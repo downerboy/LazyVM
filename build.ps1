@@ -60,7 +60,11 @@ function Import-BuildTool {
         Write-Host "Installing $($Tool.Name) $($Tool.Version)..."
         Install-Module -Name $Tool.Name -RequiredVersion $Tool.Version -Scope CurrentUser -Force -SkipPublisherCheck
     }
-    Import-Module -Name $Tool.Name -RequiredVersion $Tool.Version -Force
+    # Not -Force: analyzing the tests can load Pester already, and Pester
+    # cannot be loaded twice into one session.
+    if (-not (Get-Module -Name $Tool.Name | Where-Object { $_.Version -eq [version]$Tool.Version })) {
+        Import-Module -Name $Tool.Name -RequiredVersion $Tool.Version
+    }
 }
 
 function Invoke-Build {
