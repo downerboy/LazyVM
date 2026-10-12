@@ -688,6 +688,7 @@ Describe 'Copy-StoredCredential' {
             return $key
         }
         function New-TestCredentialFile {
+            [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'A made-up password for a test.')]
             param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][byte[]]$Key)
             $secure = ConvertTo-SecureString -String 'S3cret!' -AsPlainText -Force
             $blob = [pscustomobject]@{ UserName = 'sean'; Password = ConvertFrom-SecureString -SecureString $secure -Key $Key }
