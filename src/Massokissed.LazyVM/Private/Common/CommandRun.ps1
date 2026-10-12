@@ -1,4 +1,4 @@
-# CommandRun.ps1 - What every public command does first and last.
+﻿# CommandRun.ps1 - What every public command does first and last.
 # Dot-sourced by Massokissed.LazyVM.psm1; not meant to be run on its own.
 
 function Assert-Administrator {
@@ -23,7 +23,7 @@ function Initialize-CommandRun {
       The start of every command that works on a VM: reads its settings,
       opens its log, writes the run's header and any settings warnings, and
       adopts the guest account name from the credential store. Returns the
-      configuration (see Read-LazyVMSettings).
+      configuration (see Read-VMSetting).
     #>
     param(
         [Parameter(Mandatory)][string]$Title,
@@ -33,18 +33,18 @@ function Initialize-CommandRun {
     $configuration = Import-LazyVMConfiguration -VMName $Name -Unattended:(Test-Unattended)
 
     Initialize-Log
-    Write-Log '========================================================' 'INFO'
-    Write-Log "  LazyVM - $Title"                                        'INFO'
-    Write-Log "  Started : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"    'INFO'
-    Write-Log "  Host    : $env:COMPUTERNAME"                           'INFO'
-    Write-Log "  User    : $env:USERDOMAIN\$env:USERNAME"               'INFO'
-    Write-Log "  Module  : $($MyInvocation.MyCommand.Module.Version) on PowerShell $($PSVersionTable.PSVersion)" 'INFO'
-    Write-Log "  VM      : $($configuration.VMName) ($($configuration.ProfilePath))" 'INFO'
-    Write-Log "  Root    : $($configuration.Root) (from $($configuration.RootSource))" 'INFO'
+    Write-LogEntry '========================================================' 'INFO'
+    Write-LogEntry "  LazyVM - $Title"                                        'INFO'
+    Write-LogEntry "  Started : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"    'INFO'
+    Write-LogEntry "  Host    : $env:COMPUTERNAME"                           'INFO'
+    Write-LogEntry "  User    : $env:USERDOMAIN\$env:USERNAME"               'INFO'
+    Write-LogEntry "  Module  : $($MyInvocation.MyCommand.Module.Version) on PowerShell $($PSVersionTable.PSVersion)" 'INFO'
+    Write-LogEntry "  VM      : $($configuration.VMName) ($($configuration.ProfilePath))" 'INFO'
+    Write-LogEntry "  Root    : $($configuration.Root) (from $($configuration.RootSource))" 'INFO'
     $changed = @($configuration.ChangedKeys) + @($configuration.ProfileKeys | ForEach-Object { "$_ (VM)" })
-    Write-Log "  Changed : $(if ($changed.Count -gt 0) { $changed -join ', ' } else { 'nothing - all defaults' })" 'INFO'
-    Write-Log '========================================================' 'INFO'
-    foreach ($warning in $configuration.Warnings) { Write-Log $warning 'WARN' }
+    Write-LogEntry "  Changed : $(if ($changed.Count -gt 0) { $changed -join ', ' } else { 'nothing - all defaults' })" 'INFO'
+    Write-LogEntry '========================================================' 'INFO'
+    foreach ($warning in $configuration.Warnings) { Write-LogEntry $warning 'WARN' }
 
     Sync-GuestUserFromStore
     return $configuration

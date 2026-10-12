@@ -1,4 +1,4 @@
-function Get-LazyVMLicense {
+﻿function Get-LazyVMLicense {
     <#
     .SYNOPSIS
     Shows how long a VM's Windows evaluation has left.

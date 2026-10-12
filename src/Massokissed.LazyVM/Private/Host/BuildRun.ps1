@@ -1,4 +1,4 @@
-# BuildRun.ps1 - Running the build phases in order (Build-LazyVM).
+﻿# BuildRun.ps1 - Running the build phases in order (Build-LazyVM).
 # Dot-sourced by Massokissed.LazyVM.psm1; not meant to be run on its own.
 
 function Invoke-VMBuild {
@@ -14,7 +14,7 @@ function Invoke-VMBuild {
     )
 
     $startPhase = [math]::Max($FromPhase, (Get-ResumePhase))
-    if ($startPhase -gt 0) { Write-Log "Starting at Phase $startPhase" 'INFO' }
+    if ($startPhase -gt 0) { Write-LogEntry "Starting at Phase $startPhase" 'INFO' }
 
     # The Windows ISO is the one thing LazyVM cannot download, so check for
     # it before anything changes on the host, while whoever started the run
@@ -24,24 +24,24 @@ function Invoke-VMBuild {
 
     $needsFeatureInstall = $false
     if ($startPhase -le 0) {
-        $needsFeatureInstall = @(Invoke-Phase0-ServiceCheck)[-1] -eq $true
-        $null = Invoke-Phase1-CPUCheck
+        $needsFeatureInstall = @(Repair-HyperVService)[-1] -eq $true
+        $null = Test-HostReadiness
     }
 
     if ($startPhase -le 2) {
         # A function's result is all of its output: only the last item is the answer.
-        if (@(Invoke-Phase2-HyperVFeature)[-1] -eq $true) { return 'RestartPending' }
+        if (@(Enable-HyperVFeature)[-1] -eq $true) { return 'RestartPending' }
     }
     elseif ($needsFeatureInstall) {
-        Write-Log 'Hyper-V services are unhealthy but Phase 2 was skipped by -FromPhase' 'WARN'
+        Write-LogEntry 'Hyper-V services are unhealthy but Phase 2 was skipped by -FromPhase' 'WARN'
     }
 
-    if ($startPhase -le 3) { $null = Invoke-Phase3-FolderSetup }
-    if ($startPhase -le 4) { $null = Invoke-Phase4-AssetCheck }
+    if ($startPhase -le 3) { $null = Initialize-HostFolder }
+    if ($startPhase -le 4) { $null = Confirm-InstallMedia }
     else { $null = Resolve-InstallationIso }   # later phases still need a valid ISO path
     if ($startPhase -le 5) {
-        $null = Invoke-Phase5-SQLDisk
-        $null = Invoke-Phase5b-DevDrive
+        $null = Initialize-SqlDataVhd
+        $null = Initialize-DevDriveVhd
     }
 
     $useUnattend = $false
@@ -49,10 +49,10 @@ function Invoke-VMBuild {
         # The answer-file disc must exist before Phase 6, which attaches it,
         # and is only worth building for a VM that has not been created yet.
         if ($NoUnattend) {
-            Write-Log '-NoUnattend: Windows Setup and OOBE will have to be completed by hand' 'WARN'
+            Write-LogEntry '-NoUnattend: Windows Setup and OOBE will have to be completed by hand' 'WARN'
         }
         elseif (Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue) {
-            Write-Log 'VM already exists - not rebuilding the answer-file disc' 'INFO'
+            Write-LogEntry 'VM already exists - not rebuilding the answer-file disc' 'INFO'
         }
         else {
             $guestCredential = Get-GuestCredential -CreateIfMissing
@@ -60,7 +60,7 @@ function Invoke-VMBuild {
             $useUnattend = $true
         }
 
-        $null = Invoke-Phase6-VMBuild -UseUnattend:$useUnattend
+        $null = New-GuestVM -UseUnattend:$useUnattend
     }
 
     if ($startPhase -le 7) {
@@ -69,10 +69,10 @@ function Invoke-VMBuild {
                 Where-Object { $_.Path -eq $CFG.SeedDiskPath }
         ).Count -gt 0
 
-        $null = Invoke-Phase7-SilentInstalls -UsedUnattend:($useUnattend -or $seedAttached)
+        $null = Install-GuestSoftware -UsedUnattend:($useUnattend -or $seedAttached)
     }
 
-    if ($startPhase -le 8) { $null = Invoke-Phase8-PostConfig }
+    if ($startPhase -le 8) { $null = Complete-GuestConfiguration }
 
     # Only now is the resume point cleared, so a crash mid-resume leaves it
     # in place for the next attempt.

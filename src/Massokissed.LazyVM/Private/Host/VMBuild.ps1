@@ -4,21 +4,21 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  PHASE 6 — VM Build
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase6-VMBuild {
+function New-GuestVM {
     param([switch]$UseUnattend)
 
-    Write-Log 'PHASE 6 - VM Build' 'PHASE'
+    Write-LogEntry 'PHASE 6 - VM Build' 'PHASE'
 
     if (-not (Test-HyperVModule)) {
-        Exit-WithError 'The Hyper-V PowerShell module is not available. Enable Microsoft-Hyper-V-Management-PowerShell (Phase 2) and re-run.'
+        Stop-WithError 'The Hyper-V PowerShell module is not available. Enable Microsoft-Hyper-V-Management-PowerShell (Phase 2) and re-run.'
     }
 
     $switchName = Resolve-VMSwitch
 
     $existing = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
     if ($existing) {
-        Write-Log "VM '$($CFG.VMName)' already exists (State: $($existing.State)) - skipping creation" 'INFO'
-        Write-Log "To rebuild: Remove-VM -Name $($CFG.VMName) -Force, then delete $($CFG.VHDXRoot)\$($CFG.VMName)-OS.vhdx" 'INFO'
+        Write-LogEntry "VM '$($CFG.VMName)' already exists (State: $($existing.State)) - skipping creation" 'INFO'
+        Write-LogEntry "To rebuild: Remove-VM -Name $($CFG.VMName) -Force, then delete $($CFG.VHDXRoot)\$($CFG.VMName)-OS.vhdx" 'INFO'
         return
     }
 
@@ -32,15 +32,15 @@ function Invoke-Phase6-VMBuild {
     if (Test-Path -LiteralPath $osDiskPath) {
         $reusingDisk = $true
         $onDisk = (Get-Item -LiteralPath $osDiskPath).Length
-        Write-Log "OS VHDX already exists ($(Format-Size $onDisk) allocated) - reusing it" 'WARN'
-        Write-Log "  Delete $osDiskPath first if you want a clean install." 'INFO'
+        Write-LogEntry "OS VHDX already exists ($(Format-Size $onDisk) allocated) - reusing it" 'WARN'
+        Write-LogEntry "  Delete $osDiskPath first if you want a clean install." 'INFO'
     }
     else {
-        Write-Log "Creating OS VHDX: $osDiskPath ($($CFG.OSDiskSizeGB) GB dynamic)" 'INFO'
+        Write-LogEntry "Creating OS VHDX: $osDiskPath ($($CFG.OSDiskSizeGB) GB dynamic)" 'INFO'
         New-VHD -Path $osDiskPath -SizeBytes ($CFG.OSDiskSizeGB * 1GB) -Dynamic | Out-Null
     }
 
-    Write-Log "Creating VM '$($CFG.VMName)' (Generation 2) on switch '$switchName'..." 'INFO'
+    Write-LogEntry "Creating VM '$($CFG.VMName)' (Generation 2) on switch '$switchName'..." 'INFO'
     New-VM -Name $CFG.VMName `
         -Generation 2 `
         -VHDPath $osDiskPath `
@@ -48,7 +48,7 @@ function Invoke-Phase6-VMBuild {
         -SwitchName $switchName | Out-Null
 
     Set-VMProcessor -VMName $CFG.VMName -Count $CFG.vCPU
-    Write-Log "vCPUs: $($CFG.vCPU)" 'OK'
+    Write-LogEntry "vCPUs: $($CFG.vCPU)" 'OK'
 
     Set-VMMemory -VMName $CFG.VMName `
         -DynamicMemoryEnabled $true `
@@ -56,15 +56,15 @@ function Invoke-Phase6-VMBuild {
         -StartupBytes ([long]$CFG.MemStartGB * 1GB) `
         -MaximumBytes ([long]$CFG.MemMaxGB * 1GB) `
         -Priority 80
-    Write-Log "Dynamic Memory: min $($CFG.MemMinGB) GB / startup $($CFG.MemStartGB) GB / max $($CFG.MemMaxGB) GB" 'OK'
+    Write-LogEntry "Dynamic Memory: min $($CFG.MemMinGB) GB / startup $($CFG.MemStartGB) GB / max $($CFG.MemMaxGB) GB" 'OK'
 
     Set-VMFirmware -VMName $CFG.VMName -EnableSecureBoot On -SecureBootTemplate 'MicrosoftWindows'
-    Write-Log 'Secure Boot: enabled (MicrosoftWindows template)' 'OK'
+    Write-LogEntry 'Secure Boot: enabled (MicrosoftWindows template)' 'OK'
 
-    Enable-VMTpm-Checked -VMName $CFG.VMName
+    Enable-GuestTpm -VMName $CFG.VMName
 
     Add-VMDvdDrive -VMName $CFG.VMName -Path $CFG.ISOPath
-    Write-Log "ISO attached: $($CFG.ISOPath)" 'OK'
+    Write-LogEntry "ISO attached: $($CFG.ISOPath)" 'OK'
 
     if ($UseUnattend) {
         # A second DVD drive: Windows Setup only reads autounattend.xml from
@@ -72,7 +72,7 @@ function Invoke-Phase6-VMBuild {
         # so the answer file's DiskID 0 always targets it; the SQL data disk
         # and Dev Drive are attached later, in Phase 7.
         Add-VMDvdDrive -VMName $CFG.VMName -Path $CFG.SeedDiskPath
-        Write-Log 'Answer-file disc attached' 'OK'
+        Write-LogEntry 'Answer-file disc attached' 'OK'
     }
 
     # The Windows ISO's drive, not the answer-file disc's, is the one to boot.
@@ -80,7 +80,7 @@ function Invoke-Phase6-VMBuild {
     $vhd = @(Get-VMHardDiskDrive -VMName $CFG.VMName | Where-Object { $_.Path -eq $osDiskPath })[0]
     $nic = Get-VMNetworkAdapter -VMName $CFG.VMName
     Set-VMFirmware -VMName $CFG.VMName -BootOrder $dvd, $vhd, $nic
-    Write-Log 'Boot order: DVD -> VHD -> NIC' 'OK'
+    Write-LogEntry 'Boot order: DVD -> VHD -> NIC' 'OK'
 
     # Integration services, verified rather than assumed.
     $wanted = 'Guest Service Interface', 'Heartbeat', 'Key-Value Pair Exchange', 'Shutdown', 'Time Synchronization', 'VSS'
@@ -94,11 +94,11 @@ function Invoke-Phase6-VMBuild {
         catch { $failed += "$name ($($_.Exception.Message))" }
     }
     if ($failed.Count -gt 0) {
-        Write-Log "Integration services NOT enabled: $($failed -join ', ')" 'WARN'
-        Write-Log '  Copy-VMFile needs Guest Service Interface; Phase 7 will fail without it.' 'WARN'
+        Write-LogEntry "Integration services NOT enabled: $($failed -join ', ')" 'WARN'
+        Write-LogEntry '  Copy-VMFile needs Guest Service Interface; Phase 7 will fail without it.' 'WARN'
     }
     else {
-        Write-Log "Integration services enabled: $($wanted -join ', ')" 'OK'
+        Write-LogEntry "Integration services enabled: $($wanted -join ', ')" 'OK'
     }
 
     # AutomaticCheckpointsEnabled (not CheckpointType Disabled) so manual
@@ -108,13 +108,13 @@ function Invoke-Phase6-VMBuild {
     if (Test-Path -LiteralPath $CFG.CheckpointDir) {
         Set-VM -VMName $CFG.VMName -SnapshotFileLocation $CFG.CheckpointDir
     }
-    Write-Log "Automatic checkpoints disabled; manual checkpoints -> $($CFG.CheckpointDir)" 'OK'
+    Write-LogEntry "Automatic checkpoints disabled; manual checkpoints -> $($CFG.CheckpointDir)" 'OK'
 
     $note = "LazyVM | Built $(Get-Date -Format 'yyyy-MM-dd') | guest admin: $($CFG.GuestAdminUser)"
     if ($reusingDisk) { $note += ' | reused existing OS VHDX' }
     Set-VM -VMName $CFG.VMName -Notes $note
 
-    Write-Log "VM '$($CFG.VMName)' built" 'OK'
+    Write-LogEntry "VM '$($CFG.VMName)' built" 'OK'
 }
 
 function Start-VMFromInstallMedia {
@@ -151,27 +151,28 @@ function Start-VMFromInstallMedia {
         }
         catch {
             # Not ready yet; the next pass tries again.
+            Write-Verbose "The VM's keyboard is not ready yet: $($_.Exception.Message)"
         }
         Start-Sleep -Milliseconds 500
     }
 
     if ($pressed -gt 0) {
-        Write-Log "VM started; Enter pressed $pressed time(s) to boot Windows Setup from the ISO" 'OK'
+        Write-LogEntry "VM started; Enter pressed $pressed time(s) to boot Windows Setup from the ISO" 'OK'
     }
     else {
-        Write-Log 'VM started, but its virtual keyboard could not be reached to boot from the ISO.' 'WARN'
-        Write-Log "  If the console shows 'No operating system was loaded', turn the VM off and run" 'INFO'
-        Write-Log "  this again with -FromPhase 7, or press a key in the console when it asks." 'INFO'
+        Write-LogEntry 'VM started, but its virtual keyboard could not be reached to boot from the ISO.' 'WARN'
+        Write-LogEntry "  If the console shows 'No operating system was loaded', turn the VM off and run" 'INFO'
+        Write-LogEntry "  this again with -FromPhase 7, or press a key in the console when it asks." 'INFO'
     }
 }
 
-function Enable-VMTpm-Checked {
+function Enable-GuestTpm {
     param([Parameter(Mandatory)][string]$VMName)
 
     try {
         $guardian = Get-HgsGuardian -Name 'UntrustedGuardian' -ErrorAction SilentlyContinue
         if (-not $guardian) {
-            Write-Log 'Creating HGS guardian for vTPM...' 'INFO'
+            Write-LogEntry 'Creating HGS guardian for vTPM...' 'INFO'
             $guardian = New-HgsGuardian -Name 'UntrustedGuardian' -GenerateCertificates
         }
         $protector = New-HgsKeyProtector -Owner $guardian -AllowUntrustedRoot
@@ -181,15 +182,15 @@ function Enable-VMTpm-Checked {
         # Verified, not assumed. The previous version swallowed failures with
         # -ErrorAction SilentlyContinue and logged "TPM: Enabled" regardless.
         if ((Get-VMSecurity -VMName $VMName).TpmEnabled) {
-            Write-Log 'vTPM: enabled' 'OK'
+            Write-LogEntry 'vTPM: enabled' 'OK'
         }
         else {
-            Write-Log 'vTPM: Enable-VMTPM reported success but the VM still shows TpmEnabled = False' 'WARN'
+            Write-LogEntry 'vTPM: Enable-VMTPM reported success but the VM still shows TpmEnabled = False' 'WARN'
         }
     }
     catch {
         Write-LogError 'vTPM could not be enabled' $_
-        Write-Log '  Windows 11 Setup requires a TPM. Install will fail without it.' 'WARN'
+        Write-LogEntry '  Windows 11 Setup requires a TPM. Install will fail without it.' 'WARN'
     }
 }
 
@@ -204,15 +205,15 @@ function Resolve-VMSwitch {
 
     $existing = Get-VMSwitch -Name $CFG.SwitchName -ErrorAction SilentlyContinue
     if ($existing) {
-        Write-Log "Switch '$($CFG.SwitchName)' - OK ($($existing.SwitchType))" 'OK'
+        Write-LogEntry "Switch '$($CFG.SwitchName)' - OK ($($existing.SwitchType))" 'OK'
         return $CFG.SwitchName
     }
 
-    Write-Log "Switch '$($CFG.SwitchName)' not found" 'WARN'
+    Write-LogEntry "Switch '$($CFG.SwitchName)' not found" 'WARN'
 
     $nat = Get-VMSwitch -Name $CFG.NatSwitchName -ErrorAction SilentlyContinue
     if (-not $nat) {
-        Write-Log "Creating internal switch '$($CFG.NatSwitchName)' with a NAT network..." 'INFO'
+        Write-LogEntry "Creating internal switch '$($CFG.NatSwitchName)' with a NAT network..." 'INFO'
         $nat = New-VMSwitch -Name $CFG.NatSwitchName -SwitchType Internal
     }
 
@@ -223,18 +224,18 @@ function Resolve-VMSwitch {
         Where-Object { $_.IPAddress -eq $CFG.NatHostIP }
     if (-not $ip) {
         New-NetIPAddress -IPAddress $CFG.NatHostIP -PrefixLength $prefixLength -InterfaceAlias $alias -ErrorAction Stop | Out-Null
-        Write-Log "Host gateway $($CFG.NatHostIP)/$prefixLength assigned to '$alias'" 'OK'
+        Write-LogEntry "Host gateway $($CFG.NatHostIP)/$prefixLength assigned to '$alias'" 'OK'
     }
 
     $natNet = Get-NetNat -ErrorAction SilentlyContinue |
         Where-Object { $_.InternalIPInterfaceAddressPrefix -eq $CFG.NatSubnet }
     if (-not $natNet) {
         New-NetNat -Name "$($CFG.NatSwitchName)-NAT" -InternalIPInterfaceAddressPrefix $CFG.NatSubnet -ErrorAction Stop | Out-Null
-        Write-Log "NAT network created for $($CFG.NatSubnet)" 'OK'
+        Write-LogEntry "NAT network created for $($CFG.NatSubnet)" 'OK'
     }
 
-    Write-Log "Note: this NAT network has no DHCP server. Set a static address inside the guest," 'WARN'
-    Write-Log "      or switch $($CFG.VMName) back to 'Default Switch' once it is available." 'WARN'
+    Write-LogEntry "Note: this NAT network has no DHCP server. Set a static address inside the guest," 'WARN'
+    Write-LogEntry "      or switch $($CFG.VMName) back to 'Default Switch' once it is available." 'WARN'
 
     $CFG.SwitchName = $CFG.NatSwitchName
     return $CFG.NatSwitchName

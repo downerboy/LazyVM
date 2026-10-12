@@ -21,6 +21,9 @@ function Get-LogEncoding {
 }
 
 function Initialize-Log {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'LazyVM is a console tool: progress must show as it happens, and every line also goes to the log file. Write-Output would mix it into each function''s results.')]
+    param()
+
     if ($script:LogReady) { return }
     $dir = Split-Path -Path $CFG.LogFile -Parent
     if (-not (Test-Path -LiteralPath $dir)) {
@@ -63,7 +66,8 @@ function Initialize-Log {
     $script:LogReady = $true
 }
 
-function Write-Log {
+function Write-LogEntry {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'LazyVM is a console tool: progress must show as it happens, and every line also goes to the log file. Write-Output would mix it into each function''s results.')]
     param(
         [Parameter(Position = 0)]
         [AllowEmptyString()]
@@ -71,7 +75,7 @@ function Write-Log {
 
         # Position 1 must be explicit: declaring a Position on ANY parameter
         # removes the automatic positions from all the others, so without this
-        # every Write-Log 'text' 'OK' call fails with "a positional parameter
+        # every Write-LogEntry 'text' 'OK' call fails with "a positional parameter
         # cannot be found that accepts argument 'OK'".
         [Parameter(Position = 1)]
         [ValidateSet('INFO', 'WARN', 'ERROR', 'OK', 'PHASE')]
@@ -115,11 +119,11 @@ function Write-LogError {
         [string]$Context,
         [System.Management.Automation.ErrorRecord]$ErrorRecord
     )
-    Write-Log "$Context - $($ErrorRecord.Exception.Message)" 'ERROR'
-    Write-Log "    type : $($ErrorRecord.Exception.GetType().FullName)" 'INFO'
+    Write-LogEntry "$Context - $($ErrorRecord.Exception.Message)" 'ERROR'
+    Write-LogEntry "    type : $($ErrorRecord.Exception.GetType().FullName)" 'INFO'
     if ($ErrorRecord.ScriptStackTrace) {
         foreach ($frame in ($ErrorRecord.ScriptStackTrace -split "`r?`n")) {
-            if ($frame.Trim()) { Write-Log "    at   : $($frame.Trim())" 'INFO' }
+            if ($frame.Trim()) { Write-LogEntry "    at   : $($frame.Trim())" 'INFO' }
         }
     }
 }

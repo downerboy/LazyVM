@@ -1,4 +1,4 @@
-function Build-LazyVM {
+﻿function Build-LazyVM {
     <#
     .SYNOPSIS
     Builds a VM, unattended, from its profile.
@@ -64,15 +64,15 @@ function Build-LazyVM {
 
         $result = Invoke-VMBuild -FromPhase $FromPhase -NoUnattend:$NoUnattend
         if ($result -eq 'RestartPending') {
-            Write-Log 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
+            Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
             return
         }
 
-        Write-Log '' 'INFO'
-        Write-Log '========================================================' 'INFO'
-        Write-Log "  All phases complete. $($CFG.VMName) is ready."          'OK'
-        Write-Log "  Log : $($CFG.LogFile)"                                 'INFO'
-        Write-Log '========================================================' 'INFO'
+        Write-LogEntry '' 'INFO'
+        Write-LogEntry '========================================================' 'INFO'
+        Write-LogEntry "  All phases complete. $($CFG.VMName) is ready."          'OK'
+        Write-LogEntry "  Log : $($CFG.LogFile)"                                 'INFO'
+        Write-LogEntry '========================================================' 'INFO'
     }
     catch {
         if ($script:LogReady) { Write-LogError 'Build stopped' $_ }

@@ -1,4 +1,4 @@
-# Configuration.Tests.ps1
+﻿# Configuration.Tests.ps1
 # Settings: the schema and its defaults, reading and checking JSON settings
 # files, the last-good safety net, choosing the root folder, resolving host
 # paths, creating and selecting VM profiles, and bringing 1.x settings across.
@@ -70,14 +70,14 @@ Describe 'The settings schema' {
     }
 
     It 'accepts all its own defaults' {
-        $defaults = InModuleScope $module { Get-DefaultSettings }
+        $defaults = InModuleScope $module { Get-DefaultSetting }
         $path = New-TestFile -Text (ConvertTo-Json -InputObject $defaults -Depth 20)
 
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
     }
 
     It 'lists the settings users change, not the ones LazyVM works out itself' {
-        $defaults = InModuleScope $module { Get-DefaultSettings }
+        $defaults = InModuleScope $module { Get-DefaultSetting }
 
         $defaults.Keys | Should -Contain 'vCPU'
         $defaults.Keys | Should -Contain 'MaintenanceTime'
@@ -88,9 +88,9 @@ Describe 'The settings schema' {
 
     It 'gives a fresh copy each time, so changing one cannot change the defaults' {
         InModuleScope $module {
-            $first = Get-DefaultSettings
+            $first = Get-DefaultSetting
             $first.GuestProjectPaths[0] = 'changed'
-            (Get-DefaultSettings).GuestProjectPaths[0] | Should -Not -Be 'changed'
+            (Get-DefaultSetting).GuestProjectPaths[0] | Should -Not -Be 'changed'
         }
     }
 }
@@ -270,7 +270,7 @@ Describe 'Resolve-LazyVMRoot' {
     }
 }
 
-Describe 'Resolve-HostPathSettings' {
+Describe 'Resolve-HostPathSetting' {
     It 'joins relative paths to the root and keeps full paths as written' {
         $settings = InModuleScope $module {
             $settings = @{}
@@ -281,7 +281,7 @@ Describe 'Resolve-HostPathSettings' {
             $settings['ISOPath'] = '\\nas\iso\win11.iso'
             $settings['LogFile'] = '.\Logs\Alpha.log'
 
-            Resolve-HostPathSettings -Settings $settings -Root 'D:\DevVM'
+            Resolve-HostPathSetting -Settings $settings -Root 'D:\DevVM'
             $settings
         }
 
@@ -305,13 +305,13 @@ Describe 'Resolve-HostPathSettings' {
                 }
                 $settings['VHDXRoot'] = $Value
 
-                Resolve-HostPathSettings -Settings $settings -Root 'D:\DevVM'
+                Resolve-HostPathSetting -Settings $settings -Root 'D:\DevVM'
             }
         } | Should -Throw -ExpectedMessage "*'VHDXRoot' must be a path inside the LazyVM folder*"
     }
 }
 
-Describe 'Add-DerivedSettings' {
+Describe 'Add-DerivedSetting' {
     It 'works out the names and files LazyVM keeps for a VM' {
         $settings = @{
             VMName               = 'Alpha'
@@ -324,7 +324,7 @@ Describe 'Add-DerivedSettings' {
             SqlBackupFolder      = 'Backup'
         }
 
-        InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Add-DerivedSettings -Settings $Settings }
+        InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Add-DerivedSetting -Settings $Settings }
 
         $settings.SeedDiskPath | Should -Be 'D:\DevVM\VMs\Alpha-Seed.iso'
         $settings.CredKeyFile | Should -Be 'D:\DevVM\Backup\.lazyvm.key'
@@ -357,7 +357,7 @@ Describe 'Test-VMName' {
     }
 }
 
-Describe 'Expand-VMTokens' {
+Describe 'Expand-VMToken' {
     It 'replaces {VM} in text settings and leaves the others alone' {
         $settings = @{
             LogFile  = 'Logs\{VM}.log'
@@ -368,7 +368,7 @@ Describe 'Expand-VMTokens' {
 
         InModuleScope $module -Parameters @{ Settings = $settings } {
             param($Settings)
-            Expand-VMTokens -Settings $Settings -VMName 'Alpha'
+            Expand-VMToken -Settings $Settings -VMName 'Alpha'
         }
 
         $settings.LogFile | Should -Be 'Logs\Alpha.log'
@@ -457,9 +457,9 @@ Describe 'New-VMProfile' {
         }
 
         $path | Should -Exist
-        $profile = Read-TestJson -Path $path
-        @($profile.Keys) | Should -Be @('$schema')
-        $profile['$schema'] | Should -Be '../../LazyVM.Settings.schema.json'
+        $vmProfile = Read-TestJson -Path $path
+        @($vmProfile.Keys) | Should -Be @('$schema')
+        $vmProfile['$schema'] | Should -Be '../../LazyVM.Settings.schema.json'
     }
 
     It 'sets the maintenance time an hour after the latest one in use, wrapping at midnight' {
@@ -484,7 +484,7 @@ Describe 'New-VMProfile' {
             New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Beta'
         }
 
-        $default = InModuleScope $module { (Get-DefaultSettings).MaintenanceTime }
+        $default = InModuleScope $module { (Get-DefaultSetting).MaintenanceTime }
         $expected = [datetime]::ParseExact($default, 'HH:mm', $null).AddHours(1).ToString('HH:mm')
         (Read-TestJson -Path $path).MaintenanceTime | Should -Be $expected
     }
@@ -499,11 +499,11 @@ Describe 'New-VMProfile' {
             param($Root)
             New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Beta' -From 'Alpha'
         }
-        $profile = Read-TestJson -Path $path
+        $vmProfile = Read-TestJson -Path $path
 
-        $profile.MemMaxGB | Should -Be 32
-        $profile.Keys | Should -Not -Contain 'LogFile'
-        $profile.Keys | Should -Not -Contain 'GuestComputerName'
+        $vmProfile.MemMaxGB | Should -Be 32
+        $vmProfile.Keys | Should -Not -Contain 'LogFile'
+        $vmProfile.Keys | Should -Not -Contain 'GuestComputerName'
         Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'Tooling.json' | Should -Exist
     }
 
@@ -523,13 +523,13 @@ Describe 'New-VMProfile' {
     }
 }
 
-Describe 'Read-LazyVMSettings' {
+Describe 'Read-VMSetting' {
     It 'layers the defaults, the host settings and the VM profile, then names, roots and derives everything' {
         $root = New-TestRoot -HostSettings '{ "MemMaxGB": 12, "vCPU": 6 }' -Profiles @{
             Alpha = '{ "GuestComputerName": "ALPHA-PC", "vCPU": 2 }'
         }
 
-        $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-LazyVMSettings -Root $Root }
+        $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root }
         $settings = $result.Settings
 
         $result.VMName | Should -Be 'Alpha'
@@ -548,16 +548,16 @@ Describe 'Read-LazyVMSettings' {
     It 'reports a bad setting in the VM profile' {
         $root = New-TestRoot -Profiles @{ Alpha = '{ "Bogus": 1 }' }
 
-        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-LazyVMSettings -Root $Root } } |
+        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root } } |
             Should -Throw -ExpectedMessage "*'Bogus' is not a setting*"
     }
 
     It 'passes on the warning when an unattended run falls back to a last good copy' {
         $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
-        InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-LazyVMSettings -Root $Root } | Out-Null
+        InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root } | Out-Null
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Config/VMs/Alpha/VM.json') -Value '{ "vCPU": "two" }'
 
-        $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-LazyVMSettings -Root $Root -Unattended }
+        $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root -Unattended }
 
         $result.Settings.vCPU | Should -Be 2
         $result.Warnings.Count | Should -Be 1
@@ -567,20 +567,18 @@ Describe 'Read-LazyVMSettings' {
 Describe 'Import-LazyVMConfiguration' {
     AfterAll {
         InModuleScope $module { $script:Settings.Clear() }
-        Remove-Variable -Name LazyVMTestRoot -Scope Global -ErrorAction SilentlyContinue
     }
 
     It 'fills the module''s current settings in place and leaves them alone when reading another VM' {
         $root = New-TestRoot -Profiles @{ Alpha = '{}'; Beta = '{}' }
 
-        $global:LazyVMTestRoot = $root
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $global:LazyVMTestRoot; Source = 'a test' } }
+            Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $Root; Source = 'a test' } }.GetNewClosure()
             $current = $script:Settings
 
             $result = Import-LazyVMConfiguration -VMName 'Alpha'
-            $beta = Read-LazyVMSettings -Root $Root -VMName 'Beta'
+            $beta = Read-VMSetting -Root $Root -VMName 'Beta'
 
             [object]::ReferenceEquals($result.Settings, $current) | Should -BeTrue
             [object]::ReferenceEquals($CFG, $current) | Should -BeTrue
@@ -619,10 +617,10 @@ Describe 'Bringing 1.x settings across' {
         $hostSettings.MemMaxGB | Should -Be 24
         $hostSettings.Keys | Should -Not -Contain 'Root'
         $hostSettings.Keys | Should -Not -Contain 'ScheduleTaskName'
-        $profile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json')
-        $profile.vCPU | Should -Be 6
-        $profile.MaintenanceTime | Should -Be '03:00'
-        $profile.Keys | Should -Not -Contain 'SQLInstallerPath'
+        $vmProfile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json')
+        $vmProfile.vCPU | Should -Be 6
+        $vmProfile.MaintenanceTime | Should -Be '03:00'
+        $vmProfile.Keys | Should -Not -Contain 'SQLInstallerPath'
         Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/Tooling.json' | Should -Exist
         Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/History/Daily/20261001.json' | Should -Exist
         ($done -join "`n") | Should -BeLike "*'Root' is now chosen once with Set-LazyVMRoot*"
@@ -636,7 +634,7 @@ Describe 'Bringing 1.x settings across' {
         InModuleScope $module -Parameters @{ Legacy = $legacy; Root = $root } {
             param($Legacy, $Root)
             Import-LegacyConfiguration -LegacyConfigDir $Legacy -ConfigDir (Get-ConfigDir -Root $Root) | Out-Null
-            { Read-LazyVMSettings -Root $Root } | Should -Not -Throw
+            { Read-VMSetting -Root $Root } | Should -Not -Throw
         }
     }
 

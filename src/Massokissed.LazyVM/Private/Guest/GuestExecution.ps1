@@ -32,7 +32,7 @@ function Connect-Guest {
     }
 
     if ($lastError) { Write-LogError 'PowerShell Direct connection failed' $lastError }
-    Exit-WithError "Could not open a PowerShell Direct session to '$($CFG.VMName)' as '$($Credential.UserName)'. Check the guest account and password, and that the guest is past OOBE."
+    Stop-WithError "Could not open a PowerShell Direct session to '$($CFG.VMName)' as '$($Credential.UserName)'. Check the guest account and password, and that the guest is past OOBE."
 }
 
 function Disconnect-Guest {
@@ -55,7 +55,7 @@ function Invoke-GuestScript {
 
     $session = $script:GuestSession
     if (-not $session -or $session.State -ne 'Opened') {
-        Exit-WithError "No open guest session for: $Activity"
+        Stop-WithError "No open guest session for: $Activity"
     }
 
     $job = Invoke-Command -Session $session -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList -AsJob
@@ -172,13 +172,13 @@ function Wait-GuestReady {
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
     $announced = $false
 
-    Write-Log "Waiting up to $TimeoutMinutes minutes for the guest to finish installing and reach the desktop..." 'INFO'
+    Write-LogEntry "Waiting up to $TimeoutMinutes minutes for the guest to finish installing and reach the desktop..." 'INFO'
 
     while ((Get-Date) -lt $deadline) {
         $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
-        if (-not $vm) { Exit-WithError "VM '$($CFG.VMName)' disappeared while waiting." }
+        if (-not $vm) { Stop-WithError "VM '$($CFG.VMName)' disappeared while waiting." }
         if ($vm.State -ne 'Running') {
-            Write-Log "VM state is '$($vm.State)' - starting it" 'INFO'
+            Write-LogEntry "VM state is '$($vm.State)' - starting it" 'INFO'
             Start-VM -Name $CFG.VMName -ErrorAction SilentlyContinue | Out-Null
             Start-Sleep -Seconds 20
             continue
@@ -188,7 +188,7 @@ function Wait-GuestReady {
         $heartbeat = Get-VMIntegrationService -VMName $CFG.VMName -Name 'Heartbeat' -ErrorAction SilentlyContinue
         if (-not $heartbeat -or $heartbeat.PrimaryStatusDescription -ne 'OK') {
             if (-not $announced) {
-                Write-Log '  guest is still installing (no heartbeat yet)' 'INFO'
+                Write-LogEntry '  guest is still installing (no heartbeat yet)' 'INFO'
                 $announced = $true
             }
             Start-Sleep -Seconds 30
@@ -215,10 +215,10 @@ function Wait-GuestReady {
 
             $elapsed = [int]((Get-Date) - $deadline.AddMinutes(-$TimeoutMinutes)).TotalMinutes
             if ($provisioned) {
-                Write-Log "Guest is provisioned and reachable (after $elapsed min)" 'OK'
+                Write-LogEntry "Guest is provisioned and reachable (after $elapsed min)" 'OK'
             }
             else {
-                Write-Log "Guest is reachable over PowerShell Direct (after $elapsed min); no provisioning marker - continuing" 'OK'
+                Write-LogEntry "Guest is reachable over PowerShell Direct (after $elapsed min); no provisioning marker - continuing" 'OK'
             }
             return $true
         }
@@ -227,7 +227,7 @@ function Wait-GuestReady {
         }
     }
 
-    Exit-WithError "The guest did not become reachable within $TimeoutMinutes minutes. Open the VM console to see where Setup stopped."
+    Stop-WithError "The guest did not become reachable within $TimeoutMinutes minutes. Open the VM console to see where Setup stopped."
 }
 
 function Copy-FromGuest {

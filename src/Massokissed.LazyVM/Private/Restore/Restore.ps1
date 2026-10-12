@@ -8,22 +8,22 @@
 #  isolated: a failure to re-add a firewall rule must not cost you your
 #  databases.
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase10-Restore {
-    Write-Log 'PHASE 10 - Restore Captured State' 'PHASE'
+function Restore-GuestState {
+    Write-LogEntry 'PHASE 10 - Restore Captured State' 'PHASE'
 
     $manifest = Get-CaptureManifest
     if (-not $manifest) {
-        Write-Log 'No capture manifest found - nothing to restore' 'WARN'
-        Write-Log "  Expected at $(Join-Path $CFG.StateDir 'manifest.json')" 'INFO'
+        Write-LogEntry 'No capture manifest found - nothing to restore' 'WARN'
+        Write-LogEntry "  Expected at $(Join-Path $CFG.StateDir 'manifest.json')" 'INFO'
         return
     }
-    Write-Log "Restoring the capture taken at $($manifest.CapturedAt)" 'INFO'
+    Write-LogEntry "Restoring the capture taken at $($manifest.CapturedAt)" 'INFO'
 
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
-    if (-not $vm) { Exit-WithError "VM '$($CFG.VMName)' does not exist." }
+    if (-not $vm) { Stop-WithError "VM '$($CFG.VMName)' does not exist." }
 
     $credential = Get-GuestCredential
-    if (-not $credential) { Exit-WithError 'No stored guest credential.' }
+    if (-not $credential) { Stop-WithError 'No stored guest credential.' }
 
     if ($vm.State -ne 'Running') {
         Start-VM -Name $CFG.VMName | Out-Null
@@ -36,8 +36,8 @@ function Invoke-Phase10-Restore {
         [pscustomobject]@{ Name = '10a - Windows environment'; Action = { Restore-GuestWindowsState -Manifest $manifest } }
         [pscustomobject]@{ Name = '10b - Visual Studio'; Action = { Restore-GuestVisualStudioState -Manifest $manifest } }
         [pscustomobject]@{ Name = '10c - SQL Server'; Action = { Restore-GuestSqlState -Manifest $manifest } }
-        [pscustomobject]@{ Name = '10d - project files'; Action = { Restore-GuestProjectFiles -Manifest $manifest } }
-        [pscustomobject]@{ Name = '10e - application settings'; Action = { Restore-GuestAppSettings -Manifest $manifest } }
+        [pscustomobject]@{ Name = '10d - project files'; Action = { Restore-GuestProjectFolder -Manifest $manifest } }
+        [pscustomobject]@{ Name = '10e - application settings'; Action = { Restore-GuestAppSetting -Manifest $manifest } }
     )
 
     $failures = 0
@@ -46,25 +46,27 @@ function Invoke-Phase10-Restore {
         catch {
             $failures++
             Write-LogError "$($step.Name) failed" $_
-            Write-Log '  Continuing with the remaining restore steps.' 'INFO'
+            Write-LogEntry '  Continuing with the remaining restore steps.' 'INFO'
         }
     }
 
-    if ($failures -gt 0) { Write-Log "Restore finished with $failures of $($steps.Count) steps failing" 'WARN' }
-    else { Write-Log 'Phase 10 complete' 'OK' }
+    if ($failures -gt 0) { Write-LogEntry "Restore finished with $failures of $($steps.Count) steps failing" 'WARN' }
+    else { Write-LogEntry 'Phase 10 complete' 'OK' }
     return ($failures -eq 0)
 }
 
 function Restore-GuestWindowsState {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'The certificate PFX password has to cross into the guest as text, where it becomes a SecureString again; PowerShell Direct cannot carry a SecureString encrypted with a key the guest does not have.')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'The certificate PFX password has to cross into the guest as text, where it becomes a SecureString again; PowerShell Direct cannot carry a SecureString encrypted with a key the guest does not have.')]
     param([Parameter(Mandatory)]$Manifest)
 
     if (-not $Manifest.Windows -or -not $Manifest.Windows.Archive) {
-        Write-Log '  no Windows environment capture - skipping' 'INFO'
+        Write-LogEntry '  no Windows environment capture - skipping' 'INFO'
         return
     }
     $archive = $Manifest.Windows.Archive
     if (-not (Test-Path -LiteralPath $archive)) {
-        Write-Log "  capture archive missing at $archive - skipping" 'WARN'
+        Write-LogEntry "  capture archive missing at $archive - skipping" 'WARN'
         return
     }
 
@@ -188,7 +190,7 @@ function Restore-GuestWindowsState {
     }
 
     foreach ($line in @($report)) {
-        if ($line -match 'failed') { Write-Log "  $line" 'WARN' } else { Write-Log "  $line" 'OK' }
+        if ($line -match 'failed') { Write-LogEntry "  $line" 'WARN' } else { Write-LogEntry "  $line" 'OK' }
     }
 }
 
@@ -196,13 +198,13 @@ function Restore-GuestVisualStudioState {
     param([Parameter(Mandatory)]$Manifest)
 
     if (-not $Manifest.VisualStudio) {
-        Write-Log '  no Visual Studio capture - skipping' 'INFO'
+        Write-LogEntry '  no Visual Studio capture - skipping' 'INFO'
         return
     }
 
     $vs = Get-GuestVisualStudio
     if (-not $vs) {
-        Write-Log '  Visual Studio is not installed in the guest - skipping' 'WARN'
+        Write-LogEntry '  Visual Studio is not installed in the guest - skipping' 'WARN'
         return
     }
 
@@ -217,7 +219,7 @@ function Restore-GuestVisualStudioState {
             Copy-ToGuest -HostPath $hostPath -GuestPath $guestPath
             $pushed[$key] = $guestPath
         }
-        catch { Write-Log "  could not send $key to the guest: $($_.Exception.Message)" 'WARN' }
+        catch { Write-LogEntry "  could not send $key to the guest: $($_.Exception.Message)" 'WARN' }
     }
 
     $report = Invoke-GuestScript -Activity 'Visual Studio restore' -TimeoutMinutes 30 -ArgumentList @(
@@ -251,7 +253,7 @@ function Restore-GuestVisualStudioState {
         }
         return $log
     }
-    foreach ($line in @($report)) { Write-Log "  $line" 'OK' }
+    foreach ($line in @($report)) { Write-LogEntry "  $line" 'OK' }
 
     # Settings have to be applied in the desktop session: the settings store
     # is per-user, and devenv needs a real session to write it.
@@ -266,9 +268,9 @@ function Restore-GuestVisualStudioState {
         try {
             Invoke-GuestScriptAsInteractiveUser -ScriptText $script -TaskName 'LazyVM-VSSettingsRestore' `
                 -Activity 'Visual Studio settings restore' -TimeoutMinutes 25
-            Write-Log '  applied Visual Studio settings' 'OK'
+            Write-LogEntry '  applied Visual Studio settings' 'OK'
         }
-        catch { Write-Log "  settings import failed: $($_.Exception.Message)" 'WARN' }
+        catch { Write-LogEntry "  settings import failed: $($_.Exception.Message)" 'WARN' }
     }
 }
 
@@ -276,13 +278,13 @@ function Restore-GuestSqlState {
     param([Parameter(Mandatory)]$Manifest)
 
     if (-not $Manifest.Sql) {
-        Write-Log '  no SQL capture - skipping' 'INFO'
+        Write-LogEntry '  no SQL capture - skipping' 'INFO'
         return
     }
 
     $instance = Get-GuestSqlInstance
     if (-not $instance) {
-        Write-Log '  SQL Server is not installed in the guest - skipping' 'WARN'
+        Write-LogEntry '  SQL Server is not installed in the guest - skipping' 'WARN'
         return
     }
     Set-GuestSqlServer -Instance $instance.Instance
@@ -321,7 +323,7 @@ function Restore-GuestSqlState {
             $cmd = $c.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = 120
             return $cmd.ExecuteScalar()
         }
-        function Get-Rows($c, $sql) {
+        function Get-SqlRow($c, $sql) {
             $cmd = $c.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = 300
             $r = $cmd.ExecuteReader(); $rows = @()
             try {
@@ -397,7 +399,7 @@ function Restore-GuestSqlState {
                 $backupEsc = "N'" + $backup.Replace("'", "''") + "'"
 
                 try {
-                    $files = @(Get-Rows $conn "RESTORE FILELISTONLY FROM DISK = $backupEsc")
+                    $files = @(Get-SqlRow $conn "RESTORE FILELISTONLY FROM DISK = $backupEsc")
                     $moves = @()
                     foreach ($f in $files) {
                         $logical = "$($f.LogicalName)"
@@ -430,27 +432,27 @@ function Restore-GuestSqlState {
     }
 
     foreach ($line in @($report)) {
-        if ($line -like 'FAILED*' -or $line -like 'MISSING*') { Write-Log "  $line" 'ERROR' }
-        elseif ($line -match 'failed') { Write-Log "  $line" 'WARN' }
-        elseif ($line -like 'skipped*') { Write-Log "  $line" 'INFO' }
-        else { Write-Log "  $line" 'OK' }
+        if ($line -like 'FAILED*' -or $line -like 'MISSING*') { Write-LogEntry "  $line" 'ERROR' }
+        elseif ($line -match 'failed') { Write-LogEntry "  $line" 'WARN' }
+        elseif ($line -like 'skipped*') { Write-LogEntry "  $line" 'INFO' }
+        else { Write-LogEntry "  $line" 'OK' }
     }
 
     foreach ($item in @($Manifest.Sql.NotMigrated)) {
-        Write-Log "  reminder - not migrated: $item" 'WARN'
+        Write-LogEntry "  reminder - not migrated: $item" 'WARN'
     }
 }
 
-function Restore-GuestProjectFiles {
+function Restore-GuestProjectFolder {
     param([Parameter(Mandatory)]$Manifest)
 
     if (-not $Manifest.Projects -or -not $Manifest.Projects.Archive) {
-        Write-Log '  no guest-side project capture - skipping' 'INFO'
+        Write-LogEntry '  no guest-side project capture - skipping' 'INFO'
         return
     }
     $archive = $Manifest.Projects.Archive
     if (-not (Test-Path -LiteralPath $archive)) {
-        Write-Log "  project archive missing at $archive - skipping" 'WARN'
+        Write-LogEntry "  project archive missing at $archive - skipping" 'WARN'
         return
     }
 
@@ -476,24 +478,24 @@ function Restore-GuestProjectFiles {
         return [pscustomobject]@{ Path = $dest; Files = $files.Count; Bytes = $bytes }
     }
 
-    Write-Log "  restored $($report.Files) file(s), $(Format-Size $report.Bytes) to $($report.Path)" 'OK'
-    Write-Log '  Extracted to a dated folder so nothing in the new guest is overwritten.' 'INFO'
+    Write-LogEntry "  restored $($report.Files) file(s), $(Format-Size $report.Bytes) to $($report.Path)" 'OK'
+    Write-LogEntry '  Extracted to a dated folder so nothing in the new guest is overwritten.' 'INFO'
 }
 
-function Restore-GuestAppSettings {
+function Restore-GuestAppSetting {
     <# Imports each captured application settings file into the guest's registry. #>
     param([Parameter(Mandatory)]$Manifest)
 
     $saved = @()
     if ($Manifest.PSObject.Properties['AppSettings'] -and $Manifest.AppSettings) { $saved = @($Manifest.AppSettings) }
     if ($saved.Count -eq 0) {
-        Write-Log '  no application settings captured - skipping' 'INFO'
+        Write-LogEntry '  no application settings captured - skipping' 'INFO'
         return
     }
 
     foreach ($entry in $saved) {
         if (-not (Test-Path -LiteralPath $entry.File)) {
-            Write-Log "  $($entry.Name) - settings file missing at $($entry.File)" 'WARN'
+            Write-LogEntry "  $($entry.Name) - settings file missing at $($entry.File)" 'WARN'
             continue
         }
         $guestFile = Join-Path $CFG.GuestSetupDir "app-$($entry.Name).reg"
@@ -504,7 +506,7 @@ function Restore-GuestAppSettings {
             & reg.exe import $file 2>&1 | Out-Null
             return ($LASTEXITCODE -eq 0)
         }
-        if ($imported) { Write-Log "  restored $($entry.Name) settings" 'OK' }
-        else { Write-Log "  $($entry.Name) settings import failed" 'WARN' }
+        if ($imported) { Write-LogEntry "  restored $($entry.Name) settings" 'OK' }
+        else { Write-LogEntry "  $($entry.Name) settings import failed" 'WARN' }
     }
 }

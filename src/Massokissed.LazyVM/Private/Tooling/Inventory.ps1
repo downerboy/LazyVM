@@ -213,9 +213,9 @@ function Get-GuestToolingReport {
     $path = Join-Path $toolingDir ('inventory-{0}.json' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
     Write-TextFileAtomic -Path $path -Text (ConvertTo-Json -InputObject $inventory -Depth 8)
 
-    $recorded = Read-ToolingRecord -Path (Get-ToolingPaths).Record
+    $recorded = Read-ToolingRecord -Path (Get-ToolingPath).Record
     $observed = ConvertTo-ToolingRecord -Inventory $inventory
-    Add-MarketplaceItems -Record $observed -Previous $recorded
+    Add-MarketplaceItem -Record $observed -Previous $recorded
 
     # Per-user extensions a rebuild cannot reinstall from the marketplace.
     $unmatched = @(

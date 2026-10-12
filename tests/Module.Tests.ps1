@@ -1,4 +1,4 @@
-# Module.Tests.ps1
+﻿# Module.Tests.ps1
 # The module as users see it: what it exports, and that every command has
 # the help Get-Help shows.
 
@@ -24,6 +24,15 @@ Describe 'The module' {
         $approved = @(Get-Verb | ForEach-Object { $_.Verb })
         foreach ($command in Get-Command -Module 'Massokissed.LazyVM') {
             $approved | Should -Contain $command.Verb -Because "$($command.Name) should use an approved verb"
+        }
+    }
+
+    It 'lets every command that changes something be tried with -WhatIf and confirmed with -Confirm' {
+        # Build and Invoke run whole unattended operations, which a WhatIf
+        # could not meaningfully preview; the verbs below change one thing.
+        $changing = 'New', 'Set', 'Remove', 'Restore', 'Save', 'Register'
+        foreach ($command in Get-Command -Module 'Massokissed.LazyVM' | Where-Object { $changing -contains $_.Verb }) {
+            $command.Parameters.Keys | Should -Contain 'WhatIf' -Because "$($command.Name) changes something"
         }
     }
 

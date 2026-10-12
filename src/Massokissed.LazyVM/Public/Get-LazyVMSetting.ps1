@@ -1,4 +1,4 @@
-function Get-LazyVMSetting {
+﻿function Get-LazyVMSetting {
     <#
     .SYNOPSIS
     Shows a VM's settings: each value, where it came from, and what it does.
@@ -45,7 +45,7 @@ function Get-LazyVMSetting {
     )
 
     $root = (Resolve-LazyVMRoot).Path
-    $configuration = Read-LazyVMSettings -Root $root -VMName $Name
+    $configuration = Read-VMSetting -Root $root -VMName $Name
     foreach ($warning in $configuration.Warnings) { Write-Warning $warning }
 
     $schema = Get-SettingsSchema

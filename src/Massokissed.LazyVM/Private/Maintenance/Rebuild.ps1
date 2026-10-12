@@ -17,25 +17,25 @@ function Invoke-Rebuild {
         [switch]$NoUnattend
     )
 
-    Write-Log 'REBUILD - Capture, Rebuild, Restore' 'PHASE'
+    Write-LogEntry 'REBUILD - Capture, Rebuild, Restore' 'PHASE'
     $started = Get-Date
 
     if (-not (Test-HyperVModule)) {
-        Exit-WithError 'The Hyper-V PowerShell module is not available.'
+        Stop-WithError 'The Hyper-V PowerShell module is not available.'
     }
 
     # ── 1. capture ──────────────────────────────────────────────────────────
     $manifest = $null
     if ($SkipCapture) {
-        Write-Log 'Skipping capture (-SkipCapture): using the existing manifest' 'WARN'
+        Write-LogEntry 'Skipping capture (-SkipCapture): using the existing manifest' 'WARN'
         $manifest = Get-CaptureManifest
-        if (-not $manifest) { Exit-WithError "No existing capture manifest, and -SkipCapture was given. Capture first with: Save-LazyVMState -Name $($CFG.VMName)" }
+        if (-not $manifest) { Stop-WithError "No existing capture manifest, and -SkipCapture was given. Capture first with: Save-LazyVMState -Name $($CFG.VMName)" }
     }
     elseif (Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue) {
-        $manifest = Invoke-Phase9-Capture
+        $manifest = Save-GuestState
     }
     else {
-        Write-Log 'No existing VM - this is a first build rather than a rebuild' 'INFO'
+        Write-LogEntry 'No existing VM - this is a first build rather than a rebuild' 'INFO'
     }
 
     $expectedDatabases = @()
@@ -50,10 +50,10 @@ function Invoke-Rebuild {
     # ── 3. rebuild ──────────────────────────────────────────────────────────
     $rebuildOk = $false
     try {
-        Invoke-Phase3-FolderSetup
-        Invoke-Phase4-AssetCheck
-        Invoke-Phase5-SQLDisk
-        Invoke-Phase5b-DevDrive
+        Initialize-HostFolder
+        Confirm-InstallMedia
+        Initialize-SqlDataVhd
+        Initialize-DevDriveVhd
 
         $useUnattend = $false
         if (-not $NoUnattend) {
@@ -61,14 +61,14 @@ function Invoke-Rebuild {
             New-UnattendSeedDisk -GuestCredential $guestCredential
             $useUnattend = $true
         }
-        Invoke-Phase6-VMBuild -UseUnattend:$useUnattend
+        New-GuestVM -UseUnattend:$useUnattend
 
         $seedAttached = @(Get-VMDvdDrive -VMName $CFG.VMName -ErrorAction SilentlyContinue |
                 Where-Object { $_.Path -eq $CFG.SeedDiskPath }).Count -gt 0
-        Invoke-Phase7-SilentInstalls -UsedUnattend:($useUnattend -or $seedAttached)
-        Invoke-Phase8-PostConfig
+        Install-GuestSoftware -UsedUnattend:($useUnattend -or $seedAttached)
+        Complete-GuestConfiguration
 
-        if ($manifest) { Invoke-Phase10-Restore | Out-Null }
+        if ($manifest) { Restore-GuestState | Out-Null }
 
         $rebuildOk = $true
     }
@@ -90,25 +90,25 @@ function Invoke-Rebuild {
     $elapsed = [int]((Get-Date) - $started).TotalMinutes
 
     if ($rebuildOk -and $verification -and $verification.Passed) {
-        Write-Log "Rebuild verified in $elapsed minutes" 'OK'
+        Write-LogEntry "Rebuild verified in $elapsed minutes" 'OK'
         if ($retired) { Remove-RetiredVM -Retired $retired }
         return $true
     }
 
-    Write-Log "Rebuild did NOT complete cleanly (after $elapsed minutes)" 'ERROR'
+    Write-LogEntry "Rebuild did NOT complete cleanly (after $elapsed minutes)" 'ERROR'
     if ($verification) {
-        foreach ($failure in @($verification.Failures)) { Write-Log "  $failure" 'ERROR' }
+        foreach ($failure in @($verification.Failures)) { Write-LogEntry "  $failure" 'ERROR' }
     }
     if ($retired) {
-        Write-Log '' 'INFO'
-        Write-Log 'The previous VM has been KEPT. To roll back:' 'WARN'
-        Write-Log "  Stop-VM -Name '$($CFG.VMName)' -TurnOff -Force -ErrorAction SilentlyContinue" 'INFO'
-        Write-Log "  Remove-VM -Name '$($CFG.VMName)' -Force" 'INFO'
-        Write-Log "  Remove-Item '$($retired.NewOsPath)' -Force" 'INFO'
-        Write-Log "  Rename-Item '$($retired.RetiredOsPath)' '$([IO.Path]::GetFileName($retired.NewOsPath))'" 'INFO'
-        Write-Log "  Build-LazyVM -Name '$($CFG.VMName)' -FromPhase 6" 'INFO'
-        Write-Log '' 'INFO'
-        Write-Log "Retired OS disk: $($retired.RetiredOsPath)" 'WARN'
+        Write-LogEntry '' 'INFO'
+        Write-LogEntry 'The previous VM has been KEPT. To roll back:' 'WARN'
+        Write-LogEntry "  Stop-VM -Name '$($CFG.VMName)' -TurnOff -Force -ErrorAction SilentlyContinue" 'INFO'
+        Write-LogEntry "  Remove-VM -Name '$($CFG.VMName)' -Force" 'INFO'
+        Write-LogEntry "  Remove-Item '$($retired.NewOsPath)' -Force" 'INFO'
+        Write-LogEntry "  Rename-Item '$($retired.RetiredOsPath)' '$([IO.Path]::GetFileName($retired.NewOsPath))'" 'INFO'
+        Write-LogEntry "  Build-LazyVM -Name '$($CFG.VMName)' -FromPhase 6" 'INFO'
+        Write-LogEntry '' 'INFO'
+        Write-LogEntry "Retired OS disk: $($retired.RetiredOsPath)" 'WARN'
     }
     return $false
 }
@@ -117,7 +117,7 @@ function Invoke-RetireCurrentVM {
     <# Shuts the guest down and moves its OS disk aside under a dated name.
        Nothing is deleted here. #>
 
-    Write-Log 'Retiring the current VM...' 'INFO'
+    Write-LogEntry 'Retiring the current VM...' 'INFO'
     Stop-GuestGracefully
 
     $null = Get-VM -Name $CFG.VMName -ErrorAction Stop   # fail fast if it vanished
@@ -132,7 +132,7 @@ function Invoke-RetireCurrentVM {
                 }) |
             Select-Object -First 1
     }
-    if (-not $osDrive) { Exit-WithError 'Could not identify the OS disk on the existing VM.' }
+    if (-not $osDrive) { Stop-WithError 'Could not identify the OS disk on the existing VM.' }
 
     $osPath = $osDrive.Path
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -142,7 +142,7 @@ function Invoke-RetireCurrentVM {
     # chain, which would make the rename meaningless.
     $checkpoints = @(Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue)
     if ($checkpoints.Count -gt 0) {
-        Write-Log "Removing $($checkpoints.Count) checkpoint(s) before retiring the disk..." 'WARN'
+        Write-LogEntry "Removing $($checkpoints.Count) checkpoint(s) before retiring the disk..." 'WARN'
         Remove-VMSnapshot -VMName $CFG.VMName -IncludeAllChildSnapshots -Confirm:$false
         $deadline = (Get-Date).AddMinutes(30)
         while ((Get-Date) -lt $deadline -and @(Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue).Count -gt 0) {
@@ -151,10 +151,10 @@ function Invoke-RetireCurrentVM {
     }
 
     Remove-VM -Name $CFG.VMName -Force
-    Write-Log "VM definition '$($CFG.VMName)' removed (disks kept)" 'OK'
+    Write-LogEntry "VM definition '$($CFG.VMName)' removed (disks kept)" 'OK'
 
     Move-Item -LiteralPath $osPath -Destination $retiredPath -Force
-    Write-Log "OS disk retired to $([IO.Path]::GetFileName($retiredPath)) ($(Format-Size (Get-Item $retiredPath).Length))" 'OK'
+    Write-LogEntry "OS disk retired to $([IO.Path]::GetFileName($retiredPath)) ($(Format-Size (Get-Item $retiredPath).Length))" 'OK'
 
     # The VM's own config folder would otherwise collide with the new build.
     $configDir = Join-Path $CFG.VHDXRoot $CFG.VMName
@@ -162,10 +162,10 @@ function Invoke-RetireCurrentVM {
         $retiredConfig = "$configDir.retired-$stamp"
         try {
             Move-Item -LiteralPath $configDir -Destination $retiredConfig -Force
-            Write-Log 'VM configuration folder moved aside' 'OK'
+            Write-LogEntry 'VM configuration folder moved aside' 'OK'
         }
         catch {
-            Write-Log "Could not move the VM config folder: $($_.Exception.Message)" 'WARN'
+            Write-LogEntry "Could not move the VM config folder: $($_.Exception.Message)" 'WARN'
             $retiredConfig = $null
         }
     }
@@ -176,9 +176,9 @@ function Invoke-RetireCurrentVM {
         Remove-Item -LiteralPath $CFG.SeedDiskPath -Force -ErrorAction SilentlyContinue
     }
 
-    Write-Log "SQL data disk left untouched: $($CFG.SQLDiskPath)" 'INFO'
+    Write-LogEntry "SQL data disk left untouched: $($CFG.SQLDiskPath)" 'INFO'
     if ($CFG.UseDevDrive -and (Test-Path -LiteralPath $CFG.DevDrivePath)) {
-        Write-Log "Dev Drive left untouched: $($CFG.DevDrivePath)" 'INFO'
+        Write-LogEntry "Dev Drive left untouched: $($CFG.DevDrivePath)" 'INFO'
     }
 
     return [pscustomobject]@{
@@ -193,8 +193,8 @@ function Remove-RetiredVM {
     param([Parameter(Mandatory)]$Retired)
 
     if (-not $CFG.DeleteRetiredDiskOnSuccess) {
-        Write-Log "Keeping the retired disk as configured: $($Retired.RetiredOsPath)" 'INFO'
-        Write-Log '  Delete it by hand once you are happy with the new VM.' 'INFO'
+        Write-LogEntry "Keeping the retired disk as configured: $($Retired.RetiredOsPath)" 'INFO'
+        Write-LogEntry '  Delete it by hand once you are happy with the new VM.' 'INFO'
         return
     }
 
@@ -208,7 +208,7 @@ function Remove-RetiredVM {
     if ($Retired.RetiredConfig -and (Test-Path -LiteralPath $Retired.RetiredConfig)) {
         Remove-Item -LiteralPath $Retired.RetiredConfig -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Write-Log "Retired VM deleted - $(Format-Size $freed) reclaimed" 'OK'
+    Write-LogEntry "Retired VM deleted - $(Format-Size $freed) reclaimed" 'OK'
 }
 
 function Test-RebuiltVM {
@@ -216,26 +216,29 @@ function Test-RebuiltVM {
        This is the gate that decides whether the old disk can be deleted. #>
     param([string[]]$ExpectedDatabases = @())
 
-    Write-Log 'Verifying the rebuilt VM...' 'INFO'
+    Write-LogEntry 'Verifying the rebuilt VM...' 'INFO'
 
-    $checks = @()
-    $failures = @()
+    # Filled by Add-Check which, being nested, adds to this function's list.
+    $checks = [System.Collections.Generic.List[object]]::new()
 
-    function Add-Check([string]$name, [bool]$ok, [string]$detail) {
-        $script:__checks += [pscustomobject]@{ Name = $name; Passed = $ok; Detail = $detail }
-        if ($ok) { Write-Log "  PASS  $name - $detail" 'OK' }
-        else { Write-Log "  FAIL  $name - $detail" 'ERROR' }
+    function Add-Check {
+        param(
+            [Parameter(Mandatory)][string]$Name,
+            [Parameter(Mandatory)][bool]$Passed,
+            [string]$Detail
+        )
+        $checks.Add([pscustomobject]@{ Name = $Name; Passed = $Passed; Detail = $Detail })
+        if ($Passed) { Write-LogEntry "  PASS  $Name - $Detail" 'OK' }
+        else { Write-LogEntry "  FAIL  $Name - $Detail" 'ERROR' }
     }
-    $script:__checks = @()
 
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
-    Add-Check 'VM exists' ($null -ne $vm) $(if ($vm) { "state $($vm.State)" } else { 'not found' })
+    Add-Check -Name 'VM exists' -Passed ($null -ne $vm) -Detail $(if ($vm) { "state $($vm.State)" } else { 'not found' })
     if (-not $vm) {
-        $script:__checks | ForEach-Object { if (-not $_.Passed) { $failures += $_.Name } }
-        return [pscustomobject]@{ Passed = $false; Checks = $script:__checks; Failures = @('VM does not exist') }
+        return [pscustomobject]@{ Passed = $false; Checks = @($checks); Failures = @('VM does not exist') }
     }
 
-    Add-Check 'VM running' ($vm.State -eq 'Running') "state $($vm.State)"
+    Add-Check -Name 'VM running' -Passed ($vm.State -eq 'Running') -Detail "state $($vm.State)"
 
     $credential = Get-GuestCredential
     $reachable = $false
@@ -249,18 +252,18 @@ function Test-RebuiltVM {
         # verification result, and the remaining checks still get reported.
         $reachError = $_.Exception.Message
     }
-    Add-Check 'guest reachable' $reachable $(if ($reachable) { 'PowerShell Direct' } else { $reachError })
+    Add-Check -Name 'guest reachable' -Passed $reachable -Detail $(if ($reachable) { 'PowerShell Direct' } else { $reachError })
 
     if ($reachable) {
         # Every Visual Studio Installer product in the VM's tooling list.
-        $installedProducts = @(Get-GuestInstallerProducts)
+        $installedProducts = @(Get-GuestInstallerProduct)
         foreach ($product in @((Get-BuildTooling -Quiet).Products)) {
             $found = @($installedProducts | Where-Object { $_.ProductId -eq $product.ProductId -and $_.ChannelId -eq $product.ChannelId }).Count -gt 0
-            Add-Check "$($product.DisplayName) installed" $found $(if ($found) { $product.ChannelId } else { 'not found' })
+            Add-Check -Name "$($product.DisplayName) installed" -Passed $found -Detail $(if ($found) { $product.ChannelId } else { 'not found' })
         }
 
         $sql = Get-GuestSqlInstance
-        Add-Check 'SQL Server installed' ($null -ne $sql) $(if ($sql) { "$($sql.Instance) ($($sql.Edition))" } else { 'not found' })
+        Add-Check -Name 'SQL Server installed' -Passed ($null -ne $sql) -Detail $(if ($sql) { "$($sql.Instance) ($($sql.Edition))" } else { 'not found' })
 
         if ($sql -and $ExpectedDatabases.Count -gt 0) {
             $present = Invoke-GuestScript -Activity 'database verification' -TimeoutMinutes 10 `
@@ -280,8 +283,8 @@ function Test-RebuiltVM {
             }
             $present = @($present)
             $missing = @($ExpectedDatabases | Where-Object { $present -notcontains $_ })
-            Add-Check 'databases restored' ($missing.Count -eq 0) `
-                $(if ($missing.Count -eq 0) { "$($present.Count) online: $($present -join ', ')" } else { "missing: $($missing -join ', ')" })
+            Add-Check -Name 'databases restored' -Passed ($missing.Count -eq 0) `
+                -Detail $(if ($missing.Count -eq 0) { "$($present.Count) online: $($present -join ', ')" } else { "missing: $($missing -join ', ')" })
         }
 
         if ($CFG.UseDevDrive) {
@@ -308,7 +311,7 @@ function Test-RebuiltVM {
                 }
             }
             catch { $devDetail = $_.Exception.Message }
-            Add-Check 'Dev Drive mounted' $devOk $devDetail
+            Add-Check -Name 'Dev Drive mounted' -Passed $devOk -Detail $devDetail
         }
 
         $diskOk = $false
@@ -320,13 +323,12 @@ function Test-RebuiltVM {
         catch {
             $diskDetail = "$($CFG.GuestSqlDataDir) - $($_.Exception.Message)"
         }
-        Add-Check 'SQL data disk mounted' ([bool]$diskOk) $diskDetail
+        Add-Check -Name 'SQL data disk mounted' -Passed ([bool]$diskOk) -Detail $diskDetail
     }
 
-    $checks = $script:__checks
     $failures = @($checks | Where-Object { -not $_.Passed } | ForEach-Object { "$($_.Name): $($_.Detail)" })
     $passed = ($failures.Count -eq 0)
 
-    Write-Log "Verification: $(@($checks | Where-Object Passed).Count)/$($checks.Count) checks passed" $(if ($passed) { 'OK' } else { 'ERROR' })
-    return [pscustomobject]@{ Passed = $passed; Checks = $checks; Failures = $failures }
+    Write-LogEntry "Verification: $(@($checks | Where-Object Passed).Count)/$($checks.Count) checks passed" $(if ($passed) { 'OK' } else { 'ERROR' })
+    return [pscustomobject]@{ Passed = $passed; Checks = @($checks); Failures = $failures }
 }

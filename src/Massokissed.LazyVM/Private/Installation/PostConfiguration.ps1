@@ -7,22 +7,22 @@
 #  Each step is isolated, so a failure in one is logged and the remaining
 #  steps still run.
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase8-PostConfig {
-    Write-Log 'PHASE 8 - Post-Configuration' 'PHASE'
+function Complete-GuestConfiguration {
+    Write-LogEntry 'PHASE 8 - Post-Configuration' 'PHASE'
 
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
     if (-not $vm) {
-        Write-Log "VM '$($CFG.VMName)' not found - skipping Phase 8" 'WARN'
+        Write-LogEntry "VM '$($CFG.VMName)' not found - skipping Phase 8" 'WARN'
         return
     }
 
     $credential = Get-GuestCredential
     if (-not $credential) {
-        Write-Log 'No stored guest credential - skipping Phase 8' 'WARN'
+        Write-LogEntry 'No stored guest credential - skipping Phase 8' 'WARN'
         return
     }
     if ($vm.State -ne 'Running') {
-        Write-Log "VM is '$($vm.State)' - skipping Phase 8 (start the VM and re-run with -FromPhase 8)" 'WARN'
+        Write-LogEntry "VM is '$($vm.State)' - skipping Phase 8 (start the VM and re-run with -FromPhase 8)" 'WARN'
         return
     }
 
@@ -31,8 +31,8 @@ function Invoke-Phase8-PostConfig {
     $steps = @(
         [pscustomobject]@{ Name = '8a - SQL data disk'; Action = { Confirm-SqlDataDisk } }
         [pscustomobject]@{ Name = '8b - relocate SQL data files'; Action = { Move-GuestSqlDataFile } }
-        [pscustomobject]@{ Name = '8c - VS settings'; Action = { Restore-VSSettings } }
-        [pscustomobject]@{ Name = '8d - database restore'; Action = { Restore-SqlDatabases } }
+        [pscustomobject]@{ Name = '8c - VS settings'; Action = { Restore-VSSetting } }
+        [pscustomobject]@{ Name = '8d - database restore'; Action = { Restore-SqlDatabase } }
     )
 
     $failures = 0
@@ -43,15 +43,15 @@ function Invoke-Phase8-PostConfig {
         catch {
             $failures++
             Write-LogError "$($step.Name) failed" $_
-            Write-Log "  Continuing with the remaining Phase 8 steps." 'INFO'
+            Write-LogEntry "  Continuing with the remaining Phase 8 steps." 'INFO'
         }
     }
 
     if ($failures -gt 0) {
-        Write-Log "Phase 8 finished with $failures of $($steps.Count) steps failing" 'WARN'
+        Write-LogEntry "Phase 8 finished with $failures of $($steps.Count) steps failing" 'WARN'
     }
     else {
-        Write-Log 'Phase 8 complete' 'OK'
+        Write-LogEntry 'Phase 8 complete' 'OK'
     }
 }
 
@@ -59,7 +59,7 @@ function Confirm-SqlDataDisk {
     $attached = @(Get-VMHardDiskDrive -VMName $CFG.VMName |
             Where-Object { $_.Path -eq $CFG.SQLDiskPath })
     if ($attached.Count -eq 0) { Add-SqlDataDisk }
-    else { Write-Log 'SQL data disk attached' 'OK' }
+    else { Write-LogEntry 'SQL data disk attached' 'OK' }
 
     # Always run this, even when the disk was already attached: it is
     # idempotent, and it is what resolves the actual drive letter that the
@@ -89,20 +89,20 @@ function Move-GuestSqlDataFile {
           old ones are simply removed afterwards.
     #>
     if (-not $CFG.MoveSqlDataToDataDisk) {
-        Write-Log 'SQL data relocation disabled in config (MoveSqlDataToDataDisk) - skipping' 'INFO'
+        Write-LogEntry 'SQL data relocation disabled in config (MoveSqlDataToDataDisk) - skipping' 'INFO'
         return
     }
 
     $instance = Get-GuestSqlInstance
     if (-not $instance) {
-        Write-Log 'No SQL Server instance in the guest - nothing to relocate' 'INFO'
+        Write-LogEntry 'No SQL Server instance in the guest - nothing to relocate' 'INFO'
         return
     }
 
     Set-GuestSqlServer -Instance $instance.Instance
     $serviceName = if ($instance.Instance -eq 'MSSQLSERVER') { 'MSSQLSERVER' } else { "MSSQL`$$($instance.Instance)" }
 
-    Write-Log "Relocating SQL data files for instance '$($instance.Instance)' onto $($CFG.GuestDataDriveLetter):..." 'INFO'
+    Write-LogEntry "Relocating SQL data files for instance '$($instance.Instance)' onto $($CFG.GuestDataDriveLetter):..." 'INFO'
 
     $report = Invoke-GuestScript -Activity 'SQL data file relocation' -TimeoutMinutes 120 -ArgumentList @(
         (Get-GuestSqlServer), $serviceName, $instance.Instance,
@@ -132,7 +132,7 @@ function Move-GuestSqlDataFile {
             return $cmd.ExecuteNonQuery()
         }
 
-        function Get-Rows($conn, $sql) {
+        function Get-SqlRow($conn, $sql) {
             $cmd = $conn.CreateCommand()
             $cmd.CommandText = $sql
             $reader = $cmd.ExecuteReader()
@@ -152,7 +152,7 @@ function Move-GuestSqlDataFile {
             # database_id 1..4 are master/tempdb/model/msdb. Take user
             # databases plus tempdb; deliberately leave the rest alone.
             # @() so a single-row result does not unroll to a scalar on return.
-            $files = @(Get-Rows $connection @'
+            $files = @(Get-SqlRow $connection @'
 SELECT d.name AS DbName, d.database_id AS DbId, d.state_desc AS State,
        mf.name AS LogicalName, mf.physical_name AS PhysicalName, mf.type_desc AS FileType
 FROM sys.master_files mf
@@ -179,7 +179,7 @@ ORDER BY d.name, mf.file_id
                     $dest = Join-Path $tempDir $leaf
                     $logical = $f.LogicalName.Replace("'", "''")
                     $destEsc = $dest.Replace("'", "''")
-                    Invoke-Sql $connection "ALTER DATABASE [tempdb] MODIFY FILE (NAME = N'$logical', FILENAME = N'$destEsc')" | Out-Null
+                    Invoke-Sql -conn $connection -sql "ALTER DATABASE [tempdb] MODIFY FILE (NAME = N'$logical', FILENAME = N'$destEsc')" | Out-Null
                     $oldTempFiles += $f.PhysicalName
                     $tempdbMoved = $true
                 }
@@ -242,7 +242,7 @@ ORDER BY d.name, mf.file_id
                 $offline = $false
                 $repointed = @()
                 try {
-                    Invoke-Sql $connection "ALTER DATABASE $quoted SET OFFLINE WITH ROLLBACK IMMEDIATE" | Out-Null
+                    Invoke-Sql -conn $connection -sql "ALTER DATABASE $quoted SET OFFLINE WITH ROLLBACK IMMEDIATE" | Out-Null
                     $offline = $true
 
                     foreach ($item in $plan) {
@@ -257,11 +257,11 @@ ORDER BY d.name, mf.file_id
                     foreach ($item in $plan) {
                         $l = $item.Logical.Replace("'", "''")
                         $d = $item.Dest.Replace("'", "''")
-                        Invoke-Sql $connection "ALTER DATABASE $quoted MODIFY FILE (NAME = N'$l', FILENAME = N'$d')" | Out-Null
+                        Invoke-Sql -conn $connection -sql "ALTER DATABASE $quoted MODIFY FILE (NAME = N'$l', FILENAME = N'$d')" | Out-Null
                         $repointed += $item
                     }
 
-                    Invoke-Sql $connection "ALTER DATABASE $quoted SET ONLINE" 900 | Out-Null
+                    Invoke-Sql -conn $connection -sql "ALTER DATABASE $quoted SET ONLINE" -timeout 900 | Out-Null
                     $offline = $false
 
                     # Only now are the originals expendable.
@@ -278,9 +278,9 @@ ORDER BY d.name, mf.file_id
                         foreach ($item in $repointed) {
                             $l = $item.Logical.Replace("'", "''")
                             $s = $item.Source.Replace("'", "''")
-                            Invoke-Sql $connection "ALTER DATABASE $quoted MODIFY FILE (NAME = N'$l', FILENAME = N'$s')" | Out-Null
+                            Invoke-Sql -conn $connection -sql "ALTER DATABASE $quoted MODIFY FILE (NAME = N'$l', FILENAME = N'$s')" | Out-Null
                         }
-                        if ($offline) { Invoke-Sql $connection "ALTER DATABASE $quoted SET ONLINE" 900 | Out-Null }
+                        if ($offline) { Invoke-Sql -conn $connection -sql "ALTER DATABASE $quoted SET ONLINE" -timeout 900 | Out-Null }
                         foreach ($item in $plan) {
                             if ((Test-Path $item.Dest) -and (Test-Path $item.Source)) {
                                 Remove-Item -LiteralPath $item.Dest -Force -ErrorAction SilentlyContinue
@@ -336,34 +336,34 @@ ORDER BY d.name, mf.file_id
     }
 
     foreach ($line in @($report)) {
-        if ($line -like 'FAILED*') { Write-Log "  $line" 'ERROR' }
-        elseif ($line -like 'skipped*' -or $line -like 'no user*') { Write-Log "  $line" 'INFO' }
-        elseif ($line -like 'could not*') { Write-Log "  $line" 'WARN' }
-        else { Write-Log "  $line" 'OK' }
+        if ($line -like 'FAILED*') { Write-LogEntry "  $line" 'ERROR' }
+        elseif ($line -like 'skipped*' -or $line -like 'no user*') { Write-LogEntry "  $line" 'INFO' }
+        elseif ($line -like 'could not*') { Write-LogEntry "  $line" 'WARN' }
+        else { Write-LogEntry "  $line" 'OK' }
     }
-    Write-Log 'SQL data relocation complete' 'OK'
+    Write-LogEntry 'SQL data relocation complete' 'OK'
 }
 
-function Restore-VSSettings {
+function Restore-VSSetting {
     if (-not (Test-Path -LiteralPath $CFG.VSSettingsBackup)) {
-        Write-Log "No VS settings backup at $($CFG.VSSettingsBackup) - skipping" 'INFO'
-        Write-Log '  Create one with: Visual Studio -> Tools -> Import/Export Settings -> Export all settings' 'INFO'
+        Write-LogEntry "No VS settings backup at $($CFG.VSSettingsBackup) - skipping" 'INFO'
+        Write-LogEntry '  Create one with: Visual Studio -> Tools -> Import/Export Settings -> Export all settings' 'INFO'
         return
     }
 
     $destination = Join-Path $CFG.GuestSetupDir 'VisualStudio.vssettings'
     Copy-VMFile -Name $CFG.VMName -SourcePath $CFG.VSSettingsBackup -DestinationPath $destination `
         -CreateFullPath -FileSource Host -Force -ErrorAction Stop
-    Write-Log 'VS settings file copied into the guest' 'OK'
+    Write-LogEntry 'VS settings file copied into the guest' 'OK'
 
     # devenv is located with vswhere rather than assuming the Community path,
     # so Professional and Enterprise installs work too.
     $vs = Get-GuestVisualStudio
     if (-not $vs) {
-        Write-Log 'Visual Studio is not installed in the guest - skipping the settings restore' 'WARN'
+        Write-LogEntry 'Visual Studio is not installed in the guest - skipping the settings restore' 'WARN'
         return
     }
-    Write-Log "Found $($vs.DisplayName) at $($vs.DevEnvPath)" 'INFO'
+    Write-LogEntry "Found $($vs.DisplayName) at $($vs.DevEnvPath)" 'INFO'
 
     # devenv /ResetSettings writes to the per-user settings store and needs a
     # real desktop session, so it runs as the interactive user.
@@ -377,10 +377,10 @@ function Restore-VSSettings {
     Invoke-GuestScriptAsInteractiveUser -ScriptText $script -TaskName 'LazyVM-VSSettings' `
         -Activity 'Visual Studio settings restore' -TimeoutMinutes 20
 
-    Write-Log 'Visual Studio settings restored' 'OK'
+    Write-LogEntry 'Visual Studio settings restored' 'OK'
 }
 
-function Restore-SqlDatabases {
+function Restore-SqlDatabase {
     <#
       Rewritten for safety. The previous version used Invoke-Sqlcmd with
       -ErrorAction SilentlyContinue for its "does this database exist?" check:
@@ -393,7 +393,7 @@ function Restore-SqlDatabases {
       logical file names with RESTORE FILELISTONLY instead of assuming they
       match the database name, and never passes REPLACE.
     #>
-    Write-Log "Checking $($CFG.GuestSqlBackupDir) for databases to restore..." 'INFO'
+    Write-LogEntry "Checking $($CFG.GuestSqlBackupDir) for databases to restore..." 'INFO'
 
     $results = Invoke-GuestScript -Activity 'SQL database restore' -TimeoutMinutes 60 `
         -ArgumentList @($CFG.GuestSqlBackupDir, $CFG.GuestSqlDataDir, $CFG.GuestSqlLogDir, (Get-GuestSqlServer)) -ScriptBlock {
@@ -469,7 +469,7 @@ function Restore-SqlDatabases {
     }
 
     foreach ($line in @($results)) {
-        if ($line -like 'restored:*') { Write-Log "  $line" 'OK' } else { Write-Log "  $line" 'INFO' }
+        if ($line -like 'restored:*') { Write-LogEntry "  $line" 'OK' } else { Write-LogEntry "  $line" 'INFO' }
     }
-    Write-Log 'Database restore check complete' 'OK'
+    Write-LogEntry 'Database restore check complete' 'OK'
 }

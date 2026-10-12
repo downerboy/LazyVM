@@ -16,17 +16,17 @@
 #  being copied to the host: that VHDX is never destroyed by a rebuild, and
 #  pulling tens of GB across the VMBus would be pointless.
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase9-Capture {
-    Write-Log 'PHASE 9 - Capture Guest State' 'PHASE'
+function Save-GuestState {
+    Write-LogEntry 'PHASE 9 - Capture Guest State' 'PHASE'
 
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
-    if (-not $vm) { Exit-WithError "VM '$($CFG.VMName)' does not exist - nothing to capture." }
+    if (-not $vm) { Stop-WithError "VM '$($CFG.VMName)' does not exist - nothing to capture." }
 
     $credential = Get-GuestCredential
-    if (-not $credential) { Exit-WithError 'No stored guest credential. Store one with Set-LazyVMCredential first.' }
+    if (-not $credential) { Stop-WithError 'No stored guest credential. Store one with Set-LazyVMCredential first.' }
 
     if ($vm.State -ne 'Running') {
-        Write-Log "VM is '$($vm.State)' - starting it to capture" 'INFO'
+        Write-LogEntry "VM is '$($vm.State)' - starting it to capture" 'INFO'
         Start-VM -Name $CFG.VMName | Out-Null
         Wait-GuestReady -Credential $credential -TimeoutMinutes 30 | Out-Null
     }
@@ -34,7 +34,7 @@ function Invoke-Phase9-Capture {
 
     # Resolve the data disk letter so SQL backups land in the right place.
     try { Initialize-GuestSqlDisk }
-    catch { Write-Log "Could not prepare the data disk: $($_.Exception.Message)" 'WARN' }
+    catch { Write-LogEntry "Could not prepare the data disk: $($_.Exception.Message)" 'WARN' }
 
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $stateDir = $CFG.StateDir
@@ -62,13 +62,13 @@ function Invoke-Phase9-Capture {
         [pscustomobject]@{ Key = 'VisualStudio'; Name = 'Visual Studio'; Action = { Save-GuestVisualStudioState } }
         [pscustomobject]@{ Key = 'Sql'; Name = 'SQL Server'; Action = { Save-GuestSqlState } }
         [pscustomobject]@{ Key = 'Windows'; Name = 'Windows environment'; Action = { Save-GuestWindowsState } }
-        [pscustomobject]@{ Key = 'Projects'; Name = 'project files'; Action = { Save-GuestProjectFiles } }
-        [pscustomobject]@{ Key = 'AppSettings'; Name = 'application settings'; Action = { Save-GuestAppSettings } }
+        [pscustomobject]@{ Key = 'Projects'; Name = 'project files'; Action = { Save-GuestProjectFolder } }
+        [pscustomobject]@{ Key = 'AppSettings'; Name = 'application settings'; Action = { Save-GuestAppSetting } }
     )
 
     foreach ($step in $steps) {
         try {
-            Write-Log "Capturing $($step.Name)..." 'INFO'
+            Write-LogEntry "Capturing $($step.Name)..." 'INFO'
             $manifest[$step.Key] = & $step.Action
         }
         catch {
@@ -92,10 +92,10 @@ function Invoke-Phase9-Capture {
     Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $stateDir "manifest-$stamp.json") -Force
 
     if ($manifest.Warnings.Count -gt 0) {
-        Write-Log "Capture finished with $($manifest.Warnings.Count) warning(s):" 'WARN'
-        foreach ($w in $manifest.Warnings) { Write-Log "  $w" 'WARN' }
+        Write-LogEntry "Capture finished with $($manifest.Warnings.Count) warning(s):" 'WARN'
+        foreach ($w in $manifest.Warnings) { Write-LogEntry "  $w" 'WARN' }
     }
-    Write-Log "Capture written to $manifestPath" 'OK'
+    Write-LogEntry "Capture written to $manifestPath" 'OK'
     return $manifest
 }
 
@@ -104,7 +104,7 @@ function Get-CaptureManifest {
     if (-not (Test-Path -LiteralPath $path)) { return $null }
     try { return (Get-Content -LiteralPath $path -Raw | ConvertFrom-Json) }
     catch {
-        Write-Log "Capture manifest at $path is unreadable: $($_.Exception.Message)" 'WARN'
+        Write-LogEntry "Capture manifest at $path is unreadable: $($_.Exception.Message)" 'WARN'
         return $null
     }
 }
@@ -127,7 +127,7 @@ function Get-GuestIdentity {
 function Save-GuestVisualStudioState {
     $vs = Get-GuestVisualStudio
     if (-not $vs) {
-        Write-Log '  Visual Studio is not installed - skipping' 'INFO'
+        Write-LogEntry '  Visual Studio is not installed - skipping' 'INFO'
         return $null
     }
 
@@ -237,10 +237,10 @@ function Save-GuestVisualStudioState {
         try {
             Copy-FromGuest -GuestPath $pull.Guest -HostPath $dest
             $captured.Files[$pull.Key] = $dest
-            Write-Log "  $($pull.Name)" 'OK'
+            Write-LogEntry "  $($pull.Name)" 'OK'
         }
         catch {
-            Write-Log "  could not retrieve $($pull.Name): $($_.Exception.Message)" 'WARN'
+            Write-LogEntry "  could not retrieve $($pull.Name): $($_.Exception.Message)" 'WARN'
         }
     }
 
@@ -250,8 +250,8 @@ function Save-GuestVisualStudioState {
         Copy-Item -LiteralPath $captured.Files['Settings'] -Destination $CFG.VSSettingsBackup -Force -ErrorAction SilentlyContinue
     }
 
-    Write-Log "  Visual Studio: $($vs.DisplayName)" 'OK'
-    foreach ($note in @($info.Notes)) { Write-Log "  $note" 'WARN' }
+    Write-LogEntry "  Visual Studio: $($vs.DisplayName)" 'OK'
+    foreach ($note in @($info.Notes)) { Write-LogEntry "  $note" 'WARN' }
     return [pscustomobject]$captured
 }
 
@@ -259,7 +259,7 @@ function Save-GuestVisualStudioState {
 function Save-GuestSqlState {
     $instance = Get-GuestSqlInstance
     if (-not $instance) {
-        Write-Log '  SQL Server is not installed - skipping' 'INFO'
+        Write-LogEntry '  SQL Server is not installed - skipping' 'INFO'
         return $null
     }
     Set-GuestSqlServer -Instance $instance.Instance
@@ -275,7 +275,7 @@ function Save-GuestSqlState {
         $conn = New-Object System.Data.SqlClient.SqlConnection($cs)
         $conn.Open()
 
-        function Get-Rows($c, $sql) {
+        function Get-SqlRow($c, $sql) {
             $cmd = $c.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = 300
             $r = $cmd.ExecuteReader(); $rows = @()
             try {
@@ -305,11 +305,11 @@ function Save-GuestSqlState {
             Notes        = @()
         }
 
-        $ver = Get-Rows $conn "SELECT SERVERPROPERTY('ProductVersion') AS V, SERVERPROPERTY('Edition') AS E, @@SERVICENAME AS S"
+        $ver = Get-SqlRow $conn "SELECT SERVERPROPERTY('ProductVersion') AS V, SERVERPROPERTY('Edition') AS E, @@SERVICENAME AS S"
         $out.Version = "$($ver[0].V)"; $out.Edition = "$($ver[0].E)"; $out.Instance = "$($ver[0].S)"
 
         # -- user databases --------------------------------------------------
-        $dbs = @(Get-Rows $conn @'
+        $dbs = @(Get-SqlRow $conn @'
 SELECT name, recovery_model_desc AS Recovery, compatibility_level AS CompatLevel, collation_name AS Collation
 FROM sys.databases WHERE database_id > 4 AND state_desc = 'ONLINE' AND is_read_only = 0
 '@)
@@ -344,7 +344,7 @@ FROM sys.databases WHERE database_id > 4 AND state_desc = 'ONLINE' AND is_read_o
         # -- logins ----------------------------------------------------------
         # SID and password hash are preserved so database users do not become
         # orphaned when the databases are restored into a new instance.
-        $logins = @(Get-Rows $conn @'
+        $logins = @(Get-SqlRow $conn @'
 SELECT sp.name, sp.type_desc AS TypeDesc, sp.is_disabled AS IsDisabled,
        sp.default_database_name AS DefaultDb, sp.default_language_name AS DefaultLang,
        CONVERT(varchar(max), sp.sid, 1) AS SidHex,
@@ -356,7 +356,7 @@ WHERE sp.type IN ('S','U','G') AND sp.name NOT LIKE '##%' AND sp.name NOT LIKE '
   AND sp.name <> 'sa' AND sp.name NOT LIKE 'BUILTIN\%'
 '@)
         foreach ($l in $logins) {
-            $roles = @(Get-Rows $conn ("SELECT r.name FROM sys.server_role_members m JOIN sys.server_principals r ON r.principal_id = m.role_principal_id JOIN sys.server_principals p ON p.principal_id = m.member_principal_id WHERE p.name = N'" + "$($l.name)".Replace("'", "''") + "'") | ForEach-Object { "$($_.name)" })
+            $roles = @(Get-SqlRow $conn ("SELECT r.name FROM sys.server_role_members m JOIN sys.server_principals r ON r.principal_id = m.role_principal_id JOIN sys.server_principals p ON p.principal_id = m.member_principal_id WHERE p.name = N'" + "$($l.name)".Replace("'", "''") + "'") | ForEach-Object { "$($_.name)" })
             $out.Logins += [pscustomobject]@{
                 Name              = "$($l.name)"
                 TypeDesc          = "$($l.TypeDesc)"
@@ -372,15 +372,15 @@ WHERE sp.type IN ('S','U','G') AND sp.name NOT LIKE '##%' AND sp.name NOT LIKE '
         }
 
         # -- instance settings ----------------------------------------------
-        $out.Configs = @(Get-Rows $conn "SELECT name, value_in_use FROM sys.configurations WHERE value <> value_in_use OR value_in_use <> 0" |
+        $out.Configs = @(Get-SqlRow $conn "SELECT name, value_in_use FROM sys.configurations WHERE value <> value_in_use OR value_in_use <> 0" |
                 ForEach-Object { [pscustomobject]@{ Name = "$($_.name)"; Value = "$($_.value_in_use)" } })
 
         # -- things this script knowingly does NOT migrate -------------------
-        $jobs = @(Get-Rows $conn "SELECT name FROM msdb.dbo.sysjobs" | ForEach-Object { "$($_.name)" })
+        $jobs = @(Get-SqlRow $conn "SELECT name FROM msdb.dbo.sysjobs" | ForEach-Object { "$($_.name)" })
         if ($jobs.Count -gt 0) { $out.NotMigrated += "SQL Agent jobs: $($jobs -join ', ')" }
-        $linked = @(Get-Rows $conn "SELECT name FROM sys.servers WHERE server_id <> 0" | ForEach-Object { "$($_.name)" })
+        $linked = @(Get-SqlRow $conn "SELECT name FROM sys.servers WHERE server_id <> 0" | ForEach-Object { "$($_.name)" })
         if ($linked.Count -gt 0) { $out.NotMigrated += "linked servers: $($linked -join ', ')" }
-        $creds = @(Get-Rows $conn "SELECT name FROM sys.credentials" | ForEach-Object { "$($_.name)" })
+        $creds = @(Get-SqlRow $conn "SELECT name FROM sys.credentials" | ForEach-Object { "$($_.name)" })
         if ($creds.Count -gt 0) { $out.NotMigrated += "credentials: $($creds -join ', ')" }
 
         $conn.Close()
@@ -389,16 +389,20 @@ WHERE sp.type IN ('S','U','G') AND sp.name NOT LIKE '##%' AND sp.name NOT LIKE '
 
     $total = 0
     foreach ($db in @($result.Databases)) { $total += $db.SizeBytes }
-    Write-Log "  SQL $($result.Version) ($($result.Edition)): $(@($result.Databases).Count) database(s), $(Format-Size $total) of backups, $(@($result.Logins).Count) login(s)" 'OK'
-    Write-Log "  Backups stay on the data disk ($($result.BackupDir)), which survives the rebuild" 'INFO'
+    Write-LogEntry "  SQL $($result.Version) ($($result.Edition)): $(@($result.Databases).Count) database(s), $(Format-Size $total) of backups, $(@($result.Logins).Count) login(s)" 'OK'
+    Write-LogEntry "  Backups stay on the data disk ($($result.BackupDir)), which survives the rebuild" 'INFO'
     foreach ($item in @($result.NotMigrated)) {
-        Write-Log "  NOT migrated automatically - $item" 'WARN'
+        Write-LogEntry "  NOT migrated automatically - $item" 'WARN'
     }
     return $result
 }
 
 # ── Windows environment ──────────────────────────────────────────────────────
 function Save-GuestWindowsState {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'The certificate PFX password has to cross into the guest as text, where it becomes a SecureString again; PowerShell Direct cannot carry a SecureString encrypted with a key the guest does not have.')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'The certificate PFX password has to cross into the guest as text, where it becomes a SecureString again; PowerShell Direct cannot carry a SecureString encrypted with a key the guest does not have.')]
+    param()
+
     $windowsDir = Join-Path $CFG.StateDir 'windows'
 
     # A password for the certificate PFXs, kept in the existing credential store.
@@ -550,10 +554,10 @@ function Save-GuestWindowsState {
     Copy-FromGuest -GuestPath $result.Zip -HostPath $zipDest
 
     $summary = $result.Summary
-    Write-Log ("  environment: {0} machine + {1} user variable(s), {2} certificate(s), {3} firewall rule(s), {4} task(s)" -f `
+    Write-LogEntry ("  environment: {0} machine + {1} user variable(s), {2} certificate(s), {3} firewall rule(s), {4} task(s)" -f `
         (@($summary.EnvMachine.PSObject.Properties).Count), (@($summary.EnvUser.PSObject.Properties).Count),
         (@($summary.Certificates).Count), $summary.FirewallRules, (@($summary.ScheduledTasks).Count)) 'OK'
-    foreach ($note in @($summary.Notes)) { Write-Log "  $note" 'INFO' }
+    foreach ($note in @($summary.Notes)) { Write-LogEntry "  $note" 'INFO' }
 
     return [pscustomobject]@{
         Archive        = $zipDest
@@ -565,7 +569,7 @@ function Save-GuestWindowsState {
 }
 
 # ── Project files held on the guest ──────────────────────────────────────────
-function Save-GuestProjectFiles {
+function Save-GuestProjectFolder {
     <#
       Anything kept on the guest's own disk. Source on the Dev Drive needs no
       capture: that disk persists across rebuilds, and source control backs it.
@@ -624,16 +628,16 @@ function Save-GuestProjectFiles {
         return [pscustomobject]@{ Zip = $zip; Included = $included; Skipped = $skipped; Bytes = $bytes }
     }
 
-    foreach ($skip in @($result.Skipped)) { Write-Log "  skipped $skip" 'WARN' }
+    foreach ($skip in @($result.Skipped)) { Write-LogEntry "  skipped $skip" 'WARN' }
 
     if (-not $result.Zip) {
-        Write-Log '  no guest-side project files found' 'INFO'
+        Write-LogEntry '  no guest-side project files found' 'INFO'
         return $null
     }
 
     $dest = Join-Path $projectsDir 'projects.zip'
     Copy-FromGuest -GuestPath $result.Zip -HostPath $dest
-    Write-Log "  projects: $(@($result.Included).Count) folder(s), $(Format-Size $result.Bytes) -> $(Format-Size (Get-Item $dest).Length) compressed" 'OK'
+    Write-LogEntry "  projects: $(@($result.Included).Count) folder(s), $(Format-Size $result.Bytes) -> $(Format-Size (Get-Item $dest).Length) compressed" 'OK'
 
     return [pscustomobject]@{
         Archive  = $dest
@@ -643,7 +647,7 @@ function Save-GuestProjectFiles {
 }
 
 # ── Application settings ─────────────────────────────────────────────────────
-function Save-GuestAppSettings {
+function Save-GuestAppSetting {
     <#
       Exports each registry key in AppSettings to <StateDir>\apps\<Name>.reg.
       A key that does not exist yet (the application was never started) is
@@ -669,12 +673,12 @@ function Save-GuestAppSettings {
         }
 
         if (-not $exported) {
-            Write-Log "  $name - no settings in the registry yet ($key)" 'INFO'
+            Write-LogEntry "  $name - no settings in the registry yet ($key)" 'INFO'
             continue
         }
         $hostFile = Join-Path $appsDir "$name.reg"
         Copy-FromGuest -GuestPath $guestFile -HostPath $hostFile
-        Write-Log "  $name settings" 'OK'
+        Write-LogEntry "  $name settings" 'OK'
         $saved += [pscustomobject]@{ Name = $name; RegistryKey = $key; File = $hostFile }
     }
     return @($saved)

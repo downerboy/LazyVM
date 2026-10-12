@@ -1,4 +1,4 @@
-function Set-LazyVMRoot {
+﻿function Set-LazyVMRoot {
     <#
     .SYNOPSIS
     Chooses the folder LazyVM keeps everything in on this host.
@@ -67,7 +67,7 @@ function Set-LazyVMRoot {
     # Maintenance tasks registered by 1.x still run the old script. Each is
     # registered again, so it runs Invoke-LazyVMMaintenance instead.
     $tasksUpdated = @()
-    foreach ($vmName in @(Get-VMProfileNames -ConfigDir $configDir)) {
+    foreach ($vmName in @(Get-VMProfileName -ConfigDir $configDir)) {
         $task = Get-ScheduledTask -TaskName "LazyVM-Maintain-$vmName" -ErrorAction SilentlyContinue
         if (-not $task -or -not (@($task.Actions) | Where-Object { "$($_.Arguments)" -like '*Build-LazyVM.ps1*' })) {
             continue

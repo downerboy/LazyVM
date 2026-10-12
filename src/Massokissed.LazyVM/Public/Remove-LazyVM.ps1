@@ -1,4 +1,4 @@
-function Remove-LazyVM {
+﻿function Remove-LazyVM {
     <#
     .SYNOPSIS
     Deletes a VM and everything LazyVM created for it.
@@ -10,8 +10,8 @@ function Remove-LazyVM {
     profile and tooling history.
 
     What every VM uses is kept: the LazyVM folder itself, the ISOs and
-    installers, your settings file and the password key. So is anything
-    another VM also uses.
+    installers, and your settings file. So is anything another VM also uses,
+    such as the key that encrypts the stored passwords.
 
     Everything that would be deleted is listed first, with sizes, and you are
     asked to confirm. Use -WhatIf to see the list without deleting anything.
@@ -54,11 +54,11 @@ function Remove-LazyVM {
         if (-not $context) { return }
 
         if (-not $PSCmdlet.ShouldProcess($CFG.VMName, 'Delete the VM and everything listed above, which cannot be undone')) {
-            Write-Log 'Removal cancelled - nothing has been changed.' 'INFO'
+            Write-LogEntry 'Removal cancelled - nothing has been changed.' 'INFO'
             return
         }
 
-        $outcome = Remove-VMAndItsFiles -Context $context
+        $outcome = Invoke-VMRemoval -Context $context
         if ($outcome -eq 'incomplete') {
             throw "'$($CFG.VMName)' was only partly removed. The log lists what is left: $($CFG.LogFile)"
         }

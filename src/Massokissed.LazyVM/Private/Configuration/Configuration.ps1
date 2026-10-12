@@ -1,4 +1,4 @@
-# Configuration.ps1 - Loads and checks the settings files, and creates VM profiles.
+﻿# Configuration.ps1 - Loads and checks the settings files, and creates VM profiles.
 # Dot-sourced by Massokissed.LazyVM.psm1; not meant to be run on its own.
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ function ConvertTo-PlainValue {
     return $Value
 }
 
-function Get-DefaultSettings {
+function Get-DefaultSetting {
     <# Every setting at its default, from the schema. A fresh copy each time. #>
     $schema = Get-SettingsSchema
     $settings = @{}
@@ -306,7 +306,7 @@ function Resolve-LazyVMRoot {
     throw "LazyVM does not know which folder to keep its VMs in yet. Choose one with: Set-LazyVMRoot -Path D:\DevVM"
 }
 
-function Resolve-HostPathSettings {
+function Resolve-HostPathSetting {
     <# Joins every relative host path to the root. Updates $Settings in place. #>
     param(
         [Parameter(Mandatory)][hashtable]$Settings,
@@ -336,7 +336,7 @@ function Resolve-HostPathSettings {
     }
 }
 
-function Add-DerivedSettings {
+function Add-DerivedSetting {
     <#
       Values worked out from the settings rather than set by the user: task
       and registry names, credential files, the answer-file disc and the
@@ -354,7 +354,7 @@ function Add-DerivedSettings {
     $Settings.ScheduleTaskName = "LazyVM-Maintain-$vm"
     $Settings.ExcludeTaskPrefix = 'LazyVM-'
 
-    # Recomputed by Set-GuestSqlPaths once the data disk's real letter is known.
+    # Recomputed by Set-GuestSqlPath once the data disk's real letter is known.
     $letter = $Settings.GuestDataDriveLetter.ToUpperInvariant()
     $Settings.GuestSqlDataDir = "${letter}:\$($Settings.SqlDataFolder)"
     $Settings.GuestSqlLogDir = "${letter}:\$($Settings.SqlLogFolder)"
@@ -379,7 +379,7 @@ function Get-ConfigDir {
     return Join-Path -Path $Root -ChildPath 'Config'
 }
 
-function Get-VMProfileNames {
+function Get-VMProfileName {
     <# The VMs this host knows about: one folder per VM under Config\VMs. #>
     param([Parameter(Mandatory)][string]$ConfigDir)
 
@@ -410,7 +410,7 @@ function Resolve-VMSelection {
         [string]$Requested
     )
 
-    $names = @(Get-VMProfileNames -ConfigDir $ConfigDir)
+    $names = @(Get-VMProfileName -ConfigDir $ConfigDir)
 
     if ($Requested) {
         $match = $names | Where-Object { $_ -eq $Requested } | Select-Object -First 1
@@ -430,7 +430,7 @@ function Resolve-VMSelection {
     throw "This host has several VMs ($($names -join ', ')). Say which one with -Name."
 }
 
-function Expand-VMTokens {
+function Expand-VMToken {
     <# Replaces {VM} in every text setting with the VM's name. Updates $Settings in place. #>
     param(
         [Parameter(Mandatory)][hashtable]$Settings,
@@ -501,14 +501,14 @@ function New-VMProfile {
         throw "'$Name' cannot be used as a VM name: use 1-15 letters, digits or hyphens, starting with a letter or digit."
     }
 
-    $existing = @(Get-VMProfileNames -ConfigDir $ConfigDir)
+    $existing = @(Get-VMProfileName -ConfigDir $ConfigDir)
     if ($existing | Where-Object { $_ -eq $Name }) {
         throw "A VM named '$Name' already exists."
     }
 
     Initialize-ConfigFolder -ConfigDir $ConfigDir
 
-    $defaults = Get-DefaultSettings
+    $defaults = Get-DefaultSetting
     $perVM = @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime')
 
     $settings = @{}
@@ -554,7 +554,7 @@ function New-VMProfile {
     return $path
 }
 
-function Read-LazyVMSettings {
+function Read-VMSetting {
     <#
       Reads the settings for one VM, in layers: the defaults, then the
       host-wide settings file, then the VM's own profile. Then names
@@ -570,7 +570,7 @@ function Read-LazyVMSettings {
     )
 
     $configDir = Get-ConfigDir -Root $Root
-    $settings = Get-DefaultSettings
+    $settings = Get-DefaultSetting
     $sources = @{}
     foreach ($key in $settings.Keys) { $sources[$key] = 'Default' }
     $warnings = [System.Collections.Generic.List[string]]::new()
@@ -602,9 +602,9 @@ function Read-LazyVMSettings {
     $settings.ConfigDir = $configDir
     # Where this VM's profile, tooling list and tooling history live.
     $settings.ProfileDir = Split-Path -Path $profilePath -Parent
-    Expand-VMTokens -Settings $settings -VMName $vm
-    Resolve-HostPathSettings -Settings $settings -Root $Root
-    Add-DerivedSettings -Settings $settings
+    Expand-VMToken -Settings $settings -VMName $vm
+    Resolve-HostPathSetting -Settings $settings -Root $Root
+    Add-DerivedSetting -Settings $settings
 
     return [pscustomobject]@{
         Settings    = $settings
@@ -622,7 +622,7 @@ function Read-LazyVMSettings {
 function Import-LazyVMConfiguration {
     <#
       Reads the settings for the VM a command is working on (see
-      Read-LazyVMSettings) and makes them the module's current settings,
+      Read-VMSetting) and makes them the module's current settings,
       which every function reads as $CFG.
     #>
     param(
@@ -634,7 +634,7 @@ function Import-LazyVMConfiguration {
     $resolvedRoot = Resolve-LazyVMRoot -Root $Root
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $resolvedRoot.Path)
 
-    $configuration = Read-LazyVMSettings -Root $resolvedRoot.Path -VMName $VMName -Unattended:$Unattended
+    $configuration = Read-VMSetting -Root $resolvedRoot.Path -VMName $VMName -Unattended:$Unattended
     $configuration | Add-Member -NotePropertyName RootSource -NotePropertyValue $resolvedRoot.Source
 
     # Filled in place rather than replaced: $CFG is this same table.
@@ -645,7 +645,7 @@ function Import-LazyVMConfiguration {
     return $configuration
 }
 
-function ConvertFrom-LegacySettings {
+function ConvertFrom-LegacySetting {
     <#
       Converts a LazyVM 1.x settings file (.psd1) to the settings it still
       applies to, for the JSON file that replaces it. Settings that no longer
@@ -697,7 +697,7 @@ function Import-LegacyConfiguration {
     if (Test-Path -LiteralPath $legacyUserFile -PathType Leaf) {
         $current = Read-SettingsFile -Path $hostFile
         if ($current.Count -eq 0) {
-            $converted = ConvertFrom-LegacySettings -Path $legacyUserFile
+            $converted = ConvertFrom-LegacySetting -Path $legacyUserFile
             Write-TextFileAtomic -Path $hostFile -Text (ConvertTo-SettingsJson -Settings $converted.Values -SchemaReference "./$script:SchemaFileName")
             $done.Add("Converted $legacyUserFile to $hostFile")
             foreach ($note in $converted.Notes) { $done.Add("  $note") }
@@ -718,7 +718,7 @@ function Import-LegacyConfiguration {
             continue
         }
 
-        $converted = ConvertFrom-LegacySettings -Path $legacyProfile
+        $converted = ConvertFrom-LegacySetting -Path $legacyProfile
         Write-TextFileAtomic -Path $profilePath -Text (ConvertTo-SettingsJson -Settings $converted.Values -SchemaReference "../../$script:SchemaFileName")
         $done.Add("Converted the profile of '$($folder.Name)' to $profilePath")
         foreach ($note in $converted.Notes) { $done.Add("  $note") }

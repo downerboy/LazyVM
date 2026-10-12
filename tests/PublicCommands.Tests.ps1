@@ -1,4 +1,4 @@
-# PublicCommands.Tests.ps1
+﻿# PublicCommands.Tests.ps1
 # What the public commands decide for themselves: confirmations, outcomes
 # and output. The work they hand to the private functions is mocked, so
 # nothing here needs Hyper-V, the registry or a guest.
@@ -32,21 +32,21 @@ Describe 'Remove-LazyVM' {
         InModuleScope $module { $script:Settings['VMName'] = 'Alpha'; $script:Settings['LogFile'] = 'Alpha.log' }
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Get-VMRemovalContext { [pscustomobject]@{ Files = @('x') } }
-        Mock -ModuleName $module Remove-VMAndItsFiles { 'removed' }
-        Mock -ModuleName $module Write-Log { }
+        Mock -ModuleName $module Invoke-VMRemoval { 'removed' }
+        Mock -ModuleName $module Write-LogEntry { }
     }
 
     It 'lists what would go and deletes nothing with -WhatIf' {
         Remove-LazyVM -Name Alpha -WhatIf
 
         Should -Invoke -ModuleName $module Get-VMRemovalContext -Times 1
-        Should -Invoke -ModuleName $module Remove-VMAndItsFiles -Times 0
+        Should -Invoke -ModuleName $module Invoke-VMRemoval -Times 0
     }
 
     It 'deletes without asking with -Force' {
         Remove-LazyVM -Name Alpha -Force
 
-        Should -Invoke -ModuleName $module Remove-VMAndItsFiles -Times 1
+        Should -Invoke -ModuleName $module Invoke-VMRemoval -Times 1
     }
 
     It 'does nothing more when there is nothing to remove' {
@@ -54,11 +54,11 @@ Describe 'Remove-LazyVM' {
 
         Remove-LazyVM -Name Alpha -Force
 
-        Should -Invoke -ModuleName $module Remove-VMAndItsFiles -Times 0
+        Should -Invoke -ModuleName $module Invoke-VMRemoval -Times 0
     }
 
     It 'reports a removal that could not finish as an error' {
-        Mock -ModuleName $module Remove-VMAndItsFiles { 'incomplete' }
+        Mock -ModuleName $module Invoke-VMRemoval { 'incomplete' }
 
         { Remove-LazyVM -Name Alpha -Force } | Should -Throw -ExpectedMessage '*only partly removed*'
     }
@@ -77,7 +77,7 @@ Describe 'Invoke-LazyVMMaintenance' {
         Mock -ModuleName $module Initialize-CommandRun { }
         InModuleScope $module { $script:Settings['VMName'] = 'Alpha'; $script:Settings['LogFile'] = 'Alpha.log' }
         Mock -ModuleName $module Complete-CommandRun { }
-        Mock -ModuleName $module Write-Log { }
+        Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Invoke-Rebuild { $true }
     }
 
@@ -113,14 +113,14 @@ Describe 'Build-LazyVM' {
         Mock -ModuleName $module Initialize-CommandRun { }
         InModuleScope $module { $script:Settings['VMName'] = 'Alpha'; $script:Settings['LogFile'] = 'Alpha.log' }
         Mock -ModuleName $module Complete-CommandRun { }
-        Mock -ModuleName $module Write-Log { }
+        Mock -ModuleName $module Write-LogEntry { }
     }
 
     It 'stops quietly, without an error, when the host is restarting to turn on Hyper-V' {
         Mock -ModuleName $module Invoke-VMBuild { 'RestartPending' }
 
         { Build-LazyVM -Name Alpha } | Should -Not -Throw
-        Should -Invoke -ModuleName $module Write-Log -ParameterFilter { $Message -like '*restarting*' }
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*restarting*' }
     }
 
     It 'passes -FromPhase and -NoUnattend on' {
@@ -142,7 +142,7 @@ Describe 'Restore-LazyVMTooling' {
         Mock -ModuleName $module Initialize-CommandRun { }
         InModuleScope $module { $script:Settings['VMName'] = 'Alpha'; $script:Settings['LogFile'] = 'Alpha.log' }
         Mock -ModuleName $module Complete-CommandRun { }
-        Mock -ModuleName $module Write-Log { }
+        Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Invoke-ToolingRevert { }
     }
 

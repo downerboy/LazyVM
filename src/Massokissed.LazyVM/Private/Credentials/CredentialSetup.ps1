@@ -1,4 +1,4 @@
-# CredentialSetup.ps1 - Storing the guest account (Set-LazyVMCredential).
+﻿# CredentialSetup.ps1 - Storing the guest account (Set-LazyVMCredential).
 # Dot-sourced by Massokissed.LazyVM.psm1; not meant to be run on its own.
 
 function Resolve-GuestUserName {
@@ -39,6 +39,7 @@ function Set-StoredGuestCredential {
       unattended Setup creates the account with it. Returns whether a
       password was generated.
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'A generated password has to become a SecureString once, on its way into the encrypted store.')]
     param([Parameter(Mandatory)][pscredential]$Credential)
 
     $userName = Resolve-GuestUserName -Name $Credential.UserName
@@ -51,9 +52,9 @@ function Set-StoredGuestCredential {
 
     Save-StoredCredential -Path $CFG.GuestCredFile -UserName $userName -Password $password
     $CFG.GuestAdminUser = $userName
-    Write-Log "Guest credential stored for '$userName' at $($CFG.GuestCredFile)" 'OK'
+    Write-LogEntry "Guest credential stored for '$userName' at $($CFG.GuestCredFile)" 'OK'
     if ($generated) {
-        Write-Log "  A password was generated. See it with: Get-LazyVMCredential -Name $($CFG.VMName) -AsPlainText" 'INFO'
+        Write-LogEntry "  A password was generated. See it with: Get-LazyVMCredential -Name $($CFG.VMName) -AsPlainText" 'INFO'
     }
     return $generated
 }

@@ -1,4 +1,4 @@
-function Restore-LazyVMTooling {
+﻿function Restore-LazyVMTooling {
     <#
     .SYNOPSIS
     Returns a VM to a recorded tooling version.
@@ -53,7 +53,7 @@ function Restore-LazyVMTooling {
             $null = Initialize-CommandRun -Title 'Revert tooling' -Name $Name
             $action = "Return to tooling version $RestorePoint. ALL its disks go back to then, including the Dev Drive and SQL data disk"
             if (-not $PSCmdlet.ShouldProcess($CFG.VMName, $action)) {
-                Write-Log 'Revert cancelled' 'INFO'
+                Write-LogEntry 'Revert cancelled' 'INFO'
                 return
             }
             Invoke-ToolingRevert -Stamp $RestorePoint

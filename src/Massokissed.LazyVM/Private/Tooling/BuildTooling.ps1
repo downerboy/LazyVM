@@ -12,17 +12,17 @@ function Get-BuildTooling {
     #>
     param([switch]$Quiet)
 
-    $paths = Get-ToolingPaths
+    $paths = Get-ToolingPath
     $record = Read-ToolingRecord -Path $paths.Record
     if ($record) {
-        if (-not $Quiet) { Write-Log "Installing from this VM's tooling list: $($paths.Record)" 'INFO' }
+        if (-not $Quiet) { Write-LogEntry "Installing from this VM's tooling list: $($paths.Record)" 'INFO' }
         return $record
     }
 
     $defaultPath = Join-Path -Path $script:DataDir -ChildPath 'Tooling.Default.json'
     $default = Read-ToolingRecord -Path $defaultPath
-    if (-not $default) { Exit-WithError "This VM has no tooling list yet and the default list is missing: $defaultPath" }
-    if (-not $Quiet) { Write-Log "This VM has no tooling list yet - installing the default one: $defaultPath" 'INFO' }
+    if (-not $default) { Stop-WithError "This VM has no tooling list yet and the default list is missing: $defaultPath" }
+    if (-not $Quiet) { Write-LogEntry "This VM has no tooling list yet - installing the default one: $defaultPath" 'INFO' }
     return $default
 }
 
@@ -61,28 +61,28 @@ function Write-ToolingReinstallReport {
 
     $reportPath = Join-Path $CFG.StateDir 'reinstall-by-hand.txt'
     if ($programs.Count + $extensions.Count -eq 0) {
-        Write-Log 'Everything in the tooling list is installed' 'OK'
+        Write-LogEntry 'Everything in the tooling list is installed' 'OK'
         Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
         return
     }
 
-    Write-Log "$($programs.Count + $extensions.Count) item(s) in the tooling list could not be installed automatically - install these by hand:" 'WARN'
+    Write-LogEntry "$($programs.Count + $extensions.Count) item(s) in the tooling list could not be installed automatically - install these by hand:" 'WARN'
     $lines = @("Installed before, not reinstalled automatically ($(Get-Date -Format 'yyyy-MM-dd HH:mm')):", '')
     foreach ($program in $programs) {
-        Write-Log "  program: $($program.Name)  ($($program.Publisher))" 'WARN'
+        Write-LogEntry "  program: $($program.Name)  ($($program.Publisher))" 'WARN'
         $lines += "program    $($program.Name)  ($($program.Publisher))"
     }
     foreach ($extension in $extensions) {
-        Write-Log "  Visual Studio extension: $($extension.DisplayName)  [$($extension.Id)]" 'WARN'
+        Write-LogEntry "  Visual Studio extension: $($extension.DisplayName)  [$($extension.Id)]" 'WARN'
         $lines += "extension  $($extension.DisplayName)  [$($extension.Id)]  - Extensions > Manage Extensions"
     }
     if (-not (Test-Path -LiteralPath $CFG.StateDir)) { New-Item -ItemType Directory -Path $CFG.StateDir -Force | Out-Null }
     $lines | Set-Content -LiteralPath $reportPath -Encoding UTF8
-    Write-Log "  List written to $reportPath" 'INFO'
+    Write-LogEntry "  List written to $reportPath" 'INFO'
 
     # Recorded in the VM's tooling list so the next daily run does not take
     # these as uninstalled.
-    $paths = Get-ToolingPaths
+    $paths = Get-ToolingPath
     if (Test-Path -LiteralPath $paths.Record) {
         $record = Get-Content -LiteralPath $paths.Record -Raw | ConvertFrom-Json
         $merged = [ordered]@{}

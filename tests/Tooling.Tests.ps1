@@ -124,7 +124,7 @@ Describe 'Get-RecordField' {
     }
 }
 
-Describe 'Get-ProductExtensionIdentities' {
+Describe 'Get-ProductExtensionIdentity' {
     It 'uses the marketplace link where known, and name and id otherwise' {
         $product = New-TestProduct -Extensions @('https://marketplace.visualstudio.com/items?itemName=pub.exported') -UserExtensions @(
             [ordered]@{ Id = 'linked-id'; DisplayName = 'Linked'; MarketplaceItem = 'pub.linked' }
@@ -133,7 +133,7 @@ Describe 'Get-ProductExtensionIdentities' {
 
         $identities = InModuleScope $module -Parameters @{ Product = $product } {
             param($Product)
-            @(Get-ProductExtensionIdentities -Product $Product)
+            @(Get-ProductExtensionIdentity -Product $Product)
         }
 
         $identities | Should -Be @(
@@ -346,7 +346,7 @@ Describe 'Compare-ToolingRecord' {
 
 Describe 'Merge-AwaitingReinstall' {
     BeforeAll {
-        Mock Write-Log -ModuleName $module
+        Mock Write-LogEntry -ModuleName $module
     }
 
     It 'keeps a program that is still missing, both in the list and as awaiting' {
@@ -363,7 +363,7 @@ Describe 'Merge-AwaitingReinstall' {
 
         @($record.Programs | ForEach-Object { $_.Name }) | Should -Be @('LINQPad 9', 'Old Tool')
         @($record.AwaitingReinstall.Programs | ForEach-Object { $_.Name }) | Should -Be @('Old Tool')
-        Should -Invoke Write-Log -ModuleName $module -ParameterFilter { $Level -eq 'WARN' }
+        Should -Invoke Write-LogEntry -ModuleName $module -ParameterFilter { $Level -eq 'WARN' }
     }
 
     It 'drops a program from the awaiting list once it is installed again' {
@@ -428,6 +428,6 @@ Describe 'Merge-AwaitingReinstall' {
 
         $record.AwaitingReinstall.Programs | Should -BeNullOrEmpty
         $record.AwaitingReinstall.Extensions | Should -BeNullOrEmpty
-        Should -Invoke Write-Log -ModuleName $module -Times 0 -Exactly -Scope It
+        Should -Invoke Write-LogEntry -ModuleName $module -Times 0 -Exactly -Scope It
     }
 }

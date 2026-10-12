@@ -75,7 +75,7 @@ function Test-HyperVModule {
     return $false
 }
 
-function Exit-WithError {
+function Stop-WithError {
     param([Parameter(Mandatory)][string]$Message)
     throw $Message
 }

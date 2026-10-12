@@ -1,4 +1,4 @@
-function Restore-LazyVMState {
+﻿function Restore-LazyVMState {
     <#
     .SYNOPSIS
     Puts a VM's captured state back into it.
@@ -30,7 +30,7 @@ function Restore-LazyVMState {
         if (-not $PSCmdlet.ShouldProcess($CFG.VMName, "Apply the capture in $($CFG.StateDir) to the VM")) {
             return
         }
-        $restoreOk = @(Invoke-Phase10-Restore)[-1]
+        $restoreOk = @(Restore-GuestState)[-1]
         if ($restoreOk -eq $false) {
             throw "The restore into '$($CFG.VMName)' did not complete. The log says what failed: $($CFG.LogFile)"
         }

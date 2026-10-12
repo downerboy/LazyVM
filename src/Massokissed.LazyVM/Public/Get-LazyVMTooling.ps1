@@ -1,4 +1,4 @@
-function Get-LazyVMTooling {
+﻿function Get-LazyVMTooling {
     <#
     .SYNOPSIS
     Shows what is installed in a VM, and what the next maintenance run would record.

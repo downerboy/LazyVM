@@ -1,4 +1,4 @@
-function Get-LazyVM {
+﻿function Get-LazyVM {
     <#
     .SYNOPSIS
     Lists the VMs LazyVM looks after on this host.
@@ -35,7 +35,7 @@ function Get-LazyVM {
     $hyperV = [bool](Get-Command -Name Get-VM -ErrorAction SilentlyContinue)
     $scheduledTasks = [bool](Get-Command -Name Get-ScheduledTask -ErrorAction SilentlyContinue)
 
-    foreach ($vmName in @(Get-VMProfileNames -ConfigDir $configDir | Where-Object { $_ -like $Name })) {
+    foreach ($vmName in @(Get-VMProfileName -ConfigDir $configDir | Where-Object { $_ -like $Name })) {
         $state = 'Not built'
         if ($hyperV) {
             $lookupErrors = $null
@@ -52,7 +52,7 @@ function Get-LazyVM {
         $maintenanceTime = $null
         $settingsStatus = 'OK'
         try {
-            $maintenanceTime = (Read-LazyVMSettings -Root $root -VMName $vmName).Settings.MaintenanceTime
+            $maintenanceTime = (Read-VMSetting -Root $root -VMName $vmName).Settings.MaintenanceTime
         }
         catch {
             $settingsStatus = $_.Exception.Message

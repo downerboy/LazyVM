@@ -1,4 +1,4 @@
-function Invoke-LazyVMRebuild {
+﻿function Invoke-LazyVMRebuild {
     <#
     .SYNOPSIS
     Rebuilds a VM from scratch, keeping its work.
@@ -53,7 +53,7 @@ function Invoke-LazyVMRebuild {
         $null = Initialize-CommandRun -Title 'Rebuild' -Name $Name
         $action = 'Rebuild from scratch. State is captured first and restored afterwards, and the old Windows disk is kept until the new VM is checked'
         if (-not $PSCmdlet.ShouldProcess($CFG.VMName, $action)) {
-            Write-Log 'Rebuild cancelled' 'INFO'
+            Write-LogEntry 'Rebuild cancelled' 'INFO'
             return
         }
 

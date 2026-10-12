@@ -51,7 +51,7 @@ function Resolve-MarketplaceItem {
             -ContentType 'application/json' -Headers @{ Accept = 'application/json;api-version=3.0-preview.1' } -Body $body
     }
     catch {
-        Write-Log "  marketplace lookup failed for '$DisplayName': $($_.Exception.Message)" 'WARN'
+        Write-LogEntry "  marketplace lookup failed for '$DisplayName': $($_.Exception.Message)" 'WARN'
         return $null
     }
 
@@ -77,7 +77,7 @@ function Resolve-MarketplaceItem {
     return ''
 }
 
-function Add-MarketplaceItems {
+function Add-MarketplaceItem {
     <# Gives each per-user extension in $Record its MarketplaceItem, reusing $Previous's answers. Updates $Record in place. #>
     param(
         [Parameter(Mandatory)]$Record,
@@ -107,7 +107,7 @@ function Add-MarketplaceItems {
                 if ($null -ne $item) { $extension['MarketplaceItem'] = $item }
             }
             catch {
-                Write-Log "  marketplace lookup failed for '$($extension.DisplayName)': $($_.Exception.Message)" 'WARN'
+                Write-LogEntry "  marketplace lookup failed for '$($extension.DisplayName)': $($_.Exception.Message)" 'WARN'
             }
         }
     }

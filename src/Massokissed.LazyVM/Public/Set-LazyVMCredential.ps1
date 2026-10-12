@@ -1,4 +1,4 @@
-function Set-LazyVMCredential {
+﻿function Set-LazyVMCredential {
     <#
     .SYNOPSIS
     Stores the administrator account LazyVM uses inside a VM.
@@ -55,7 +55,7 @@ function Set-LazyVMCredential {
         if ($existing -and -not $Force) {
             $question = "A credential for '$($existing.UserName)' is already stored for $($CFG.VMName). Replace it? This does not change the password inside the VM."
             if (-not $PSCmdlet.ShouldContinue($question, 'Replace the stored credential')) {
-                Write-Log 'Kept the existing credential' 'INFO'
+                Write-LogEntry 'Kept the existing credential' 'INFO'
                 return
             }
         }
@@ -64,7 +64,7 @@ function Set-LazyVMCredential {
             $message = "The administrator account INSIDE $($CFG.VMName). Leave the password empty to have one generated (for a VM LazyVM will build)."
             $Credential = Get-Credential -UserName $CFG.GuestAdminUser -Message $message
             if (-not $Credential) {
-                Write-Log 'No credential entered - nothing was changed' 'INFO'
+                Write-LogEntry 'No credential entered - nothing was changed' 'INFO'
                 return
             }
         }

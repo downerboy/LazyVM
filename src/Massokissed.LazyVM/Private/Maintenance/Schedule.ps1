@@ -5,7 +5,7 @@
 #  DAILY MAINTENANCE SCHEDULED TASK  (Register-LazyVMMaintenance)
 # ─────────────────────────────────────────────────────────────────────────────
 function Register-RebuildSchedule {
-    Write-Log "Daily Maintenance Schedule - $($CFG.VMName)" 'PHASE'
+    Write-LogEntry "Daily Maintenance Schedule - $($CFG.VMName)" 'PHASE'
 
     # Refuse to schedule an unattended run that cannot possibly authenticate.
     if (-not (Get-StoredCredential -Path $CFG.GuestCredFile)) {
@@ -44,8 +44,8 @@ function Register-RebuildSchedule {
     Register-ScheduledTask -TaskName $CFG.ScheduleTaskName -Trigger $trigger -Action $action `
         -Settings $settings -Principal $principal -Force | Out-Null
 
-    Write-Log "Scheduled task '$($CFG.ScheduleTaskName)' registered for VM '$($CFG.VMName)' - daily at $($CFG.MaintenanceTime), first run $($nextRun.ToString('yyyy-MM-dd HH:mm'))" 'OK'
-    Write-Log '  Runs daily as SYSTEM and does nothing until the evaluation is within' 'INFO'
-    Write-Log "  $($CFG.RebuildThresholdDays) days of expiry. It then captures state and rearms Windows;" 'INFO'
-    Write-Log '  only when rearms are exhausted does it capture, rebuild and restore.' 'INFO'
+    Write-LogEntry "Scheduled task '$($CFG.ScheduleTaskName)' registered for VM '$($CFG.VMName)' - daily at $($CFG.MaintenanceTime), first run $($nextRun.ToString('yyyy-MM-dd HH:mm'))" 'OK'
+    Write-LogEntry '  Runs daily as SYSTEM and does nothing until the evaluation is within' 'INFO'
+    Write-LogEntry "  $($CFG.RebuildThresholdDays) days of expiry. It then captures state and rearms Windows;" 'INFO'
+    Write-LogEntry '  only when rearms are exhausted does it capture, rebuild and restore.' 'INFO'
 }

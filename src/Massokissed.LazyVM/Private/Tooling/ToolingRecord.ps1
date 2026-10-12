@@ -129,7 +129,7 @@ function Get-SetChange {
     return $changes
 }
 
-function Get-ProductExtensionIdentities {
+function Get-ProductExtensionIdentity {
     <#
       How a product's extensions are compared: by marketplace link wherever
       one is known, so an extension that a rebuild reinstalled for all users
@@ -173,7 +173,7 @@ function Compare-ToolingRecord {
         $name = $product.DisplayName
         $changes += Get-SetChange -Label "$name component" -Old @($before.Components) -New @($product.Components)
         $changes += Get-SetChange -Label "$name extension" `
-            -Old @(Get-ProductExtensionIdentities -Product $before) -New @(Get-ProductExtensionIdentities -Product $product)
+            -Old @(Get-ProductExtensionIdentity -Product $before) -New @(Get-ProductExtensionIdentity -Product $product)
     }
     foreach ($key in @($oldProducts.Keys | Sort-Object)) {
         if (-not $newProducts.ContainsKey($key)) {
@@ -184,11 +184,11 @@ function Compare-ToolingRecord {
 
     $changes += Get-SetChange -Label 'winget' -Old @(@($Old.WingetPackages) | ForEach-Object { $_.Id }) -New @(@($New.WingetPackages) | ForEach-Object { $_.Id })
     $changes += Get-SetChange -Label 'program' -Old @(@($Old.Programs) | ForEach-Object { $_.Name }) -New @(@($New.Programs) | ForEach-Object { $_.Name })
-    $changes += Get-SetChange -Label 'awaiting reinstall' -Old @(Get-AwaitingNames -Record $Old) -New @(Get-AwaitingNames -Record $New)
+    $changes += Get-SetChange -Label 'awaiting reinstall' -Old @(Get-AwaitingName -Record $Old) -New @(Get-AwaitingName -Record $New)
     return @($changes)
 }
 
-function Get-ToolingPaths {
+function Get-ToolingPath {
     $historyDir = Join-Path $CFG.ProfileDir 'History'
     return [pscustomobject]@{
         Record     = Join-Path $CFG.ProfileDir 'Tooling.json'
@@ -228,7 +228,7 @@ function Get-ToolingStamp {
     }
 }
 
-function Enable-ToolingCheckpoints {
+function Enable-ToolingCheckpoint {
     <#
       Tooling tracking needs checkpoints. A VM set up by hand can have them
       switched off entirely; this turns on production checkpoints (consistent,
@@ -240,7 +240,7 @@ function Enable-ToolingCheckpoints {
     $vm = Get-VM -Name $CFG.VMName -ErrorAction Stop
 
     if ("$($vm.CheckpointType)" -eq 'Disabled') {
-        Write-Log "Checkpoints are switched off for '$($CFG.VMName)' - turning on production checkpoints, which tooling tracking needs" 'INFO'
+        Write-LogEntry "Checkpoints are switched off for '$($CFG.VMName)' - turning on production checkpoints, which tooling tracking needs" 'INFO'
         Set-VM -Name $CFG.VMName -CheckpointType Production -ErrorAction Stop
     }
 
@@ -258,14 +258,14 @@ function Enable-ToolingCheckpoints {
         if ($granted.Count -gt 0) { continue }
         $output = & icacls.exe $folder /grant "${account}:(F)" 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Could not grant the VM access to $folder for checkpoints: $output" }
-        Write-Log "Gave '$($CFG.VMName)' access to $folder, so checkpoints can be created there" 'INFO'
+        Write-LogEntry "Gave '$($CFG.VMName)' access to $folder, so checkpoints can be created there" 'INFO'
     }
 
     $hasCheckpoints = @(Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue).Count -gt 0
     if (-not $hasCheckpoints -and "$($vm.SnapshotFileLocation)".TrimEnd('\') -ne $CFG.CheckpointDir.TrimEnd('\')) {
         if (-not (Test-Path -LiteralPath $CFG.CheckpointDir)) { New-Item -ItemType Directory -Path $CFG.CheckpointDir -Force | Out-Null }
         Set-VM -Name $CFG.VMName -SnapshotFileLocation $CFG.CheckpointDir -ErrorAction Stop
-        Write-Log "Checkpoints for '$($CFG.VMName)' are stored in $($CFG.CheckpointDir)" 'INFO'
+        Write-LogEntry "Checkpoints for '$($CFG.VMName)' are stored in $($CFG.CheckpointDir)" 'INFO'
     }
 }
 
@@ -283,9 +283,9 @@ function New-ToolingCheckpoint {
         [switch]$SkipPrune
     )
 
-    Enable-ToolingCheckpoints
+    Enable-ToolingCheckpoint
     Checkpoint-VM -Name $CFG.VMName -SnapshotName $Name -ErrorAction Stop
-    Write-Log "Checkpoint taken: '$Name'" 'OK'
+    Write-LogEntry "Checkpoint taken: '$Name'" 'OK'
     if ($SkipPrune) { return }
 
     $tooling = @(Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue |
@@ -295,9 +295,9 @@ function New-ToolingCheckpoint {
         $old = $tooling[$index]
         try {
             Remove-VMSnapshot -VMSnapshot $old -Confirm:$false -ErrorAction Stop
-            Write-Log "  removed the older checkpoint '$($old.Name)'" 'INFO'
+            Write-LogEntry "  removed the older checkpoint '$($old.Name)'" 'INFO'
         }
-        catch { Write-Log "  could not remove the checkpoint '$($old.Name)': $($_.Exception.Message)" 'WARN' }
+        catch { Write-LogEntry "  could not remove the checkpoint '$($old.Name)': $($_.Exception.Message)" 'WARN' }
     }
 }
 
@@ -306,12 +306,12 @@ function Update-ToolingRecord {
       The daily tooling step, also run by Save-LazyVMTooling. Needs an open guest
       session. Returns the list of changes adopted (empty when none).
     #>
-    Write-Log "Tooling Check - $($CFG.VMName)" 'PHASE'
+    Write-LogEntry "Tooling Check - $($CFG.VMName)" 'PHASE'
 
-    $paths = Get-ToolingPaths
+    $paths = Get-ToolingPath
     $current = ConvertTo-ToolingRecord -Inventory (Get-GuestToolingInventory)
     $previous = Read-ToolingRecord -Path $paths.Record
-    Add-MarketplaceItems -Record $current -Previous $previous
+    Add-MarketplaceItem -Record $current -Previous $previous
     Merge-AwaitingReinstall -Record $current -Previous $previous
 
     # The day's copy, kept whether or not anything changed.
@@ -324,15 +324,15 @@ function Update-ToolingRecord {
     if ($previous) {
         $changes = @(Compare-ToolingRecord -Old $previous -New $current)
         if ($changes.Count -eq 0) {
-            Write-Log 'No tooling changes since the last recorded version' 'OK'
+            Write-LogEntry 'No tooling changes since the last recorded version' 'OK'
             return @()
         }
-        Write-Log "$($changes.Count) tooling change(s) found:" 'INFO'
-        foreach ($change in $changes) { Write-Log "  $change" 'INFO' }
+        Write-LogEntry "$($changes.Count) tooling change(s) found:" 'INFO'
+        foreach ($change in $changes) { Write-LogEntry "  $change" 'INFO' }
     }
     else {
         $changes = @('first recording of this VM''s tooling')
-        Write-Log 'No tooling list recorded yet - recording the first one' 'INFO'
+        Write-LogEntry 'No tooling list recorded yet - recording the first one' 'INFO'
     }
 
     $stamp = Get-ToolingStamp
@@ -346,7 +346,7 @@ function Update-ToolingRecord {
 
     Save-ToolingRecord -Record $current -Path (Join-Path $paths.HistoryDir "Tooling-$stamp.json")
     Save-ToolingRecord -Record $current -Path $paths.Record
-    Write-Log "Tooling list recorded as version $stamp ($($paths.Record))" 'OK'
+    Write-LogEntry "Tooling list recorded as version $stamp ($($paths.Record))" 'OK'
     return $changes
 }
 
@@ -355,14 +355,14 @@ function Open-GuestSession {
     param([Parameter(Mandatory)][string]$Purpose)
 
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
-    if (-not $vm) { Exit-WithError "VM '$($CFG.VMName)' does not exist." }
+    if (-not $vm) { Stop-WithError "VM '$($CFG.VMName)' does not exist." }
 
     $credential = Get-GuestCredential
-    if (-not $credential) { Exit-WithError 'No stored guest credential. Store one with Set-LazyVMCredential first.' }
+    if (-not $credential) { Stop-WithError 'No stored guest credential. Store one with Set-LazyVMCredential first.' }
 
     $started = $false
     if ($vm.State -ne 'Running') {
-        Write-Log "VM is '$($vm.State)' - starting it to $Purpose" 'INFO'
+        Write-LogEntry "VM is '$($vm.State)' - starting it to $Purpose" 'INFO'
         Start-VM -Name $CFG.VMName | Out-Null
         Wait-GuestReady -Credential $credential -TimeoutMinutes 20 | Out-Null
         $started = $true
@@ -371,9 +371,9 @@ function Open-GuestSession {
     return $started
 }
 
-function Get-ToolingRestorePoints {
+function Get-ToolingRestorePoint {
     <# Get-LazyVMRestorePoint: the tooling versions that still have their checkpoint, oldest first. #>
-    $paths = Get-ToolingPaths
+    $paths = Get-ToolingPath
     $checkpoints = @(Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -like 'Tooling *' } | Sort-Object CreationTime)
 
@@ -399,14 +399,14 @@ function Invoke-ToolingRevert {
     #>
     param([Parameter(Mandatory)][string]$Stamp)
 
-    Write-Log "Revert - $($CFG.VMName) to tooling version $Stamp" 'PHASE'
+    Write-LogEntry "Revert - $($CFG.VMName) to tooling version $Stamp" 'PHASE'
 
-    $paths = Get-ToolingPaths
+    $paths = Get-ToolingPath
     $checkpoint = Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -eq "Tooling $Stamp" -or $_.Name -eq "Tooling $Stamp before revert" } | Select-Object -First 1
-    if (-not $checkpoint) { Exit-WithError "There is no checkpoint 'Tooling $Stamp'. See them with: Get-LazyVMRestorePoint -Name $($CFG.VMName)" }
+    if (-not $checkpoint) { Stop-WithError "There is no checkpoint 'Tooling $Stamp'. See them with: Get-LazyVMRestorePoint -Name $($CFG.VMName)" }
     $listFile = Join-Path $paths.HistoryDir "Tooling-$Stamp.json"
-    if (-not (Test-Path -LiteralPath $listFile)) { Exit-WithError "The tooling list for $Stamp is missing: $listFile" }
+    if (-not (Test-Path -LiteralPath $listFile)) { Stop-WithError "The tooling list for $Stamp is missing: $listFile" }
 
     # The current state, as an ordinary tooling version, so the revert can be reverted.
     $now = Get-ToolingStamp
@@ -419,11 +419,11 @@ function Invoke-ToolingRevert {
     Disconnect-Guest
     Restore-VMSnapshot -VMSnapshot $checkpoint -Confirm:$false -ErrorAction Stop
     Write-TextFileAtomic -Path $paths.Record -Text ([IO.File]::ReadAllText($listFile))
-    Write-Log "VM returned to '$($checkpoint.Name)' and its tooling list restored" 'OK'
-    Write-Log "  To undo this revert: Restore-LazyVMTooling -Name $($CFG.VMName) -RestorePoint $now" 'INFO'
+    Write-LogEntry "VM returned to '$($checkpoint.Name)' and its tooling list restored" 'OK'
+    Write-LogEntry "  To undo this revert: Restore-LazyVMTooling -Name $($CFG.VMName) -RestorePoint $now" 'INFO'
 
     if ($wasRunning -and (Get-VM -Name $CFG.VMName).State -ne 'Running') {
         Start-VM -Name $CFG.VMName | Out-Null
-        Write-Log 'VM started' 'INFO'
+        Write-LogEntry 'VM started' 'INFO'
     }
 }

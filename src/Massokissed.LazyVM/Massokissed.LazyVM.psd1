@@ -1,4 +1,4 @@
-@{
+﻿@{
     RootModule           = 'Massokissed.LazyVM.psm1'
     ModuleVersion        = '2.0.0'
     GUID                 = '08c1f0fc-8b41-4102-a4a7-847ac770437b'

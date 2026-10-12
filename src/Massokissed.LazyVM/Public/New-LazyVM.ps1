@@ -1,4 +1,4 @@
-function New-LazyVM {
+﻿function New-LazyVM {
     <#
     .SYNOPSIS
     Creates a new VM's profile, ready to build.

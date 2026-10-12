@@ -212,7 +212,7 @@ function New-UnattendSeedDisk {
     <# Builds the answer-file disc, $CFG.SeedDiskPath: an ISO holding autounattend.xml. #>
     param([Parameter(Mandatory)][pscredential]$GuestCredential)
 
-    Write-Log 'Building the answer-file disc...' 'INFO'
+    Write-LogEntry 'Building the answer-file disc...' 'INFO'
 
     if (Test-Path -LiteralPath $CFG.SeedDiskPath) {
         Remove-Item -LiteralPath $CFG.SeedDiskPath -Force
@@ -249,7 +249,7 @@ function New-UnattendSeedDisk {
         Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    Write-Log "Answer-file disc ready: $($CFG.SeedDiskPath)" 'OK'
+    Write-LogEntry "Answer-file disc ready: $($CFG.SeedDiskPath)" 'OK'
 }
 
 function Remove-UnattendSeedDisk {
@@ -263,15 +263,15 @@ function Remove-UnattendSeedDisk {
                 Where-Object { $_.Path -eq $CFG.SeedDiskPath })
         foreach ($drive in $attached) {
             Remove-VMDvdDrive -VMDvdDrive $drive
-            Write-Log 'Answer-file disc removed from the VM' 'OK'
+            Write-LogEntry 'Answer-file disc removed from the VM' 'OK'
         }
         if (Test-Path -LiteralPath $CFG.SeedDiskPath) {
             Remove-Item -LiteralPath $CFG.SeedDiskPath -Force
-            Write-Log 'Answer-file disc deleted (it held the guest password in clear text)' 'OK'
+            Write-LogEntry 'Answer-file disc deleted (it held the guest password in clear text)' 'OK'
         }
     }
     catch {
-        Write-Log "Could not remove the answer-file disc: $($_.Exception.Message)" 'WARN'
-        Write-Log "  Delete $($CFG.SeedDiskPath) by hand - it contains the guest password." 'WARN'
+        Write-LogEntry "Could not remove the answer-file disc: $($_.Exception.Message)" 'WARN'
+        Write-LogEntry "  Delete $($CFG.SeedDiskPath) by hand - it contains the guest password." 'WARN'
     }
 }

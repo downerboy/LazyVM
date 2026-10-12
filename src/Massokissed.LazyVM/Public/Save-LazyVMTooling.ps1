@@ -1,4 +1,4 @@
-function Save-LazyVMTooling {
+﻿function Save-LazyVMTooling {
     <#
     .SYNOPSIS
     Records a VM's tooling now, as the daily maintenance does.

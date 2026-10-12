@@ -4,26 +4,26 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  PHASE 7 — Guest Provisioning and Silent Installs
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase7-SilentInstalls {
+function Install-GuestSoftware {
     param([switch]$UsedUnattend)
 
-    Write-Log 'PHASE 7 - Guest Provisioning and Silent Installs' 'PHASE'
+    Write-LogEntry 'PHASE 7 - Guest Provisioning and Silent Installs' 'PHASE'
 
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
     if (-not $vm) {
-        Write-Log "VM '$($CFG.VMName)' not found - skipping Phase 7" 'WARN'
+        Write-LogEntry "VM '$($CFG.VMName)' not found - skipping Phase 7" 'WARN'
         return
     }
 
     $credential = Get-GuestCredential
     if (-not $credential) {
-        Write-Log 'No stored guest credential.' 'ERROR'
-        Write-Log "  Store one with: Set-LazyVMCredential -Name $($CFG.VMName)" 'INFO'
-        Exit-WithError 'PowerShell Direct requires an explicit guest credential.'
+        Write-LogEntry 'No stored guest credential.' 'ERROR'
+        Write-LogEntry "  Store one with: Set-LazyVMCredential -Name $($CFG.VMName)" 'INFO'
+        Stop-WithError 'PowerShell Direct requires an explicit guest credential.'
     }
 
     if ($vm.State -ne 'Running') {
-        Write-Log "VM is '$($vm.State)' - starting it" 'INFO'
+        Write-LogEntry "VM is '$($vm.State)' - starting it" 'INFO'
         if ($UsedUnattend) {
             # Windows is still to be installed from the ISO.
             Start-VMFromInstallMedia -VMName $CFG.VMName
@@ -36,10 +36,10 @@ function Invoke-Phase7-SilentInstalls {
     if (-not $UsedUnattend) {
         # This is equally true of a VM that was set up by hand long ago, so the
         # wording must not read as an error in that case.
-        Write-Log 'No answer-file disc is attached to this VM.' 'INFO'
-        Write-Log '  If the guest is already installed and signed in, that is expected - carry on.' 'INFO'
-        Write-Log "  If Windows Setup has not run yet, complete it by hand and create a local" 'INFO'
-        Write-Log "  administrator named '$($CFG.GuestAdminUser)' with the stored password." 'INFO'
+        Write-LogEntry 'No answer-file disc is attached to this VM.' 'INFO'
+        Write-LogEntry '  If the guest is already installed and signed in, that is expected - carry on.' 'INFO'
+        Write-LogEntry "  If Windows Setup has not run yet, complete it by hand and create a local" 'INFO'
+        Write-LogEntry "  administrator named '$($CFG.GuestAdminUser)' with the stored password." 'INFO'
     }
 
     Wait-GuestReady -Credential $credential -TimeoutMinutes $CFG.GuestWaitMinutes
@@ -71,29 +71,29 @@ function Invoke-Phase7-SilentInstalls {
     # working installation.
     $networkReady = Wait-GuestNetwork -TimeoutMinutes $CFG.GuestNetworkWaitMinutes
     if (-not $networkReady) {
-        Write-Log 'The guest has no working DNS: products and packages that download cannot be installed' 'WARN'
-        Write-Log '  Re-run with -FromPhase 7 once the guest has internet.' 'INFO'
+        Write-LogEntry 'The guest has no working DNS: products and packages that download cannot be installed' 'WARN'
+        Write-LogEntry '  Re-run with -FromPhase 7 once the guest has internet.' 'INFO'
     }
     else {
-        Install-ToolingProducts -Tooling $tooling
+        Install-ToolingProduct -Tooling $tooling
     }
 
     $sql = Get-GuestSqlInstance
     if ($sql) {
-        Write-Log "SQL Server instance '$($sql.Instance)' already present ($($sql.Edition)) - skipping the install" 'OK'
-        Write-Log "  Data directories are whatever that instance was configured with, not necessarily D:." 'INFO'
+        Write-LogEntry "SQL Server instance '$($sql.Instance)' already present ($($sql.Edition)) - skipping the install" 'OK'
+        Write-LogEntry "  Data directories are whatever that instance was configured with, not necessarily D:." 'INFO'
     }
     else {
         Install-SqlServer
     }
 
     if ($networkReady) {
-        Install-WingetPackages -Packages @($tooling.WingetPackages)
+        Install-WingetPackage -Packages @($tooling.WingetPackages)
     }
 
     Write-ToolingReinstallReport -Tooling $tooling
 
-    Write-Log 'Phase 7 complete' 'OK'
+    Write-LogEntry 'Phase 7 complete' 'OK'
 }
 
 function Wait-GuestNetwork {
@@ -139,7 +139,7 @@ function Wait-GuestNetwork {
             }
 
             if ($state.Dns -and $state.Https) {
-                Write-Log 'Guest network is up (DNS and HTTPS both working)' 'OK'
+                Write-LogEntry 'Guest network is up (DNS and HTTPS both working)' 'OK'
                 return $true
             }
             $lastDetail = "$($state.Detail)"
@@ -149,20 +149,20 @@ function Wait-GuestNetwork {
         }
 
         if (-not $announced) {
-            Write-Log "Waiting up to $TimeoutMinutes minutes for the guest network to come up..." 'INFO'
-            if ($lastDetail) { Write-Log "  $lastDetail" 'INFO' }
+            Write-LogEntry "Waiting up to $TimeoutMinutes minutes for the guest network to come up..." 'INFO'
+            if ($lastDetail) { Write-LogEntry "  $lastDetail" 'INFO' }
             $announced = $true
         }
         Start-Sleep -Seconds 15
     }
 
-    Write-Log "Guest network did not come up within $TimeoutMinutes minutes" 'WARN'
-    if ($lastDetail) { Write-Log "  last error: $lastDetail" 'WARN' }
-    Write-Log '  Check inside the guest:  Resolve-DnsName www.microsoft.com' 'INFO'
+    Write-LogEntry "Guest network did not come up within $TimeoutMinutes minutes" 'WARN'
+    if ($lastDetail) { Write-LogEntry "  last error: $lastDetail" 'WARN' }
+    Write-LogEntry '  Check inside the guest:  Resolve-DnsName www.microsoft.com' 'INFO'
     return $false
 }
 
-function Install-WingetPackages {
+function Install-WingetPackage {
     <#
       Installs the winget packages in the VM's tooling list. The caller has
       already waited for the guest network: PowerShell Direct works long before
@@ -179,7 +179,7 @@ function Install-WingetPackages {
     }
     if ($tools.Count -eq 0) { return }
 
-    Write-Log "Checking $($tools.Count) winget package(s) from the tooling list..." 'INFO'
+    Write-LogEntry "Checking $($tools.Count) winget package(s) from the tooling list..." 'INFO'
 
     try {
         $report = Invoke-GuestScript -Activity 'winget packages' -TimeoutMinutes 60 `
@@ -270,9 +270,9 @@ function Install-WingetPackages {
         }
 
         foreach ($line in @($report)) {
-            if ($line -like 'FAILED*' -or $line -like 'SKIPPED*') { Write-Log "  $line" 'WARN' }
-            elseif ($line -like 'installed:*') { Write-Log "  $line" 'OK' }
-            else { Write-Log "  $line" 'INFO' }
+            if ($line -like 'FAILED*' -or $line -like 'SKIPPED*') { Write-LogEntry "  $line" 'WARN' }
+            elseif ($line -like 'installed:*') { Write-LogEntry "  $line" 'OK' }
+            else { Write-LogEntry "  $line" 'INFO' }
         }
     }
     catch {
@@ -288,12 +288,12 @@ function Get-GuestVisualStudio {
       Studio skipped the Visual Studio install and captured SSMS's settings.
       Returns $null when Visual Studio is not installed.
     #>
-    $products = @(Get-GuestInstallerProducts | Where-Object { $_.ProductId -notlike '*.Ssms' })
+    $products = @(Get-GuestInstallerProduct | Where-Object { $_.ProductId -notlike '*.Ssms' })
     if ($products.Count -eq 0) { return $null }
     return ($products | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1)
 }
 
-function Get-GuestInstallerProducts {
+function Get-GuestInstallerProduct {
     <# Every product the Visual Studio Installer manages in the guest, without exporting their configurations. #>
     try {
         return @(Invoke-GuestScript -Activity 'Visual Studio Installer product detection' -TimeoutMinutes 5 -ScriptBlock {
@@ -322,7 +322,7 @@ function Get-GuestInstallerProducts {
             })
     }
     catch {
-        Write-Log "Visual Studio Installer product detection failed, assuming none installed: $($_.Exception.Message)" 'WARN'
+        Write-LogEntry "Visual Studio Installer product detection failed, assuming none installed: $($_.Exception.Message)" 'WARN'
         return @()
     }
 }
@@ -358,7 +358,7 @@ function Get-GuestSqlInstance {
         }
     }
     catch {
-        Write-Log "SQL Server detection failed, assuming not installed: $($_.Exception.Message)" 'WARN'
+        Write-LogEntry "SQL Server detection failed, assuming not installed: $($_.Exception.Message)" 'WARN'
         return $null
     }
 }
@@ -368,16 +368,16 @@ function Add-SqlDataDisk {
             Where-Object { $_.Path -eq $CFG.SQLDiskPath })
 
     if ($attached.Count -gt 0) {
-        Write-Log 'SQL data disk already attached' 'OK'
+        Write-LogEntry 'SQL data disk already attached' 'OK'
         return
     }
 
     Add-VMHardDiskDrive -VMName $CFG.VMName -Path $CFG.SQLDiskPath -ControllerType SCSI
-    Write-Log 'SQL data disk attached (SCSI)' 'OK'
+    Write-LogEntry 'SQL data disk attached (SCSI)' 'OK'
     Start-Sleep -Seconds 5    # let the guest enumerate it
 }
 
-function Set-GuestSqlPaths {
+function Set-GuestSqlPath {
     <# Rebuilds the guest SQL directory paths around whichever drive letter the
        data disk actually ended up on. Nothing downstream should assume D:. #>
     param([Parameter(Mandatory)][string]$Letter)
@@ -400,7 +400,7 @@ function Initialize-GuestSqlDisk {
       is squatting on the wanted letter, and falls back to whatever letter the
       volume already has rather than aborting the build.
     #>
-    Write-Log 'Preparing the SQL data disk inside the guest...' 'INFO'
+    Write-LogEntry 'Preparing the SQL data disk inside the guest...' 'INFO'
 
     $result = Invoke-GuestScript -Activity 'SQL data disk initialisation' -TimeoutMinutes 15 -ArgumentList @(
         $CFG.GuestDataDriveLetter,
@@ -523,19 +523,19 @@ function Initialize-GuestSqlDisk {
         }
     }
 
-    foreach ($note in @($result.Notes)) { Write-Log "  $note" 'WARN' }
+    foreach ($note in @($result.Notes)) { Write-LogEntry "  $note" 'WARN' }
 
     # Everything downstream — SQL setup arguments, the restore step — now uses
     # the letter the disk actually got.
-    Set-GuestSqlPaths -Letter $result.Letter
+    Set-GuestSqlPath -Letter $result.Letter
 
     if ($result.Formatted) {
-        Write-Log "SQL data disk formatted as $($result.Letter): ($($result.FreeGB) GB free of $($result.SizeGB) GB)" 'OK'
+        Write-LogEntry "SQL data disk formatted as $($result.Letter): ($($result.FreeGB) GB free of $($result.SizeGB) GB)" 'OK'
     }
     else {
-        Write-Log "SQL data disk already prepared, mounted as $($result.Letter): ($($result.FreeGB) GB free of $($result.SizeGB) GB)" 'OK'
+        Write-LogEntry "SQL data disk already prepared, mounted as $($result.Letter): ($($result.FreeGB) GB free of $($result.SizeGB) GB)" 'OK'
     }
-    Write-Log "  SQL directories: $($CFG.GuestSqlDataDir), $($CFG.GuestSqlLogDir), $($CFG.GuestSqlTempDir), $($CFG.GuestSqlBackupDir)" 'INFO'
+    Write-LogEntry "  SQL directories: $($CFG.GuestSqlDataDir), $($CFG.GuestSqlLogDir), $($CFG.GuestSqlTempDir), $($CFG.GuestSqlBackupDir)" 'INFO'
 }
 
 function Test-InstallExitCode {
@@ -545,22 +545,22 @@ function Test-InstallExitCode {
         $ExitCode
     )
     if ($null -eq $ExitCode) {
-        Write-Log "$Product - installer returned no exit code" 'WARN'
+        Write-LogEntry "$Product - installer returned no exit code" 'WARN'
         return $false
     }
     $code = [int]$ExitCode
     switch ($code) {
-        0 { Write-Log "$Product - installed (exit 0)" 'OK'; return $true }
-        3010 { Write-Log "$Product - installed, reboot required (exit 3010)" 'OK'; return $true }
-        1641 { Write-Log "$Product - installed, reboot initiated (exit 1641)" 'OK'; return $true }
+        0 { Write-LogEntry "$Product - installed (exit 0)" 'OK'; return $true }
+        3010 { Write-LogEntry "$Product - installed, reboot required (exit 3010)" 'OK'; return $true }
+        1641 { Write-LogEntry "$Product - installed, reboot initiated (exit 1641)" 'OK'; return $true }
         default {
-            Write-Log "$Product - installer exit code $code" 'ERROR'
+            Write-LogEntry "$Product - installer exit code $code" 'ERROR'
             return $false
         }
     }
 }
 
-function Install-ToolingProducts {
+function Install-ToolingProduct {
     <#
       Installs each Visual Studio Installer product in the tooling list that
       the guest does not have yet, from its own channel's bootstrapper, with
@@ -573,23 +573,23 @@ function Install-ToolingProducts {
     #>
     param([Parameter(Mandatory)]$Tooling)
 
-    $installed = @(Get-GuestInstallerProducts)
+    $installed = @(Get-GuestInstallerProduct)
 
     foreach ($product in @($Tooling.Products)) {
         $label = "$($product.DisplayName)"
         $present = $installed | Where-Object { $_.ProductId -eq $product.ProductId -and $_.ChannelId -eq $product.ChannelId } | Select-Object -First 1
         if ($present) {
-            Write-Log "$label already installed - skipping" 'OK'
+            Write-LogEntry "$label already installed - skipping" 'OK'
             continue
         }
 
         $url = Get-ProductBootstrapperUrl -ProductId $product.ProductId -ChannelId $product.ChannelId
         if (-not $url) {
-            Write-Log "$label - no bootstrapper is known for channel '$($product.ChannelId)'; add one to InstallerBootstrappers" 'ERROR'
+            Write-LogEntry "$label - no bootstrapper is known for channel '$($product.ChannelId)'; add one to InstallerBootstrappers" 'ERROR'
             continue
         }
 
-        $extensions = @(Get-ProductExtensionLinks -Product $product)
+        $extensions = @(Get-ProductExtensionLink -Product $product)
         $config = [ordered]@{
             version    = '1.0'
             components = @($product.Components)
@@ -600,7 +600,7 @@ function Install-ToolingProducts {
         $includeRecommended = [bool](Get-RecordField -Item $product -Name 'IncludeRecommended')
         $edition = ($product.ProductId -split '\.')[-1].ToLowerInvariant()
 
-        Write-Log "Installing $label from $url ($(@($product.Components).Count) workload/component id(s), $($extensions.Count) extension(s); up to $($CFG.VSInstallMinutes) minutes)..." 'INFO'
+        Write-LogEntry "Installing $label from $url ($(@($product.Components).Count) workload/component id(s), $($extensions.Count) extension(s); up to $($CFG.VSInstallMinutes) minutes)..." 'INFO'
         try {
             $exitCode = Invoke-GuestScript -Activity "$label install" -TimeoutMinutes $CFG.VSInstallMinutes `
                 -ArgumentList @($url, "bootstrap-$edition.exe", $CFG.GuestSetupDir, $configJson, $includeRecommended, ($extensions.Count -gt 0)) -ScriptBlock {
@@ -624,7 +624,7 @@ function Install-ToolingProducts {
                 return $proc.ExitCode
             }
             if (-not (Test-InstallExitCode -Product $label -ExitCode $exitCode)) {
-                Write-Log '  Guest log: %TEMP%\dd_bootstrapper_*.log and %TEMP%\dd_setup_*.log for the guest account' 'INFO'
+                Write-LogEntry '  Guest log: %TEMP%\dd_bootstrapper_*.log and %TEMP%\dd_setup_*.log for the guest account' 'INFO'
             }
         }
         catch {
@@ -651,7 +651,7 @@ function Get-ProductBootstrapperUrl {
     return ("$($table[$key])" -replace '\{edition\}', $edition)
 }
 
-function Get-ProductExtensionLinks {
+function Get-ProductExtensionLink {
     <# Marketplace links for a product's extensions: the instance-wide ones, plus per-user ones that have a marketplace match. #>
     param([Parameter(Mandatory)]$Product)
 
@@ -673,7 +673,7 @@ function Install-SqlServer {
 
     $dvd = @(Get-VMDvdDrive -VMName $CFG.VMName)[0]
     if (-not $dvd) {
-        Exit-WithError 'The VM has no DVD drive to mount the SQL Server ISO in.'
+        Stop-WithError 'The VM has no DVD drive to mount the SQL Server ISO in.'
     }
     $previousMedia = $dvd.Path
 
@@ -697,8 +697,8 @@ function Install-SqlServer {
 
     Set-VMDvdDrive -VMName $CFG.VMName -ControllerNumber $dvd.ControllerNumber `
         -ControllerLocation $dvd.ControllerLocation -Path $CFG.SQLIsoPath
-    Write-Log 'SQL Server ISO placed in the VM DVD drive' 'OK'
-    Write-Log "Installing SQL Server 2025 Enterprise Developer (up to $($CFG.SQLInstallMinutes) minutes)..." 'INFO'
+    Write-LogEntry 'SQL Server ISO placed in the VM DVD drive' 'OK'
+    Write-LogEntry "Installing SQL Server 2025 Enterprise Developer (up to $($CFG.SQLInstallMinutes) minutes)..." 'INFO'
 
     try {
         $exitCode = Invoke-GuestScript -Activity 'SQL Server install' -TimeoutMinutes $CFG.SQLInstallMinutes `
@@ -727,11 +727,11 @@ function Install-SqlServer {
     finally {
         Set-VMDvdDrive -VMName $CFG.VMName -ControllerNumber $dvd.ControllerNumber `
             -ControllerLocation $dvd.ControllerLocation -Path $previousMedia
-        Write-Log 'VM DVD drive restored to its previous media' 'OK'
+        Write-LogEntry 'VM DVD drive restored to its previous media' 'OK'
     }
 
     if (-not (Test-InstallExitCode -Product 'SQL Server 2025 Enterprise Developer' -ExitCode $exitCode)) {
-        Write-Log '  Guest log: C:\Program Files\Microsoft SQL Server\170\Setup Bootstrap\Log\Summary.txt' 'INFO'
-        Exit-WithError "SQL Server installation failed (exit $exitCode)."
+        Write-LogEntry '  Guest log: C:\Program Files\Microsoft SQL Server\170\Setup Bootstrap\Log\Summary.txt' 'INFO'
+        Stop-WithError "SQL Server installation failed (exit $exitCode)."
     }
 }

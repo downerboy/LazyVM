@@ -10,8 +10,8 @@ BeforeAll {
     $module = 'Massokissed.LazyVM'
     $scriptDir = 'D:\DevVM\Scripts'
 
-    function New-TestVMSettings {
-        <# A VM's settings as Read-LazyVMSettings resolves them with the defaults, under D:\DevVM. #>
+    function New-TestVMSetting {
+        <# A VM's settings as Read-VMSetting resolves them with the defaults, under D:\DevVM. #>
         param(
             [Parameter(Mandatory)][string]$Name,
             [hashtable]$Overrides = @{}
@@ -91,7 +91,7 @@ Describe 'Test-PathWithin' {
 Describe 'Get-VMRemovalPlan' {
     Context 'with no other VM on the host' {
         BeforeAll {
-            $plan = Get-TestPlan -Settings (New-TestVMSettings -Name 'Alpha')
+            $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha')
         }
 
         It 'deletes every disk the VM has, including the Dev Drive' {
@@ -132,7 +132,7 @@ Describe 'Get-VMRemovalPlan' {
     }
 
     It 'keeps the credential key while another VM uses it' {
-        $plan = Get-TestPlan -Settings (New-TestVMSettings -Name 'Alpha') -OtherSettings @(New-TestVMSettings -Name 'Beta')
+        $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') -OtherSettings @(New-TestVMSetting -Name 'Beta')
 
         $plan.Files | Should -Not -Contain 'D:\DevVM\Backup\.lazyvm.key'
         $plan.Kept.Path | Should -Contain 'D:\DevVM\Backup\.lazyvm.key'
@@ -142,15 +142,15 @@ Describe 'Get-VMRemovalPlan' {
     It 'keeps a folder that holds another VM''s files' {
         # Built before VMs had their own folders, Alpha keeps its state in
         # State itself; Beta's state is in State\Beta.
-        $alpha = New-TestVMSettings -Name 'Alpha' -Overrides @{ StateDir = 'D:\DevVM\State' }
-        $plan = Get-TestPlan -Settings $alpha -OtherSettings @(New-TestVMSettings -Name 'Beta')
+        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ StateDir = 'D:\DevVM\State' }
+        $plan = Get-TestPlan -Settings $alpha -OtherSettings @(New-TestVMSetting -Name 'Beta')
 
         $plan.Folders | Should -Not -Contain 'D:\DevVM\State'
         ($plan.Kept | Where-Object { $_.Path -eq 'D:\DevVM\State' }).Reason | Should -BeLike "*VM 'Beta' also uses D:\DevVM\State\Beta*"
     }
 
     It 'keeps a disk attached to another VM' {
-        $alpha = New-TestVMSettings -Name 'Alpha' -Overrides @{ SQLDiskPath = 'D:\DevVM\SQLDisk\Shared.vhdx' }
+        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ SQLDiskPath = 'D:\DevVM\SQLDisk\Shared.vhdx' }
         $plan = Get-TestPlan -Settings $alpha -OtherVMDisks @('D:\DevVM\SQLDisk\Shared.vhdx')
 
         $plan.Files | Should -Not -Contain 'D:\DevVM\SQLDisk\Shared.vhdx'
@@ -163,7 +163,7 @@ Describe 'Get-VMRemovalPlan' {
         @{ Folder = 'D:\DevVM\Scripts' }
         @{ Folder = 'D:\DevVM\Backup' }
     ) {
-        $alpha = New-TestVMSettings -Name 'Alpha' -Overrides @{ StateDir = $Folder }
+        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ StateDir = $Folder }
         $plan = Get-TestPlan -Settings $alpha
 
         $plan.Folders | Should -Not -Contain $Folder
@@ -171,7 +171,7 @@ Describe 'Get-VMRemovalPlan' {
     }
 
     It 'adds the disks Hyper-V reports attached, without listing one twice' {
-        $plan = Get-TestPlan -Settings (New-TestVMSettings -Name 'Alpha') -AttachedDisks @(
+        $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') -AttachedDisks @(
             'd:\devvm\sqldisk\alpha.vhdx'
             'D:\DevVM\Checkpoints\Alpha\Alpha-OS_1234.avhdx'
             'E:\Elsewhere\Extra.vhdx'
@@ -183,7 +183,7 @@ Describe 'Get-VMRemovalPlan' {
     }
 
     It 'adds retired disks, rotated logs and retired configuration folders' {
-        $plan = Get-TestPlan -Settings (New-TestVMSettings -Name 'Alpha') `
+        $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') `
             -ExtraFiles @('D:\DevVM\VMs\Alpha-OS.retired-20261001-020000.vhdx', 'D:\DevVM\Logs\Alpha.20261001-020000.log') `
             -ExtraFolders @('D:\DevVM\VMs\Alpha.retired-20261001-020000')
 
@@ -193,8 +193,8 @@ Describe 'Get-VMRemovalPlan' {
     }
 
     It 'keeps a scheduled task another VM uses' {
-        $alpha = New-TestVMSettings -Name 'Alpha' -Overrides @{ ScheduleTaskName = 'Shared-Task' }
-        $beta = New-TestVMSettings -Name 'Beta' -Overrides @{ ScheduleTaskName = 'Shared-Task' }
+        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ ScheduleTaskName = 'Shared-Task' }
+        $beta = New-TestVMSetting -Name 'Beta' -Overrides @{ ScheduleTaskName = 'Shared-Task' }
 
         $plan = Get-TestPlan -Settings $alpha -OtherSettings @($beta)
 
@@ -203,9 +203,9 @@ Describe 'Get-VMRemovalPlan' {
     }
 
     It 'keeps a registry key that holds another VM''s key' {
-        $alpha = New-TestVMSettings -Name 'Alpha' -Overrides @{ ResumeRegKey = 'HKLM:\SOFTWARE\LazyVM' }
+        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ ResumeRegKey = 'HKLM:\SOFTWARE\LazyVM' }
 
-        $plan = Get-TestPlan -Settings $alpha -OtherSettings @(New-TestVMSettings -Name 'Beta')
+        $plan = Get-TestPlan -Settings $alpha -OtherSettings @(New-TestVMSetting -Name 'Beta')
 
         $plan.RegistryKey | Should -BeNullOrEmpty
         $plan.Kept.Path | Should -Contain 'HKLM:\SOFTWARE\LazyVM'

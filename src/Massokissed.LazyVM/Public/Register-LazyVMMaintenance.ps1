@@ -1,4 +1,4 @@
-function Register-LazyVMMaintenance {
+﻿function Register-LazyVMMaintenance {
     <#
     .SYNOPSIS
     Schedules a VM's daily maintenance.

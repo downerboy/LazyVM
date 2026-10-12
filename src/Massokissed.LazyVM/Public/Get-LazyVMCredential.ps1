@@ -1,4 +1,4 @@
-function Get-LazyVMCredential {
+﻿function Get-LazyVMCredential {
     <#
     .SYNOPSIS
     Gets the administrator account LazyVM uses inside a VM.
@@ -37,7 +37,7 @@ function Get-LazyVMCredential {
     )
 
     Assert-Administrator
-    $configuration = Read-LazyVMSettings -Root (Resolve-LazyVMRoot).Path -VMName $Name
+    $configuration = Read-VMSetting -Root (Resolve-LazyVMRoot).Path -VMName $Name
 
     # The key that decrypts the store lives in the settings just read, so the
     # module's current settings are pointed at them for the read.

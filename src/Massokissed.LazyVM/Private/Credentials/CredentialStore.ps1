@@ -17,7 +17,7 @@ function Get-CredKey {
         # Windows PowerShell 5.1 only (PowerShell 7 renamed it -AsByteStream).
         $key = [IO.File]::ReadAllBytes($CFG.CredKeyFile)
         if ($key.Length -eq 32) { return $key }
-        Write-Log 'Credential key file is malformed - regenerating (stored passwords will be reset)' 'WARN'
+        Write-LogEntry 'Credential key file is malformed - regenerating (stored passwords will be reset)' 'WARN'
         Remove-Item -LiteralPath $CFG.GuestCredFile -Force -ErrorAction SilentlyContinue
     }
 
@@ -37,7 +37,7 @@ function Get-CredKey {
 
     $hidden = Get-Item -LiteralPath $CFG.CredKeyFile -Force
     $hidden.Attributes = $hidden.Attributes -bor [IO.FileAttributes]::Hidden
-    Write-Log 'Generated new credential key (SYSTEM + Administrators only)' 'OK'
+    Write-LogEntry 'Generated new credential key (SYSTEM + Administrators only)' 'OK'
     return $key
 }
 
@@ -69,7 +69,7 @@ function Get-StoredCredential {
         return New-Object System.Management.Automation.PSCredential($blob.UserName, $secure)
     }
     catch {
-        Write-Log "Could not read stored credential at $Path - $($_.Exception.Message)" 'WARN'
+        Write-LogEntry "Could not read stored credential at $Path - $($_.Exception.Message)" 'WARN'
         return $null
     }
 }
@@ -112,6 +112,7 @@ function Get-GuestCredential {
       which is why every unattended run of the previous script died with
       "The credential is invalid."
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'A generated password has to become a SecureString once, on its way into the encrypted store.')]
     param([switch]$CreateIfMissing)
 
     $cred = Get-StoredCredential -Path $CFG.GuestCredFile
@@ -122,8 +123,8 @@ function Get-GuestCredential {
     $plain = New-RandomPassword
     $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
     Save-StoredCredential -Path $CFG.GuestCredFile -UserName $CFG.GuestAdminUser -Password $secure
-    Write-Log "Generated guest administrator credential for '$($CFG.GuestAdminUser)'" 'OK'
-    Write-Log "  Stored at $($CFG.GuestCredFile). See it with: Get-LazyVMCredential -Name $($CFG.VMName) -AsPlainText" 'INFO'
+    Write-LogEntry "Generated guest administrator credential for '$($CFG.GuestAdminUser)'" 'OK'
+    Write-LogEntry "  Stored at $($CFG.GuestCredFile). See it with: Get-LazyVMCredential -Name $($CFG.VMName) -AsPlainText" 'INFO'
     return (New-Object System.Management.Automation.PSCredential($CFG.GuestAdminUser, $secure))
 }
 

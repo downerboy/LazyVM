@@ -11,8 +11,8 @@
 #  processes. The previous version forced all ten to Automatic, which fought
 #  Windows' defaults for no benefit, so they are now reported only.
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase0-ServiceCheck {
-    Write-Log 'PHASE 0 - Hyper-V Service Health Check' 'PHASE'
+function Repair-HyperVService {
+    Write-LogEntry 'PHASE 0 - Hyper-V Service Health Check' 'PHASE'
 
     $needsFeatureInstall = $false
 
@@ -35,7 +35,7 @@ function Invoke-Phase0-ServiceCheck {
         $cim = Get-CimInstance -ClassName Win32_Service -Filter "Name='$($svc.Name)'" -ErrorAction SilentlyContinue
 
         if (-not $cim) {
-            Write-Log "$($svc.Display) - NOT FOUND. Hyper-V feature is not installed." 'WARN'
+            Write-LogEntry "$($svc.Display) - NOT FOUND. Hyper-V feature is not installed." 'WARN'
             $needsFeatureInstall = $true
             continue
         }
@@ -44,10 +44,10 @@ function Invoke-Phase0-ServiceCheck {
         $wantMode = if ($svc.Want -eq 'Automatic') { 'Auto' } else { $svc.Want }
 
         if ($startMode -eq 'Disabled' -or ($svc.Want -eq 'Automatic' -and $startMode -ne 'Auto')) {
-            Write-Log "$($svc.Display) - StartMode='$startMode' -> setting $($svc.Want)" 'WARN'
+            Write-LogEntry "$($svc.Display) - StartMode='$startMode' -> setting $($svc.Want)" 'WARN'
             try {
                 Set-Service -Name $svc.Name -StartupType $svc.Want -ErrorAction Stop
-                Write-Log "$($svc.Display) - startup type set to $($svc.Want)" 'OK'
+                Write-LogEntry "$($svc.Display) - startup type set to $($svc.Want)" 'OK'
             }
             catch {
                 Write-LogError "$($svc.Display) - could not set startup type" $_
@@ -56,15 +56,15 @@ function Invoke-Phase0-ServiceCheck {
             }
         }
         else {
-            Write-Log "$($svc.Display) - StartMode=$startMode (expected $wantMode)" 'INFO'
+            Write-LogEntry "$($svc.Display) - StartMode=$startMode (expected $wantMode)" 'INFO'
         }
 
         if ($svc.MustRun -and $cim.State -ne 'Running') {
-            Write-Log "$($svc.Display) - State='$($cim.State)' -> starting..." 'WARN'
+            Write-LogEntry "$($svc.Display) - State='$($cim.State)' -> starting..." 'WARN'
             try {
                 Start-Service -Name $svc.Name -ErrorAction Stop
                 (Get-Service -Name $svc.Name).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
-                Write-Log "$($svc.Display) - now Running" 'OK'
+                Write-LogEntry "$($svc.Display) - now Running" 'OK'
             }
             catch {
                 Write-LogError "$($svc.Display) - failed to start" $_
@@ -72,7 +72,7 @@ function Invoke-Phase0-ServiceCheck {
             }
         }
         elseif ($svc.MustRun) {
-            Write-Log "$($svc.Display) - Running" 'OK'
+            Write-LogEntry "$($svc.Display) - Running" 'OK'
         }
     }
 
@@ -84,26 +84,26 @@ function Invoke-Phase0-ServiceCheck {
         }
         else { $missing += $name }
     }
-    Write-Log "Guest integration components on host: $($present.Count) present, $($missing.Count) absent (informational - not reconfigured)" 'INFO'
+    Write-LogEntry "Guest integration components on host: $($present.Count) present, $($missing.Count) absent (informational - not reconfigured)" 'INFO'
 
-    Write-Log 'Phase 0 complete' 'OK'
+    Write-LogEntry 'Phase 0 complete' 'OK'
     return $needsFeatureInstall
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  PHASE 1 — CPU / Firmware / Capacity Readiness
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase1-CPUCheck {
-    Write-Log 'PHASE 1 - CPU, Firmware and Capacity Readiness' 'PHASE'
+function Test-HostReadiness {
+    Write-LogEntry 'PHASE 1 - CPU, Firmware and Capacity Readiness' 'PHASE'
 
     $cpu = Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1
     $cs = Get-CimInstance -ClassName Win32_ComputerSystem
 
-    Write-Log "CPU  : $($cpu.Name)" 'INFO'
-    Write-Log "Cores: $($cpu.NumberOfCores)  Threads: $($cpu.NumberOfLogicalProcessors)" 'INFO'
+    Write-LogEntry "CPU  : $($cpu.Name)" 'INFO'
+    Write-LogEntry "Cores: $($cpu.NumberOfCores)  Threads: $($cpu.NumberOfLogicalProcessors)" 'INFO'
 
     if ($cpu.NumberOfLogicalProcessors -lt $CFG.vCPU) {
-        Write-Log "Host has $($cpu.NumberOfLogicalProcessors) logical processors but the VM is configured for $($CFG.vCPU) vCPU" 'WARN'
+        Write-LogEntry "Host has $($cpu.NumberOfLogicalProcessors) logical processors but the VM is configured for $($CFG.vCPU) vCPU" 'WARN'
     }
 
     # SLAT. WMI hides raw CPU flags once Hyper-V owns the machine, so
@@ -112,24 +112,24 @@ function Invoke-Phase1-CPUCheck {
     # its output is localised) only as a last resort.
     $slatConfirmed = $false
     if ($cs.HypervisorPresent) {
-        Write-Log 'SLAT confirmed - a hypervisor is already running (HypervisorPresent = True)' 'OK'
+        Write-LogEntry 'SLAT confirmed - a hypervisor is already running (HypervisorPresent = True)' 'OK'
         $slatConfirmed = $true
     }
     elseif ($cpu.SecondLevelAddressTranslationExtensions) {
-        Write-Log 'SLAT confirmed via WMI' 'OK'
+        Write-LogEntry 'SLAT confirmed via WMI' 'OK'
         $slatConfirmed = $true
     }
     else {
-        Write-Log 'SLAT not visible via WMI - falling back to systeminfo (this takes ~30s)' 'INFO'
+        Write-LogEntry 'SLAT not visible via WMI - falling back to systeminfo (this takes ~30s)' 'INFO'
         try {
             $sysinfo = & systeminfo.exe 2>&1
             $slatLine = @($sysinfo | Where-Object { $_ -match 'Second Level Address Translation' })
             if ($slatLine.Count -gt 0 -and ($slatLine -join ' ') -match '(?i)\byes\b') {
-                Write-Log 'SLAT confirmed via systeminfo' 'OK'
+                Write-LogEntry 'SLAT confirmed via systeminfo' 'OK'
                 $slatConfirmed = $true
             }
             elseif ($slatLine.Count -eq 0) {
-                Write-Log 'systeminfo did not report a SLAT line (non-English Windows?) - cannot confirm' 'WARN'
+                Write-LogEntry 'systeminfo did not report a SLAT line (non-English Windows?) - cannot confirm' 'WARN'
             }
         }
         catch {
@@ -138,24 +138,24 @@ function Invoke-Phase1-CPUCheck {
     }
 
     if (-not $slatConfirmed) {
-        Exit-WithError 'SLAT (Intel EPT / AMD RVI) not detected. Enable Intel VT-x / AMD-V and EPT/RVI in UEFI firmware, then re-run.'
+        Stop-WithError 'SLAT (Intel EPT / AMD RVI) not detected. Enable Intel VT-x / AMD-V and EPT/RVI in UEFI firmware, then re-run.'
     }
 
     if ($cpu.VMMonitorModeExtensions) {
-        Write-Log 'VM Monitor Mode Extensions - supported' 'OK'
+        Write-LogEntry 'VM Monitor Mode Extensions - supported' 'OK'
     }
     else {
-        Write-Log 'VM Monitor Mode Extensions not reported (expected when a hypervisor is already active)' 'INFO'
+        Write-LogEntry 'VM Monitor Mode Extensions not reported (expected when a hypervisor is already active)' 'INFO'
     }
 
     # RAM
     $ramGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1)
-    Write-Log "Host RAM: $ramGB GB" 'INFO'
+    Write-LogEntry "Host RAM: $ramGB GB" 'INFO'
     if ($ramGB -lt ($CFG.MemMaxGB + 4)) {
-        Write-Log "Host RAM is within 4 GB of the VM maximum ($($CFG.MemMaxGB) GB) - the host may page under load" 'WARN'
+        Write-LogEntry "Host RAM is within 4 GB of the VM maximum ($($CFG.MemMaxGB) GB) - the host may page under load" 'WARN'
     }
     else {
-        Write-Log "Host RAM comfortably supports Dynamic Memory $($CFG.MemMinGB)-$($CFG.MemMaxGB) GB" 'OK'
+        Write-LogEntry "Host RAM comfortably supports Dynamic Memory $($CFG.MemMinGB)-$($CFG.MemMaxGB) GB" 'OK'
     }
 
     # Free space, measured on the volumes actually used and sized from config.
@@ -171,24 +171,24 @@ function Invoke-Phase1-CPUCheck {
         $root = [IO.Path]::GetPathRoot((Resolve-PathForce $req.Path))
         if (-not $byVolume.ContainsKey($root)) { $byVolume[$root] = 0 }
         $byVolume[$root] += $req.NeedGB
-        Write-Log "  needs $($req.NeedGB) GB on $root for $($req.What)" 'INFO'
+        Write-LogEntry "  needs $($req.NeedGB) GB on $root for $($req.What)" 'INFO'
     }
 
     foreach ($root in $byVolume.Keys) {
         $freeGB = Get-FreeSpaceGB -Path $root
         $needGB = $byVolume[$root]
         if ($freeGB -lt 0) {
-            Write-Log "$root - could not determine free space" 'WARN'
+            Write-LogEntry "$root - could not determine free space" 'WARN'
         }
         elseif ($freeGB -lt $needGB) {
-            Write-Log "$root - $freeGB GB free, about $needGB GB needed. Dynamic disks will grow into this over time." 'WARN'
+            Write-LogEntry "$root - $freeGB GB free, about $needGB GB needed. Dynamic disks will grow into this over time." 'WARN'
         }
         else {
-            Write-Log "$root - $freeGB GB free (need ~$needGB GB)" 'OK'
+            Write-LogEntry "$root - $freeGB GB free (need ~$needGB GB)" 'OK'
         }
     }
 
-    Write-Log 'Phase 1 complete' 'OK'
+    Write-LogEntry 'Phase 1 complete' 'OK'
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -199,19 +199,19 @@ function Invoke-Phase1-CPUCheck {
 #  -RunAsAdministrator fails immediately) and never fires at all under a SYSTEM
 #  scheduled task. A one-shot startup task as SYSTEM works in every case.
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase2-HyperVFeature {
+function Enable-HyperVFeature {
     <#
       Returns $true when the host is restarting to finish enabling Hyper-V;
       the build then stops, and the resume task carries on at Phase 3.
     #>
-    Write-Log 'PHASE 2 - Hyper-V Feature Installation' 'PHASE'
+    Write-LogEntry 'PHASE 2 - Hyper-V Feature Installation' 'PHASE'
 
     # Hyper-V is not offered on Home editions. Detect that now rather than
     # failing obscurely in Phase 6.
     $os = Get-CimInstance -ClassName Win32_OperatingSystem
-    Write-Log "OS: $($os.Caption) (build $($os.BuildNumber))" 'INFO'
+    Write-LogEntry "OS: $($os.Caption) (build $($os.BuildNumber))" 'INFO'
     if ($os.Caption -match '(?i)\bHome\b') {
-        Exit-WithError "Hyper-V is not available on $($os.Caption). Windows Pro, Enterprise or Education is required."
+        Stop-WithError "Hyper-V is not available on $($os.Caption). Windows Pro, Enterprise or Education is required."
     }
 
     # Microsoft-Hyper-V-All is the umbrella feature; enabling it with -All
@@ -239,30 +239,30 @@ function Invoke-Phase2-HyperVFeature {
     }
 
     if ($absent.Count -gt 0) {
-        Write-Log "Feature names not present on this edition: $($absent -join ', ')" 'WARN'
+        Write-LogEntry "Feature names not present on this edition: $($absent -join ', ')" 'WARN'
     }
     if ($enabled.Count -gt 0) {
-        Write-Log "Already enabled: $($enabled -join ', ')" 'OK'
+        Write-LogEntry "Already enabled: $($enabled -join ', ')" 'OK'
     }
 
     if ($disabled.Count -eq 0) {
         if ($enabled.Count -eq 0) {
-            Exit-WithError 'No Hyper-V features are available on this system. Check the Windows edition and firmware virtualization settings.'
+            Stop-WithError 'No Hyper-V features are available on this system. Check the Windows edition and firmware virtualization settings.'
         }
-        Write-Log 'All required Hyper-V features are enabled' 'OK'
+        Write-LogEntry 'All required Hyper-V features are enabled' 'OK'
         return $false
     }
 
-    Write-Log "Not yet enabled: $($disabled -join ', ')" 'WARN'
+    Write-LogEntry "Not yet enabled: $($disabled -join ', ')" 'WARN'
 
     Register-ResumeTask -Phase 3
 
-    Write-Log 'Enabling Microsoft-Hyper-V-All (several minutes)...' 'WARN'
+    Write-LogEntry 'Enabling Microsoft-Hyper-V-All (several minutes)...' 'WARN'
     $result = Enable-WindowsOptionalFeature -Online -FeatureName 'Microsoft-Hyper-V-All' -All -NoRestart
 
     if ($result.RestartNeeded) {
-        Write-Log 'Hyper-V enabled. Rebooting in 30 seconds; the build resumes automatically at Phase 3.' 'WARN'
-        Write-Log "Cancel with: Unregister-ScheduledTask -TaskName '$($CFG.ResumeTaskName)' -Confirm:`$false" 'INFO'
+        Write-LogEntry 'Hyper-V enabled. Rebooting in 30 seconds; the build resumes automatically at Phase 3.' 'WARN'
+        Write-LogEntry "Cancel with: Unregister-ScheduledTask -TaskName '$($CFG.ResumeTaskName)' -Confirm:`$false" 'INFO'
         Start-Sleep -Seconds 30
         Restart-Computer -Force
         # Restart-Computer returns immediately; the caller stops here so no
@@ -270,7 +270,7 @@ function Invoke-Phase2-HyperVFeature {
         return $true
     }
 
-    Write-Log 'Hyper-V enabled without requiring a restart' 'OK'
+    Write-LogEntry 'Hyper-V enabled without requiring a restart' 'OK'
     Unregister-ResumeTask
     return $false
 }
@@ -294,13 +294,13 @@ function Register-ResumeTask {
     Register-ScheduledTask -TaskName $CFG.ResumeTaskName -Action $action -Trigger $trigger `
         -Principal $principal -Settings $settings -Force | Out-Null
 
-    Write-Log "Resume task '$($CFG.ResumeTaskName)' registered (resumes at Phase $Phase after reboot)" 'OK'
+    Write-LogEntry "Resume task '$($CFG.ResumeTaskName)' registered (resumes at Phase $Phase after reboot)" 'OK'
 }
 
 function Unregister-ResumeTask {
     if (Get-ScheduledTask -TaskName $CFG.ResumeTaskName -ErrorAction SilentlyContinue) {
         Unregister-ScheduledTask -TaskName $CFG.ResumeTaskName -Confirm:$false
-        Write-Log "Resume task '$($CFG.ResumeTaskName)' removed" 'INFO'
+        Write-LogEntry "Resume task '$($CFG.ResumeTaskName)' removed" 'INFO'
     }
     if (Test-Path -LiteralPath $CFG.ResumeRegKey) {
         Remove-ItemProperty -Path $CFG.ResumeRegKey -Name 'ResumePhase' -ErrorAction SilentlyContinue
@@ -315,15 +315,15 @@ function Get-ResumePhase {
     $props = Get-ItemProperty -Path $CFG.ResumeRegKey -ErrorAction SilentlyContinue
     if (-not $props -or -not $props.PSObject.Properties['ResumePhase']) { return 0 }
     $phase = [int]$props.ResumePhase
-    if ($phase -gt 0) { Write-Log "Resuming after reboot from Phase $phase" 'INFO' }
+    if ($phase -gt 0) { Write-LogEntry "Resuming after reboot from Phase $phase" 'INFO' }
     return $phase
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  PHASE 3 — Folder Structure
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase3-FolderSetup {
-    Write-Log 'PHASE 3 - Folder Structure' 'PHASE'
+function Initialize-HostFolder {
+    Write-LogEntry 'PHASE 3 - Folder Structure' 'PHASE'
 
     $folders = @(
         $CFG.Root
@@ -342,11 +342,11 @@ function Invoke-Phase3-FolderSetup {
     foreach ($folder in $folders) {
         if (-not (Test-Path -LiteralPath $folder)) {
             New-Item -ItemType Directory -Path $folder -Force | Out-Null
-            Write-Log "Created : $folder" 'OK'
+            Write-LogEntry "Created : $folder" 'OK'
             $created++
         }
     }
-    Write-Log "Phase 3 complete - $($folders.Count) folders verified, $created created" 'OK'
+    Write-LogEntry "Phase 3 complete - $($folders.Count) folders verified, $created created" 'OK'
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -360,13 +360,13 @@ function Invoke-Phase3-FolderSetup {
 #
 #  The SQL Server ISO, by contrast, is a direct download (Resolve-SqlServerIso).
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase4-AssetCheck {
-    Write-Log 'PHASE 4 - Asset Verification' 'PHASE'
+function Confirm-InstallMedia {
+    Write-LogEntry 'PHASE 4 - Asset Verification' 'PHASE'
 
     Resolve-InstallationIso
     Resolve-SqlServerIso
 
-    Write-Log 'Phase 4 complete' 'OK'
+    Write-LogEntry 'Phase 4 complete' 'OK'
 }
 
 function Resolve-SqlServerIso {
@@ -385,15 +385,15 @@ function Resolve-SqlServerIso {
     #>
     if (Test-IsoFile -Path $CFG.SQLIsoPath) {
         $size = Format-Size ((Get-Item -LiteralPath $CFG.SQLIsoPath).Length)
-        Write-Log "SQL Server ISO - OK ($size) at $($CFG.SQLIsoPath)" 'OK'
+        Write-LogEntry "SQL Server ISO - OK ($size) at $($CFG.SQLIsoPath)" 'OK'
         return
     }
 
     if (Test-Path -LiteralPath $CFG.SQLIsoPath) {
-        Write-Log 'SQL Server ISO - present but not a valid image; re-downloading' 'WARN'
+        Write-LogEntry 'SQL Server ISO - present but not a valid image; re-downloading' 'WARN'
     }
     else {
-        Write-Log 'SQL Server ISO - not found; downloading (a few GB, this can take a while)' 'INFO'
+        Write-LogEntry 'SQL Server ISO - not found; downloading (a few GB, this can take a while)' 'INFO'
     }
 
     $temp = "$($CFG.SQLIsoPath).tmp"
@@ -408,12 +408,12 @@ function Resolve-SqlServerIso {
 
         # Only now is the existing copy replaced.
         Move-Item -LiteralPath $temp -Destination $CFG.SQLIsoPath -Force
-        Write-Log "SQL Server ISO - downloaded ($(Format-Size (Get-Item -LiteralPath $CFG.SQLIsoPath).Length))" 'OK'
+        Write-LogEntry "SQL Server ISO - downloaded ($(Format-Size (Get-Item -LiteralPath $CFG.SQLIsoPath).Length))" 'OK'
     }
     catch {
         Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
         Write-LogError 'SQL Server ISO - download failed' $_
-        Exit-WithError "Cannot continue without the SQL Server ISO. Download it from $($CFG.SQLIsoUrl) and save it to $($CFG.SQLIsoPath)."
+        Stop-WithError "Cannot continue without the SQL Server ISO. Download it from $($CFG.SQLIsoUrl) and save it to $($CFG.SQLIsoPath)."
     }
     finally {
         $client.Dispose()
@@ -428,21 +428,21 @@ function Resolve-InstallationIso {
     if (Test-IsoFile -Path $CFG.ISOPath) {
         $size = (Get-Item -LiteralPath $CFG.ISOPath).Length
         if ($size -ge ($CFG.ISOMinSizeGB * 1GB)) {
-            Write-Log "Windows ISO - OK ($(Format-Size $size)) at $($CFG.ISOPath)" 'OK'
+            Write-LogEntry "Windows ISO - OK ($(Format-Size $size)) at $($CFG.ISOPath)" 'OK'
             return
         }
-        Write-Log "Windows ISO at $($CFG.ISOPath) is a valid image but only $(Format-Size $size)" 'WARN'
+        Write-LogEntry "Windows ISO at $($CFG.ISOPath) is a valid image but only $(Format-Size $size)" 'WARN'
     }
     elseif (Test-Path -LiteralPath $CFG.ISOPath) {
         $size = (Get-Item -LiteralPath $CFG.ISOPath).Length
-        Write-Log "$($CFG.ISOPath) is $(Format-Size $size) and is NOT an ISO 9660 image (no CD001 signature)." 'WARN'
-        Write-Log '  This is almost always the HTML registration page returned by the evaluation download link.' 'INFO'
+        Write-LogEntry "$($CFG.ISOPath) is $(Format-Size $size) and is NOT an ISO 9660 image (no CD001 signature)." 'WARN'
+        Write-LogEntry '  This is almost always the HTML registration page returned by the evaluation download link.' 'INFO'
     }
     else {
-        Write-Log "Windows ISO not found at $($CFG.ISOPath)" 'WARN'
+        Write-LogEntry "Windows ISO not found at $($CFG.ISOPath)" 'WARN'
     }
 
-    Write-Log "Searching $($CFG.ISOSearchRoot) for a usable image..." 'INFO'
+    Write-LogEntry "Searching $($CFG.ISOSearchRoot) for a usable image..." 'INFO'
     $candidates = @(
         Get-ChildItem -LiteralPath $CFG.ISOSearchRoot -Filter '*.iso' -File -ErrorAction SilentlyContinue |
             Where-Object { $_.Length -ge ($CFG.ISOMinSizeGB * 1GB) } |
@@ -451,40 +451,40 @@ function Resolve-InstallationIso {
     )
 
     if ($candidates.Count -eq 0) {
-        Write-Log 'No valid Windows ISO found.' 'ERROR'
-        Write-Log "  Download Windows 11 Enterprise (evaluation) from:" 'INFO'
-        Write-Log "    $($CFG.ISODownloadPage)" 'INFO'
-        Write-Log "  The download is behind a registration form and cannot be automated." 'INFO'
-        Write-Log "  Save the image as $($CFG.ISOPath) and run the script again." 'INFO'
+        Write-LogEntry 'No valid Windows ISO found.' 'ERROR'
+        Write-LogEntry "  Download Windows 11 Enterprise (evaluation) from:" 'INFO'
+        Write-LogEntry "    $($CFG.ISODownloadPage)" 'INFO'
+        Write-LogEntry "  The download is behind a registration form and cannot be automated." 'INFO'
+        Write-LogEntry "  Save the image as $($CFG.ISOPath) and run the script again." 'INFO'
 
         # Someone is at the keyboard, so take them straight to the form. A
         # scheduled run has nobody to read the page and skips this.
         if ([Environment]::UserInteractive) {
             try {
                 Start-Process -FilePath $CFG.ISODownloadPage
-                Write-Log '  The download page has been opened in your browser.' 'INFO'
+                Write-LogEntry '  The download page has been opened in your browser.' 'INFO'
             }
             catch {
-                Write-Log "  Could not open the download page: $($_.Exception.Message)" 'WARN'
+                Write-LogEntry "  Could not open the download page: $($_.Exception.Message)" 'WARN'
             }
         }
-        Exit-WithError 'No valid Windows installation ISO is available.'
+        Stop-WithError 'No valid Windows installation ISO is available.'
     }
 
     $chosen = $candidates[0]
-    Write-Log "Using $($chosen.Name) ($(Format-Size $chosen.Length)) instead of the configured path" 'WARN'
+    Write-LogEntry "Using $($chosen.Name) ($(Format-Size $chosen.Length)) instead of the configured path" 'WARN'
     if ($candidates.Count -gt 1) {
-        Write-Log "  Other valid images present: $(($candidates | Select-Object -Skip 1).Name -join ', ')" 'INFO'
+        Write-LogEntry "  Other valid images present: $(($candidates | Select-Object -Skip 1).Name -join ', ')" 'INFO'
     }
-    Write-Log "  To silence this, set ISOPath to: $($chosen.FullName)" 'INFO'
+    Write-LogEntry "  To silence this, set ISOPath to: $($chosen.FullName)" 'INFO'
     $CFG.ISOPath = $chosen.FullName
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  PHASE 5 — SQL Data Disk
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-Phase5-SQLDisk {
-    Write-Log 'PHASE 5 - SQL Data Disk' 'PHASE'
+function Initialize-SqlDataVhd {
+    Write-LogEntry 'PHASE 5 - SQL Data Disk' 'PHASE'
 
     if (Test-Path -LiteralPath $CFG.SQLDiskPath) {
         # .Length is the allocated size of a dynamic VHDX, not its configured
@@ -493,28 +493,28 @@ function Invoke-Phase5-SQLDisk {
         $onDisk = (Get-Item -LiteralPath $CFG.SQLDiskPath).Length
         try {
             $vhd = Get-VHD -Path $CFG.SQLDiskPath
-            Write-Log ("SQLDisk.vhdx exists - capacity {0}, currently allocated {1}, type {2}" -f `
+            Write-LogEntry ("SQLDisk.vhdx exists - capacity {0}, currently allocated {1}, type {2}" -f `
                 (Format-Size $vhd.Size), (Format-Size $onDisk), $vhd.VhdType) 'OK'
             if ($vhd.Size -lt ($CFG.SQLDiskSizeGB * 1GB)) {
-                Write-Log "  Configured capacity is smaller than the requested $($CFG.SQLDiskSizeGB) GB. Expand with Resize-VHD if needed." 'WARN'
+                Write-LogEntry "  Configured capacity is smaller than the requested $($CFG.SQLDiskSizeGB) GB. Expand with Resize-VHD if needed." 'WARN'
             }
         }
         catch {
-            Write-Log "SQLDisk.vhdx exists ($(Format-Size $onDisk) on disk) - could not read VHD metadata: $($_.Exception.Message)" 'WARN'
+            Write-LogEntry "SQLDisk.vhdx exists ($(Format-Size $onDisk) on disk) - could not read VHD metadata: $($_.Exception.Message)" 'WARN'
         }
-        Write-Log 'Existing database data preserved' 'INFO'
+        Write-LogEntry 'Existing database data preserved' 'INFO'
         return
     }
 
-    Write-Log "Creating $($CFG.SQLDiskSizeGB) GB dynamic VHDX..." 'INFO'
+    Write-LogEntry "Creating $($CFG.SQLDiskSizeGB) GB dynamic VHDX..." 'INFO'
     New-VHD -Path $CFG.SQLDiskPath -SizeBytes ($CFG.SQLDiskSizeGB * 1GB) -Dynamic | Out-Null
-    Write-Log "SQLDisk.vhdx created at $($CFG.SQLDiskPath)" 'OK'
+    Write-LogEntry "SQLDisk.vhdx created at $($CFG.SQLDiskPath)" 'OK'
 }
 
-function Invoke-Phase5b-DevDrive {
-    Write-Log 'PHASE 5b - Dev Drive Disk' 'PHASE'
+function Initialize-DevDriveVhd {
+    Write-LogEntry 'PHASE 5b - Dev Drive Disk' 'PHASE'
     if (-not $CFG.UseDevDrive) {
-        Write-Log 'Dev Drive disabled in config - skipping' 'INFO'
+        Write-LogEntry 'Dev Drive disabled in config - skipping' 'INFO'
         return
     }
     New-DevDriveDisk

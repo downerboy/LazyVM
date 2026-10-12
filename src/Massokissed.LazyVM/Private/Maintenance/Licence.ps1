@@ -83,11 +83,11 @@ function Invoke-GuestRearm {
     }
 
     if (-not $result.Success) {
-        Write-Log "Rearm failed: $($result.Reason)" 'WARN'
+        Write-LogEntry "Rearm failed: $($result.Reason)" 'WARN'
         return $false
     }
 
-    Write-Log "Rearm accepted (had $($result.Before) remaining) - restarting the guest to apply it" 'OK'
+    Write-LogEntry "Rearm accepted (had $($result.Before) remaining) - restarting the guest to apply it" 'OK'
     Restart-GuestAndWait
     return $true
 }
@@ -107,13 +107,13 @@ function Get-LicenseReport {
       guest, with the last capture. Starts the VM if it is off.
     #>
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
-    if (-not $vm) { Exit-WithError "VM '$($CFG.VMName)' does not exist yet. Build it with: Build-LazyVM -Name $($CFG.VMName)" }
+    if (-not $vm) { Stop-WithError "VM '$($CFG.VMName)' does not exist yet. Build it with: Build-LazyVM -Name $($CFG.VMName)" }
 
     $credential = Get-GuestCredential
-    if (-not $credential) { Exit-WithError "No stored guest credential. Store one with: Set-LazyVMCredential -Name $($CFG.VMName)" }
+    if (-not $credential) { Stop-WithError "No stored guest credential. Store one with: Set-LazyVMCredential -Name $($CFG.VMName)" }
 
     if ($vm.State -ne 'Running') {
-        Write-Log "VM is '$($vm.State)' - starting it to read the licence" 'INFO'
+        Write-LogEntry "VM is '$($vm.State)' - starting it to read the licence" 'INFO'
         Start-VM -Name $CFG.VMName | Out-Null
         Wait-GuestReady -Credential $credential -TimeoutMinutes 20 | Out-Null
     }
@@ -184,24 +184,24 @@ function Invoke-Maintenance {
       evaluation is close to expiry, at which point it rearms, or rebuilds if
       rearms are exhausted.
     #>
-    Write-Log 'Maintenance Run' 'PHASE'
+    Write-LogEntry 'Maintenance Run' 'PHASE'
 
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
     if (-not $vm) {
-        Write-Log "VM '$($CFG.VMName)' does not exist - running a normal build instead" 'WARN'
+        Write-LogEntry "VM '$($CFG.VMName)' does not exist - running a normal build instead" 'WARN'
         return 'build'
     }
 
     $credential = Get-GuestCredential
     if (-not $credential) {
-        Write-Log 'No stored guest credential - cannot check the licence.' 'ERROR'
-        Write-Log "  Store one with: Set-LazyVMCredential -Name $($CFG.VMName)" 'INFO'
+        Write-LogEntry 'No stored guest credential - cannot check the licence.' 'ERROR'
+        Write-LogEntry "  Store one with: Set-LazyVMCredential -Name $($CFG.VMName)" 'INFO'
         return 'error'
     }
 
     $wasOff = ($vm.State -ne 'Running')
     if ($wasOff) {
-        Write-Log 'Starting the VM to check its licence' 'INFO'
+        Write-LogEntry 'Starting the VM to check its licence' 'INFO'
         Start-VM -Name $CFG.VMName | Out-Null
         Wait-GuestReady -Credential $credential -TimeoutMinutes 30 | Out-Null
     }
@@ -214,36 +214,36 @@ function Invoke-Maintenance {
     catch { Write-LogError 'Tooling check failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus
-    Write-Log "Licence: $($license.Status); $($license.DaysLeft) day(s) left; $($license.RearmsLeft) rearm(s) remaining" 'INFO'
+    Write-LogEntry "Licence: $($license.Status); $($license.DaysLeft) day(s) left; $($license.RearmsLeft) rearm(s) remaining" 'INFO'
 
     $decision = Get-MaintenanceDecision -DaysLeft $license.DaysLeft `
         -RearmsLeft $license.RearmsLeft -ThresholdDays $CFG.RebuildThresholdDays
 
     if ($decision -eq 'none') {
-        if ($license.DaysLeft -lt 0) { Write-Log 'No evaluation countdown reported - nothing to do' 'OK' }
-        else { Write-Log "More than $($CFG.RebuildThresholdDays) days remain - no action needed" 'OK' }
+        if ($license.DaysLeft -lt 0) { Write-LogEntry 'No evaluation countdown reported - nothing to do' 'OK' }
+        else { Write-LogEntry "More than $($CFG.RebuildThresholdDays) days remain - no action needed" 'OK' }
         if ($wasOff) { Stop-GuestGracefully }
         return 'none'
     }
 
-    Write-Log "Evaluation expires in $($license.DaysLeft) day(s) - acting now" 'WARN'
+    Write-LogEntry "Evaluation expires in $($license.DaysLeft) day(s) - acting now" 'WARN'
 
     # Always capture before doing anything, so even a rearm that goes wrong
     # leaves a usable restore point.
-    Invoke-Phase9-Capture | Out-Null
+    Save-GuestState | Out-Null
 
     if ($decision -eq 'rearm') {
-        Write-Log "Attempting rearm ($($license.RearmsLeft) remaining) - this avoids a rebuild" 'INFO'
+        Write-LogEntry "Attempting rearm ($($license.RearmsLeft) remaining) - this avoids a rebuild" 'INFO'
         if (Invoke-GuestRearm) {
             $after = Get-GuestLicenseStatus
-            Write-Log "Rearmed: $($after.DaysLeft) day(s) now remaining, $($after.RearmsLeft) rearm(s) left" 'OK'
+            Write-LogEntry "Rearmed: $($after.DaysLeft) day(s) now remaining, $($after.RearmsLeft) rearm(s) left" 'OK'
             if ($wasOff) { Stop-GuestGracefully }
             return 'rearmed'
         }
-        Write-Log 'Rearm did not succeed - falling through to a full rebuild' 'WARN'
+        Write-LogEntry 'Rearm did not succeed - falling through to a full rebuild' 'WARN'
     }
     else {
-        Write-Log 'No rearms remaining - a full rebuild is required' 'WARN'
+        Write-LogEntry 'No rearms remaining - a full rebuild is required' 'WARN'
     }
 
     return 'rebuild'
@@ -256,19 +256,19 @@ function Stop-GuestGracefully {
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
     if (-not $vm -or $vm.State -eq 'Off') { return }
 
-    Write-Log 'Shutting the guest down...' 'INFO'
+    Write-LogEntry 'Shutting the guest down...' 'INFO'
     Stop-VM -Name $CFG.VMName -Force:$false -ErrorAction SilentlyContinue | Out-Null
 
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
     while ((Get-Date) -lt $deadline) {
         $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
         if (-not $vm -or $vm.State -eq 'Off') {
-            Write-Log 'Guest is off' 'OK'
+            Write-LogEntry 'Guest is off' 'OK'
             return
         }
         Start-Sleep -Seconds 10
     }
 
-    Write-Log "Guest did not shut down within $TimeoutMinutes minutes - forcing it off" 'WARN'
+    Write-LogEntry "Guest did not shut down within $TimeoutMinutes minutes - forcing it off" 'WARN'
     Stop-VM -Name $CFG.VMName -TurnOff -Force | Out-Null
 }

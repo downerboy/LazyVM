@@ -1,4 +1,4 @@
-function Invoke-LazyVMMaintenance {
+﻿function Invoke-LazyVMMaintenance {
     <#
     .SYNOPSIS
     Runs a VM's daily maintenance: the scheduled task's command.
@@ -39,15 +39,15 @@ function Invoke-LazyVMMaintenance {
         $action = @(Invoke-Maintenance)[-1]
         switch ($action) {
             'none' {
-                Write-Log 'Maintenance complete - nothing needed' 'OK'
+                Write-LogEntry 'Maintenance complete - nothing needed' 'OK'
                 return 'None'
             }
             'rearmed' {
-                Write-Log 'Maintenance complete - evaluation rearmed, no rebuild needed' 'OK'
+                Write-LogEntry 'Maintenance complete - evaluation rearmed, no rebuild needed' 'OK'
                 return 'Rearmed'
             }
             'rebuild' {
-                Write-Log 'Maintenance is escalating to a full rebuild' 'WARN'
+                Write-LogEntry 'Maintenance is escalating to a full rebuild' 'WARN'
                 # The capture already ran inside Invoke-Maintenance.
                 if (@(Invoke-Rebuild -SkipCapture)[-1] -ne $true) {
                     throw "The rebuild of '$($CFG.VMName)' did not complete cleanly. The log says what happened and how to go back: $($CFG.LogFile)"
@@ -55,7 +55,7 @@ function Invoke-LazyVMMaintenance {
                 return 'Rebuilt'
             }
             'build' {
-                Write-Log 'Maintenance found no VM - building one' 'INFO'
+                Write-LogEntry 'Maintenance found no VM - building one' 'INFO'
                 if (@(Invoke-Rebuild)[-1] -ne $true) {
                     throw "Building '$($CFG.VMName)' did not complete cleanly. The log says what happened: $($CFG.LogFile)"
                 }

@@ -1,4 +1,4 @@
-# Massokissed.LazyVM.psm1
+﻿# Massokissed.LazyVM.psm1
 # The module's root. Loads every function from Private (internal) and
 # Public (exported) and sets up the module's own state.
 #
@@ -51,10 +51,12 @@ Remove-Variable -Name folder, folderPath, files, file -ErrorAction SilentlyConti
 # ── Tab completion ───────────────────────────────────────────────────────────
 # -Name on every command completes with the VMs on this host.
 $vmNameCompleter = {
-    param($commandName, $parameterName, $wordToComplete)
+    # PowerShell passes the command name, the parameter name and the word
+    # typed so far; only the word is needed.
+    $wordToComplete = $args[2]
     $root = Get-RegisteredRoot
     if (-not $root) { return }
-    Get-VMProfileNames -ConfigDir (Get-ConfigDir -Root $root) |
+    Get-VMProfileName -ConfigDir (Get-ConfigDir -Root $root) |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
 }

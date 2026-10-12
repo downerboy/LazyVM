@@ -12,7 +12,7 @@
 #  longer want, delete it from AwaitingReinstall in Tooling.json.
 # ─────────────────────────────────────────────────────────────────────────────
 
-function Get-AwaitingNames {
+function Get-AwaitingName {
     param($Record)
 
     $awaiting = Get-RecordField -Item $Record -Name 'AwaitingReinstall'
@@ -73,8 +73,8 @@ function Merge-AwaitingReinstall {
 
     $Record['AwaitingReinstall'] = [ordered]@{ Programs = @($programs); Extensions = @($extensions) }
     if ($programs.Count + $extensions.Count -gt 0) {
-        Write-Log "$($programs.Count + $extensions.Count) item(s) from before the last rebuild still need installing by hand:" 'WARN'
-        foreach ($program in $programs) { Write-Log "  program: $($program.Name)" 'WARN' }
-        foreach ($extension in $extensions) { Write-Log "  extension: $($extension.DisplayName)" 'WARN' }
+        Write-LogEntry "$($programs.Count + $extensions.Count) item(s) from before the last rebuild still need installing by hand:" 'WARN'
+        foreach ($program in $programs) { Write-LogEntry "  program: $($program.Name)" 'WARN' }
+        foreach ($extension in $extensions) { Write-LogEntry "  extension: $($extension.DisplayName)" 'WARN' }
     }
 }

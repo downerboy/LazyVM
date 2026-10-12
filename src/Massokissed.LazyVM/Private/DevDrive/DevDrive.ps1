@@ -28,18 +28,18 @@ function New-DevDriveDisk {
         $onDisk = (Get-Item -LiteralPath $CFG.DevDrivePath).Length
         try {
             $vhd = Get-VHD -Path $CFG.DevDrivePath
-            Write-Log ("Dev Drive disk exists - capacity {0}, currently allocated {1}" -f `
+            Write-LogEntry ("Dev Drive disk exists - capacity {0}, currently allocated {1}" -f `
                 (Format-Size $vhd.Size), (Format-Size $onDisk)) 'OK'
         }
         catch {
-            Write-Log "Dev Drive disk exists ($(Format-Size $onDisk) on disk)" 'OK'
+            Write-LogEntry "Dev Drive disk exists ($(Format-Size $onDisk) on disk)" 'OK'
         }
-        Write-Log 'Existing Dev Drive contents preserved' 'INFO'
+        Write-LogEntry 'Existing Dev Drive contents preserved' 'INFO'
         return
     }
 
     if ($CFG.DevDriveSizeGB -lt 50) {
-        Exit-WithError "DevDriveSizeGB is $($CFG.DevDriveSizeGB); Dev Drive requires at least 50 GB."
+        Stop-WithError "DevDriveSizeGB is $($CFG.DevDriveSizeGB); Dev Drive requires at least 50 GB."
     }
 
     $parent = Split-Path -Path $CFG.DevDrivePath -Parent
@@ -47,27 +47,27 @@ function New-DevDriveDisk {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
 
-    Write-Log "Creating $($CFG.DevDriveSizeGB) GB dynamic Dev Drive disk..." 'INFO'
+    Write-LogEntry "Creating $($CFG.DevDriveSizeGB) GB dynamic Dev Drive disk..." 'INFO'
     New-VHD -Path $CFG.DevDrivePath -SizeBytes ([long]$CFG.DevDriveSizeGB * 1GB) -Dynamic | Out-Null
-    Write-Log "Dev Drive disk created at $($CFG.DevDrivePath)" 'OK'
+    Write-LogEntry "Dev Drive disk created at $($CFG.DevDrivePath)" 'OK'
 }
 
 function Add-DevDriveDisk {
     if (-not $CFG.UseDevDrive) { return }
     if (-not (Test-Path -LiteralPath $CFG.DevDrivePath)) {
-        Write-Log "Dev Drive disk not found at $($CFG.DevDrivePath) - skipping attach" 'WARN'
+        Write-LogEntry "Dev Drive disk not found at $($CFG.DevDrivePath) - skipping attach" 'WARN'
         return
     }
 
     $attached = @(Get-VMHardDiskDrive -VMName $CFG.VMName -ErrorAction SilentlyContinue |
             Where-Object { $_.Path -eq $CFG.DevDrivePath })
     if ($attached.Count -gt 0) {
-        Write-Log 'Dev Drive disk already attached' 'OK'
+        Write-LogEntry 'Dev Drive disk already attached' 'OK'
         return
     }
 
     Add-VMHardDiskDrive -VMName $CFG.VMName -Path $CFG.DevDrivePath -ControllerType SCSI
-    Write-Log 'Dev Drive disk attached (SCSI)' 'OK'
+    Write-LogEntry 'Dev Drive disk attached (SCSI)' 'OK'
     Start-Sleep -Seconds 5
 }
 
@@ -80,7 +80,7 @@ function Initialize-GuestDevDrive {
     #>
     if (-not $CFG.UseDevDrive) { return }
 
-    Write-Log 'Preparing the Dev Drive inside the guest...' 'INFO'
+    Write-LogEntry 'Preparing the Dev Drive inside the guest...' 'INFO'
 
     $result = Invoke-GuestScript -Activity 'Dev Drive preparation' -TimeoutMinutes 30 -ArgumentList @(
         $CFG.DevDriveLetter, $CFG.DevDriveSizeGB, $CFG.DevDriveLabel, ($CFG.DevDriveFilters -join ', ')
@@ -212,24 +212,24 @@ function Initialize-GuestDevDrive {
     }
 
     foreach ($note in @($result.Notes)) {
-        if ($note -like 'DEV DRIVE FORMAT REFUSED*') { Write-Log "  $note" 'ERROR' }
-        elseif ($note -like 'falling back*' -or $note -like '*returned*') { Write-Log "  $note" 'WARN' }
-        else { Write-Log "  $note" 'INFO' }
+        if ($note -like 'DEV DRIVE FORMAT REFUSED*') { Write-LogEntry "  $note" 'ERROR' }
+        elseif ($note -like 'falling back*' -or $note -like '*returned*') { Write-LogEntry "  $note" 'WARN' }
+        else { Write-LogEntry "  $note" 'INFO' }
     }
 
     $CFG.DevDriveLetter = $result.Letter
 
     if ($result.Trusted) {
-        Write-Log "Dev Drive ready at $($result.Letter): - trusted ReFS, $($result.FreeGB) GB free of $($result.SizeGB) GB" 'OK'
-        Write-Log '  Defender performance mode and ReFS block cloning are active on this volume.' 'INFO'
+        Write-LogEntry "Dev Drive ready at $($result.Letter): - trusted ReFS, $($result.FreeGB) GB free of $($result.SizeGB) GB" 'OK'
+        Write-LogEntry '  Defender performance mode and ReFS block cloning are active on this volume.' 'INFO'
     }
     elseif ($result.FileSystem -eq 'ReFS') {
-        Write-Log "Volume at $($result.Letter): is ReFS but NOT trusted - it works, without the Dev Drive speedups" 'WARN'
-        Write-Log "  Try by hand:  fsutil devdrv enable   then   fsutil devdrv trust $($result.Letter):" 'INFO'
+        Write-LogEntry "Volume at $($result.Letter): is ReFS but NOT trusted - it works, without the Dev Drive speedups" 'WARN'
+        Write-LogEntry "  Try by hand:  fsutil devdrv enable   then   fsutil devdrv trust $($result.Letter):" 'INFO'
     }
     else {
-        Write-Log "Volume at $($result.Letter): is NTFS - Dev Drive was not available on this disk" 'WARN'
-        Write-Log '  It still persists across rebuilds; only the ReFS acceleration is missing.' 'INFO'
+        Write-LogEntry "Volume at $($result.Letter): is NTFS - Dev Drive was not available on this disk" 'WARN'
+        Write-LogEntry '  It still persists across rebuilds; only the ReFS acceleration is missing.' 'INFO'
     }
     return $result
 }
@@ -248,13 +248,13 @@ function Enable-GuestEnhancedSession {
     try {
         if (-not (Get-VMHost).EnableEnhancedSessionMode) {
             Set-VMHost -EnableEnhancedSessionMode $true
-            Write-Log 'Enhanced session mode enabled on the Hyper-V host' 'OK'
+            Write-LogEntry 'Enhanced session mode enabled on the Hyper-V host' 'OK'
         }
         Set-VM -VMName $CFG.VMName -EnhancedSessionTransportType HvSocket -ErrorAction Stop
-        Write-Log 'VM enhanced session transport set to HvSocket (VMBus)' 'OK'
+        Write-LogEntry 'VM enhanced session transport set to HvSocket (VMBus)' 'OK'
     }
     catch {
-        Write-Log "Could not configure enhanced session mode on the host: $($_.Exception.Message)" 'WARN'
+        Write-LogEntry "Could not configure enhanced session mode on the host: $($_.Exception.Message)" 'WARN'
         return
     }
 
@@ -291,8 +291,8 @@ function Enable-GuestEnhancedSession {
             }
             return $log
         }
-        foreach ($line in @($report)) { Write-Log "  $line" 'OK' }
-        Write-Log '  In VMConnect: Show Options > Local Resources > More > Drives to share host drives.' 'INFO'
+        foreach ($line in @($report)) { Write-LogEntry "  $line" 'OK' }
+        Write-LogEntry '  In VMConnect: Show Options > Local Resources > More > Drives to share host drives.' 'INFO'
     }
     catch {
         Write-LogError 'Could not enable Remote Desktop in the guest (non-fatal)' $_
