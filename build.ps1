@@ -133,6 +133,7 @@ function Invoke-Analyze {
     )
     foreach ($finding in $findings) {
         Write-Host "$($finding.ScriptName):$($finding.Line)  $($finding.RuleName)  $($finding.Message)"
+        Write-CIError -Message "$($finding.RuleName): $($finding.Message)" -File $finding.ScriptPath -Line $finding.Line
     }
     if ($findings.Count -gt 0) { throw "PSScriptAnalyzer found $($findings.Count) problem(s)." }
     Write-Host 'PSScriptAnalyzer: no findings'
@@ -149,17 +150,42 @@ function Invoke-Test {
     $configuration.TestResult.OutputPath = Join-Path -Path $outDir -ChildPath 'testResults.xml'
 
     $result = Invoke-Pester -Configuration $configuration
+    foreach ($test in $result.Failed) {
+        Write-CIError -Message "$($test.ExpandedPath): $($test.ErrorRecord[0].Exception.Message)" -File $test.ScriptBlock.File -Line $test.StartLine
+    }
+    foreach ($container in @($result.Containers | Where-Object Result -eq 'Failed')) {
+        Write-CIError -Message "$($container.Item): $(@($container.ErrorRecord)[0])"
+    }
     if ($result.FailedCount -gt 0 -or $result.FailedContainersCount -gt 0) {
         throw "$($result.FailedCount) test(s) and $($result.FailedContainersCount) test file(s) failed."
     }
 }
 
-if ($Task -in 'All', 'Build') { Invoke-Build }
-if ($Task -in 'All', 'Analyze') {
-    Import-BuildTool -Tool ($tools | Where-Object Name -eq 'PSScriptAnalyzer')
-    Invoke-Analyze
+function Write-CIError {
+    <# On GitHub Actions, an error shown on the run and the pull request, at the file and line when known. #>
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [string]$File,
+        [int]$Line
+    )
+    if (-not $env:GITHUB_ACTIONS) { return }
+    $location = if ($File) { " file=$([IO.Path]::GetRelativePath($PSScriptRoot, $File)),line=$Line" } else { '' }
+    $text = $Message -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A'
+    Write-Host "::error$location::$text"
 }
-if ($Task -in 'All', 'Test') {
-    Import-BuildTool -Tool ($tools | Where-Object Name -eq 'Pester')
-    Invoke-Test
+
+try {
+    if ($Task -in 'All', 'Build') { Invoke-Build }
+    if ($Task -in 'All', 'Analyze') {
+        Import-BuildTool -Tool ($tools | Where-Object Name -eq 'PSScriptAnalyzer')
+        Invoke-Analyze
+    }
+    if ($Task -in 'All', 'Test') {
+        Import-BuildTool -Tool ($tools | Where-Object Name -eq 'Pester')
+        Invoke-Test
+    }
+}
+catch {
+    Write-CIError -Message "$($_.Exception.Message)`n$($_.ScriptStackTrace)"
+    throw
 }
