@@ -87,6 +87,13 @@ function New-UnattendXml {
     </component>
   </settings>
   <settings pass="oobeSystem">
+    <!-- Without this, Windows 11 OOBE stops on the region and keyboard pages. -->
+    <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UserLocale>en-US</UserLocale>
+    </component>
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
       <OOBE>
         <HideEULAPage>true</HideEULAPage>

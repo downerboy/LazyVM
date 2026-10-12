@@ -42,7 +42,7 @@ function Install-GuestSoftware {
         Write-LogEntry "  administrator named '$($CFG.GuestAdminUser)' with the stored password." 'INFO'
     }
 
-    Wait-GuestReady -Credential $credential -TimeoutMinutes $CFG.GuestWaitMinutes
+    Wait-GuestReady -Credential $credential -TimeoutMinutes $CFG.GuestWaitMinutes -RequireProvisioned:$UsedUnattend
 
     # Provisioning is done, so the answer-file disc (which holds the guest password in
     # clear text) is removed before anything else runs. Doing it here also
@@ -602,7 +602,7 @@ function Install-ToolingProduct {
 
         Write-LogEntry "Installing $label from $url ($(@($product.Components).Count) workload/component id(s), $($extensions.Count) extension(s); up to $($CFG.VSInstallMinutes) minutes)..." 'INFO'
         try {
-            $exitCode = Invoke-GuestScript -Activity "$label install" -TimeoutMinutes $CFG.VSInstallMinutes `
+            $prepared = Invoke-GuestScript -Activity "$label download" -TimeoutMinutes 15 `
                 -ArgumentList @($url, "bootstrap-$edition.exe", $CFG.GuestSetupDir, $configJson, $includeRecommended, ($extensions.Count -gt 0)) -ScriptBlock {
                 param($url, $bootstrapperName, $setupDir, $configJson, $includeRecommended, $hasExtensions)
                 $ErrorActionPreference = 'Stop'
@@ -620,11 +620,12 @@ function Install-ToolingProduct {
                 if ($includeRecommended) { $arguments += '--includeRecommended' }
                 if ($hasExtensions) { $arguments += '--allowUnsignedExtensions' }
 
-                $proc = Start-Process -FilePath $bootstrapper -ArgumentList $arguments -Wait -PassThru -NoNewWindow -WorkingDirectory $setupDir
-                return $proc.ExitCode
+                return [pscustomobject]@{ FilePath = $bootstrapper; Arguments = ($arguments -join ' ') }
             }
+            $exitCode = Invoke-GuestInstaller -FilePath $prepared.FilePath -ArgumentList $prepared.Arguments `
+                -Name "install-$edition" -TimeoutMinutes $CFG.VSInstallMinutes -Activity "the $label install"
             if (-not (Test-InstallExitCode -Product $label -ExitCode $exitCode)) {
-                Write-LogEntry '  Guest log: %TEMP%\dd_bootstrapper_*.log and %TEMP%\dd_setup_*.log for the guest account' 'INFO'
+                Write-LogEntry '  Guest log: C:\Windows\Temp\dd_bootstrapper_*.log and dd_setup_*.log' 'INFO'
             }
         }
         catch {
@@ -701,9 +702,7 @@ function Install-SqlServer {
     Write-LogEntry "Installing SQL Server 2025 Enterprise Developer (up to $($CFG.SQLInstallMinutes) minutes)..." 'INFO'
 
     try {
-        $exitCode = Invoke-GuestScript -Activity 'SQL Server install' -TimeoutMinutes $CFG.SQLInstallMinutes `
-            -ArgumentList @($setupArguments) -ScriptBlock {
-            param($setupArguments)
+        $setupExe = Invoke-GuestScript -Activity 'SQL Server media check' -TimeoutMinutes 5 -ScriptBlock {
             $ErrorActionPreference = 'Stop'
 
             # The guest takes a moment to notice the new media. The Windows
@@ -719,10 +718,10 @@ function Install-SqlServer {
                 if (-not $setupExe) { Start-Sleep -Seconds 2 }
             }
             if (-not $setupExe) { throw 'the SQL Server media did not appear on any DVD drive in the guest' }
-
-            $proc = Start-Process -FilePath $setupExe -ArgumentList $setupArguments -Wait -PassThru -NoNewWindow
-            return $proc.ExitCode
+            return $setupExe
         }
+        $exitCode = Invoke-GuestInstaller -FilePath $setupExe -ArgumentList $setupArguments `
+            -Name 'install-sqlserver' -TimeoutMinutes $CFG.SQLInstallMinutes -Activity 'the SQL Server install'
     }
     finally {
         Set-VMDvdDrive -VMName $CFG.VMName -ControllerNumber $dvd.ControllerNumber `

@@ -26,6 +26,7 @@ $script:CFG = $script:Settings
 
 # The PowerShell Direct session every guest call goes through.
 $script:GuestSession = $null
+$script:GuestCredential = $null
 
 # Connection target for guest-side SQL work. Refined to localhost\<instance>
 # by Set-GuestSqlServer once the real instance name is known.
