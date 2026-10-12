@@ -680,7 +680,15 @@ function Import-LegacyConfiguration {
       beside the scripts, in <Root>\Scripts\Config. Each settings file is
       converted to JSON, and each VM's tooling list and history copied. A
       file that already exists in the new place is never overwritten, and the
-      old files are left exactly as they are. Returns what was done.
+      old files are left exactly as they are.
+
+      A profile from MsDevVM, the version before, may name its own credential
+      key and files and its own task. LazyVM now works those out itself, so
+      the credentials are carried to where it will look for them, and the
+      old task's name is returned so Set-LazyVMRoot can replace it.
+
+      Returns Messages, what was done, and LegacyTasks, the maintenance
+      tasks registered under names LazyVM no longer uses.
     #>
     param(
         [Parameter(Mandatory)][string]$LegacyConfigDir,
@@ -688,7 +696,11 @@ function Import-LegacyConfiguration {
     )
 
     $done = [System.Collections.Generic.List[string]]::new()
-    if (-not (Test-Path -LiteralPath $LegacyConfigDir -PathType Container)) { return @($done) }
+    $legacyTasks = [System.Collections.Generic.List[object]]::new()
+    if (-not (Test-Path -LiteralPath $LegacyConfigDir -PathType Container)) {
+        return [pscustomobject]@{ Messages = @(); LegacyTasks = @() }
+    }
+    $root = Split-Path -Path $ConfigDir -Parent
 
     Initialize-ConfigFolder -ConfigDir $ConfigDir
 
@@ -732,6 +744,43 @@ function Import-LegacyConfiguration {
                 $done.Add("  Copied its $item")
             }
         }
+
+        # Names a 1.x profile could set that LazyVM now works out itself.
+        $legacy = Import-PowerShellDataFile -LiteralPath $legacyProfile
+        $resolveLegacy = {
+            param([string]$Value)
+            $path = $Value.Replace('{VM}', $folder.Name)
+            if (Test-FullHostPath $path) { return $path }
+            return "$root\$($path -replace '^\.\\', '')"
+        }
+        $derived = @{
+            VMName               = $folder.Name
+            VHDXRoot             = 'VMs'
+            CredStoreDir         = 'Backup'
+            GuestDataDriveLetter = 'D'
+            SqlDataFolder        = ''
+            SqlLogFolder         = ''
+            SqlTempFolder        = ''
+            SqlBackupFolder      = ''
+        }
+        if ($converted.Values.ContainsKey('CredStoreDir')) { $derived.CredStoreDir = $converted.Values.CredStoreDir }
+        $derived.CredStoreDir = & $resolveLegacy $derived.CredStoreDir
+        Add-DerivedSetting -Settings $derived
+
+        $oldKey = if ($legacy.ContainsKey('CredKeyFile')) { & $resolveLegacy $legacy.CredKeyFile } else { $derived.CredKeyFile }
+        foreach ($name in 'GuestCredFile', 'CertCredFile') {
+            if (-not $legacy.ContainsKey($name)) { continue }
+            $message = Copy-StoredCredential -OldKeyPath $oldKey -OldPath (& $resolveLegacy $legacy[$name]) `
+                -NewKeyPath $derived.CredKeyFile -NewPath $derived[$name]
+            if ($message) { $done.Add("  $message") }
+        }
+
+        if ($legacy.ContainsKey('ScheduleTaskName')) {
+            $taskName = $legacy.ScheduleTaskName.Replace('{VM}', $folder.Name)
+            if ($taskName -ne $derived.ScheduleTaskName) {
+                $legacyTasks.Add([pscustomobject]@{ VMName = $folder.Name; TaskName = $taskName })
+            }
+        }
     }
-    return @($done)
+    return [pscustomobject]@{ Messages = @($done); LegacyTasks = @($legacyTasks) }
 }

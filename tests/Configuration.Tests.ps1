@@ -623,8 +623,8 @@ Describe 'Bringing 1.x settings across' {
         $vmProfile.Keys | Should -Not -Contain 'SQLInstallerPath'
         Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/Tooling.json' | Should -Exist
         Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/History/Daily/20261001.json' | Should -Exist
-        ($done -join "`n") | Should -BeLike "*'Root' is now chosen once with Set-LazyVMRoot*"
-        ($done -join "`n") | Should -BeLike "*'SQLInstallerPath' is no longer a setting*"
+        ($done.Messages -join "`n") | Should -BeLike "*'Root' is now chosen once with Set-LazyVMRoot*"
+        ($done.Messages -join "`n") | Should -BeLike "*'SQLInstallerPath' is no longer a setting*"
     }
 
     It 'produces files that load cleanly' {
@@ -658,7 +658,90 @@ Describe 'Bringing 1.x settings across' {
             Import-LegacyConfiguration -LegacyConfigDir (Join-Path -Path $Root -ChildPath 'Scripts/Config') -ConfigDir (Get-ConfigDir -Root $Root)
         }
 
-        @($done).Count | Should -Be 0
+        @($done.Messages).Count | Should -Be 0
+        @($done.LegacyTasks).Count | Should -Be 0
+    }
+
+    It 'returns a maintenance task registered under a name LazyVM no longer uses' {
+        $legacy = New-LegacyKit
+        Set-Content -LiteralPath (Join-Path -Path $legacy -ChildPath 'VMs/DevBox/VM.psd1') -Value "@{ ScheduleTaskName = 'MsDevVM-90DayRebuild' }"
+        $root = New-TestRoot
+
+        $done = InModuleScope $module -Parameters @{ Legacy = $legacy; Root = $root } {
+            param($Legacy, $Root)
+            Import-LegacyConfiguration -LegacyConfigDir $Legacy -ConfigDir (Get-ConfigDir -Root $Root)
+        }
+
+        $done.LegacyTasks.TaskName | Should -Be 'MsDevVM-90DayRebuild'
+        $done.LegacyTasks.VMName | Should -Be 'DevBox'
+    }
+}
+
+Describe 'Copy-StoredCredential' {
+    BeforeAll {
+        function New-TestKey {
+            param([Parameter(Mandatory)][string]$Path)
+            $key = [byte[]]::new(32)
+            [Security.Cryptography.RandomNumberGenerator]::Fill($key)
+            New-Item -ItemType Directory -Path (Split-Path -Path $Path -Parent) -Force | Out-Null
+            [IO.File]::WriteAllBytes($Path, $key)
+            return $key
+        }
+        function New-TestCredentialFile {
+            param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][byte[]]$Key)
+            $secure = ConvertTo-SecureString -String 'S3cret!' -AsPlainText -Force
+            $blob = [pscustomobject]@{ UserName = 'sean'; Password = ConvertFrom-SecureString -SecureString $secure -Key $Key }
+            New-Item -ItemType Directory -Path (Split-Path -Path $Path -Parent) -Force | Out-Null
+            Set-Content -LiteralPath $Path -Value (ConvertTo-Json -InputObject $blob)
+        }
+        function Read-TestCredential {
+            param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][byte[]]$Key)
+            $blob = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+            $secure = ConvertTo-SecureString -String $blob.Password -Key $Key
+            return [pscredential]::new($blob.UserName, $secure).GetNetworkCredential().Password
+        }
+    }
+
+    It 'copies the credential and the key when the new key does not exist yet' {
+        $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $oldKey = New-TestKey -Path "$folder/old.key"
+        New-TestCredentialFile -Path "$folder/old/guest.cred" -Key $oldKey
+
+        InModuleScope $module -Parameters @{ Folder = $folder } {
+            param($Folder)
+            Copy-StoredCredential -OldKeyPath "$Folder/old.key" -OldPath "$Folder/old/guest.cred" -NewKeyPath "$Folder/new.key" -NewPath "$Folder/new/guest.cred"
+        } | Should -BeLike 'Copied*'
+
+        Read-TestCredential -Path "$folder/new/guest.cred" -Key ([IO.File]::ReadAllBytes("$folder/new.key")) | Should -Be 'S3cret!'
+    }
+
+    It 'encrypts it again when the new key already exists and differs' {
+        $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $oldKey = New-TestKey -Path "$folder/old.key"
+        $newKey = New-TestKey -Path "$folder/new.key"
+        New-TestCredentialFile -Path "$folder/old/guest.cred" -Key $oldKey
+
+        InModuleScope $module -Parameters @{ Folder = $folder } {
+            param($Folder)
+            Copy-StoredCredential -OldKeyPath "$Folder/old.key" -OldPath "$Folder/old/guest.cred" -NewKeyPath "$Folder/new.key" -NewPath "$Folder/new/guest.cred"
+        } | Should -BeLike '*encrypted with*'
+
+        Read-TestCredential -Path "$folder/new/guest.cred" -Key $newKey | Should -Be 'S3cret!'
+    }
+
+    It 'never overwrites an existing credential' {
+        $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $oldKey = New-TestKey -Path "$folder/old.key"
+        New-TestCredentialFile -Path "$folder/old/guest.cred" -Key $oldKey
+        New-Item -ItemType Directory -Path "$folder/new" | Out-Null
+        Set-Content -LiteralPath "$folder/new/guest.cred" -Value 'existing'
+
+        InModuleScope $module -Parameters @{ Folder = $folder } {
+            param($Folder)
+            Copy-StoredCredential -OldKeyPath "$Folder/old.key" -OldPath "$Folder/old/guest.cred" -NewKeyPath "$Folder/new.key" -NewPath "$Folder/new/guest.cred"
+        } | Should -BeNullOrEmpty
+
+        (Get-Content -LiteralPath "$folder/new/guest.cred" -Raw).Trim() | Should -Be 'existing'
     }
 }
 

@@ -134,3 +134,52 @@ function ConvertTo-PlainText {
     try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 }
+
+function Copy-StoredCredential {
+    <#
+      Carries a stored credential from one key and file to another, for
+      bringing a 1.x VM across whose profile named its own key or files.
+      Copied as it is when both use the same key; otherwise decrypted with
+      the old key and encrypted again with the new one. A missing new key is
+      created as a copy of the old one, with the same restricted access.
+      Never overwrites an existing credential. Returns what was done, or
+      $null when there was nothing to do.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$OldKeyPath,
+        [Parameter(Mandatory)][string]$OldPath,
+        [Parameter(Mandatory)][string]$NewKeyPath,
+        [Parameter(Mandatory)][string]$NewPath
+    )
+
+    if (-not (Test-Path -LiteralPath $OldPath -PathType Leaf) -or (Test-Path -LiteralPath $NewPath)) { return $null }
+    if (-not (Test-Path -LiteralPath $OldKeyPath -PathType Leaf)) {
+        return "Could not bring $OldPath across: its key, $OldKeyPath, is missing."
+    }
+    $oldKey = [IO.File]::ReadAllBytes($OldKeyPath)
+
+    if (-not (Test-Path -LiteralPath $NewKeyPath)) {
+        $folder = Split-Path -Path $NewKeyPath -Parent
+        if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
+        Copy-Item -LiteralPath $OldKeyPath -Destination $NewKeyPath
+        if ($IsWindows) { Set-Acl -LiteralPath $NewKeyPath -AclObject (Get-Acl -LiteralPath $OldKeyPath) }
+    }
+    $newKey = [IO.File]::ReadAllBytes($NewKeyPath)
+
+    $folder = Split-Path -Path $NewPath -Parent
+    if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
+
+    if ([Linq.Enumerable]::SequenceEqual([byte[]]$oldKey, [byte[]]$newKey)) {
+        Copy-Item -LiteralPath $OldPath -Destination $NewPath
+        return "Copied $OldPath to $NewPath"
+    }
+
+    $blob = Get-Content -LiteralPath $OldPath -Raw | ConvertFrom-Json
+    $secure = ConvertTo-SecureString -String $blob.Password -Key $oldKey
+    $reencrypted = [pscustomobject]@{
+        UserName = $blob.UserName
+        Password = ConvertFrom-SecureString -SecureString $secure -Key $newKey
+    }
+    Write-TextFileAtomic -Path $NewPath -Text (ConvertTo-Json -InputObject $reencrypted)
+    return "Copied $OldPath to $NewPath, encrypted with $NewKeyPath"
+}

@@ -17,8 +17,9 @@
     kit, the one with Scripts in it. Its settings, VM profiles, tooling lists
     and tooling history are converted and copied into the new Config folder.
     Nothing existing is overwritten and the old files are left as they are.
-    Daily maintenance tasks registered by 1.x are re-registered so they run
-    the new commands.
+    Daily maintenance tasks registered by 1.x are registered again so they
+    run the new commands, and credentials and tasks a VM from MsDevVM, the
+    version before 1.x, kept under its own names are carried across.
 
     .PARAMETER Path
     A folder on a local drive, such as D:\DevVM. Not the top of a drive.
@@ -62,20 +63,31 @@
 
     $configDir = Get-ConfigDir -Root $root
     Initialize-ConfigFolder -ConfigDir $configDir
-    $imported = @(Import-LegacyConfiguration -LegacyConfigDir (Join-Path -Path $root -ChildPath 'Scripts\Config') -ConfigDir $configDir)
+    $imported = Import-LegacyConfiguration -LegacyConfigDir (Join-Path -Path $root -ChildPath 'Scripts\Config') -ConfigDir $configDir
 
-    # Maintenance tasks registered by 1.x still run the old script. Each is
-    # registered again, so it runs Invoke-LazyVMMaintenance instead.
+    # Maintenance tasks registered by 1.x still run the old script, some
+    # under names LazyVM no longer uses. Each is registered again, under the
+    # current name, to run Invoke-LazyVMMaintenance, and an old-named one is
+    # then removed, so a VM is never maintained twice.
     $tasksUpdated = @()
     foreach ($vmName in @(Get-VMProfileName -ConfigDir $configDir)) {
-        $task = Get-ScheduledTask -TaskName "LazyVM-Maintain-$vmName" -ErrorAction SilentlyContinue
-        if (-not $task -or -not (@($task.Actions) | Where-Object { "$($_.Arguments)" -like '*Build-LazyVM.ps1*' })) {
-            continue
-        }
+        $candidates = @("LazyVM-Maintain-$vmName") + @($imported.LegacyTasks | Where-Object VMName -eq $vmName | ForEach-Object { $_.TaskName })
+        $oldTasks = @(
+            foreach ($taskName in $candidates) {
+                $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                if ($task -and (@($task.Actions) | Where-Object { "$($_.Arguments)" -like '*.ps1*' })) { $task }
+            }
+        )
+        if ($oldTasks.Count -eq 0) { continue }
+
         try {
             $null = Initialize-CommandRun -Title 'Moving the maintenance task to LazyVM 2' -Name $vmName
             Register-RebuildSchedule
-            $tasksUpdated += $task.TaskName
+            foreach ($oldTask in $oldTasks | Where-Object TaskName -ne $CFG.ScheduleTaskName) {
+                Unregister-ScheduledTask -TaskName $oldTask.TaskName -Confirm:$false
+                Write-LogEntry "Removed the 1.x task '$($oldTask.TaskName)'; '$($CFG.ScheduleTaskName)' replaces it" 'OK'
+            }
+            $tasksUpdated += $CFG.ScheduleTaskName
         }
         catch {
             Write-Warning "The maintenance task for '$vmName' still runs LazyVM 1.x: $($_.Exception.Message) Fix that, then run: Register-LazyVMMaintenance -Name $vmName"
@@ -89,7 +101,7 @@
         PSTypeName   = 'LazyVM.Root'
         Root         = $root
         SettingsFile = Join-Path -Path $configDir -ChildPath $script:SettingsFileName
-        Imported     = $imported
+        Imported     = @($imported.Messages)
         TasksUpdated = $tasksUpdated
     }
 }
