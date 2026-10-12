@@ -202,6 +202,7 @@ function Install-WingetPackage {
                 -1978335215 = 'no applicable installer for this system'
                 -1978334972 = 'the installer hash did not match'
                 -1978335216 = 'the source could not be updated'
+                -1978335226 = 'the package''s own installer failed'
             }
             # Worth one retry; everything else is a real failure.
             $transientCodes = @(-2147012889, -2147012894, -2147012867, -2147012716)
@@ -263,7 +264,9 @@ function Install-WingetPackage {
                     # winget's own output is a progress table, so its last line
                     # is noise. The decoded code is what actually explains it.
                     $meaning = if ($exitMeanings.ContainsKey($exit)) { $exitMeanings[$exit] } else { 'see the winget documentation for this code' }
-                    $hex = '0x{0:X8}' -f [uint32]($exit -band 0xFFFFFFFF)
+                    # An Int32 formats as its two's-complement hex, which is
+                    # how winget documents its codes.
+                    $hex = '0x{0:X8}' -f [int]$exit
                     $log += "FAILED $name ($id) - exit $exit [$hex] $meaning"
                 }
             }
