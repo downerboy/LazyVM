@@ -420,64 +420,83 @@ function Resolve-SqlServerIso {
     }
 }
 
+function Test-WindowsIsoName {
+    <#
+      Whether a file name looks like the Windows 11 evaluation ISO, so a
+      search of the Downloads folder never adopts some other ISO. Microsoft
+      names it like ...CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso.
+    #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    return ($Name -match '(?i)\.iso$' -and $Name -match '(?i)ENTERPRISEEVAL|Win(dows)?[ _.-]?11')
+}
+
+function Get-DownloadsFolder {
+    <# The signed-in user's Downloads folder, wherever it has been moved to. #>
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+    $value = (Get-ItemProperty -Path $key -ErrorAction SilentlyContinue).'{374DE290-123F-4565-9164-39C4925E467B}'
+    if ($value) { return [Environment]::ExpandEnvironmentVariables($value) }
+    return Join-Path -Path $env:USERPROFILE -ChildPath 'Downloads'
+}
+
 function Resolve-InstallationIso {
-    <# Validates the configured ISO. If it is not a real image, searches the
-       ISO folder for one that is and adopts it (read-only discovery — nothing
-       is renamed or deleted). #>
+    <#
+      Finds the Windows ISO: at ISOPath; else any valid image in the ISO
+      folder; else the evaluation ISO in the user's Downloads folder, which is
+      moved to ISOPath so the scheduled runs, which run as SYSTEM and cannot
+      see anyone's Downloads, find it later. When there is none, opens the
+      download page for whoever is there and stops.
+    #>
+    $minimum = $CFG.ISOMinSizeGB * 1GB
 
-    if (Test-IsoFile -Path $CFG.ISOPath) {
-        $size = (Get-Item -LiteralPath $CFG.ISOPath).Length
-        if ($size -ge ($CFG.ISOMinSizeGB * 1GB)) {
-            Write-LogEntry "Windows ISO - OK ($(Format-Size $size)) at $($CFG.ISOPath)" 'OK'
-            return
-        }
-        Write-LogEntry "Windows ISO at $($CFG.ISOPath) is a valid image but only $(Format-Size $size)" 'WARN'
-    }
-    elseif (Test-Path -LiteralPath $CFG.ISOPath) {
-        $size = (Get-Item -LiteralPath $CFG.ISOPath).Length
-        Write-LogEntry "$($CFG.ISOPath) is $(Format-Size $size) and is NOT an ISO 9660 image (no CD001 signature)." 'WARN'
-        Write-LogEntry '  This is almost always the HTML registration page returned by the evaluation download link.' 'INFO'
-    }
-    else {
-        Write-LogEntry "Windows ISO not found at $($CFG.ISOPath)" 'WARN'
+    if ((Test-IsoFile -Path $CFG.ISOPath) -and (Get-Item -LiteralPath $CFG.ISOPath).Length -ge $minimum) {
+        Write-LogEntry "Windows ISO - OK ($(Format-Size (Get-Item -LiteralPath $CFG.ISOPath).Length)) at $($CFG.ISOPath)" 'OK'
+        return
     }
 
-    Write-LogEntry "Searching $($CFG.ISOSearchRoot) for a usable image..." 'INFO'
-    $candidates = @(
+    $inIsoFolder = @(
         Get-ChildItem -LiteralPath $CFG.ISOSearchRoot -Filter '*.iso' -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Length -ge ($CFG.ISOMinSizeGB * 1GB) } |
-            Where-Object { Test-IsoFile -Path $_.FullName } |
+            Where-Object { $_.Length -ge $minimum -and (Test-IsoFile -Path $_.FullName) } |
             Sort-Object LastWriteTime -Descending
     )
+    if ($inIsoFolder.Count -gt 0) {
+        $CFG.ISOPath = $inIsoFolder[0].FullName
+        Write-LogEntry "Windows ISO - using $($CFG.ISOPath) ($(Format-Size $inIsoFolder[0].Length))" 'OK'
+        return
+    }
 
-    if ($candidates.Count -eq 0) {
-        Write-LogEntry 'No valid Windows ISO found.' 'ERROR'
-        Write-LogEntry "  Download Windows 11 Enterprise (evaluation) from:" 'INFO'
-        Write-LogEntry "    $($CFG.ISODownloadPage)" 'INFO'
-        Write-LogEntry "  The download is behind a registration form and cannot be automated." 'INFO'
-        Write-LogEntry "  Save the image as $($CFG.ISOPath) and run the script again." 'INFO'
+    $downloads = Get-DownloadsFolder
+    $downloaded = @(
+        Get-ChildItem -LiteralPath $downloads -Filter '*.iso' -File -ErrorAction SilentlyContinue |
+            Where-Object { (Test-WindowsIsoName -Name $_.Name) -and $_.Length -ge $minimum -and (Test-IsoFile -Path $_.FullName) } |
+            Sort-Object LastWriteTime -Descending
+    )
+    if ($downloaded.Count -gt 0) {
+        $folder = Split-Path -Path $CFG.ISOPath -Parent
+        if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
+        Write-LogEntry "Moving the Windows ISO from $downloads to $($CFG.ISOPath), where the scheduled rebuilds can find it..." 'INFO'
+        Move-Item -LiteralPath $downloaded[0].FullName -Destination $CFG.ISOPath
+        Write-LogEntry "Windows ISO - OK ($(Format-Size (Get-Item -LiteralPath $CFG.ISOPath).Length)) at $($CFG.ISOPath)" 'OK'
+        return
+    }
 
-        # Someone is at the keyboard, so take them straight to the form. A
-        # scheduled run has nobody to read the page and skips this.
-        if ([Environment]::UserInteractive) {
-            try {
-                Start-Process -FilePath $CFG.ISODownloadPage
-                Write-LogEntry '  The download page has been opened in your browser.' 'INFO'
-            }
-            catch {
-                Write-LogEntry "  Could not open the download page: $($_.Exception.Message)" 'WARN'
-            }
+    Write-LogEntry 'No Windows 11 Enterprise evaluation ISO was found.' 'ERROR'
+    Write-LogEntry '  It cannot be downloaded automatically: the download is behind a registration form.' 'INFO'
+    Write-LogEntry "  Download it from $($CFG.ISODownloadPage)" 'INFO'
+    Write-LogEntry "  into your Downloads folder, then run the same Build-LazyVM command again." 'INFO'
+
+    # Someone is at the keyboard, so take them straight to the form. A
+    # scheduled run has nobody to read the page and skips this.
+    if (-not (Test-Unattended)) {
+        try {
+            Start-Process -FilePath $CFG.ISODownloadPage
+            Write-LogEntry '  The download page has been opened in your browser.' 'INFO'
         }
-        Stop-WithError 'No valid Windows installation ISO is available.'
+        catch {
+            Write-LogEntry "  Could not open the download page: $($_.Exception.Message)" 'WARN'
+        }
     }
-
-    $chosen = $candidates[0]
-    Write-LogEntry "Using $($chosen.Name) ($(Format-Size $chosen.Length)) instead of the configured path" 'WARN'
-    if ($candidates.Count -gt 1) {
-        Write-LogEntry "  Other valid images present: $(($candidates | Select-Object -Skip 1).Name -join ', ')" 'INFO'
-    }
-    Write-LogEntry "  To silence this, set ISOPath to: $($chosen.FullName)" 'INFO'
-    $CFG.ISOPath = $chosen.FullName
+    Stop-WithError "No Windows ISO yet. Download it into $downloads, then run Build-LazyVM again."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -11,6 +11,8 @@ Builds, checks and tests the Massokissed.LazyVM module.
            fails the build.
   Test     Runs the Pester tests and writes out\testResults.xml.
   All      All three, in that order (the default).
+  Install  Build, then install the module for all users, where PowerShell
+           and the scheduled tasks find it. Needs an elevated PowerShell.
 
 .PARAMETER Task
 Which step to run.
@@ -27,10 +29,15 @@ the current user, if they are missing.
 
 .EXAMPLE
 ./build.ps1 -Bootstrap
+
+.EXAMPLE
+./build.ps1 -Task Install
+
+Builds LazyVM and installs it, ready to use: Build-LazyVM -Name DevBox
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Build', 'Analyze', 'Test')]
+    [ValidateSet('All', 'Build', 'Analyze', 'Test', 'Install')]
     [string]$Task = 'All',
 
     [switch]$Bootstrap
@@ -133,6 +140,19 @@ function Invoke-Build {
     Write-Host "Built $moduleName $version in $target ($($exported.Count) commands)"
 }
 
+function Install-BuiltModule {
+    $version = (Import-PowerShellDataFile -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$moduleName.psd1")).ModuleVersion
+    $built = Join-Path -Path $outDir -ChildPath "$moduleName/$version"
+    $target = Join-Path -Path $env:ProgramFiles -ChildPath "PowerShell/Modules/$moduleName/$version"
+
+    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+    Copy-Item -Path (Join-Path -Path $built -ChildPath '*') -Destination $target -Recurse -Force
+
+    Write-Host "Installed $moduleName $version in $target"
+    Write-Host 'Open a new PowerShell 7 window as administrator, then run: Build-LazyVM -Name DevBox'
+}
+
 function Invoke-Analyze {
     # In a process of its own: resolving the commands in the tests loads
     # Pester's assembly into whichever process the analyzer runs in, and
@@ -190,7 +210,8 @@ function Write-CIError {
 }
 
 try {
-    if ($Task -in 'All', 'Build') { Invoke-Build }
+    if ($Task -in 'All', 'Build', 'Install') { Invoke-Build }
+    if ($Task -eq 'Install') { Install-BuiltModule }
     if ($Task -in 'All', 'Analyze') {
         # Installed if missing; loaded only by the analyzer's own process.
         Import-BuildTool -Tool ($tools | Where-Object Name -eq 'PSScriptAnalyzer') -InstallOnly

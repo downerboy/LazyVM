@@ -109,6 +109,8 @@ Describe 'Invoke-LazyVMMaintenance' {
 
 Describe 'Build-LazyVM' {
     BeforeEach {
+        Mock -ModuleName $module Initialize-BuildTarget { }
+        Mock -ModuleName $module Register-RebuildSchedule { }
         Mock -ModuleName $module Assert-Administrator { }
         Mock -ModuleName $module Initialize-CommandRun { }
         InModuleScope $module { $script:Settings['VMName'] = 'Alpha'; $script:Settings['LogFile'] = 'Alpha.log' }
@@ -129,6 +131,30 @@ Describe 'Build-LazyVM' {
         Build-LazyVM -Name Alpha -FromPhase 7 -NoUnattend
 
         Should -Invoke -ModuleName $module Invoke-VMBuild -ParameterFilter { $FromPhase -eq 7 -and $NoUnattend }
+    }
+
+    It 'schedules the daily maintenance after a successful build' {
+        Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
+
+        Build-LazyVM -Name Alpha
+
+        Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 1
+    }
+
+    It 'still finishes a good build when the maintenance cannot be scheduled' {
+        Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
+        Mock -ModuleName $module Register-RebuildSchedule { throw 'no task scheduler' }
+
+        { Build-LazyVM -Name Alpha } | Should -Not -Throw
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*could not be scheduled*' }
+    }
+
+    It 'does not schedule maintenance while the host restarts' {
+        Mock -ModuleName $module Invoke-VMBuild { 'RestartPending' }
+
+        Build-LazyVM -Name Alpha
+
+        Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 0
     }
 
     It 'refuses a phase that does not exist' {
@@ -237,5 +263,72 @@ Describe 'Get-ModuleImportCommand' {
             }
             finally { $env:PSModulePath = $saved }
         }
+    }
+}
+
+Describe 'Initialize-BuildTarget' {
+    BeforeEach {
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        Mock -ModuleName $module Set-RegisteredRoot { }
+        Mock -ModuleName $module Get-DefaultRoot { $root }.GetNewClosure()
+    }
+
+    It 'chooses and records the LazyVM folder on first use, and creates the profile' {
+        Mock -ModuleName $module Get-RegisteredRoot { $null }
+
+        InModuleScope $module { Initialize-BuildTarget -Name 'DevBox' } 6> $null
+
+        Should -Invoke -ModuleName $module Set-RegisteredRoot -Times 1 -ParameterFilter { $Path -eq $root }
+        Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json' | Should -Exist
+        Join-Path -Path $root -ChildPath 'Config/LazyVM.Settings.json' | Should -Exist
+    }
+
+    It 'leaves a chosen folder and an existing profile alone' {
+        Mock -ModuleName $module Get-RegisteredRoot { $root }.GetNewClosure()
+        New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json') -Value '{ "vCPU": 6 }'
+
+        InModuleScope $module { Initialize-BuildTarget -Name 'DevBox' } 6> $null
+
+        Should -Invoke -ModuleName $module Set-RegisteredRoot -Times 0
+        (Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json') -Raw).Trim() | Should -Be '{ "vCPU": 6 }'
+    }
+
+    It 'asks for a name when there are no VMs yet' {
+        Mock -ModuleName $module Get-RegisteredRoot { $root }.GetNewClosure()
+
+        { InModuleScope $module { Initialize-BuildTarget } } | Should -Throw -ExpectedMessage '*Build-LazyVM -Name DevBox*'
+    }
+}
+
+Describe 'Select-RootVolume' {
+    It 'picks the NTFS volume with the most free space, leaving out virtual disks' {
+        $volumes = @(
+            [pscustomobject]@{ DriveLetter = 'C'; FileSystem = 'NTFS'; SizeRemaining = 200GB; IsVirtual = $false }
+            [pscustomobject]@{ DriveLetter = 'D'; FileSystem = 'NTFS'; SizeRemaining = 900GB; IsVirtual = $false }
+            [pscustomobject]@{ DriveLetter = 'S'; FileSystem = 'ReFS'; SizeRemaining = 950GB; IsVirtual = $true }
+            [pscustomobject]@{ DriveLetter = 'V'; FileSystem = 'NTFS'; SizeRemaining = 999GB; IsVirtual = $true }
+        )
+
+        (InModuleScope $module -Parameters @{ Volumes = $volumes } { param($Volumes) Select-RootVolume -Volumes $Volumes }).DriveLetter | Should -Be 'D'
+    }
+
+    It 'returns nothing when no volume will do' {
+        $volumes = @([pscustomobject]@{ DriveLetter = 'S'; FileSystem = 'ReFS'; SizeRemaining = 1TB; IsVirtual = $true })
+
+        InModuleScope $module -Parameters @{ Volumes = $volumes } { param($Volumes) Select-RootVolume -Volumes $Volumes } | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Test-WindowsIsoName' {
+    It "returns <Expected> for '<Name>'" -ForEach @(
+        @{ Name = '26100.1742.240906-0331.ge_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso'; Expected = $true }
+        @{ Name = 'Win11Ent_Eval.iso'; Expected = $true }
+        @{ Name = 'Windows 11 Enterprise.iso'; Expected = $true }
+        @{ Name = 'ubuntu-24.04-desktop-amd64.iso'; Expected = $false }
+        @{ Name = 'SQLServer2025-x64-ENU-EntDev.iso'; Expected = $false }
+        @{ Name = 'Win11Ent_Eval.zip'; Expected = $false }
+    ) {
+        InModuleScope $module -Parameters @{ Name = $Name } { param($Name) Test-WindowsIsoName -Name $Name } | Should -Be $Expected
     }
 }

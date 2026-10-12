@@ -61,7 +61,7 @@ These are detected and reported by name rather than migrated. Doing them correct
 
 - PowerShell 7.4 or later, **run as administrator**. Every command that touches Hyper-V, the registry or scheduled tasks checks for this and says so if it is missing.
 - Windows Pro, Enterprise or Education on the host. Hyper-V is not available on Home editions, and LazyVM stops with a clear message if it detects one.
-- A genuine Windows 11 Enterprise Evaluation ISO in the `ISO` folder ([see below](#the-windows-iso-must-be-supplied-by-hand)).
+- A genuine Windows 11 Enterprise Evaluation ISO, downloaded by hand ([see below](#the-windows-iso-must-be-supplied-by-hand)). Leaving it in Downloads is enough.
 
 ### Installing LazyVM
 
@@ -70,13 +70,12 @@ LazyVM is a PowerShell module. Until it is published to the PowerShell Gallery, 
 ```powershell
 git clone https://github.com/downerboy/Massokissed.LazyVM S:\Source\Massokissed.LazyVM
 cd S:\Source\Massokissed.LazyVM
-./build.ps1 -Bootstrap
-Copy-Item .\out\Massokissed.LazyVM "$env:ProgramFiles\PowerShell\Modules" -Recurse -Force
+./build.ps1 -Bootstrap -Task Install
 ```
 
-Install it for all users, as above: the scheduled maintenance runs as SYSTEM and has to be able to find it. Once installed, PowerShell loads it by itself the first time you use one of its commands.
+`-Task Install` builds, tests and installs it for all users: the scheduled maintenance runs as SYSTEM and has to be able to find it. Once installed, PowerShell loads it by itself the first time you use one of its commands.
 
-To update, pull the repository and run the same `build.ps1` and `Copy-Item` again. The scheduled tasks pick up the new version on their next run.
+Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the module, and reports its commands as not recognized. To update, pull the repository and run the same `build.ps1` command again. The scheduled tasks pick up the new version on their next run.
 
 ### Choosing the LazyVM folder
 
@@ -85,13 +84,13 @@ Everything LazyVM creates on the host lives under one folder, the **LazyVM folde
 - logs, encrypted passwords and captured state;
 - your settings.
 
-Choose it once:
+The first `Build-LazyVM` chooses it for you: a `LazyVM` folder on the local NTFS drive with the most free space, leaving out drives on a virtual disk. It says which folder it chose. To choose your own, run this before the first build:
 
 ```powershell
 Set-LazyVMRoot -Path D:\DevVM
 ```
 
-It is recorded in the registry, under `HKLM:\SOFTWARE\LazyVM`, for every later command and for the scheduled tasks. The folder is created if needed. So are `Config\LazyVM.Settings.json`, your settings file, and a copy of the settings schema beside it ([section 8](#8-settings)).
+Either way it is recorded in the registry, under `HKLM:\SOFTWARE\LazyVM`, for every later command and for the scheduled tasks. The folder is created if needed. So are `Config\LazyVM.Settings.json`, your settings file, and a copy of the settings schema beside it ([section 8](#8-settings)).
 
 > **Important**
 > Choose the LazyVM folder before the first build. The VM disks, the credential key and the captured state all live under it, so moving it later means moving those files too.
@@ -100,9 +99,9 @@ It is recorded in the registry, under `HKLM:\SOFTWARE\LazyVM`, for every later c
 
 Microsoft's Windows 11 Enterprise evaluation download sits behind a registration form, so it cannot be fetched unattended. An automated attempt returns an HTML page, not an image.
 
-LazyVM therefore **verifies** the ISO rather than downloading it. It reads the ISO 9660 signature at offset 0x8001, so a disguised HTML page is rejected whatever it is named. If the configured path is not a real image, it searches the `ISO` folder for one that is and uses that, logging the substitution. If there is none, the build stops before changing anything on the host, and opens the download page in your browser.
+LazyVM therefore **verifies** the ISO rather than downloading it. It reads the ISO 9660 signature at offset 0x8001, so a disguised HTML page is rejected whatever it is named. It looks in three places, in order: the configured path (`ISO\Win11Ent_Eval.iso` in the LazyVM folder), any other real image in the `ISO` folder, then a Windows 11 or Enterprise Evaluation ISO in your Downloads folder, which it moves into place. If there is none, the build stops before changing anything on the host and opens the download page in your browser.
 
-Download from <https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise> and save it as `D:\DevVM\ISO\Win11Ent_Eval.iso`.
+Download from <https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise>, leave it in Downloads, and run `Build-LazyVM` again.
 
 The SQL Server ISO is downloaded for you.
 
@@ -204,11 +203,9 @@ Expect it to take between five and thirty minutes, depending on database size. W
 > **Note**
 > Database backups stay on the SQL data disk at `D:\SQLBackup`, not on the host. That disk is never destroyed by a rebuild, so there is no reason to copy tens of gigabytes across the VMBus.
 
-### Turning on the daily watch
+### The daily watch
 
-```powershell
-Register-LazyVMMaintenance
-```
+`Build-LazyVM` schedules it when the build succeeds. If that step fails, the build still succeeds and warns you; fix the cause and run `Register-LazyVMMaintenance`. Running that again at any time is harmless.
 
 This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records any tooling change ([section 9](#9-tooling-and-going-back)), then reads the licence. On almost every day it finds plenty of time remaining and finishes within a minute or two.
 
@@ -233,10 +230,7 @@ With plenty of days left, it decides no action is needed and stops.
 ### A first run, start to finish
 
 ```powershell
-Set-LazyVMRoot -Path D:\DevVM
-New-LazyVM -Name DevBox
-Build-LazyVM
-Register-LazyVMMaintenance
+Build-LazyVM -Name DevBox
 ```
 
 For a VM that already exists, which LazyVM did not build, store its account first. Then capture before the first `Build-LazyVM`: that pass can relocate your SQL databases, and a capture taken beforehand is a genuine safety net.
@@ -247,7 +241,6 @@ Set-LazyVMCredential
 Get-LazyVMLicense
 Save-LazyVMState
 Build-LazyVM
-Register-LazyVMMaintenance
 ```
 
 ## 5. The 90-day cycle
@@ -512,10 +505,9 @@ Each VM has its own profile, `Config\VMs\<Name>\VM.json`. With it come its own d
 ```powershell
 New-LazyVM -Name WebDev -From DevBox
 Build-LazyVM -Name WebDev
-Register-LazyVMMaintenance -Name WebDev
 ```
 
-`-From` copies the existing VM's settings and its tooling list, so the new VM is built with the same tools. From then on, each list follows its own VM. Leave `-From` out to start from the defaults and the default tooling list.
+`-From` copies the existing VM's settings and its tooling list, so the new VM is built with the same tools. From then on, each list follows its own VM. Leave out `New-LazyVM` and just run `Build-LazyVM -Name WebDev` to start from the defaults and the default tooling list.
 
 Once there is more than one VM, every command needs `-Name`. LazyVM will not guess, because a wrong guess would maintain or rebuild the wrong machine.
 
@@ -628,7 +620,8 @@ The log is the first place to look: `D:\DevVM\Logs\DevBox.log`. Every line is pr
 
 | Symptom | Cause and fix |
 |---|---|
-| "LazyVM does not know which folder to keep its VMs in yet" | Run `Set-LazyVMRoot -Path D:\DevVM` once. |
+| "LazyVM does not know which folder to keep its VMs in yet" | Run `Build-LazyVM -Name DevBox`, which chooses one, or `Set-LazyVMRoot -Path D:\DevVM`. |
+| "The term 'Build-LazyVM' is not recognized" | You are in Windows PowerShell 5.1, or the module is not installed. Open PowerShell 7 (`pwsh`) as administrator; if it persists, run `./build.ps1 -Task Install` again. |
 | "LazyVM needs an elevated PowerShell" | Start PowerShell 7 with Run as administrator. |
 | "No stored guest credential" | Store one with `Set-LazyVMCredential`, for an account that is a local administrator inside the VM. |
 | The VM never becomes reachable | Open the VM's console. Windows Setup may be waiting on something, or the stored password may not match the account. Check by signing in at the console with the password `Get-LazyVMCredential -AsPlainText` shows. |

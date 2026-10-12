@@ -20,27 +20,32 @@ A PowerShell module that builds and looks after Hyper-V development VMs on a Win
 
 ## Install
 
-Until LazyVM is published to the PowerShell Gallery, build it from this repository. In PowerShell 7, run as administrator:
+Until LazyVM is published to the PowerShell Gallery, build it from this repository. Open **PowerShell 7** (`pwsh`, not Windows PowerShell) as administrator:
 
 ```powershell
 git clone https://github.com/downerboy/Massokissed.LazyVM S:\Source\Massokissed.LazyVM
 cd S:\Source\Massokissed.LazyVM
-./build.ps1 -Bootstrap
-Copy-Item .\out\Massokissed.LazyVM "$env:ProgramFiles\PowerShell\Modules" -Recurse -Force
+./build.ps1 -Bootstrap -Task Install
 ```
 
-Installing for all users matters: the scheduled maintenance runs as SYSTEM, and has to be able to find the module.
+This builds, tests and installs the module for all users, which the scheduled maintenance needs because it runs as SYSTEM. Open a new PowerShell 7 window afterwards.
 
 ## Quick start
 
 ```powershell
-Set-LazyVMRoot -Path D:\DevVM        # where LazyVM keeps everything; once per host
-New-LazyVM -Name DevBox              # create the VM's profile
-Build-LazyVM -Name DevBox            # build it; takes an hour or two, no input needed
-Register-LazyVMMaintenance -Name DevBox
+Build-LazyVM -Name DevBox
 ```
 
-Save the Windows ISO as `D:\DevVM\ISO\Win11Ent_Eval.iso` before building. `Build-LazyVM` turns Hyper-V on if needed, restarting the host and carrying on by itself. It downloads the SQL Server ISO, installs Windows, then installs everything in the tooling list.
+That is all. The first time, it:
+
+- chooses a folder for LazyVM (`LazyVM` on the local drive with the most free space) and says where; run `Set-LazyVMRoot` first to choose your own;
+- creates the VM's profile;
+- finds the Windows ISO. Leave it in your Downloads folder and LazyVM moves it into place. If there is none it opens the download page and stops; run the command again once it has downloaded;
+- turns Hyper-V on if needed, restarting the host and carrying on by itself;
+- downloads SQL Server, installs Windows, then everything in the tooling list;
+- schedules the daily maintenance.
+
+It takes an hour or two and needs no input. Running it again finishes an interrupted build.
 
 To sign in to the VM yourself, `Get-LazyVMCredential -Name DevBox -AsPlainText` shows the account and the password LazyVM generated.
 
@@ -50,9 +55,9 @@ Every command has full help: `Get-Help Build-LazyVM -Full`. `-Name` can be left 
 
 | Command | What it does |
 |---|---|
-| `Set-LazyVMRoot` | Chooses the folder LazyVM keeps everything in. Brings a 1.x kit across. |
-| `New-LazyVM` | Creates a VM's profile. `-From` starts from another VM's settings and tools. |
-| `Build-LazyVM` | Builds the VM, or finishes building it. Safe to run again. |
+| `Set-LazyVMRoot` | Chooses your own folder for LazyVM instead of the automatic one. Brings a 1.x kit across. |
+| `New-LazyVM` | Creates a VM's profile without building it. `-From` starts from another VM's settings and tools. |
+| `Build-LazyVM` | Builds the VM, setting up whatever is missing first, and schedules its maintenance. Safe to run again. |
 | `Get-LazyVM` | Lists the VMs, their state and their maintenance. |
 | `Get-LazyVMSetting` | Every setting as a VM uses it, where the value came from, and what it does. |
 | `Set-LazyVMCredential` / `Get-LazyVMCredential` | The administrator account LazyVM uses inside the VM. |
