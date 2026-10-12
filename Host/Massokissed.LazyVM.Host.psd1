@@ -20,6 +20,7 @@
         'New-UnattendSeedDisk',
         'Remove-UnattendSeedDisk',
         'Resolve-InstallationIso',
+        'Resolve-SqlServerIso',
         'Start-VMFromInstallMedia',
         'Unregister-ResumeTask'
     )

@@ -12,8 +12,7 @@
         'Get-FreeSpaceGB',
         'Resolve-PathForce',
         'Test-HyperVModule',
-        'Test-IsoFile',
-        'Test-PortableExecutable'
+        'Test-IsoFile'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()

@@ -47,9 +47,11 @@
     ISOSearchRoot     = 'ISO'
     ISODownloadPage   = 'https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise'
 
-    SQLInstallerPath  = 'Installers\SQLServer2022-x64-ENU-Dev.exe'
-    SQLInstallerUrl   = 'https://go.microsoft.com/fwlink/p/?linkid=2215158&clcid=0x409&culture=en-us&country=US'
-    SQLMinSizeMB      = 1
+    # Full installation media for SQL Server 2025 Enterprise Developer: every
+    # Enterprise feature, free for development and test. Downloaded to the
+    # host once and mounted in the guest's DVD drive for the install.
+    SQLIsoPath        = 'Installers\SQLServer2025-x64-ENU-EntDev.iso'
+    SQLIsoUrl         = 'https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso'
 
     SQLDiskPath       = 'SQLDisk\{VM}.vhdx'
     SQLDiskSizeGB     = 100

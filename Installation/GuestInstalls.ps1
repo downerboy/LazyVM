@@ -84,7 +84,6 @@ function Invoke-Phase7-SilentInstalls {
         Write-Log "  Data directories are whatever that instance was configured with, not necessarily D:." 'INFO'
     }
     else {
-        Copy-InstallersToGuest
         Install-SqlServer
     }
 
@@ -539,21 +538,6 @@ function Initialize-GuestSqlDisk {
     Write-Log "  SQL directories: $($CFG.GuestSqlDataDir), $($CFG.GuestSqlLogDir), $($CFG.GuestSqlTempDir), $($CFG.GuestSqlBackupDir)" 'INFO'
 }
 
-function Copy-InstallersToGuest {
-    <# The SQL Server bootstrapper, downloaded to the host in Phase 4. #>
-    $destination = Join-Path $CFG.GuestSetupDir 'sql_setup.exe'
-    Write-Log 'Copying the SQL Server bootstrapper into the guest...' 'INFO'
-    try {
-        Copy-VMFile -Name $CFG.VMName -SourcePath $CFG.SQLInstallerPath -DestinationPath $destination `
-            -CreateFullPath -FileSource Host -Force -ErrorAction Stop
-        Write-Log "sql_setup.exe -> guest $destination" 'OK'
-    }
-    catch {
-        Write-LogError 'Copying sql_setup.exe into the guest failed' $_
-        Exit-WithError 'Could not copy the SQL Server bootstrapper into the guest. Check that Guest Service Interface is enabled and running.'
-    }
-}
-
 function Test-InstallExitCode {
     <# 0 = success, 3010/1641 = success, reboot required. #>
     param(
@@ -681,12 +665,17 @@ function Get-ProductExtensionLinks {
 
 function Install-SqlServer {
     <#
-      SQLServer2022-x64-ENU-Dev.exe is a ~5 MB BOOTSTRAPPER, not setup.exe.
-      Passing /ACTION=Install and a feature list straight to it — as the
-      previous version did — does not install anything. The media has to be
-      downloaded and extracted first, then the real setup.exe invoked.
+      Installs from the SQL Server ISO (see Resolve-SqlServerIso), placed in
+      the VM's DVD drive for the install. Whatever the drive held before is
+      put back afterwards, whether or not the install succeeded.
     #>
-    Write-Log "Installing SQL Server 2022 Developer (up to $($CFG.SQLInstallMinutes) minutes)..." 'INFO'
+    Resolve-SqlServerIso
+
+    $dvd = @(Get-VMDvdDrive -VMName $CFG.VMName)[0]
+    if (-not $dvd) {
+        Exit-WithError 'The VM has no DVD drive to mount the SQL Server ISO in.'
+    }
+    $previousMedia = $dvd.Path
 
     $setupArguments = @(
         '/Q'
@@ -706,44 +695,43 @@ function Install-SqlServer {
         '/UPDATEENABLED=False'
     ) -join ' '
 
-    $exitCode = Invoke-GuestScript -Activity 'SQL Server install' -TimeoutMinutes $CFG.SQLInstallMinutes `
-        -ArgumentList @($CFG.GuestSetupDir, $setupArguments) -ScriptBlock {
-        param($setupDir, $setupArguments)
-        $ErrorActionPreference = 'Stop'
+    Set-VMDvdDrive -VMName $CFG.VMName -ControllerNumber $dvd.ControllerNumber `
+        -ControllerLocation $dvd.ControllerLocation -Path $CFG.SQLIsoPath
+    Write-Log 'SQL Server ISO placed in the VM DVD drive' 'OK'
+    Write-Log "Installing SQL Server 2025 Enterprise Developer (up to $($CFG.SQLInstallMinutes) minutes)..." 'INFO'
 
-        $bootstrapper = Join-Path $setupDir 'sql_setup.exe'
-        $mediaPath = Join-Path $setupDir 'SQLMedia'
-        $extractPath = Join-Path $setupDir 'SQLExtract'
-        $setupExe = Join-Path $extractPath 'setup.exe'
+    try {
+        $exitCode = Invoke-GuestScript -Activity 'SQL Server install' -TimeoutMinutes $CFG.SQLInstallMinutes `
+            -ArgumentList @($setupArguments) -ScriptBlock {
+            param($setupArguments)
+            $ErrorActionPreference = 'Stop'
 
-        if (-not (Test-Path $setupExe)) {
-            if (-not (Test-Path $mediaPath)) { New-Item -ItemType Directory -Path $mediaPath -Force | Out-Null }
-
-            # Step 1 — download the installation media (~1.5 GB).
-            $media = @(Get-ChildItem -Path $mediaPath -Filter 'SQLServer2022-DEV-x64-ENU.exe' -ErrorAction SilentlyContinue)
-            if ($media.Count -eq 0) {
-                $dl = Start-Process -FilePath $bootstrapper -Wait -PassThru -NoNewWindow `
-                    -ArgumentList "/ACTION=Download /MEDIAPATH=`"$mediaPath`" /MEDIATYPE=CAB /QUIET"
-                if ($dl.ExitCode -ne 0) { throw "media download failed (exit $($dl.ExitCode))" }
-                $media = @(Get-ChildItem -Path $mediaPath -Filter 'SQLServer2022-DEV-x64-ENU.exe')
+            # The guest takes a moment to notice the new media. The Windows
+            # ISO also has a setup.exe at its root, so the SQL media is told
+            # apart by its x64 folder.
+            $setupExe = $null
+            for ($attempt = 0; $attempt -lt 30 -and -not $setupExe; $attempt++) {
+                $setupExe = Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType=5' |
+                    ForEach-Object { "$($_.DeviceID)\" } |
+                    Where-Object { (Test-Path "$($_)setup.exe") -and (Test-Path "$($_)x64") } |
+                    ForEach-Object { "$($_)setup.exe" } |
+                    Select-Object -First 1
+                if (-not $setupExe) { Start-Sleep -Seconds 2 }
             }
-            if ($media.Count -eq 0) { throw "media download produced no installer in $mediaPath" }
+            if (-not $setupExe) { throw 'the SQL Server media did not appear on any DVD drive in the guest' }
 
-            # Step 2 — extract it to get the real setup.exe.
-            $ex = Start-Process -FilePath $media[0].FullName -Wait -PassThru -NoNewWindow `
-                -ArgumentList "/q /x:`"$extractPath`""
-            if ($ex.ExitCode -ne 0) { throw "media extraction failed (exit $($ex.ExitCode))" }
+            $proc = Start-Process -FilePath $setupExe -ArgumentList $setupArguments -Wait -PassThru -NoNewWindow
+            return $proc.ExitCode
         }
-
-        if (-not (Test-Path $setupExe)) { throw "setup.exe not found at $setupExe after extraction" }
-
-        # Step 3 — the actual install.
-        $proc = Start-Process -FilePath $setupExe -ArgumentList $setupArguments -Wait -PassThru -NoNewWindow
-        return $proc.ExitCode
+    }
+    finally {
+        Set-VMDvdDrive -VMName $CFG.VMName -ControllerNumber $dvd.ControllerNumber `
+            -ControllerLocation $dvd.ControllerLocation -Path $previousMedia
+        Write-Log 'VM DVD drive restored to its previous media' 'OK'
     }
 
-    if (-not (Test-InstallExitCode -Product 'SQL Server 2022 Developer' -ExitCode $exitCode)) {
-        Write-Log '  Guest log: C:\Program Files\Microsoft SQL Server\160\Setup Bootstrap\Log\Summary.txt' 'INFO'
+    if (-not (Test-InstallExitCode -Product 'SQL Server 2025 Enterprise Developer' -ExitCode $exitCode)) {
+        Write-Log '  Guest log: C:\Program Files\Microsoft SQL Server\170\Setup Bootstrap\Log\Summary.txt' 'INFO'
         Exit-WithError "SQL Server installation failed (exit $exitCode)."
     }
 }

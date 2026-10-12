@@ -1,6 +1,6 @@
 # Massokissed.LazyVM
 
-Builds and looks after Hyper-V development virtual machines on a Windows host, unattended: Windows 11 Enterprise Evaluation, Visual Studio, SQL Server 2022 Developer Edition and whatever other tools you install, with the 90-day evaluation handled for you.
+Builds and looks after Hyper-V development virtual machines on a Windows host, unattended: Windows 11 Enterprise Evaluation, Visual Studio, SQL Server 2025 Enterprise Developer Edition and whatever other tools you install, with the 90-day evaluation handled for you.
 
 ## What it does
 
@@ -45,7 +45,7 @@ Everything lives under one root folder, `D:\DevVM` in these steps. The scripts g
    .\Build-LazyVM.ps1 -RegisterSchedule
    ```
 
-   The build needs no further input. It turns Hyper-V on if needed, restarting the host and carrying on by itself, downloads the SQL Server installer, installs Windows, then installs everything in the tooling list.
+   The build needs no further input. It turns Hyper-V on if needed, restarting the host and carrying on by itself, downloads the SQL Server installation media, installs Windows, then installs everything in the tooling list.
 
 To change what gets installed before the first build, see the notes in `Config\LazyVM.Config.example.psd1`.
 

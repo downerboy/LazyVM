@@ -24,7 +24,7 @@ BeforeAll {
             VHDXRoot         = 'D:\DevVM\VMs'
             ISOPath          = 'D:\DevVM\ISO\Win11Ent_Eval.iso'
             ISOSearchRoot    = 'D:\DevVM\ISO'
-            SQLInstallerPath = 'D:\DevVM\Installers\SQLServer2022-x64-ENU-Dev.exe'
+            SQLIsoPath       = 'D:\DevVM\Installers\SQLServer2025-x64-ENU-EntDev.iso'
             SQLDiskPath      = "D:\DevVM\SQLDisk\$Name.vhdx"
             DevDrivePath     = "D:\DevVM\DevDrive\$Name.vhdx"
             SeedDiskPath     = "D:\DevVM\VMs\$Name-Seed.vhdx"

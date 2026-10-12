@@ -329,7 +329,7 @@ function Invoke-Phase3-FolderSetup {
     $folders = @(
         $CFG.Root
         $CFG.ISOSearchRoot
-        (Split-Path $CFG.SQLInstallerPath -Parent)
+        (Split-Path $CFG.SQLIsoPath -Parent)
         $CFG.VHDXRoot
         (Split-Path $CFG.SQLDiskPath -Parent)
         $CFG.CredStoreDir
@@ -359,66 +359,66 @@ function Invoke-Phase3-FolderSetup {
 #  subsequent run. Validity is proved by the ISO 9660 'CD001' signature rather
 #  than by file size alone.
 #
-#  Installer downloads go to a .tmp file and are validated before replacing the
-#  existing copy, so a failed download can never destroy a good one.
+#  The SQL Server ISO, by contrast, is a direct download (Resolve-SqlServerIso).
 # ─────────────────────────────────────────────────────────────────────────────
 function Invoke-Phase4-AssetCheck {
     Write-Log 'PHASE 4 - Asset Verification' 'PHASE'
 
     Resolve-InstallationIso
-
-    # Visual Studio and SSMS bootstrappers are not kept here: each is
-    # downloaded in the guest, for the channel its tooling list names.
-    $installers = @(
-        [pscustomobject]@{
-            Path      = $CFG.SQLInstallerPath
-            Url       = $CFG.SQLInstallerUrl
-            Label     = 'SQL Server 2022 Developer bootstrapper'
-            MinBytes  = $CFG.SQLMinSizeMB * 1MB
-        }
-    )
-
-    foreach ($item in $installers) {
-        if ((Test-Path -LiteralPath $item.Path) -and
-            (Test-PortableExecutable -Path $item.Path) -and
-            ((Get-Item -LiteralPath $item.Path).Length -ge $item.MinBytes)) {
-
-            $size = Format-Size ((Get-Item -LiteralPath $item.Path).Length)
-            Write-Log "$($item.Label) - OK ($size)" 'OK'
-            continue
-        }
-
-        if (Test-Path -LiteralPath $item.Path) {
-            Write-Log "$($item.Label) - present but not a valid executable; re-downloading" 'WARN'
-        }
-        else {
-            Write-Log "$($item.Label) - not found; downloading" 'INFO'
-        }
-
-        $temp = "$($item.Path).tmp"
-        try {
-            Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
-            Invoke-WebRequest -Uri $item.Url -OutFile $temp -UseBasicParsing -TimeoutSec 600
-
-            if (-not (Test-PortableExecutable -Path $temp)) {
-                throw "downloaded file is not an executable (got $(Format-Size (Get-Item -LiteralPath $temp).Length) - the URL probably returned an HTML page)"
-            }
-            if ((Get-Item -LiteralPath $temp).Length -lt $item.MinBytes) {
-                throw "downloaded file is only $(Format-Size (Get-Item -LiteralPath $temp).Length), below the $($item.MinBytes / 1MB) MB minimum"
-            }
-
-            # Only now is the existing copy replaced.
-            Move-Item -LiteralPath $temp -Destination $item.Path -Force
-            Write-Log "$($item.Label) - downloaded ($(Format-Size (Get-Item -LiteralPath $item.Path).Length))" 'OK'
-        }
-        catch {
-            Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
-            Write-LogError "$($item.Label) - download failed" $_
-            Exit-WithError "Cannot continue without $($item.Label). Download it manually from $($item.Url) and save it to $($item.Path)."
-        }
-    }
+    Resolve-SqlServerIso
 
     Write-Log 'Phase 4 complete' 'OK'
+}
+
+function Resolve-SqlServerIso {
+    <#
+      The SQL Server installation media, downloaded to the host once and
+      mounted in the guest at install time. Full media rather than the small
+      web installer: Microsoft retires web installer builds, and a retired one
+      shows a modal "no longer supported" dialog even with /QUIET, which in an
+      unattended guest waits, unseen, until the install times out.
+
+      Called by Phase 4 and again just before the install, so a run started
+      at a later phase still gets the media.
+
+      The download goes to a .tmp file and is validated before replacing the
+      existing copy, so a failed download can never destroy a good one.
+    #>
+    if (Test-IsoFile -Path $CFG.SQLIsoPath) {
+        $size = Format-Size ((Get-Item -LiteralPath $CFG.SQLIsoPath).Length)
+        Write-Log "SQL Server ISO - OK ($size) at $($CFG.SQLIsoPath)" 'OK'
+        return
+    }
+
+    if (Test-Path -LiteralPath $CFG.SQLIsoPath) {
+        Write-Log 'SQL Server ISO - present but not a valid image; re-downloading' 'WARN'
+    }
+    else {
+        Write-Log 'SQL Server ISO - not found; downloading (a few GB, this can take a while)' 'INFO'
+    }
+
+    $temp = "$($CFG.SQLIsoPath).tmp"
+    $client = New-Object System.Net.WebClient
+    try {
+        Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        $client.DownloadFile($CFG.SQLIsoUrl, $temp)
+
+        if (-not (Test-IsoFile -Path $temp)) {
+            throw "downloaded file is not an ISO image (got $(Format-Size (Get-Item -LiteralPath $temp).Length) - the URL probably returned an HTML page)"
+        }
+
+        # Only now is the existing copy replaced.
+        Move-Item -LiteralPath $temp -Destination $CFG.SQLIsoPath -Force
+        Write-Log "SQL Server ISO - downloaded ($(Format-Size (Get-Item -LiteralPath $CFG.SQLIsoPath).Length))" 'OK'
+    }
+    catch {
+        Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        Write-LogError 'SQL Server ISO - download failed' $_
+        Exit-WithError "Cannot continue without the SQL Server ISO. Download it from $($CFG.SQLIsoUrl) and save it to $($CFG.SQLIsoPath)."
+    }
+    finally {
+        $client.Dispose()
+    }
 }
 
 function Resolve-InstallationIso {

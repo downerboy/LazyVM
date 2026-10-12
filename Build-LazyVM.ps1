@@ -3,23 +3,23 @@
 
 <#
 .SYNOPSIS
-    LazyVM — unattended Hyper-V developer VM builds (Windows 11, Visual Studio, SQL Server 2022 and each VM's own tooling), one or more per host.
+    LazyVM — unattended Hyper-V developer VM builds (Windows 11, Visual Studio, SQL Server 2025 and each VM's own tooling), one or more per host.
 
 .DESCRIPTION
     Phase 0 : Hyper-V service health check (fixes vmms/vmcompute only; reports guest-side vmic*)
     Phase 1 : CPU / SLAT / RAM / free-space readiness
     Phase 2 : Hyper-V feature enable, with reboot + self-resuming scheduled task
     Phase 3 : Folder structure under the root folder (see -Root)
-    Phase 4 : Asset verification. Installers are downloaded; the Windows ISO is
-              verified only (Microsoft's evaluation download is gated behind a
+    Phase 4 : Asset verification. The SQL Server ISO is downloaded; the Windows
+              ISO is verified only (Microsoft's evaluation download is gated behind a
               registration form and cannot be fetched unattended).
     Phase 5 : SQLDisk.vhdx create-if-missing (never overwritten)
     Phase 6 : VM build — Gen 2, Secure Boot, vTPM, 4 vCPU, dynamic RAM, plus an
               answer-file disc so Windows Setup and OOBE run unattended
     Phase 7 : Guest wait, SQL data disk and Dev Drive, then the VM's tooling
               list: Visual Studio Installer products (Visual Studio, SSMS)
-              with their workloads and extensions, SQL Server 2022
-              Developer, and winget packages
+              with their workloads and extensions, SQL Server 2025
+              Enterprise Developer, and winget packages
     Phase 8 : SQL data relocation, VS settings restore, database restore
     Phase 9 : Capture guest state to the host
     Phase 10: Restore captured state into a freshly built guest

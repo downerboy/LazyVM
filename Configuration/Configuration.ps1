@@ -30,7 +30,7 @@ $script:HostPathSettings = @(
     'VHDXRoot'
     'ISOPath'
     'ISOSearchRoot'
-    'SQLInstallerPath'
+    'SQLIsoPath'
     'SQLDiskPath'
     'DevDrivePath'
     'SeedDiskPath'

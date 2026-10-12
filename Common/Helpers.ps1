@@ -28,21 +28,6 @@ function Test-IsoFile {
     finally { if ($stream) { $stream.Dispose() } }
 }
 
-function Test-PortableExecutable {
-    param([Parameter(Mandatory)][string]$Path)
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
-    if ((Get-Item -LiteralPath $Path).Length -lt 2) { return $false }
-    $stream = $null
-    try {
-        $stream = [IO.File]::OpenRead($Path)
-        $buffer = New-Object byte[] 2
-        if ($stream.Read($buffer, 0, 2) -ne 2) { return $false }
-        return ($buffer[0] -eq 0x4D -and $buffer[1] -eq 0x5A)   # 'MZ'
-    }
-    catch { return $false }
-    finally { if ($stream) { $stream.Dispose() } }
-}
-
 function Get-FreeSpaceGB {
     <# Free space on the volume that actually hosts $Path, rather than
        assuming C: as the original did. #>

@@ -106,7 +106,7 @@ function Get-VMRemovalPlan {
         $Settings.VHDXRoot
         $Settings.ISOSearchRoot
         $Settings.ISOPath
-        (Get-ParentFolder -Path $Settings.SQLInstallerPath)
+        (Get-ParentFolder -Path $Settings.SQLIsoPath)
         $Settings.CredStoreDir
     ) | Where-Object { $_ }
 
