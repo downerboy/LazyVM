@@ -230,30 +230,10 @@ if (-not $PSScriptRoot) {
 }
 
 try {
-    $moduleFolders = @(
-        'Configuration',
-        'Logging',
-        'Common',
-        'Credentials',
-        'Guest',
-        'DevDrive',
-        'Tooling',
-        'Host',
-        'Installation',
-        'Capture',
-        'Restore',
-        'Maintenance'
-    )
+    $moduleDir = Join-Path -Path $PSScriptRoot -ChildPath 'src\Massokissed.LazyVM'
+    Import-Module -Name (Join-Path -Path $moduleDir -ChildPath 'Massokissed.LazyVM.psd1') -Force -DisableNameChecking
 
-    foreach ($moduleFolder in $moduleFolders) {
-        $manifestPath = Join-Path -Path $PSScriptRoot -ChildPath "$moduleFolder\Massokissed.LazyVM.$moduleFolder.psd1"
-        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
-            throw "Missing module: $manifestPath. Copy every folder of the kit alongside Build-LazyVM.ps1."
-        }
-        Import-Module -Name $manifestPath -Global -Force -DisableNameChecking
-    }
-
-    $configDir = Join-Path -Path $PSScriptRoot -ChildPath 'Config'
+    $configDir = Join-Path -Path $moduleDir -ChildPath 'Data'
 
     if ($From -and -not $NewVM) {
         throw '-From only applies with -NewVM, to say which VM the new one starts from.'
@@ -516,5 +496,5 @@ try {
 finally {
     # Remove-Module, not left loaded: run from a console, the functions would
     # otherwise stay in that session after the script ends.
-    Get-Module -Name 'Massokissed.LazyVM.*' | Remove-Module -Force -ErrorAction SilentlyContinue
+    Get-Module -Name 'Massokissed.LazyVM' | Remove-Module -Force -ErrorAction SilentlyContinue
 }
