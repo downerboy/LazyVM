@@ -578,12 +578,19 @@ function Install-ToolingProduct {
     param([Parameter(Mandatory)]$Tooling)
 
     $installed = @(Get-GuestInstallerProduct)
+    $observed = $null
 
     foreach ($product in @($Tooling.Products)) {
         $label = "$($product.DisplayName)"
         $present = $installed | Where-Object { $_.ProductId -eq $product.ProductId -and $_.ChannelId -eq $product.ChannelId } | Select-Object -First 1
         if ($present) {
-            Write-LogEntry "$label already installed - skipping" 'OK'
+            Write-LogEntry "$label already installed" 'OK'
+            if (@(Get-ProductExtensionLink -Product $product).Count -gt 0) {
+                if (-not $observed) { $observed = ConvertTo-ToolingRecord -Inventory (Get-GuestToolingInventory) }
+                $now = @($observed.Products) | Where-Object { $_.ProductId -eq $product.ProductId -and $_.ChannelId -eq $product.ChannelId } | Select-Object -First 1
+                $links = @(Get-MissingProductExtension -Product $product -Observed $now | Where-Object { $_.Link } | ForEach-Object { $_.Link })
+                if ($links.Count -gt 0) { Add-ProductExtension -Product $product -Installed $present -Links $links }
+            }
             continue
         }
 
@@ -635,6 +642,46 @@ function Install-ToolingProduct {
         catch {
             Write-LogError "$label install failed" $_
         }
+    }
+}
+
+function Add-ProductExtension {
+    <#
+      Adds Marketplace extensions to a product that is already installed, for
+      all users, with the Visual Studio Installer's modify command. Covers a
+      product installed before its extensions were in the tooling list, or
+      whose first install was interrupted before they went in.
+    #>
+    param(
+        [Parameter(Mandatory)]$Product,
+        [Parameter(Mandatory)]$Installed,
+        [Parameter(Mandatory)][string[]]$Links
+    )
+
+    $label = "$($Product.DisplayName)"
+    $config = [ordered]@{ version = '1.0'; components = @($Product.Components); extensions = @($Links) } | ConvertTo-Json -Depth 4
+    Write-LogEntry "Adding $($Links.Count) extension(s) to $label..." 'INFO'
+    try {
+        $prepared = Invoke-GuestScript -Activity "$label extension list" -TimeoutMinutes 5 `
+            -ArgumentList @($CFG.GuestSetupDir, $config, $Installed.InstallPath) -ScriptBlock {
+            param($setupDir, $configJson, $installPath)
+            $ErrorActionPreference = 'Stop'
+            if (-not (Test-Path $setupDir)) { New-Item -ItemType Directory -Path $setupDir -Force | Out-Null }
+            $configPath = Join-Path $setupDir 'extensions.vsconfig'
+            [IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
+            $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+            if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
+            return [pscustomobject]@{
+                FilePath  = $installer
+                Arguments = "modify --installPath `"$installPath`" --config `"$configPath`" --quiet --norestart --allowUnsignedExtensions"
+            }
+        }
+        $exitCode = Invoke-GuestInstaller -FilePath $prepared.FilePath -ArgumentList $prepared.Arguments `
+            -Name 'add-extensions' -TimeoutMinutes 60 -Activity "adding extensions to $label"
+        $null = Test-InstallExitCode -Product "$label extensions" -ExitCode $exitCode
+    }
+    catch {
+        Write-LogError "Adding extensions to $label failed" $_
     }
 }
 

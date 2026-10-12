@@ -320,6 +320,33 @@ Describe 'Select-RootVolume' {
     }
 }
 
+Describe 'Get-MissingProductExtension' {
+    BeforeAll {
+        $product = @{
+            Extensions     = @('https://marketplace.visualstudio.com/items?itemName=A.One')
+            UserExtensions = @(
+                @{ Id = 'two'; DisplayName = 'Two'; Publisher = 'B'; MarketplaceItem = 'B.Two' }
+                @{ Id = 'three'; DisplayName = 'Three'; Publisher = 'C' }
+            )
+        }
+    }
+
+    It 'lists everything when the guest has none of them' {
+        $missing = InModuleScope $module -Parameters @{ Product = $product } { param($Product) Get-MissingProductExtension -Product $Product -Observed $null }
+        @($missing).Count | Should -Be 3
+        @($missing | Where-Object { $_.Link }).Count | Should -Be 2
+    }
+
+    It 'leaves out what the guest has, by link or by id' {
+        $observed = @{
+            Extensions     = @('https://marketplace.visualstudio.com/items?itemName=B.Two')
+            UserExtensions = @(@{ Id = 'three' })
+        }
+        $missing = InModuleScope $module -Parameters @{ Product = $product; Observed = $observed } { param($Product, $Observed) Get-MissingProductExtension -Product $Product -Observed $Observed }
+        @($missing).ForEach({ $_.Link }) | Should -Be @('https://marketplace.visualstudio.com/items?itemName=A.One')
+    }
+}
+
 Describe 'Get-GuestUserSetting' {
     It 'asks for only what is turned on' {
         $values = InModuleScope $module {
