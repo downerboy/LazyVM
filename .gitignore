@@ -7,3 +7,6 @@ src/Massokissed.LazyVM/Data/LazyVM.Config.psd1
 
 # Word's lock file while the guide is open.
 ~$*
+
+# build.ps1 output: the built module and test results.
+out/

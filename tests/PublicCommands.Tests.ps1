@@ -190,6 +190,10 @@ Describe 'New-LazyVM' {
     BeforeEach {
         $root = New-TestRoot
         Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $root; Source = 'a test' } }.GetNewClosure()
+        # Where Hyper-V is installed, the new VM must still read as not built.
+        if (Get-Command -Name Get-VM -ErrorAction SilentlyContinue) {
+            Mock -ModuleName $module Get-VM { }
+        }
     }
 
     It 'creates the profile and returns the new VM' {

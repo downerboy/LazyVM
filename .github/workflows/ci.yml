@@ -1,0 +1,41 @@
+# Builds, analyzes and tests LazyVM on every push and pull request, on
+# Windows with PowerShell 7, the only place LazyVM runs.
+name: CI
+
+on:
+  push:
+    branches: [ main, 'refactor/**' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, analyze and test
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PowerShell version
+        run: $PSVersionTable
+
+      - name: Build, analyze and test
+        run: ./build.ps1 -Bootstrap
+
+      - name: Upload the test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: out/testResults.xml
+
+      - name: Upload the built module
+        uses: actions/upload-artifact@v4
+        with:
+          name: Massokissed.LazyVM
+          path: out/Massokissed.LazyVM
