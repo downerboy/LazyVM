@@ -59,6 +59,7 @@ function Install-GuestSoftware {
     Initialize-GuestSqlDisk
     Initialize-GuestDevDrive | Out-Null
     Enable-GuestEnhancedSession
+    Set-GuestCustomization
 
     # The tooling list says what this VM gets: the VM's own recorded list, or
     # the default list for a VM that has none yet.

@@ -248,6 +248,54 @@
       "description": "The VM's time zone, as Windows names it (Get-TimeZone -ListAvailable).",
       "minLength": 1
     },
+    "GuestRemoveApps": {
+      "type": "array",
+      "default": [
+        "Microsoft.BingNews",
+        "Microsoft.MicrosoftOfficeHub",
+        "Microsoft.GamingApp",
+        "Microsoft.XboxGamingOverlay",
+        "Microsoft.XboxIdentityProvider",
+        "Microsoft.XboxSpeechToTextOverlay",
+        "Microsoft.Xbox.TCUI"
+      ],
+      "description": "Built-in Windows apps removed from the VM at every build, for every user and for users created later. Package names as Get-AppxPackage shows them; * is a wildcard. Your list replaces the default, so copy it and add to it.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "GuestRemoveOneDrive": {
+      "type": "boolean",
+      "default": true,
+      "description": "Remove OneDrive from the VM at every build, and stop it from installing for new users."
+    },
+    "GuestDarkMode": {
+      "type": "boolean",
+      "default": true,
+      "description": "Use the dark theme in the VM, for every user."
+    },
+    "GuestShowFileExtensions": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show file extensions in File Explorer in the VM, for every user."
+    },
+    "GuestTaskbarLeft": {
+      "type": "boolean",
+      "default": true,
+      "description": "Put the Start button and taskbar icons on the left in the VM, for every user."
+    },
+    "GuestHideWidgets": {
+      "type": "boolean",
+      "default": true,
+      "description": "Turn off Widgets in the VM."
+    },
+    "GuestHideTaskbarSearch": {
+      "type": "boolean",
+      "default": true,
+      "description": "Hide the search box on the taskbar in the VM, for every user. Search still works from the Start menu."
+    },
     "GuestSetupDir": {
       "type": "string",
       "default": "C:\\LazyVMSetup",

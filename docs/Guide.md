@@ -416,6 +416,9 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in a
 | `DevDriveLetter` | W | Where the Dev Drive appears in the VM. |
 | `SQLIsoUrl` | SQL Server 2025 Enterprise Developer | Where the SQL Server ISO is downloaded from. |
 | `SwitchName` | Default Switch | The virtual switch. See the note below. |
+| `GuestRemoveApps` | News, Microsoft 365, Xbox | Built-in apps removed at every build, so they stay gone after a rebuild. Your list replaces the default, so copy it and add to it. |
+| `GuestRemoveOneDrive` | true | Removes OneDrive and stops it installing for new users. |
+| `GuestDarkMode`, `GuestShowFileExtensions`, `GuestTaskbarLeft`, `GuestHideWidgets`, `GuestHideTaskbarSearch` | true | Windows appearance in the VM, applied for every user at every build. |
 
 ### Adding tools to a VM
 

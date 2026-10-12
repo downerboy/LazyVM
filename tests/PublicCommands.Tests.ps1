@@ -320,6 +320,28 @@ Describe 'Select-RootVolume' {
     }
 }
 
+Describe 'Get-GuestUserSetting' {
+    It 'asks for only what is turned on' {
+        $values = InModuleScope $module {
+            $script:Settings.Clear()
+            $script:Settings['GuestDarkMode'] = $false
+            $script:Settings['GuestShowFileExtensions'] = $true
+            $script:Settings['GuestTaskbarLeft'] = $true
+            $script:Settings['GuestHideTaskbarSearch'] = $false
+            Get-GuestUserSetting
+        }
+        @($values).ForEach({ $_.Name }) | Should -Be @('HideFileExt', 'TaskbarAl')
+    }
+
+    It 'asks for nothing when everything is off' {
+        InModuleScope $module {
+            $script:Settings.Clear()
+            foreach ($name in 'GuestDarkMode', 'GuestShowFileExtensions', 'GuestTaskbarLeft', 'GuestHideTaskbarSearch') { $script:Settings[$name] = $false }
+            @(Get-GuestUserSetting).Count
+        } | Should -Be 0
+    }
+}
+
 Describe 'Get-FreeControllerLocation' {
     It 'returns <Expected> when <Used> are in use' -ForEach @(
         @{ Used = @(); Expected = 0 }
