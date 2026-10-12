@@ -50,7 +50,10 @@ $tools = @(
 )
 
 function Import-BuildTool {
-    param([Parameter(Mandatory)][hashtable]$Tool)
+    param(
+        [Parameter(Mandatory)][hashtable]$Tool,
+        [switch]$InstallOnly
+    )
 
     $installed = Get-Module -ListAvailable -Name $Tool.Name | Where-Object { $_.Version -eq [version]$Tool.Version }
     if (-not $installed) {
@@ -60,8 +63,8 @@ function Import-BuildTool {
         Write-Host "Installing $($Tool.Name) $($Tool.Version)..."
         Install-Module -Name $Tool.Name -RequiredVersion $Tool.Version -Scope CurrentUser -Force -SkipPublisherCheck
     }
-    # Not -Force: analyzing the tests can load Pester already, and Pester
-    # cannot be loaded twice into one session.
+    if ($InstallOnly) { return }
+    # Not -Force: Pester cannot be loaded twice into one session.
     if (-not (Get-Module -Name $Tool.Name | Where-Object { $_.Version -eq [version]$Tool.Version })) {
         Import-Module -Name $Tool.Name -RequiredVersion $Tool.Version
     }
@@ -131,10 +134,18 @@ function Invoke-Build {
 }
 
 function Invoke-Analyze {
-    $findings = @(
-        Invoke-ScriptAnalyzer -Path (Join-Path -Path $PSScriptRoot -ChildPath 'src') -Recurse -Settings (Join-Path -Path $PSScriptRoot -ChildPath 'PSScriptAnalyzerSettings.psd1')
-        Invoke-ScriptAnalyzer -Path (Join-Path -Path $PSScriptRoot -ChildPath 'tests') -Recurse -Settings (Join-Path -Path $PSScriptRoot -ChildPath 'tests/PSScriptAnalyzerSettings.psd1')
-    )
+    # In a process of its own: resolving the commands in the tests loads
+    # Pester's assembly into whichever process the analyzer runs in, and
+    # that would stop the tests loading Pester themselves.
+    $tool = $tools | Where-Object Name -eq 'PSScriptAnalyzer'
+    $job = Start-Job -ScriptBlock {
+        param($Root, $Version)
+        Import-Module -Name PSScriptAnalyzer -RequiredVersion $Version
+        Invoke-ScriptAnalyzer -Path (Join-Path -Path $Root -ChildPath 'src') -Recurse -Settings (Join-Path -Path $Root -ChildPath 'PSScriptAnalyzerSettings.psd1')
+        Invoke-ScriptAnalyzer -Path (Join-Path -Path $Root -ChildPath 'tests') -Recurse -Settings (Join-Path -Path $Root -ChildPath 'tests/PSScriptAnalyzerSettings.psd1')
+    } -ArgumentList $PSScriptRoot, $tool.Version
+    $findings = @(Receive-Job -Job $job -Wait -AutoRemoveJob -ErrorAction Stop)
+
     foreach ($finding in $findings) {
         Write-Host "$($finding.ScriptName):$($finding.Line)  $($finding.RuleName)  $($finding.Message)"
         Write-CIError -Message "$($finding.RuleName): $($finding.Message)" -File $finding.ScriptPath -Line $finding.Line
@@ -181,7 +192,8 @@ function Write-CIError {
 try {
     if ($Task -in 'All', 'Build') { Invoke-Build }
     if ($Task -in 'All', 'Analyze') {
-        Import-BuildTool -Tool ($tools | Where-Object Name -eq 'PSScriptAnalyzer')
+        # Installed if missing; loaded only by the analyzer's own process.
+        Import-BuildTool -Tool ($tools | Where-Object Name -eq 'PSScriptAnalyzer') -InstallOnly
         Invoke-Analyze
     }
     if ($Task -in 'All', 'Test') {
