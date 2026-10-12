@@ -200,6 +200,10 @@ function Invoke-Phase1-CPUCheck {
 #  scheduled task. A one-shot startup task as SYSTEM works in every case.
 # ─────────────────────────────────────────────────────────────────────────────
 function Invoke-Phase2-HyperVFeature {
+    <#
+      Returns $true when the host is restarting to finish enabling Hyper-V;
+      the build then stops, and the resume task carries on at Phase 3.
+    #>
     Write-Log 'PHASE 2 - Hyper-V Feature Installation' 'PHASE'
 
     # Hyper-V is not offered on Home editions. Detect that now rather than
@@ -246,14 +250,10 @@ function Invoke-Phase2-HyperVFeature {
             Exit-WithError 'No Hyper-V features are available on this system. Check the Windows edition and firmware virtualization settings.'
         }
         Write-Log 'All required Hyper-V features are enabled' 'OK'
-        return
+        return $false
     }
 
     Write-Log "Not yet enabled: $($disabled -join ', ')" 'WARN'
-
-    if (-not $CFG.ScriptPath) {
-        Exit-WithError 'Hyper-V needs enabling and the host must reboot, but the script path could not be determined (the script was piped or run via -Command). Save it to disk and run it with -File so the post-reboot resume can be scheduled.'
-    }
 
     Register-ResumeTask -Phase 3
 
@@ -265,13 +265,14 @@ function Invoke-Phase2-HyperVFeature {
         Write-Log "Cancel with: Unregister-ScheduledTask -TaskName '$($CFG.ResumeTaskName)' -Confirm:`$false" 'INFO'
         Start-Sleep -Seconds 30
         Restart-Computer -Force
-        # Restart-Computer returns immediately; stop here so no later phase
-        # starts work that the imminent reboot would tear down.
-        exit 0
+        # Restart-Computer returns immediately; the caller stops here so no
+        # later phase starts work that the imminent restart would tear down.
+        return $true
     }
 
     Write-Log 'Hyper-V enabled without requiring a restart' 'OK'
     Unregister-ResumeTask
+    return $false
 }
 
 function Register-ResumeTask {
@@ -281,11 +282,9 @@ function Register-ResumeTask {
         New-Item -Path $CFG.ResumeRegKey -Force | Out-Null
     }
     Set-ItemProperty -Path $CFG.ResumeRegKey -Name 'ResumePhase' -Value $Phase -Type DWord
-    Set-ItemProperty -Path $CFG.ResumeRegKey -Name 'ScriptPath'  -Value $CFG.ScriptPath -Type String
 
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
-        '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -VM "{3}" -Root "{2}" -FromPhase {1}' -f $CFG.ScriptPath, $Phase, $CFG.Root, $CFG.VMName
-    )
+    # Build-LazyVM reads the resume phase from the registry key above.
+    $action = New-LazyVMTaskAction -Command "Build-LazyVM -Name '$($CFG.VMName)'"
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $trigger.Delay = 'PT2M'   # let services settle before the build resumes
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest

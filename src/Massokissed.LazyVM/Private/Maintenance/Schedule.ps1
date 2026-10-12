@@ -1,22 +1,15 @@
-﻿# Schedule.ps1 - Daily maintenance scheduled task (-RegisterSchedule).
+﻿# Schedule.ps1 - The daily maintenance scheduled task (Register-LazyVMMaintenance).
 # Dot-sourced by Massokissed.LazyVM.psm1; not meant to be run on its own.
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  90-DAY REBUILD SCHEDULED TASK  (-RegisterSchedule)
+#  DAILY MAINTENANCE SCHEDULED TASK  (Register-LazyVMMaintenance)
 # ─────────────────────────────────────────────────────────────────────────────
 function Register-RebuildSchedule {
     Write-Log "Daily Maintenance Schedule - $($CFG.VMName)" 'PHASE'
 
-    if (-not $CFG.ScriptPath) {
-        Write-Log 'Cannot register the schedule: the script path is unknown (run the script with -File).' 'WARN'
-        return
-    }
-
     # Refuse to schedule an unattended run that cannot possibly authenticate.
     if (-not (Get-StoredCredential -Path $CFG.GuestCredFile)) {
-        Write-Log 'Cannot register the schedule: no guest credential is stored.' 'WARN'
-        Write-Log '  Run .\Build-LazyVM.ps1 -SetupCredentials first.' 'INFO'
-        return
+        throw "Cannot register the schedule: no guest credential is stored for '$($CFG.VMName)'. Store one first with: Set-LazyVMCredential -Name $($CFG.VMName)"
     }
 
     # The time of day comes from the VM's MaintenanceTime, so each VM on the
@@ -24,23 +17,20 @@ function Register-RebuildSchedule {
     [datetime]$time = [datetime]::MinValue
     if (-not [datetime]::TryParseExact($CFG.MaintenanceTime, 'HH:mm', [Globalization.CultureInfo]::InvariantCulture,
             [Globalization.DateTimeStyles]::None, [ref]$time)) {
-        Write-Log "Cannot register the schedule: MaintenanceTime '$($CFG.MaintenanceTime)' is not a 24-hour time such as 02:00." 'WARN'
-        return
+        throw "Cannot register the schedule: MaintenanceTime '$($CFG.MaintenanceTime)' is not a 24-hour time such as 02:00."
     }
 
-    # Runs DAILY rather than every 90 days, and -Maintain does nothing until
+    # Runs DAILY rather than every 90 days, and does nothing until
     # the evaluation is within RebuildThresholdDays of expiring. A task that
     # fired exactly every 90 days would drift past the expiry date, and would
     # miss it entirely if the host happened to be off that day.
     $nextRun = (Get-Date).Date.AddDays(1).Add($time.TimeOfDay)
 
-    # The VM and the root folder are written into the task, so an unattended
-    # run always maintains this VM in this location. Registering again
-    # replaces the task, which is how an existing one is updated.
+    # The VM is named in the task; the root folder comes from the registry.
+    # Registering again replaces the task, which is how an existing one is
+    # updated.
     $trigger = New-ScheduledTaskTrigger -Daily -DaysInterval 1 -At $nextRun
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (
-        '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -VM "{1}" -Root "{2}" -Maintain -Force' -f $CFG.ScriptPath, $CFG.VMName, $CFG.Root
-    )
+    $action = New-LazyVMTaskAction -Command "Invoke-LazyVMMaintenance -Name '$($CFG.VMName)'"
     $settings = New-ScheduledTaskSettingsSet `
         -WakeToRun `
         -StartWhenAvailable `

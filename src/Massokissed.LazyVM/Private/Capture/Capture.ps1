@@ -23,7 +23,7 @@ function Invoke-Phase9-Capture {
     if (-not $vm) { Exit-WithError "VM '$($CFG.VMName)' does not exist - nothing to capture." }
 
     $credential = Get-GuestCredential
-    if (-not $credential) { Exit-WithError 'No stored guest credential. Run with -SetupCredentials first.' }
+    if (-not $credential) { Exit-WithError 'No stored guest credential. Store one with Set-LazyVMCredential first.' }
 
     if ($vm.State -ne 'Running') {
         Write-Log "VM is '$($vm.State)' - starting it to capture" 'INFO'

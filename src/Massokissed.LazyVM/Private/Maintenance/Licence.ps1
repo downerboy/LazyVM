@@ -101,15 +101,16 @@ function Restart-GuestAndWait {
     Connect-Guest -Credential $credential | Out-Null
 }
 
-function Show-LicenseStatus {
-    <# -CheckLicense: report and do nothing else. #>
-    Write-Log 'Windows Evaluation Licence Status' 'PHASE'
-
+function Get-LicenseReport {
+    <#
+      Get-LazyVMLicense: the guest's evaluation licence, read from inside the
+      guest, with the last capture. Starts the VM if it is off.
+    #>
     $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
-    if (-not $vm) { Exit-WithError "VM '$($CFG.VMName)' does not exist." }
+    if (-not $vm) { Exit-WithError "VM '$($CFG.VMName)' does not exist yet. Build it with: Build-LazyVM -Name $($CFG.VMName)" }
 
     $credential = Get-GuestCredential
-    if (-not $credential) { Exit-WithError 'No stored guest credential. Run with -SetupCredentials first.' }
+    if (-not $credential) { Exit-WithError "No stored guest credential. Store one with: Set-LazyVMCredential -Name $($CFG.VMName)" }
 
     if ($vm.State -ne 'Running') {
         Write-Log "VM is '$($vm.State)' - starting it to read the licence" 'INFO'
@@ -119,44 +120,38 @@ function Show-LicenseStatus {
     Connect-Guest -Credential $credential | Out-Null
 
     $license = Get-GuestLicenseStatus
-    Write-Log "Guest OS     : $($license.OsCaption) (build $($license.OsBuild))" 'INFO'
-    Write-Log "Licence      : $($license.Description)" 'INFO'
-    Write-Log "Status       : $($license.Status)" 'INFO'
 
-    if ($license.DaysLeft -ge 0) {
-        $level = if ($license.DaysLeft -le $CFG.RebuildThresholdDays) { 'WARN' } else { 'OK' }
-        Write-Log "Days left    : $($license.DaysLeft)" $level
-    }
-    else {
-        Write-Log 'Days left    : not reported (this may not be an evaluation image)' 'INFO'
-    }
-
-    if ($license.RearmsLeft -ge 0) {
-        $level = if ($license.RearmsLeft -eq 0) { 'WARN' } else { 'OK' }
-        Write-Log "Rearms left  : $($license.RearmsLeft)" $level
-        if ($license.RearmsLeft -gt 0) {
-            Write-Log "  About $($license.RearmsLeft * 90) more days available without a rebuild." 'INFO'
-        }
-        else {
-            Write-Log '  Rearms exhausted - the next expiry needs a full rebuild.' 'WARN'
-        }
-    }
-
+    $lastCapture = $null
+    $capturedDatabases = 0
     $state = Get-CaptureManifest
     if ($state) {
-        # Older captures saved an empty database list as null, or a single name
-        # as a plain string, so normalise to an array before counting.
-        $capturedDatabases = @()
+        $lastCapture = $state.CapturedAt
+        # Older captures saved an empty database list as null, or a single
+        # name as a plain string, so normalise to an array before counting.
         if ($state.PSObject.Properties['Databases'] -and $null -ne $state.Databases) {
-            $capturedDatabases = @($state.Databases)
+            $capturedDatabases = @($state.Databases).Count
         }
-        Write-Log "Last capture : $($state.CapturedAt) ($($capturedDatabases.Count) database(s), $($state.Summary))" 'INFO'
-    }
-    else {
-        Write-Log 'Last capture : none yet - run with -Capture to create one' 'WARN'
     }
 
-    return $license
+    $decision = Get-MaintenanceDecision -DaysLeft $license.DaysLeft -RearmsLeft $license.RearmsLeft -ThresholdDays $CFG.RebuildThresholdDays
+    $nextAction = switch ($decision) {
+        'none' { if ($license.DaysLeft -lt 0) { 'None: no evaluation countdown' } else { "None until $($CFG.RebuildThresholdDays) days are left" } }
+        'rearm' { 'Rearm at the next maintenance run' }
+        'rebuild' { 'Rebuild at the next maintenance run' }
+    }
+
+    return [pscustomobject]@{
+        PSTypeName        = 'LazyVM.License'
+        Name              = $CFG.VMName
+        OperatingSystem   = "$($license.OsCaption) (build $($license.OsBuild))"
+        License           = $license.Description
+        Status            = $license.Status
+        DaysLeft          = $(if ($license.DaysLeft -ge 0) { $license.DaysLeft } else { $null })
+        RearmsLeft        = $(if ($license.RearmsLeft -ge 0) { $license.RearmsLeft } else { $null })
+        NextAction        = $nextAction
+        LastCapture       = $lastCapture
+        CapturedDatabases = $capturedDatabases
+    }
 }
 
 function Get-MaintenanceDecision {
@@ -200,7 +195,7 @@ function Invoke-Maintenance {
     $credential = Get-GuestCredential
     if (-not $credential) {
         Write-Log 'No stored guest credential - cannot check the licence.' 'ERROR'
-        Write-Log '  Run: .\Build-LazyVM.ps1 -SetupCredentials' 'INFO'
+        Write-Log "  Store one with: Set-LazyVMCredential -Name $($CFG.VMName)" 'INFO'
         return 'error'
     }
 

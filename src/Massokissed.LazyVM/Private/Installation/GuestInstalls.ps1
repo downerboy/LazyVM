@@ -18,7 +18,7 @@ function Invoke-Phase7-SilentInstalls {
     $credential = Get-GuestCredential
     if (-not $credential) {
         Write-Log 'No stored guest credential.' 'ERROR'
-        Write-Log '  Run:  .\Build-LazyVM.ps1 -SetupCredentials' 'INFO'
+        Write-Log "  Store one with: Set-LazyVMCredential -Name $($CFG.VMName)" 'INFO'
         Exit-WithError 'PowerShell Direct requires an explicit guest credential.'
     }
 

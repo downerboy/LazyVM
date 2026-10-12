@@ -107,20 +107,20 @@ Describe 'Get-SetChange' {
 
 Describe 'Get-RecordField' {
     It 'reads a field from a list built in memory' {
-        Get-RecordField -Item ([ordered]@{ Name = 'Git' }) -Name 'Name' | Should -Be 'Git'
+        InModuleScope $module { Get-RecordField -Item ([ordered]@{ Name = 'Git' }) -Name 'Name' } | Should -Be 'Git'
     }
 
     It 'reads a field from a list read back from disk' {
-        Get-RecordField -Item ([pscustomobject]@{ Name = 'Git' }) -Name 'Name' | Should -Be 'Git'
+        InModuleScope $module { Get-RecordField -Item ([pscustomobject]@{ Name = 'Git' }) -Name 'Name' } | Should -Be 'Git'
     }
 
     It 'returns $null for a missing field in either form' {
-        Get-RecordField -Item ([ordered]@{ Name = 'Git' }) -Name 'Publisher' | Should -BeNullOrEmpty
-        Get-RecordField -Item ([pscustomobject]@{ Name = 'Git' }) -Name 'Publisher' | Should -BeNullOrEmpty
+        InModuleScope $module { Get-RecordField -Item ([ordered]@{ Name = 'Git' }) -Name 'Publisher' } | Should -BeNullOrEmpty
+        InModuleScope $module { Get-RecordField -Item ([pscustomobject]@{ Name = 'Git' }) -Name 'Publisher' } | Should -BeNullOrEmpty
     }
 
     It 'returns $null for no item' {
-        Get-RecordField -Item $null -Name 'Name' | Should -BeNullOrEmpty
+        InModuleScope $module { Get-RecordField -Item $null -Name 'Name' } | Should -BeNullOrEmpty
     }
 }
 

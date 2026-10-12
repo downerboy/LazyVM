@@ -9,9 +9,26 @@
     PowerShellVersion    = '7.4'
     CompatiblePSEditions = @('Core')
 
-    # Temporary while Build-LazyVM.ps1 still calls the internal functions
-    # directly; replaced by the public command list once the commands exist.
-    FunctionsToExport    = '*'
+    FunctionsToExport    = @(
+        'Build-LazyVM'
+        'Get-LazyVM'
+        'Get-LazyVMCredential'
+        'Get-LazyVMLicense'
+        'Get-LazyVMRestorePoint'
+        'Get-LazyVMSetting'
+        'Get-LazyVMTooling'
+        'Invoke-LazyVMMaintenance'
+        'Invoke-LazyVMRebuild'
+        'New-LazyVM'
+        'Register-LazyVMMaintenance'
+        'Remove-LazyVM'
+        'Restore-LazyVMState'
+        'Restore-LazyVMTooling'
+        'Save-LazyVMState'
+        'Save-LazyVMTooling'
+        'Set-LazyVMCredential'
+        'Set-LazyVMRoot'
+    )
     CmdletsToExport      = @()
     VariablesToExport    = @()
     AliasesToExport      = @()

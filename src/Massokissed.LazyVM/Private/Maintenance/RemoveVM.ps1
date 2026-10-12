@@ -1,10 +1,10 @@
-﻿# RemoveVM.ps1 - Deleting a VM and everything the script created for it (-RemoveVM).
+﻿# RemoveVM.ps1 - Deleting a VM and everything LazyVM created for it (Remove-LazyVM).
 # Dot-sourced by Massokissed.LazyVM.psm1; not meant to be run on its own.
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  REMOVING A VM
 #
-#  -RemoveVM <Name> deletes the VM and everything created to support it:
+#  Remove-LazyVM deletes the VM and everything created to support it:
 #
 #    scheduled tasks   its maintenance task and any resume-after-reboot task
 #    registry          its resume key
@@ -232,18 +232,13 @@ function Remove-PathWithRetry {
     }
 }
 
-function Remove-LazyVM {
+function Get-VMRemovalContext {
     <#
-      -RemoveVM: deletes the VM in $CFG and everything created for it, after
-      listing it all and asking the user to type the VM's name. -Force skips
-      the question; without it, a run with nobody to answer refuses.
-      Returns 'removed', 'cancelled' or 'incomplete' (something could not be
-      deleted; the log says what).
+      Works out everything removing the VM in $CFG would delete, lists it in
+      the log, and returns it for Remove-VMAndItsFiles. Changes nothing.
+      Returns $null when nothing of the VM exists.
     #>
-    param(
-        [Parameter(Mandatory)][string]$ScriptDir,
-        [switch]$Force
-    )
+    param([Parameter(Mandatory)][string]$ScriptDir)
 
     Write-Log "REMOVE VM - $($CFG.VMName)" 'PHASE'
 
@@ -300,7 +295,7 @@ function Remove-LazyVM {
 
     if (-not $vm -and $tasks.Count -eq 0 -and -not $registryKey -and $files.Count + $folders.Count -eq 0) {
         Write-Log "Nothing of '$($CFG.VMName)' was found to remove." 'INFO'
-        return 'removed'
+        return $null
     }
 
     Write-Log "Removing '$($CFG.VMName)' deletes all of this, and it cannot be undone:" 'WARN'
@@ -327,17 +322,32 @@ function Remove-LazyVM {
         Write-Log '  It holds this VM''s source code. Push or copy anything not yet in source control first.' 'WARN'
     }
 
-    if (-not $Force) {
-        if (-not [Environment]::UserInteractive) {
-            throw 'Removing a VM needs -Force when nobody is there to confirm it. Nothing has been removed.'
-        }
-        Write-Host ''
-        $answer = Read-Host "Type the VM's name, $($CFG.VMName), to delete it (anything else cancels)"
-        if ($answer.Trim() -ne $CFG.VMName) {
-            Write-Log 'Removal cancelled - nothing has been changed.' 'INFO'
-            return 'cancelled'
-        }
+    return [pscustomobject]@{
+        VM          = $vm
+        Tasks       = $tasks
+        RegistryKey = $registryKey
+        Files       = $files
+        Folders     = $folders
+        RotatedLogs = $rotatedLogs
+        Total       = $total
     }
+}
+
+function Remove-VMAndItsFiles {
+    <#
+      Deletes what Get-VMRemovalContext listed. Returns 'removed', or
+      'incomplete' when something could not be deleted (the log says what).
+    #>
+    param([Parameter(Mandatory)]$Context)
+
+    $vm = $Context.VM
+    $tasks = @($Context.Tasks)
+    $registryKey = $Context.RegistryKey
+    $files = @($Context.Files)
+    $folders = @($Context.Folders)
+    $rotatedLogs = @($Context.RotatedLogs)
+    $total = $Context.Total
+
 
     $failures = [System.Collections.Generic.List[string]]::new()
 
@@ -369,7 +379,7 @@ function Remove-LazyVM {
             # The disks are still attached, so deleting them would fail or,
             # worse, half-succeed. Stop with everything else left in place.
             Write-LogError "Could not remove the Hyper-V VM '$($CFG.VMName)'" $_
-            Write-Log 'Its disks and folders have been left in place. Fix the problem and run -RemoveVM again.' 'WARN'
+            Write-Log 'Its disks and folders have been left in place. Fix the problem and run Remove-LazyVM again.' 'WARN'
             return 'incomplete'
         }
     }
@@ -392,7 +402,7 @@ function Remove-LazyVM {
     if ($failures.Count -gt 0) {
         Write-Log "'$($CFG.VMName)' was removed, but $($failures.Count) item(s) could not be deleted:" 'WARN'
         foreach ($failure in $failures) { Write-Log "  $failure" 'WARN' }
-        Write-Log 'Delete them by hand, or run -RemoveVM again once whatever holds them has let go.' 'INFO'
+        Write-Log 'Delete them by hand, or run Remove-LazyVM again once whatever holds them has let go.' 'INFO'
         return 'incomplete'
     }
 
@@ -413,6 +423,6 @@ function Remove-LazyVM {
         Remove-Item -LiteralPath $parent -Force -ErrorAction SilentlyContinue
     }
 
-    Write-Host "  [+] Log deleted: $($CFG.LogFile)" -ForegroundColor Green
+    Write-Information "Log deleted: $($CFG.LogFile)" -InformationAction Continue
     return 'removed'
 }

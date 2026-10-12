@@ -29,7 +29,7 @@ function Invoke-Rebuild {
     if ($SkipCapture) {
         Write-Log 'Skipping capture (-SkipCapture): using the existing manifest' 'WARN'
         $manifest = Get-CaptureManifest
-        if (-not $manifest) { Exit-WithError 'No existing capture manifest, and -SkipCapture was given. Run -Capture first.' }
+        if (-not $manifest) { Exit-WithError "No existing capture manifest, and -SkipCapture was given. Capture first with: Save-LazyVMState -Name $($CFG.VMName)" }
     }
     elseif (Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue) {
         $manifest = Invoke-Phase9-Capture
@@ -106,7 +106,7 @@ function Invoke-Rebuild {
         Write-Log "  Remove-VM -Name '$($CFG.VMName)' -Force" 'INFO'
         Write-Log "  Remove-Item '$($retired.NewOsPath)' -Force" 'INFO'
         Write-Log "  Rename-Item '$($retired.RetiredOsPath)' '$([IO.Path]::GetFileName($retired.NewOsPath))'" 'INFO'
-        Write-Log "  .\Build-LazyVM.ps1 -FromPhase 6" 'INFO'
+        Write-Log "  Build-LazyVM -Name '$($CFG.VMName)' -FromPhase 6" 'INFO'
         Write-Log '' 'INFO'
         Write-Log "Retired OS disk: $($retired.RetiredOsPath)" 'WARN'
     }

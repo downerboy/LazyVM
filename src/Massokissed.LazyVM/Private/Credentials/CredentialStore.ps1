@@ -53,7 +53,7 @@ function Save-StoredCredential {
         Password = ConvertFrom-SecureString -SecureString $Password -Key $key
     }
     # Each VM keeps its credentials in its own folder, which does not exist
-    # yet when -SetupCredentials is the first thing run for a new VM.
+    # yet when Set-LazyVMCredential is the first thing run for a new VM.
     $folder = Split-Path -Path $Path -Parent
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
     Write-TextFileAtomic -Path $Path -Text (ConvertTo-Json -InputObject $blob)
@@ -123,7 +123,7 @@ function Get-GuestCredential {
     $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
     Save-StoredCredential -Path $CFG.GuestCredFile -UserName $CFG.GuestAdminUser -Password $secure
     Write-Log "Generated guest administrator credential for '$($CFG.GuestAdminUser)'" 'OK'
-    Write-Log "  Stored at $($CFG.GuestCredFile). View it with: .\Build-LazyVM.ps1 -SetupCredentials" 'INFO'
+    Write-Log "  Stored at $($CFG.GuestCredFile). See it with: Get-LazyVMCredential -Name $($CFG.VMName) -AsPlainText" 'INFO'
     return (New-Object System.Management.Automation.PSCredential($CFG.GuestAdminUser, $secure))
 }
 

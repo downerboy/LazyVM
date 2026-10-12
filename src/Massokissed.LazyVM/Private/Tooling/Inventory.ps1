@@ -1,4 +1,4 @@
-﻿# Inventory.ps1 - Inventory of the tooling installed in the guest (-ShowTooling).
+﻿# Inventory.ps1 - Inventory of the tooling installed in the guest (Get-LazyVMTooling).
 # Dot-sourced by Massokissed.LazyVM.psm1; not meant to be run on its own.
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@
 #    - winget packages, by identifier and source
 #    - every other program in the Windows uninstall list
 #
-#  -ShowTooling runs this on its own and saves the result on the host, so the
+#  Get-LazyVMTooling runs this on its own and saves the result on the host, so the
 #  data can be checked before anything is built on it.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -199,74 +199,53 @@ function Get-GuestToolingInventory {
     return $inventory
 }
 
-function Show-GuestTooling {
+function Get-GuestToolingReport {
     <#
-      -ShowTooling: take an inventory, save it on the host and log a summary.
-      Read-only in the guest.
+      Get-LazyVMTooling: what is installed in the guest now, and what the
+      next maintenance run would record. Saves the raw inventory on the host.
+      Read-only in the guest; nothing is recorded.
     #>
-    Write-Log 'Guest Tooling Inventory' 'PHASE'
     Open-GuestSession -Purpose 'take the inventory' | Out-Null
 
     $inventory = Get-GuestToolingInventory
 
     $toolingDir = Join-Path $CFG.StateDir 'tooling'
-    if (-not (Test-Path -LiteralPath $toolingDir)) { New-Item -ItemType Directory -Path $toolingDir -Force | Out-Null }
     $path = Join-Path $toolingDir ('inventory-{0}.json' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-    $inventory | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding UTF8
+    Write-TextFileAtomic -Path $path -Text (ConvertTo-Json -InputObject $inventory -Depth 8)
 
-    foreach ($product in @($inventory.Products)) {
-        Write-Log "$($product.DisplayName) $($product.Version)  [$($product.ProductId), $($product.ChannelId)]" 'OK'
-        Write-Log "  $(@($product.Components).Count) workload/component id(s), $(@($product.ExportedExtensions).Count) instance-wide extension(s), $(@($product.UserExtensions).Count) per-user extension(s)" 'INFO'
-        foreach ($extension in @($product.ExportedExtensions)) {
-            Write-Log "    instance-wide: $extension" 'INFO'
-        }
-        foreach ($extension in @($product.UserExtensions)) {
-            Write-Log "    per-user: $($extension.DisplayName) $($extension.Version)  [$($extension.Id)]" 'INFO'
-        }
-    }
-
-    $packages = @($inventory.WingetPackages | Sort-Object { $_.Id })
-    Write-Log "winget packages: $($packages.Count)" 'OK'
-    foreach ($package in $packages) {
-        Write-Log ("  {0}  {1}  ({2})" -f $package.Id, $package.Version, $package.Source) 'INFO'
-    }
-
-    $programs = @($inventory.Programs)
-    Write-Log "Installed programs (Windows uninstall list): $($programs.Count)" 'OK'
-    foreach ($program in $programs) {
-        $details = @($program.Version, $program.Publisher, $program.Scope) | Where-Object { $_ }
-        Write-Log ("  {0}  ({1})" -f $program.Name, ($details -join ', ')) 'INFO'
-    }
-    foreach ($note in @($inventory.Notes)) { Write-Log "  $note" 'WARN' }
-    Write-Log "Inventory saved to $path" 'OK'
-
-    # What the next maintenance run (or -RecordTooling) would adopt. Nothing is recorded here.
     $recorded = Read-ToolingRecord -Path (Get-ToolingPaths).Record
-
-    # Which per-user extensions a rebuild could reinstall from the marketplace.
-    $resolved = ConvertTo-ToolingRecord -Inventory $inventory
-    Add-MarketplaceItems -Record $resolved -Previous $recorded
-    foreach ($product in @($resolved.Products)) {
-        foreach ($extension in @($product.UserExtensions)) {
-            $item = Get-RecordField -Item $extension -Name 'MarketplaceItem'
-            if ($item) { Write-Log "  marketplace match: $($extension.DisplayName) -> $item" 'OK' }
-            else { Write-Log "  no marketplace match: $($extension.DisplayName) [$($extension.Id)] - a rebuild lists it for reinstalling by hand" 'WARN' }
-        }
-    }
-
-    if (-not $recorded) {
-        Write-Log 'No tooling list recorded yet: the next run records this as the first one.' 'INFO'
-        return
-    }
     $observed = ConvertTo-ToolingRecord -Inventory $inventory
     Add-MarketplaceItems -Record $observed -Previous $recorded
-    Merge-AwaitingReinstall -Record $observed -Previous $recorded
-    $changes = @(Compare-ToolingRecord -Old $recorded -New $observed)
-    if ($changes.Count -eq 0) {
-        Write-Log 'Matches the recorded tooling list: nothing to adopt.' 'OK'
+
+    # Per-user extensions a rebuild cannot reinstall from the marketplace.
+    $unmatched = @(
+        foreach ($product in @($observed.Products)) {
+            foreach ($extension in @($product.UserExtensions)) {
+                if (-not (Get-RecordField -Item $extension -Name 'MarketplaceItem')) {
+                    "$($extension.DisplayName) [$($extension.Id)] in $($product.DisplayName)"
+                }
+            }
+        }
+    )
+
+    $pending = @()
+    if ($recorded) {
+        Merge-AwaitingReinstall -Record $observed -Previous $recorded
+        $pending = @(Compare-ToolingRecord -Old $recorded -New $observed)
     }
     else {
-        Write-Log "The next run would adopt $($changes.Count) change(s):" 'INFO'
-        foreach ($change in $changes) { Write-Log "  $change" 'INFO' }
+        $pending = @('No tooling list recorded yet: the next maintenance run records this as the first one.')
+    }
+
+    return [pscustomobject]@{
+        PSTypeName          = 'LazyVM.Tooling'
+        Name                = $CFG.VMName
+        Products            = @($observed.Products)
+        WingetPackages      = @($observed.WingetPackages)
+        Programs            = @($observed.Programs)
+        UnmatchedExtensions = $unmatched
+        PendingChanges      = $pending
+        Notes               = @($inventory.Notes)
+        SavedTo             = $path
     }
 }

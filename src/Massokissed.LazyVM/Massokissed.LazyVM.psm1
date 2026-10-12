@@ -47,3 +47,22 @@ foreach ($folder in 'Private', 'Public') {
     }
 }
 Remove-Variable -Name folder, folderPath, files, file -ErrorAction SilentlyContinue
+
+# ── Tab completion ───────────────────────────────────────────────────────────
+# -Name on every command completes with the VMs on this host.
+$vmNameCompleter = {
+    param($commandName, $parameterName, $wordToComplete)
+    $root = Get-RegisteredRoot
+    if (-not $root) { return }
+    Get-VMProfileNames -ConfigDir (Get-ConfigDir -Root $root) |
+        Where-Object { $_ -like "$wordToComplete*" } |
+        ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
+}
+$vmCommands = @(
+    'Build-LazyVM', 'Get-LazyVM', 'Get-LazyVMCredential', 'Get-LazyVMLicense', 'Get-LazyVMRestorePoint',
+    'Get-LazyVMSetting', 'Get-LazyVMTooling', 'Invoke-LazyVMMaintenance', 'Invoke-LazyVMRebuild',
+    'Register-LazyVMMaintenance', 'Remove-LazyVM', 'Restore-LazyVMState', 'Restore-LazyVMTooling',
+    'Save-LazyVMState', 'Save-LazyVMTooling', 'Set-LazyVMCredential'
+)
+Register-ArgumentCompleter -CommandName $vmCommands -ParameterName 'Name' -ScriptBlock $vmNameCompleter
+Remove-Variable -Name vmNameCompleter, vmCommands

@@ -12,7 +12,7 @@
 #    checkpoint  "Tooling <stamp>"                 the VM when it was recorded
 #    file        History\Tooling-<stamp>.json      the list recorded with it
 #
-#  -Revert <stamp> applies both. A dated copy of the list is also kept for
+#  Restore-LazyVMTooling applies both. A dated copy of the list is also kept for
 #  every day the check runs (History\Daily), whether or not it changed.
 #
 #  Only additions and removals count as changes. Versions are not compared,
@@ -217,7 +217,7 @@ function Save-ToolingRecord {
 function Get-ToolingStamp {
     <#
       A date-time no existing tooling checkpoint uses. Two checkpoints in the
-      same second would otherwise share a name, and -Revert would pick the
+      same second would otherwise share a name, and a revert would pick the
       wrong one.
     #>
     $existing = @(Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
@@ -303,7 +303,7 @@ function New-ToolingCheckpoint {
 
 function Update-ToolingRecord {
     <#
-      The daily tooling step, also run by -RecordTooling. Needs an open guest
+      The daily tooling step, also run by Save-LazyVMTooling. Needs an open guest
       session. Returns the list of changes adopted (empty when none).
     #>
     Write-Log "Tooling Check - $($CFG.VMName)" 'PHASE'
@@ -358,7 +358,7 @@ function Open-GuestSession {
     if (-not $vm) { Exit-WithError "VM '$($CFG.VMName)' does not exist." }
 
     $credential = Get-GuestCredential
-    if (-not $credential) { Exit-WithError 'No stored guest credential. Run with -SetupCredentials first.' }
+    if (-not $credential) { Exit-WithError 'No stored guest credential. Store one with Set-LazyVMCredential first.' }
 
     $started = $false
     if ($vm.State -ne 'Running') {
@@ -371,60 +371,42 @@ function Open-GuestSession {
     return $started
 }
 
-function Show-ToolingRestorePoints {
-    <# -ListRestorePoints: the tooling versions that still have their checkpoint. #>
-    Write-Log "Tooling Restore Points - $($CFG.VMName)" 'PHASE'
-
+function Get-ToolingRestorePoints {
+    <# Get-LazyVMRestorePoint: the tooling versions that still have their checkpoint, oldest first. #>
     $paths = Get-ToolingPaths
     $checkpoints = @(Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -like 'Tooling *' } | Sort-Object CreationTime)
-    if ($checkpoints.Count -eq 0) {
-        Write-Log 'No tooling checkpoints yet. One is taken whenever a tooling change is recorded.' 'INFO'
-        return
-    }
 
     foreach ($checkpoint in $checkpoints) {
         $stamp = ($checkpoint.Name -replace '^Tooling\s+', '') -replace '\s.*$', ''
         $file = Join-Path $paths.HistoryDir "Tooling-$stamp.json"
-        $note = if (Test-Path -LiteralPath $file) { '' } else { '  (no matching tooling list - the VM can be reverted, the list cannot)' }
-        Write-Log ("  {0}   taken {1}{2}" -f $checkpoint.Name, $checkpoint.CreationTime.ToString('yyyy-MM-dd HH:mm'), $note) 'INFO'
+        [pscustomobject]@{
+            PSTypeName     = 'LazyVM.RestorePoint'
+            Name           = $CFG.VMName
+            RestorePoint   = $stamp
+            Taken          = $checkpoint.CreationTime
+            Checkpoint     = $checkpoint.Name
+            HasToolingList = (Test-Path -LiteralPath $file)
+        }
     }
-    Write-Log 'To go back to one: .\Build-LazyVM.ps1 -Revert <stamp>, for example -Revert 20261008-193000' 'INFO'
 }
 
 function Invoke-ToolingRevert {
     <#
-      -Revert <stamp>: returns the VM to a recorded tooling version by applying
+      Restore-LazyVMTooling: returns the VM to a recorded tooling version by applying
       its checkpoint and restoring the matching tooling list. A checkpoint of
       the current state is taken first, so the revert itself can be undone.
     #>
-    param(
-        [Parameter(Mandatory)][string]$Stamp,
-        [switch]$Confirmed
-    )
+    param([Parameter(Mandatory)][string]$Stamp)
 
     Write-Log "Revert - $($CFG.VMName) to tooling version $Stamp" 'PHASE'
 
     $paths = Get-ToolingPaths
     $checkpoint = Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -eq "Tooling $Stamp" -or $_.Name -eq "Tooling $Stamp before revert" } | Select-Object -First 1
-    if (-not $checkpoint) { Exit-WithError "There is no checkpoint 'Tooling $Stamp'. See -ListRestorePoints." }
+    if (-not $checkpoint) { Exit-WithError "There is no checkpoint 'Tooling $Stamp'. See them with: Get-LazyVMRestorePoint -Name $($CFG.VMName)" }
     $listFile = Join-Path $paths.HistoryDir "Tooling-$Stamp.json"
     if (-not (Test-Path -LiteralPath $listFile)) { Exit-WithError "The tooling list for $Stamp is missing: $listFile" }
-
-    if (-not $Confirmed) {
-        Write-Host ''
-        Write-Host "  This returns '$($CFG.VMName)' to how it was at $($checkpoint.CreationTime.ToString('yyyy-MM-dd HH:mm'))." -ForegroundColor Yellow
-        Write-Host '  ALL of its disks go back to that point, including the Dev Drive and the SQL' -ForegroundColor Yellow
-        Write-Host '  data disk: unpushed code and later database changes are lost.' -ForegroundColor Yellow
-        Write-Host '  A checkpoint of the current state is taken first, so this can be undone.' -ForegroundColor Yellow
-        Write-Host ''
-        $answer = Read-Host 'Continue? (y/N)'
-        if ($answer -notmatch '^(y|yes)$') {
-            Write-Log 'Revert cancelled' 'INFO'
-            return
-        }
-    }
 
     # The current state, as an ordinary tooling version, so the revert can be reverted.
     $now = Get-ToolingStamp
@@ -436,9 +418,9 @@ function Invoke-ToolingRevert {
     $wasRunning = ((Get-VM -Name $CFG.VMName).State -eq 'Running')
     Disconnect-Guest
     Restore-VMSnapshot -VMSnapshot $checkpoint -Confirm:$false -ErrorAction Stop
-    Copy-Item -LiteralPath $listFile -Destination $paths.Record -Force
+    Write-TextFileAtomic -Path $paths.Record -Text ([IO.File]::ReadAllText($listFile))
     Write-Log "VM returned to '$($checkpoint.Name)' and its tooling list restored" 'OK'
-    Write-Log "  To undo this revert: .\Build-LazyVM.ps1 -Revert $now" 'INFO'
+    Write-Log "  To undo this revert: Restore-LazyVMTooling -Name $($CFG.VMName) -RestorePoint $now" 'INFO'
 
     if ($wasRunning -and (Get-VM -Name $CFG.VMName).State -ne 'Running') {
         Start-VM -Name $CFG.VMName | Out-Null
