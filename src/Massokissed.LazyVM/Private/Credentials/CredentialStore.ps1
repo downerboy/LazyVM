@@ -56,7 +56,7 @@ function Save-StoredCredential {
     # yet when -SetupCredentials is the first thing run for a new VM.
     $folder = Split-Path -Path $Path -Parent
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
-    $blob | ConvertTo-Json | Set-Content -LiteralPath $Path -Encoding UTF8 -Force
+    Write-TextFileAtomic -Path $Path -Text (ConvertTo-Json -InputObject $blob)
 }
 
 function Get-StoredCredential {

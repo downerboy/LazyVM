@@ -1,187 +1,236 @@
-﻿# Massokissed.LazyVM.Configuration.Tests.ps1
-# Settings: merging the user's files over the defaults, choosing the root
-# folder, resolving host paths, and creating and selecting VM profiles.
+# Configuration.Tests.ps1
+# Settings: the schema and its defaults, reading and checking JSON settings
+# files, the last-good safety net, choosing the root folder, resolving host
+# paths, creating and selecting VM profiles, and bringing 1.x settings across.
 #
 # Most of these functions are internal to the module, so each test runs its
 # body with InModuleScope, with test data passed in through -Parameters.
-# Config folders are built under $TestDrive with a copy of the real
-# LazyVM.Defaults.psd1, so a broken defaults file fails these tests too.
+# Everything is built under $TestDrive; the registry is never touched.
 
 BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
     Import-LazyVMModule
 
     $module = 'Massokissed.LazyVM'
-    $realDefaultsPath = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\LazyVM.Defaults.psd1'
 
-    function New-TestConfigDir {
+    function New-TestFile {
+        <# A file under $TestDrive with the given text. #>
+        param(
+            [Parameter(Mandatory)][AllowEmptyString()][string]$Text,
+            [string]$Name = "$([guid]::NewGuid().ToString('N')).json"
+        )
+
+        $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $folder | Out-Null
+        $path = Join-Path -Path $folder -ChildPath $Name
+        Set-Content -LiteralPath $path -Value $Text -NoNewline
+        return $path
+    }
+
+    function New-TestRoot {
         <#
-          A Config folder holding the real defaults, plus one VM profile per
-          entry in $Profiles (VM name -> the text of its VM.psd1).
+          A root folder with a Config folder holding one VM profile per entry
+          in $Profiles (VM name -> the JSON of its VM.json), and optionally a
+          host-wide settings file.
         #>
         param(
             [hashtable]$Profiles = @{},
-            [string]$UserSettings
+            [string]$HostSettings
         )
 
-        $configDir = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path $configDir | Out-Null
-        Copy-Item -LiteralPath $realDefaultsPath -Destination $configDir
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $configDir = Join-Path -Path $root -ChildPath 'Config'
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
 
         foreach ($name in $Profiles.Keys) {
             $profileDir = Join-Path -Path (Join-Path -Path $configDir -ChildPath 'VMs') -ChildPath $name
             New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
-            Set-Content -LiteralPath (Join-Path -Path $profileDir -ChildPath 'VM.psd1') -Value $Profiles[$name]
+            Set-Content -LiteralPath (Join-Path -Path $profileDir -ChildPath 'VM.json') -Value $Profiles[$name]
         }
-
-        if ($UserSettings) {
-            Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'LazyVM.Config.psd1') -Value $UserSettings
+        if ($HostSettings) {
+            Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.json') -Value $HostSettings
         }
-        return $configDir
+        return $root
     }
 
-    function New-TestSettingsFile {
-        <# A settings file under $TestDrive with the given text. #>
-        param([Parameter(Mandatory)][string]$Text)
+    function Read-TestJson {
+        param([Parameter(Mandatory)][string]$Path)
+        return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable
+    }
+}
 
-        $path = Join-Path -Path $TestDrive -ChildPath "$([guid]::NewGuid().ToString('N')).psd1"
-        Set-Content -LiteralPath $path -Value $Text
-        return $path
+Describe 'The settings schema' {
+    It 'has a default and a description for every setting' {
+        $schema = InModuleScope $module { Get-SettingsSchema }
+
+        foreach ($name in @($schema.properties.Keys | Where-Object { $_ -ne '$schema' })) {
+            $schema.properties[$name].Contains('default') | Should -BeTrue -Because "'$name' needs a default"
+            $schema.properties[$name]['description'] | Should -Not -BeNullOrEmpty -Because "'$name' needs a description"
+        }
     }
 
-    function New-TestSettings {
-        <# A small stand-in for the defaults, with one setting of each kind. #>
-        return @{
-            VMName       = 'Default'
-            MemoryGB     = 8
-            EnableTpm    = $true
-            GuestFolders = @('C:\Setup')
-            WingetApps   = @(@{ Id = 'Git.Git' })
-            Network      = @{ Switch = 'Default Switch' }
-            AnyList      = @()
+    It 'accepts all its own defaults' {
+        $defaults = InModuleScope $module { Get-DefaultSettings }
+        $path = New-TestFile -Text (ConvertTo-Json -InputObject $defaults -Depth 20)
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
+    }
+
+    It 'lists the settings users change, not the ones LazyVM works out itself' {
+        $defaults = InModuleScope $module { Get-DefaultSettings }
+
+        $defaults.Keys | Should -Contain 'vCPU'
+        $defaults.Keys | Should -Contain 'MaintenanceTime'
+        foreach ($derived in 'Root', 'ScheduleTaskName', 'ResumeRegKey', 'GuestCredFile', 'GuestSqlDataDir', 'SeedDiskPath') {
+            $defaults.Keys | Should -Not -Contain $derived
+        }
+    }
+
+    It 'gives a fresh copy each time, so changing one cannot change the defaults' {
+        InModuleScope $module {
+            $first = Get-DefaultSettings
+            $first.GuestProjectPaths[0] = 'changed'
+            (Get-DefaultSettings).GuestProjectPaths[0] | Should -Not -Be 'changed'
         }
     }
 }
 
-Describe 'Merge-UserSettings' {
-    It 'applies valid values and returns the names it changed, sorted' {
-        $settings = New-TestSettings
-        $path = New-TestSettingsFile -Text "@{ MemoryGB = 16; VMName = 'Dev'; EnableTpm = `$false }"
+Describe 'Read-SettingsFile' {
+    It 'returns the values the file sets' {
+        $path = New-TestFile -Text '{ "$schema": "./LazyVM.Settings.schema.json", "vCPU": 8, "UseDevDrive": false, "GuestTimeZone": "UTC" }'
 
-        $changed = InModuleScope $module -Parameters @{ Settings = $settings; Path = $path } {
-            param($Settings, $Path)
-            Merge-UserSettings -Settings $Settings -UserPath $Path
-        }
+        $values = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path }
 
-        $changed | Should -Be @('EnableTpm', 'MemoryGB', 'VMName')
-        $settings.MemoryGB | Should -Be 16
-        $settings.VMName | Should -Be 'Dev'
-        $settings.EnableTpm | Should -BeFalse
+        $values.Count | Should -Be 3
+        $values.vCPU | Should -Be 8
+        $values.UseDevDrive | Should -BeFalse
+        $values.GuestTimeZone | Should -Be 'UTC'
     }
 
-    It 'matches names case-insensitively but returns the script''s spelling' {
-        $settings = New-TestSettings
-        $path = New-TestSettingsFile -Text '@{ memorygb = 16 }'
+    It 'returns ordinary tables, looked up whatever the case' {
+        $path = New-TestFile -Text '{ "InstallerBootstrappers": { "VisualStudio.18.Release": "https://example.com/vs.exe" } }'
 
-        $changed = InModuleScope $module -Parameters @{ Settings = $settings; Path = $path } {
-            param($Settings, $Path)
-            Merge-UserSettings -Settings $Settings -UserPath $Path
-        }
+        $values = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path }
 
-        $changed | Should -BeExactly @('MemoryGB')
+        $values | Should -BeOfType [hashtable]
+        $values['installerbootstrappers'] | Should -BeOfType [hashtable]
+        $values.InstallerBootstrappers['visualstudio.18.release'] | Should -Be 'https://example.com/vs.exe'
     }
 
-    It 'accepts a single item where a list belongs, as a one-item list' {
-        $settings = New-TestSettings
-        $path = New-TestSettingsFile -Text "@{ GuestFolders = 'D:\Work' }"
+    It 'matches names whatever their case, and uses the schema''s spelling' {
+        $path = New-TestFile -Text '{ "vcpu": 6, "MEMMAXGB": 32 }'
 
-        InModuleScope $module -Parameters @{ Settings = $settings; Path = $path } {
-            param($Settings, $Path)
-            Merge-UserSettings -Settings $Settings -UserPath $Path
-        }
+        $values = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path }
 
-        , $settings.GuestFolders | Should -BeOfType [System.Collections.IList]
-        $settings.GuestFolders | Should -Be @('D:\Work')
+        @($values.Keys | Sort-Object) | Should -BeExactly @('MemMaxGB', 'vCPU')
     }
 
-    It 'accepts any items in a list whose default is empty' {
-        $settings = New-TestSettings
-        $path = New-TestSettingsFile -Text "@{ AnyList = @('text', 1, `$true) }"
+    It 'accepts a single value where a list belongs, as a one-item list' {
+        $path = New-TestFile -Text '{ "ProjectExcludeDirs": "bin" }'
 
-        InModuleScope $module -Parameters @{ Settings = $settings; Path = $path } {
-            param($Settings, $Path)
-            Merge-UserSettings -Settings $Settings -UserPath $Path
-        }
+        $values = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path }
 
-        $settings.AnyList.Count | Should -Be 3
+        , $values.ProjectExcludeDirs | Should -BeOfType [System.Collections.IList]
+        $values.ProjectExcludeDirs | Should -Be @('bin')
     }
 
-    It "rejects <Case>" -ForEach @(
-        @{ Case = 'an unknown setting'; Text = '@{ Bogus = 1 }'; Message = "*'Bogus' is not a setting*" }
-        @{ Case = 'the wrong kind of value'; Text = "@{ MemoryGB = 'lots' }"; Message = "*'MemoryGB' should be a number, but is text.*" }
-        @{ Case = 'a table where a list of text belongs'; Text = '@{ GuestFolders = @{ A = 1 } }'; Message = "*'GuestFolders' should be a list of text, but 1 item(s) are not.*" }
-        @{ Case = 'list items of the wrong kind'; Text = "@{ WingetApps = @('Git.Git') }"; Message = "*'WingetApps' should be a list of tables, but 1 item(s) are not.*" }
+    It 'keeps a one-item list a list' {
+        $path = New-TestFile -Text '{ "AppSettings": [ { "Name": "Git", "RegistryKey": "HKCU\\Software\\Git" } ] }'
+
+        $values = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path }
+
+        , $values.AppSettings | Should -BeOfType [System.Collections.IList]
+        $values.AppSettings.Count | Should -Be 1
+        $values.AppSettings[0].Name | Should -Be 'Git'
+    }
+
+    It 'treats an empty file as setting nothing' {
+        $path = New-TestFile -Text ''
+
+        $values = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path }
+
+        $values.Count | Should -Be 0
+    }
+
+    It 'rejects <Case>' -ForEach @(
+        @{ Case = 'an unknown setting'; Text = '{ "Bogus": 1 }'; Message = "*'Bogus' is not a setting*" }
+        @{ Case = 'the wrong kind of value'; Text = '{ "vCPU": "lots" }'; Message = "*'vCPU' should be a whole number, but is text.*" }
+        @{ Case = 'a number out of range'; Text = '{ "vCPU": 0 }'; Message = "*'vCPU'*" }
+        @{ Case = 'text that does not fit its pattern'; Text = '{ "MaintenanceTime": "2am" }'; Message = "*'MaintenanceTime'*" }
+        @{ Case = 'list items of the wrong kind'; Text = '{ "ProjectExcludeDirs": [ 1 ] }'; Message = "*'ProjectExcludeDirs, item 1' should be text, but is a whole number.*" }
+        @{ Case = 'an unknown field inside a list item'; Text = '{ "AppSettings": [ { "Name": "A", "RegistryKey": "HKCU\\A", "Extra": 1 } ] }'; Message = "*'AppSettings, item 1, Extra' is not allowed here.*" }
+        @{ Case = 'a host path that is neither relative nor full'; Text = '{ "VHDXRoot": "D:VMs" }'; Message = "*'VHDXRoot'*" }
+        @{ Case = 'JSON that does not parse'; Text = '{ "vCPU": 4 "UseDevDrive": true }'; Message = '*is not valid JSON*' }
+        @{ Case = 'a file that is not a table'; Text = '[ 1, 2 ]'; Message = '*must be a table of settings*' }
     ) {
-        $settings = New-TestSettings
-        $path = New-TestSettingsFile -Text $Text
+        $path = New-TestFile -Text $Text
 
-        {
-            InModuleScope $module -Parameters @{ Settings = $settings; Path = $path } {
-                param($Settings, $Path)
-                Merge-UserSettings -Settings $Settings -UserPath $Path
-            }
-        } | Should -Throw -ExpectedMessage $Message
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } |
+            Should -Throw -ExpectedMessage $Message
     }
 
-    It 'reports every problem together and changes nothing' {
-        $settings = New-TestSettings
-        $path = New-TestSettingsFile -Text "@{ VMName = 'Dev'; Bogus = 1; MemoryGB = 'lots' }"
+    It 'reports every problem together' {
+        $path = New-TestFile -Text '{ "vCPU": "lots", "Bogus": 1, "UseDevDrive": "yes" }'
 
-        {
-            InModuleScope $module -Parameters @{ Settings = $settings; Path = $path } {
-                param($Settings, $Path)
-                Merge-UserSettings -Settings $Settings -UserPath $Path
-            }
-        } | Should -Throw -ExpectedMessage '*has 2 problem(s); nothing has been changed*'
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } |
+            Should -Throw -ExpectedMessage '*has 3 problem(s), so none of it was used*'
+    }
+}
 
-        $settings.VMName | Should -Be 'Default'
+Describe 'Import-SettingsFile' {
+    It 'keeps a copy of a file that loads cleanly' {
+        $path = New-TestFile -Text '{ "vCPU": 8 }' -Name 'VM.json'
+
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path } | Out-Null
+
+        $lastGood = Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'VM.lastgood.json'
+        $lastGood | Should -Exist
+        Get-Content -LiteralPath $lastGood -Raw | Should -Be '{ "vCPU": 8 }'
     }
 
-    It 'explains a file that is not a valid data file' {
-        $settings = New-TestSettings
-        $path = New-TestSettingsFile -Text '@{ MemoryGB = (Get-Date) }'
+    It 'reports a broken file straight away when run by a person' {
+        $path = New-TestFile -Text '{ "vCPU": 8 }' -Name 'VM.json'
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path } | Out-Null
+        Set-Content -LiteralPath $path -Value '{ "vCPU": "eight" }'
 
-        {
-            InModuleScope $module -Parameters @{ Settings = $settings; Path = $path } {
-                param($Settings, $Path)
-                Merge-UserSettings -Settings $Settings -UserPath $Path
-            }
-        } | Should -Throw -ExpectedMessage '*Your settings file could not be read*'
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path } } |
+            Should -Throw -ExpectedMessage "*'vCPU' should be a whole number*"
+    }
+
+    It 'uses the last good copy, with a warning, when unattended' {
+        $path = New-TestFile -Text '{ "vCPU": 8 }' -Name 'VM.json'
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path } | Out-Null
+        Set-Content -LiteralPath $path -Value '{ "vCPU": "eight" }'
+
+        $result = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path -Unattended }
+
+        $result.Values.vCPU | Should -Be 8
+        $result.Warning | Should -BeLike '*last time it loaded cleanly*'
+        $result.Warning | Should -BeLike "*'vCPU' should be a whole number*"
+    }
+
+    It 'does not replace the last good copy with a broken file' {
+        $path = New-TestFile -Text '{ "vCPU": 8 }' -Name 'VM.json'
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path } | Out-Null
+        Set-Content -LiteralPath $path -Value 'not json'
+
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path -Unattended } | Out-Null
+
+        $lastGood = Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'VM.lastgood.json'
+        Get-Content -LiteralPath $lastGood -Raw | Should -Be '{ "vCPU": 8 }'
+    }
+
+    It 'still reports a broken file when unattended and there is no good copy' {
+        $path = New-TestFile -Text '{ "vCPU": "eight" }' -Name 'VM.json'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path -Unattended } } |
+            Should -Throw -ExpectedMessage "*'vCPU'*"
     }
 }
 
 Describe 'Resolve-SettingsRoot' {
-    It 'uses <Expected> from <Source>' -ForEach @(
-        @{ Override = 'E:\Override'; Configured = 'F:\Configured'; ScriptDir = 'D:\DevVM\Scripts'; Expected = 'E:\Override'; Source = 'the -Root parameter' }
-        @{ Override = ''; Configured = 'F:\Configured'; ScriptDir = 'D:\DevVM\Scripts'; Expected = 'F:\Configured'; Source = 'Root in LazyVM.Config.psd1' }
-        @{ Override = ''; Configured = ''; ScriptDir = 'D:\DevVM\Scripts'; Expected = 'D:\DevVM'; Source = 'the folder above D:\DevVM\Scripts' }
-        @{ Override = ''; Configured = ''; ScriptDir = 'D:\DevVM\Scripts\'; Expected = 'D:\DevVM'; Source = 'the folder above D:\DevVM\Scripts' }
-    ) {
-        $root = InModuleScope $module -Parameters @{ Override = $Override; Configured = $Configured; ScriptDir = $ScriptDir } {
-            param($Override, $Configured, $ScriptDir)
-            Resolve-SettingsRoot -RootOverride $Override -ConfiguredRoot $Configured -ConfiguredIn 'LazyVM.Config.psd1' -ScriptDir $ScriptDir
-        }
-
-        $root.Path | Should -Be $Expected
-        $root.Source | Should -Be $Source
-    }
-
     It 'drops a trailing backslash' {
-        $root = InModuleScope $module {
-            Resolve-SettingsRoot -RootOverride 'D:\DevVM\' -ScriptDir 'D:\DevVM\Scripts'
-        }
-
-        $root.Path | Should -Be 'D:\DevVM'
+        InModuleScope $module { Resolve-SettingsRoot -Path 'D:\DevVM\' -Source 'a test' } | Should -Be 'D:\DevVM'
     }
 
     It "refuses '<Root>' as the root folder" -ForEach @(
@@ -189,21 +238,35 @@ Describe 'Resolve-SettingsRoot' {
         @{ Root = '\\server\share\DevVM' }
         @{ Root = 'DevVM' }
         @{ Root = 'D:\Dev"VM' }
+        @{ Root = '' }
     ) {
-        {
-            InModuleScope $module -Parameters @{ Root = $Root } {
-                param($Root)
-                Resolve-SettingsRoot -RootOverride $Root -ScriptDir 'D:\DevVM\Scripts'
-            }
-        } | Should -Throw -ExpectedMessage '*must be a folder on a local drive*'
+        { InModuleScope $module -Parameters @{ Root = $Root } { param($Root) Resolve-SettingsRoot -Path $Root -Source 'a test' } } |
+            Should -Throw -ExpectedMessage '*must be a folder on a local drive*'
+    }
+}
+
+Describe 'Resolve-LazyVMRoot' {
+    It 'prefers -Root to the registered folder' {
+        InModuleScope $module {
+            Mock Get-RegisteredRoot { 'F:\Registered' }
+            $root = Resolve-LazyVMRoot -Root 'E:\Given'
+            $root.Path | Should -Be 'E:\Given'
+            $root.Source | Should -Be 'the -Root parameter'
+        }
     }
 
-    It 'refuses to guess when the script is at the top of a drive' {
-        {
-            InModuleScope $module {
-                Resolve-SettingsRoot -ScriptDir 'D:\Scripts'
-            }
-        } | Should -Throw -ExpectedMessage '*Could not work out the root folder*'
+    It 'uses the registered folder when there is no -Root' {
+        InModuleScope $module {
+            Mock Get-RegisteredRoot { 'F:\Registered' }
+            (Resolve-LazyVMRoot).Path | Should -Be 'F:\Registered'
+        }
+    }
+
+    It 'says how to choose one when there is none' {
+        InModuleScope $module {
+            Mock Get-RegisteredRoot { $null }
+            { Resolve-LazyVMRoot } | Should -Throw -ExpectedMessage '*Set-LazyVMRoot -Path*'
+        }
     }
 }
 
@@ -244,7 +307,34 @@ Describe 'Resolve-HostPathSettings' {
 
                 Resolve-HostPathSettings -Settings $settings -Root 'D:\DevVM'
             }
-        } | Should -Throw -ExpectedMessage "*'VHDXRoot' must be a path inside the root folder*"
+        } | Should -Throw -ExpectedMessage "*'VHDXRoot' must be a path inside the LazyVM folder*"
+    }
+}
+
+Describe 'Add-DerivedSettings' {
+    It 'works out the names and files LazyVM keeps for a VM' {
+        $settings = @{
+            VMName               = 'Alpha'
+            VHDXRoot             = 'D:\DevVM\VMs'
+            CredStoreDir         = 'D:\DevVM\Backup'
+            GuestDataDriveLetter = 'e'
+            SqlDataFolder        = 'Data'
+            SqlLogFolder         = 'Log'
+            SqlTempFolder        = 'Temp'
+            SqlBackupFolder      = 'Backup'
+        }
+
+        InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Add-DerivedSettings -Settings $Settings }
+
+        $settings.SeedDiskPath | Should -Be 'D:\DevVM\VMs\Alpha-Seed.iso'
+        $settings.CredKeyFile | Should -Be 'D:\DevVM\Backup\.lazyvm.key'
+        $settings.GuestCredFile | Should -Be 'D:\DevVM\Backup\Alpha\guest.cred'
+        $settings.CertCredFile | Should -Be 'D:\DevVM\Backup\Alpha\certs.cred'
+        $settings.ResumeRegKey | Should -Be 'HKLM:\SOFTWARE\LazyVM\Alpha'
+        $settings.ResumeTaskName | Should -Be 'LazyVM-ResumeAfterReboot-Alpha'
+        $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
+        $settings.GuestSqlDataDir | Should -Be 'E:\Data'
+        $settings.GuestSqlBackupDir | Should -Be 'E:\Backup'
     }
 }
 
@@ -271,7 +361,7 @@ Describe 'Expand-VMTokens' {
     It 'replaces {VM} in text settings and leaves the others alone' {
         $settings = @{
             LogFile  = 'Logs\{VM}.log'
-            TaskName = 'LazyVM-Maintain-{VM}'
+            Computer = '{VM}'
             MemoryGB = 8
             Folders  = @('{VM}')
         }
@@ -282,221 +372,313 @@ Describe 'Expand-VMTokens' {
         }
 
         $settings.LogFile | Should -Be 'Logs\Alpha.log'
-        $settings.TaskName | Should -Be 'LazyVM-Maintain-Alpha'
+        $settings.Computer | Should -Be 'Alpha'
         $settings.MemoryGB | Should -Be 8
         $settings.Folders | Should -Be @('{VM}')
     }
 }
 
-Describe 'ConvertTo-SettingsText' {
-    It 'writes text that reads back as the same values' {
-        $original = [ordered]@{
-            Text      = "It's quoted"
-            Flag      = $false
-            Count     = 42
-            Ratio     = 1.5
-            Empty     = @()
-            Folders   = @('C:\One', 'C:\Two')
-            Apps      = @(@{ Id = 'Git.Git'; Scope = 'machine' })
-            Network   = @{ Switch = 'Default Switch'; Vlan = 0 }
-        }
-        $path = Join-Path -Path $TestDrive -ChildPath 'RoundTrip.psd1'
-
-        $text = InModuleScope $module -Parameters @{ Value = $original } {
-            param($Value)
-            ConvertTo-SettingsText -Value $Value
-        }
-        Set-Content -LiteralPath $path -Value $text
-        $readBack = Import-PowerShellDataFile -LiteralPath $path
-
-        $readBack.Text | Should -BeExactly "It's quoted"
-        $readBack.Flag | Should -BeFalse
-        $readBack.Count | Should -Be 42
-        $readBack.Ratio | Should -Be 1.5
-        $readBack.Empty.Count | Should -Be 0
-        $readBack.Folders | Should -Be @('C:\One', 'C:\Two')
-        $readBack.Apps[0].Id | Should -Be 'Git.Git'
-        $readBack.Network.Switch | Should -Be 'Default Switch'
-    }
-
-    It 'refuses a value a settings file cannot hold' {
-        {
-            InModuleScope $module {
-                ConvertTo-SettingsText -Value (Get-Date)
-            }
-        } | Should -Throw -ExpectedMessage '*cannot be written to a settings file*'
-    }
-}
-
 Describe 'Resolve-VMSelection' {
     It 'picks the only VM when none is named' {
-        $configDir = New-TestConfigDir -Profiles @{ Alpha = '@{}' }
+        $root = New-TestRoot -Profiles @{ Alpha = '{}' }
 
-        InModuleScope $module -Parameters @{ ConfigDir = $configDir } {
-            param($ConfigDir)
-            Resolve-VMSelection -ConfigDir $ConfigDir
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Resolve-VMSelection -ConfigDir (Get-ConfigDir -Root $Root)
         } | Should -Be 'Alpha'
     }
 
     It 'returns the named VM with its folder''s spelling' {
-        $configDir = New-TestConfigDir -Profiles @{ Alpha = '@{}'; MsDevVM = '@{}' }
+        $root = New-TestRoot -Profiles @{ Alpha = '{}'; MsDevVM = '{}' }
 
-        InModuleScope $module -Parameters @{ ConfigDir = $configDir } {
-            param($ConfigDir)
-            Resolve-VMSelection -ConfigDir $ConfigDir -Requested 'msdevvm'
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Resolve-VMSelection -ConfigDir (Get-ConfigDir -Root $Root) -Requested 'msdevvm'
         } | Should -BeExactly 'MsDevVM'
     }
 
-    It 'ignores a folder with no VM.psd1' {
-        $configDir = New-TestConfigDir -Profiles @{ Alpha = '@{}' }
-        New-Item -ItemType Directory -Path (Join-Path -Path (Join-Path -Path $configDir -ChildPath 'VMs') -ChildPath 'Stray') | Out-Null
+    It 'ignores a folder with no VM.json' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{}' }
+        New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'Config/VMs/Stray') | Out-Null
 
-        InModuleScope $module -Parameters @{ ConfigDir = $configDir } {
-            param($ConfigDir)
-            Resolve-VMSelection -ConfigDir $ConfigDir
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Resolve-VMSelection -ConfigDir (Get-ConfigDir -Root $Root)
         } | Should -Be 'Alpha'
     }
 
     It 'refuses <Case>' -ForEach @(
-        @{ Case = 'a VM that does not exist'; Profiles = @{ Alpha = '@{}' }; Requested = 'Beta'; Message = "*no VM profile named 'Beta' (VMs on this host: Alpha)*" }
-        @{ Case = 'to run with no VMs'; Profiles = @{}; Requested = ''; Message = '*No VM profiles exist yet*' }
-        @{ Case = 'to guess between several VMs'; Profiles = @{ Alpha = '@{}'; Beta = '@{}' }; Requested = ''; Message = '*several VMs (Alpha, Beta)*' }
+        @{ Case = 'a VM that does not exist'; Profiles = @{ Alpha = '{}' }; Requested = 'Beta'; Message = "*no VM named 'Beta' (VMs on this host: Alpha)*" }
+        @{ Case = 'to run with no VMs'; Profiles = @{}; Requested = ''; Message = '*There are no VMs yet*' }
+        @{ Case = 'to guess between several VMs'; Profiles = @{ Alpha = '{}'; Beta = '{}' }; Requested = ''; Message = '*several VMs (Alpha, Beta)*' }
     ) {
-        $configDir = New-TestConfigDir -Profiles $Profiles
+        $root = New-TestRoot -Profiles $Profiles
 
         {
-            InModuleScope $module -Parameters @{ ConfigDir = $configDir; Requested = $Requested } {
-                param($ConfigDir, $Requested)
-                Resolve-VMSelection -ConfigDir $ConfigDir -Requested $Requested
+            InModuleScope $module -Parameters @{ Root = $root; Requested = $Requested } {
+                param($Root, $Requested)
+                Resolve-VMSelection -ConfigDir (Get-ConfigDir -Root $Root) -Requested $Requested
             }
         } | Should -Throw -ExpectedMessage $Message
     }
 }
 
-Describe 'New-VMProfile' {
-    It 'creates an empty profile from the defaults' {
-        $configDir = New-TestConfigDir
+Describe 'Initialize-ConfigFolder' {
+    It 'adds the schema for the editor and a settings file to open' {
+        $configDir = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
 
-        $path = New-VMProfile -ConfigDir $configDir -Name 'Alpha'
+        InModuleScope $module -Parameters @{ ConfigDir = $configDir } { param($ConfigDir) Initialize-ConfigFolder -ConfigDir $ConfigDir }
+
+        Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.schema.json' | Should -Exist
+        $settings = Read-TestJson -Path (Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.json')
+        $settings['$schema'] | Should -Be './LazyVM.Settings.schema.json'
+    }
+
+    It 'brings an old schema copy up to date but never touches the settings file' {
+        $configDir = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $configDir | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.schema.json') -Value '{}'
+        Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.json') -Value '{ "vCPU": 8 }'
+
+        InModuleScope $module -Parameters @{ ConfigDir = $configDir } { param($ConfigDir) Initialize-ConfigFolder -ConfigDir $ConfigDir }
+
+        (Read-TestJson -Path (Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.schema.json')).title | Should -Be 'LazyVM settings'
+        (Get-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.json') -Raw).Trim() | Should -Be '{ "vCPU": 8 }'
+    }
+}
+
+Describe 'New-VMProfile' {
+    It 'creates a profile that points at the schema and sets nothing else' {
+        $root = New-TestRoot
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Alpha'
+        }
 
         $path | Should -Exist
-        (Import-PowerShellDataFile -LiteralPath $path).Count | Should -Be 0
+        $profile = Read-TestJson -Path $path
+        @($profile.Keys) | Should -Be @('$schema')
+        $profile['$schema'] | Should -Be '../../LazyVM.Settings.schema.json'
     }
 
     It 'sets the maintenance time an hour after the latest one in use, wrapping at midnight' {
-        $configDir = New-TestConfigDir -Profiles @{
-            Alpha = "@{ MaintenanceTime = '02:00' }"
-            Beta  = "@{ MaintenanceTime = '23:30' }"
+        $root = New-TestRoot -Profiles @{
+            Alpha = '{ "MaintenanceTime": "02:00" }'
+            Beta  = '{ "MaintenanceTime": "23:30" }'
         }
 
-        $path = New-VMProfile -ConfigDir $configDir -Name 'Gamma'
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Gamma'
+        }
 
-        (Import-PowerShellDataFile -LiteralPath $path).MaintenanceTime | Should -Be '00:30'
+        (Read-TestJson -Path $path).MaintenanceTime | Should -Be '00:30'
     }
 
     It 'counts a VM with no maintenance time of its own as using the default' {
-        $defaultTime = (Import-PowerShellDataFile -LiteralPath $realDefaultsPath).MaintenanceTime
-        $expected = [datetime]::ParseExact($defaultTime, 'HH:mm', $null).AddHours(1).ToString('HH:mm')
-        $configDir = New-TestConfigDir -Profiles @{ Alpha = '@{}' }
+        $root = New-TestRoot -Profiles @{ Alpha = '{}' }
 
-        $path = New-VMProfile -ConfigDir $configDir -Name 'Beta'
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Beta'
+        }
 
-        (Import-PowerShellDataFile -LiteralPath $path).MaintenanceTime | Should -Be $expected
+        $default = InModuleScope $module { (Get-DefaultSettings).MaintenanceTime }
+        $expected = [datetime]::ParseExact($default, 'HH:mm', $null).AddHours(1).ToString('HH:mm')
+        (Read-TestJson -Path $path).MaintenanceTime | Should -Be $expected
     }
 
     It 'with -From, copies the shared settings and the tooling list, but not the per-VM ones' {
-        $configDir = New-TestConfigDir -Profiles @{
-            Alpha = "@{ MemoryGB = 32; LogFile = 'Logs\Alpha-Old.log'; GuestComputerName = 'ALPHA'; ScheduleTaskName = 'Alpha-Task' }"
+        $root = New-TestRoot -Profiles @{
+            Alpha = '{ "MemMaxGB": 32, "LogFile": "Logs\\Alpha-Old.log", "GuestComputerName": "ALPHA" }'
         }
-        $alphaDir = Join-Path -Path (Join-Path -Path $configDir -ChildPath 'VMs') -ChildPath 'Alpha'
-        Set-Content -LiteralPath (Join-Path -Path $alphaDir -ChildPath 'Tooling.json') -Value '{ "Version": 1 }'
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Config/VMs/Alpha/Tooling.json') -Value '{ "Version": 1 }'
 
-        $path = New-VMProfile -ConfigDir $configDir -Name 'Beta' -From 'Alpha'
-        $profile = Import-PowerShellDataFile -LiteralPath $path
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Beta' -From 'Alpha'
+        }
+        $profile = Read-TestJson -Path $path
 
-        $profile.MemoryGB | Should -Be 32
+        $profile.MemMaxGB | Should -Be 32
         $profile.Keys | Should -Not -Contain 'LogFile'
         $profile.Keys | Should -Not -Contain 'GuestComputerName'
-        $profile.Keys | Should -Not -Contain 'ScheduleTaskName'
         Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'Tooling.json' | Should -Exist
     }
 
     It 'refuses <Case>' -ForEach @(
         @{ Case = 'an invalid name'; Name = 'Not Valid'; From = ''; Message = "*'Not Valid' cannot be used as a VM name*" }
         @{ Case = 'a name already in use'; Name = 'Alpha'; From = ''; Message = "*'Alpha' already exists*" }
-        @{ Case = 'copying a VM that does not exist'; Name = 'Beta'; From = 'Nope'; Message = "*no VM profile named 'Nope' to copy*" }
+        @{ Case = 'copying a VM that does not exist'; Name = 'Beta'; From = 'Nope'; Message = "*no VM named 'Nope' to copy*" }
     ) {
-        $configDir = New-TestConfigDir -Profiles @{ Alpha = '@{}' }
+        $root = New-TestRoot -Profiles @{ Alpha = '{}' }
 
-        { New-VMProfile -ConfigDir $configDir -Name $Name -From $From } | Should -Throw -ExpectedMessage $Message
+        {
+            InModuleScope $module -Parameters @{ Root = $root; Name = $Name; From = $From } {
+                param($Root, $Name, $From)
+                New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name $Name -From $From
+            }
+        } | Should -Throw -ExpectedMessage $Message
+    }
+}
+
+Describe 'Read-LazyVMSettings' {
+    It 'layers the defaults, the host settings and the VM profile, then names, roots and derives everything' {
+        $root = New-TestRoot -HostSettings '{ "MemMaxGB": 12, "vCPU": 6 }' -Profiles @{
+            Alpha = '{ "GuestComputerName": "ALPHA-PC", "vCPU": 2 }'
+        }
+
+        $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-LazyVMSettings -Root $Root }
+        $settings = $result.Settings
+
+        $result.VMName | Should -Be 'Alpha'
+        $result.ChangedKeys | Should -Be @('MemMaxGB', 'vCPU')
+        $result.ProfileKeys | Should -Be @('GuestComputerName', 'vCPU')
+        $settings.MemMaxGB | Should -Be 12
+        $settings.vCPU | Should -Be 2
+        $settings.GuestComputerName | Should -Be 'ALPHA-PC'
+        $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
+        $settings.LogFile | Should -Be "$root\Logs\Alpha.log"
+        $result.Sources.MemMaxGB | Should -Be 'LazyVM.Settings.json'
+        $result.Sources.vCPU | Should -Be 'VMs\Alpha\VM.json'
+        $result.Sources.UseDevDrive | Should -Be 'Default'
+    }
+
+    It 'reports a bad setting in the VM profile' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "Bogus": 1 }' }
+
+        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-LazyVMSettings -Root $Root } } |
+            Should -Throw -ExpectedMessage "*'Bogus' is not a setting*"
+    }
+
+    It 'passes on the warning when an unattended run falls back to a last good copy' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+        InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-LazyVMSettings -Root $Root } | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Config/VMs/Alpha/VM.json') -Value '{ "vCPU": "two" }'
+
+        $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-LazyVMSettings -Root $Root -Unattended }
+
+        $result.Settings.vCPU | Should -Be 2
+        $result.Warnings.Count | Should -Be 1
     }
 }
 
 Describe 'Import-LazyVMConfiguration' {
     AfterAll {
-        (Get-LazyVMSettings).Clear()
+        InModuleScope $module { $script:Settings.Clear() }
+        Remove-Variable -Name LazyVMTestRoot -Scope Global -ErrorAction SilentlyContinue
     }
 
-    It 'layers the defaults, the user file and the VM profile, then names and roots everything' {
-        $configDir = New-TestConfigDir -UserSettings '@{ MemMaxGB = 12 }' -Profiles @{
-            Alpha = "@{ GuestComputerName = 'ALPHA-PC' }"
+    It 'fills the module''s current settings in place and leaves them alone when reading another VM' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{}'; Beta = '{}' }
+
+        $global:LazyVMTestRoot = $root
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $global:LazyVMTestRoot; Source = 'a test' } }
+            $current = $script:Settings
+
+            $result = Import-LazyVMConfiguration -VMName 'Alpha'
+            $beta = Read-LazyVMSettings -Root $Root -VMName 'Beta'
+
+            [object]::ReferenceEquals($result.Settings, $current) | Should -BeTrue
+            [object]::ReferenceEquals($CFG, $current) | Should -BeTrue
+            $CFG.VMName | Should -Be 'Alpha'
+            $beta.Settings.VMName | Should -Be 'Beta'
+            $result.RootSource | Should -Be 'a test'
         }
-
-        $result = Import-LazyVMConfiguration -ConfigDir $configDir -ScriptDir 'D:\DevVM\Scripts' -RootOverride 'E:\Lazy'
-        $settings = $result.Settings
-
-        $result.VMName | Should -Be 'Alpha'
-        $result.Root | Should -Be 'E:\Lazy'
-        $result.RootSource | Should -Be 'the -Root parameter'
-        $result.ChangedKeys | Should -Be @('MemMaxGB')
-        $result.ProfileKeys | Should -Be @('GuestComputerName')
-        $settings.MemMaxGB | Should -Be 12
-        $settings.GuestComputerName | Should -Be 'ALPHA-PC'
-        $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
-        $settings.LogFile | Should -Be 'E:\Lazy\Logs\Alpha.log'
-    }
-
-    It 'fills the shared settings table in place, so every module sees the new values' {
-        $configDir = New-TestConfigDir -Profiles @{ Alpha = '@{}' }
-        $shared = Get-LazyVMSettings
-
-        $result = Import-LazyVMConfiguration -ConfigDir $configDir -ScriptDir 'D:\DevVM\Scripts'
-
-        [object]::ReferenceEquals($result.Settings, $shared) | Should -BeTrue
-        $shared.VMName | Should -Be 'Alpha'
-    }
-
-    It 'takes the root from the user file when there is no -Root' {
-        $configDir = New-TestConfigDir -UserSettings "@{ Root = 'F:\FromUserFile' }" -Profiles @{ Alpha = '@{}' }
-
-        $result = Import-LazyVMConfiguration -ConfigDir $configDir -ScriptDir 'D:\DevVM\Scripts'
-
-        $result.Root | Should -Be 'F:\FromUserFile'
-        $result.RootSource | Should -BeLike 'Root in *LazyVM.Config.psd1'
-    }
-
-    It 'reports a bad setting in the VM profile' {
-        $configDir = New-TestConfigDir -Profiles @{ Alpha = '@{ Bogus = 1 }' }
-
-        { Import-LazyVMConfiguration -ConfigDir $configDir -ScriptDir 'D:\DevVM\Scripts' } |
-            Should -Throw -ExpectedMessage "*'Bogus' is not a setting*"
     }
 }
 
-Describe 'Read-LazyVMSettings' {
-    AfterAll {
-        (Get-LazyVMSettings).Clear()
+Describe 'Bringing 1.x settings across' {
+    BeforeAll {
+        function New-LegacyKit {
+            <# A 1.x Config folder: a user settings file and one VM with a tooling list and history. #>
+            $legacy = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+            $vmDir = Join-Path -Path $legacy -ChildPath 'VMs/DevBox'
+            New-Item -ItemType Directory -Path (Join-Path -Path $vmDir -ChildPath 'History/Daily') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path -Path $legacy -ChildPath 'LazyVM.Config.psd1') -Value "@{ Root = 'S:\Old'; MemMaxGB = 24; ScheduleTaskName = 'Mine' }"
+            Set-Content -LiteralPath (Join-Path -Path $vmDir -ChildPath 'VM.psd1') -Value "@{ MaintenanceTime = '03:00'; vCPU = 6; SQLInstallerPath = 'Installers\old.exe' }"
+            Set-Content -LiteralPath (Join-Path -Path $vmDir -ChildPath 'Tooling.json') -Value '{ "Version": 1 }'
+            Set-Content -LiteralPath (Join-Path -Path $vmDir -ChildPath 'History/Daily/20261001.json') -Value '{}'
+            return $legacy
+        }
     }
 
-    It 'reads another VM''s settings without changing the shared ones' {
-        $configDir = New-TestConfigDir -Profiles @{ Alpha = '@{}'; Beta = '@{}' }
-        Import-LazyVMConfiguration -ConfigDir $configDir -ScriptDir 'D:\DevVM\Scripts' -VMName 'Alpha' | Out-Null
+    It 'converts the settings and profiles to JSON, and copies tooling lists and history' {
+        $legacy = New-LegacyKit
+        $root = New-TestRoot
 
-        $beta = Read-LazyVMSettings -ConfigDir $configDir -ScriptDir 'D:\DevVM\Scripts' -VMName 'Beta'
+        $done = InModuleScope $module -Parameters @{ Legacy = $legacy; Root = $root } {
+            param($Legacy, $Root)
+            Import-LegacyConfiguration -LegacyConfigDir $Legacy -ConfigDir (Get-ConfigDir -Root $Root)
+        }
 
-        $beta.Settings.VMName | Should -Be 'Beta'
-        $beta.Settings.LogFile | Should -Be 'D:\DevVM\Logs\Beta.log'
-        (Get-LazyVMSettings).VMName | Should -Be 'Alpha'
-        [object]::ReferenceEquals($beta.Settings, (Get-LazyVMSettings)) | Should -BeFalse
+        $hostSettings = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Config/LazyVM.Settings.json')
+        $hostSettings.MemMaxGB | Should -Be 24
+        $hostSettings.Keys | Should -Not -Contain 'Root'
+        $hostSettings.Keys | Should -Not -Contain 'ScheduleTaskName'
+        $profile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json')
+        $profile.vCPU | Should -Be 6
+        $profile.MaintenanceTime | Should -Be '03:00'
+        $profile.Keys | Should -Not -Contain 'SQLInstallerPath'
+        Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/Tooling.json' | Should -Exist
+        Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/History/Daily/20261001.json' | Should -Exist
+        ($done -join "`n") | Should -BeLike "*'Root' is now chosen once with Set-LazyVMRoot*"
+        ($done -join "`n") | Should -BeLike "*'SQLInstallerPath' is no longer a setting*"
+    }
+
+    It 'produces files that load cleanly' {
+        $legacy = New-LegacyKit
+        $root = New-TestRoot
+
+        InModuleScope $module -Parameters @{ Legacy = $legacy; Root = $root } {
+            param($Legacy, $Root)
+            Import-LegacyConfiguration -LegacyConfigDir $Legacy -ConfigDir (Get-ConfigDir -Root $Root) | Out-Null
+            { Read-LazyVMSettings -Root $Root } | Should -Not -Throw
+        }
+    }
+
+    It 'never overwrites a VM profile that already exists' {
+        $legacy = New-LegacyKit
+        $root = New-TestRoot -Profiles @{ DevBox = '{ "vCPU": 2 }' }
+
+        InModuleScope $module -Parameters @{ Legacy = $legacy; Root = $root } {
+            param($Legacy, $Root)
+            Import-LegacyConfiguration -LegacyConfigDir $Legacy -ConfigDir (Get-ConfigDir -Root $Root) | Out-Null
+        }
+
+        (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json')).vCPU | Should -Be 2
+    }
+
+    It 'does nothing when there is no 1.x Config folder' {
+        $root = New-TestRoot
+
+        $done = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Import-LegacyConfiguration -LegacyConfigDir (Join-Path -Path $Root -ChildPath 'Scripts/Config') -ConfigDir (Get-ConfigDir -Root $Root)
+        }
+
+        @($done).Count | Should -Be 0
+    }
+}
+
+Describe 'Write-TextFileAtomic' {
+    It 'creates the folder and the file' {
+        $path = Join-Path -Path $TestDrive -ChildPath "$([guid]::NewGuid().ToString('N'))/sub/file.json"
+
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Write-TextFileAtomic -Path $Path -Text 'one' }
+
+        Get-Content -LiteralPath $path -Raw | Should -Be 'one'
+    }
+
+    It 'replaces an existing file and leaves no temporary file behind' {
+        $path = New-TestFile -Text 'old'
+
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Write-TextFileAtomic -Path $Path -Text 'new' }
+
+        Get-Content -LiteralPath $path -Raw | Should -Be 'new'
+        @(Get-ChildItem -LiteralPath (Split-Path -Path $path -Parent) -Force).Count | Should -Be 1
     }
 }

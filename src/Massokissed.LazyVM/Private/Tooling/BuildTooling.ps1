@@ -8,7 +8,7 @@
 function Get-BuildTooling {
     <#
       The tooling list a build installs: this VM's recorded list, or, for a
-      VM that has none yet, Config\Tooling.Default.json.
+      VM that has none yet, the default list that ships with the module.
     #>
     param([switch]$Quiet)
 
@@ -19,8 +19,7 @@ function Get-BuildTooling {
         return $record
     }
 
-    $configDir = Split-Path -Path (Split-Path -Path $CFG.ProfileDir -Parent) -Parent
-    $defaultPath = Join-Path $configDir 'Tooling.Default.json'
+    $defaultPath = Join-Path -Path $script:DataDir -ChildPath 'Tooling.Default.json'
     $default = Read-ToolingRecord -Path $defaultPath
     if (-not $default) { Exit-WithError "This VM has no tooling list yet and the default list is missing: $defaultPath" }
     if (-not $Quiet) { Write-Log "This VM has no tooling list yet - installing the default one: $defaultPath" 'INFO' }

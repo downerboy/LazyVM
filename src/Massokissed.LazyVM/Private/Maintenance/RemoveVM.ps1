@@ -241,9 +241,7 @@ function Remove-LazyVM {
       deleted; the log says what).
     #>
     param(
-        [Parameter(Mandatory)][string]$ConfigDir,
         [Parameter(Mandatory)][string]$ScriptDir,
-        [string]$RootOverride,
         [switch]$Force
     )
 
@@ -252,11 +250,10 @@ function Remove-LazyVM {
     # Every other VM's settings, read the way a run for that VM would read
     # them, so nothing they use is deleted.
     $otherSettings = @()
-    foreach ($name in @(Get-VMProfileNames -ConfigDir $ConfigDir)) {
+    foreach ($name in @(Get-VMProfileNames -ConfigDir $CFG.ConfigDir)) {
         if ($name -eq $CFG.VMName) { continue }
         try {
-            $otherSettings += (Read-LazyVMSettings -ConfigDir $ConfigDir -ScriptDir $ScriptDir `
-                    -RootOverride $RootOverride -VMName $name).Settings
+            $otherSettings += (Read-LazyVMSettings -Root $CFG.Root -VMName $name).Settings
         }
         catch {
             throw "Cannot tell what VM '$name' uses, so nothing has been removed. Fix its settings first:`n  $($_.Exception.Message)"

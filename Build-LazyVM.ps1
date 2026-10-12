@@ -233,8 +233,6 @@ try {
     $moduleDir = Join-Path -Path $PSScriptRoot -ChildPath 'src\Massokissed.LazyVM'
     Import-Module -Name (Join-Path -Path $moduleDir -ChildPath 'Massokissed.LazyVM.psd1') -Force -DisableNameChecking
 
-    $configDir = Join-Path -Path $moduleDir -ChildPath 'Data'
-
     if ($From -and -not $NewVM) {
         throw '-From only applies with -NewVM, to say which VM the new one starts from.'
     }
@@ -246,12 +244,12 @@ try {
     }
     $newProfilePath = $null
     if ($NewVM) {
-        $newProfilePath = New-VMProfile -ConfigDir $configDir -Name $NewVM -From $From
+        $newRoot = (Resolve-LazyVMRoot -Root $Root).Path
+        $newProfilePath = New-VMProfile -ConfigDir (Get-ConfigDir -Root $newRoot) -Name $NewVM -From $From
     }
 
     $selectedVM = if ($NewVM) { $NewVM } elseif ($RemoveVM) { $RemoveVM } else { $VM }
-    $configuration = Import-LazyVMConfiguration -ConfigDir $configDir `
-        -ScriptDir $PSScriptRoot -RootOverride $Root -VMName $selectedVM
+    $configuration = Import-LazyVMConfiguration -Root $Root -VMName $selectedVM -Unattended:(-not [Environment]::UserInteractive)
     $CFG = $configuration.Settings
 
     # Resolved once at startup: the scheduled tasks and Phase 2's resume run
@@ -275,14 +273,10 @@ try {
     Write-Log "  Script  : $(if ($CFG.ScriptPath) { $CFG.ScriptPath } else { '<not saved to disk>' })" 'INFO'
     Write-Log "  VM      : $($configuration.VMName) (profile $($configuration.ProfilePath))" 'INFO'
     Write-Log "  Root    : $($configuration.Root) (from $($configuration.RootSource))" 'INFO'
-    if ($configuration.UserFile) {
-        Write-Log "  Config  : $($configuration.UserFile)" 'INFO'
-        Write-Log "  Changed : $(if ($configuration.ChangedKeys.Count -gt 0) { $configuration.ChangedKeys -join ', ' } else { 'nothing' })" 'INFO'
-    }
-    else {
-        Write-Log '  Config  : defaults (no Config\LazyVM.Config.psd1)' 'INFO'
-    }
+    Write-Log "  Config  : $($configuration.HostFile)" 'INFO'
+    Write-Log "  Changed : $(if ($configuration.ChangedKeys.Count -gt 0) { $configuration.ChangedKeys -join ', ' } else { 'nothing' })" 'INFO'
     Write-Log '========================================================' 'INFO'
+    foreach ($warning in $configuration.Warnings) { Write-Log $warning 'WARN' }
 
     $script:UseUnattend = $false
     $exitCode = 0
@@ -290,7 +284,7 @@ try {
     try {
         # First, before anything reads the VM's credentials, which it deletes.
         if ($RemoveVM) {
-            $outcome = Remove-LazyVM -ConfigDir $configDir -ScriptDir $PSScriptRoot -RootOverride $Root -Force:$Force
+            $outcome = Remove-LazyVM -ScriptDir $moduleDir -Force:$Force
             exit $(if ($outcome -eq 'incomplete') { 1 } else { 0 })
         }
 

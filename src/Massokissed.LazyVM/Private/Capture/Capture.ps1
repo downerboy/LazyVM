@@ -88,7 +88,7 @@ function Invoke-Phase9-Capture {
     )
 
     $manifestPath = Join-Path $stateDir 'manifest.json'
-    ($manifest | ConvertTo-Json -Depth 8) | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    Write-TextFileAtomic -Path $manifestPath -Text (ConvertTo-Json -InputObject $manifest -Depth 8)
     Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $stateDir "manifest-$stamp.json") -Force
 
     if ($manifest.Warnings.Count -gt 0) {

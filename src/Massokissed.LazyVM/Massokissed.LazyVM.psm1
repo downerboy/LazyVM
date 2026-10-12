@@ -12,6 +12,13 @@ Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
 # ── Module state ─────────────────────────────────────────────────────────────
+# The files that ship with the module: the settings schema and the default
+# tooling list.
+$script:DataDir = Join-Path -Path $PSScriptRoot -ChildPath 'Data'
+
+# The settings schema, read on first use (see Get-SettingsSchema).
+$script:SettingsSchema = $null
+
 # The settings for the VM the current command is working on. Filled in place
 # by Import-LazyVMConfiguration; every function reads it as $CFG.
 $script:Settings = @{}

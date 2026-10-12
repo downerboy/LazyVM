@@ -210,9 +210,8 @@ function Save-ToolingRecord {
         [Parameter(Mandatory)][string]$Path
     )
 
-    $folder = Split-Path -Path $Path -Parent
-    if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
-    $Record | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $Path -Encoding UTF8
+    # Atomic, so a crash part-way through never leaves a half-written list.
+    Write-TextFileAtomic -Path $Path -Text (ConvertTo-Json -InputObject $Record -Depth 10)
 }
 
 function Get-ToolingStamp {

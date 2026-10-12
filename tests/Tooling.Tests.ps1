@@ -146,12 +146,11 @@ Describe 'Get-ProductExtensionIdentities' {
 
 Describe 'Test-ToolingExcluded' {
     BeforeAll {
-        $settings = Get-LazyVMSettings
-        $settings['ToolingWingetExclude'] = @('Microsoft.VisualStudio.*', 'Microsoft.Edge')
+        InModuleScope $module { $script:Settings['ToolingWingetExclude'] = @('Microsoft.VisualStudio.*', 'Microsoft.Edge') }
     }
 
     AfterAll {
-        (Get-LazyVMSettings).Clear()
+        InModuleScope $module { $script:Settings.Clear() }
     }
 
     It "returns <Expected> for '<PackageId>'" -ForEach @(
@@ -169,8 +168,7 @@ Describe 'Test-ToolingExcluded' {
 
 Describe 'ConvertTo-ToolingRecord' {
     BeforeAll {
-        $settings = Get-LazyVMSettings
-        $settings['ToolingWingetExclude'] = @('Microsoft.VisualStudio.*')
+        InModuleScope $module { $script:Settings['ToolingWingetExclude'] = @('Microsoft.VisualStudio.*') }
 
         # Shaped like Get-GuestToolingInventory's result, which arrives from
         # the guest as objects rather than dictionaries.
@@ -208,7 +206,7 @@ Describe 'ConvertTo-ToolingRecord' {
     }
 
     AfterAll {
-        (Get-LazyVMSettings).Clear()
+        InModuleScope $module { $script:Settings.Clear() }
     }
 
     It 'leaves out excluded winget packages and sorts the rest by id' {

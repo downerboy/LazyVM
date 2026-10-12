@@ -28,6 +28,32 @@ function Test-IsoFile {
     finally { if ($stream) { $stream.Dispose() } }
 }
 
+function Write-TextFileAtomic {
+    <#
+      Writes a text file so that it is either the old file or the new one,
+      never half of each: the text goes to a temporary file in the same
+      folder, which then replaces the original in one step. A crash or power
+      loss part-way through leaves the original untouched. UTF-8, no BOM.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Text
+    )
+
+    $folder = Split-Path -Path $Path -Parent
+    if ($folder -and -not (Test-Path -LiteralPath $folder)) {
+        New-Item -ItemType Directory -Path $folder -Force | Out-Null
+    }
+    $temp = Join-Path -Path $folder -ChildPath ('.{0}.{1}.tmp' -f [IO.Path]::GetFileName($Path), [guid]::NewGuid().ToString('N'))
+    try {
+        [IO.File]::WriteAllText($temp, $Text, [Text.UTF8Encoding]::new($false))
+        [IO.File]::Move($temp, $Path, $true)
+    }
+    finally {
+        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 function Get-FreeSpaceGB {
     <# Free space on the volume that actually hosts $Path, rather than
        assuming C: as the original did. #>
