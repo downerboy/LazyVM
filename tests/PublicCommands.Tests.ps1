@@ -320,6 +320,21 @@ Describe 'Select-RootVolume' {
     }
 }
 
+Describe 'Get-FreeControllerLocation' {
+    It 'returns <Expected> when <Used> are in use' -ForEach @(
+        @{ Used = @(); Expected = 0 }
+        @{ Used = @(0, 1); Expected = 2 }
+        @{ Used = @(0, 1, 3); Expected = 2 }
+        @{ Used = @(1); Expected = 0 }
+    ) {
+        InModuleScope $module -Parameters @{ Used = $Used } { param($Used) Get-FreeControllerLocation -Used $Used } | Should -Be $Expected
+    }
+
+    It 'returns nothing when the controller is full' {
+        InModuleScope $module { Get-FreeControllerLocation -Used (0..63) } | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Test-WindowsIsoName' {
     It "returns <Expected> for '<Name>'" -ForEach @(
         @{ Name = '26100.1742.240906-0331.ge_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso'; Expected = $true }

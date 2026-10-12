@@ -372,8 +372,8 @@ function Add-SqlDataDisk {
         return
     }
 
-    Add-VMHardDiskDrive -VMName $CFG.VMName -Path $CFG.SQLDiskPath -ControllerType SCSI
-    Write-LogEntry 'SQL data disk attached (SCSI)' 'OK'
+    $location = Add-VMScsiHardDisk -VMName $CFG.VMName -Path $CFG.SQLDiskPath
+    Write-LogEntry "SQL data disk attached (SCSI 0:$location)" 'OK'
     Start-Sleep -Seconds 5    # let the guest enumerate it
 }
 
