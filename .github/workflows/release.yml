@@ -1,0 +1,62 @@
+# Publishes a GitHub release when a version tag is pushed: v2.0.0, or
+# v2.0.0-alpha1 for a prerelease. The tag must match the module manifest.
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, test and publish
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build, analyze and test
+        run: ./build.ps1 -Bootstrap
+
+      - name: Package
+        run: ./build.ps1 -Task Package
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $zip = Get-Item out/release/*.zip
+          $expected = "Massokissed.LazyVM-$($tag.TrimStart('v')).zip"
+          if ($zip.Name -ne $expected) {
+              throw "The tag $tag does not match the module manifest, which packaged $($zip.Name). Set ModuleVersion and Prerelease in the manifest to match the tag."
+          }
+
+          $notes = @"
+          ## Install
+
+          In **PowerShell 7** (``pwsh``) **as administrator**, in the folder you downloaded the zip to:
+
+          ``````powershell
+          Unblock-File .\$($zip.Name)
+          Expand-Archive .\$($zip.Name) -DestinationPath .\LazyVM -Force
+          .\LazyVM\Install.ps1
+          ``````
+
+          Then open a new PowerShell 7 window as administrator and run:
+
+          ``````powershell
+          Build-LazyVM -Name DevBox
+          ``````
+
+          See the README in the zip, or [docs/Guide.md](https://github.com/${{ github.repository }}/blob/$tag/docs/Guide.md), for the rest.
+          "@ -replace '(?m)^          ', ''
+          Set-Content -Path notes.md -Value $notes
+
+          $flags = @('--title', "LazyVM $($tag.TrimStart('v'))", '--notes-file', 'notes.md', '--generate-notes')
+          if ($tag -like '*-*') { $flags += '--prerelease' }
+          gh release create $tag $zip.FullName @flags

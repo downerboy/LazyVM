@@ -21,7 +21,17 @@ A PowerShell module that builds and looks after Hyper-V development VMs on a Win
 
 ## Install
 
-Until LazyVM is published to the PowerShell Gallery, build it from this repository. Open **PowerShell 7** (`pwsh`, not Windows PowerShell) as administrator:
+Open **PowerShell 7** (`pwsh`, not Windows PowerShell) as administrator.
+
+**From a release** (no Git needed): download `Massokissed.LazyVM-<version>.zip` from the [latest release](https://github.com/downerboy/Massokissed.LazyVM/releases), then, in the folder you saved it to:
+
+```powershell
+Unblock-File .\Massokissed.LazyVM-*.zip
+Expand-Archive .\Massokissed.LazyVM-*.zip -DestinationPath .\LazyVM -Force
+.\LazyVM\Install.ps1
+```
+
+**From the repository:**
 
 ```powershell
 git clone https://github.com/downerboy/Massokissed.LazyVM S:\Source\Massokissed.LazyVM
