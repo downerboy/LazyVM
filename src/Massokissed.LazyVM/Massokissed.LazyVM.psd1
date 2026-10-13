@@ -38,6 +38,9 @@
             Tags       = @('Hyper-V', 'VM', 'VisualStudio', 'SQLServer', 'DevBox', 'Windows')
             ProjectUri = 'https://github.com/downerboy/Massokissed.LazyVM'
             LicenseUri = 'https://github.com/downerboy/Massokissed.LazyVM/blob/main/LICENSE.md'
+            # Empty for a final release. The release tag is v<ModuleVersion>
+            # followed by -<Prerelease> when this is set.
+            Prerelease = 'alpha1'
         }
     }
 }

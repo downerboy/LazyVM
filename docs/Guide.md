@@ -65,7 +65,17 @@ These are detected and reported by name rather than migrated. Doing them correct
 
 ### Installing LazyVM
 
-LazyVM is a PowerShell module. Until it is published to the PowerShell Gallery, build it from the repository, in an elevated PowerShell 7:
+LazyVM is a PowerShell module. The simplest way to install it is from a [release](https://github.com/downerboy/Massokissed.LazyVM/releases): download the zip, then, in an elevated PowerShell 7, in the folder you saved it to:
+
+```powershell
+Unblock-File .\Massokissed.LazyVM-*.zip
+Expand-Archive .\Massokissed.LazyVM-*.zip -DestinationPath .\LazyVM -Force
+.\LazyVM\Install.ps1
+```
+
+`Unblock-File` matters: Windows marks downloaded files, and PowerShell will not run a marked script. To update, do the same with the newer release.
+
+Or build it from the repository, in an elevated PowerShell 7:
 
 ```powershell
 git clone https://github.com/downerboy/Massokissed.LazyVM S:\Source\Massokissed.LazyVM

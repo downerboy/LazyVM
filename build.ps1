@@ -13,6 +13,8 @@ Builds, checks and tests the Massokissed.LazyVM module.
   All      All three, in that order (the default).
   Install  Build, then install the module for all users, where PowerShell
            and the scheduled tasks find it. Needs an elevated PowerShell.
+  Package  Build, then zip the module with Install.ps1, the README and the
+           licence into out\release, ready to attach to a GitHub release.
 
 .PARAMETER Task
 Which step to run.
@@ -37,7 +39,7 @@ Builds LazyVM and installs it, ready to use: Build-LazyVM -Name DevBox
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Build', 'Analyze', 'Test', 'Install')]
+    [ValidateSet('All', 'Build', 'Analyze', 'Test', 'Install', 'Package')]
     [string]$Task = 'All',
 
     [switch]$Bootstrap
@@ -153,6 +155,32 @@ function Install-BuiltModule {
     Write-Host 'Open a new PowerShell 7 window as administrator, then run: Build-LazyVM -Name DevBox'
 }
 
+function Get-ReleaseVersion {
+    <# The release's version as the tag names it: 2.0.0, or 2.0.0-alpha1 for a prerelease. #>
+    $manifest = Import-PowerShellDataFile -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$moduleName.psd1")
+    $prerelease = "$($manifest.PrivateData.PSData['Prerelease'])"
+    if ($prerelease) { return "$($manifest.ModuleVersion)-$prerelease" }
+    return "$($manifest.ModuleVersion)"
+}
+
+function New-ReleasePackage {
+    $version = (Import-PowerShellDataFile -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$moduleName.psd1")).ModuleVersion
+    $releaseDir = Join-Path -Path $outDir -ChildPath 'release'
+    $staging = Join-Path -Path $releaseDir -ChildPath 'staging'
+    if (Test-Path -LiteralPath $releaseDir) { Remove-Item -LiteralPath $releaseDir -Recurse -Force }
+    New-Item -ItemType Directory -Path (Join-Path -Path $staging -ChildPath $moduleName) -Force | Out-Null
+
+    Copy-Item -LiteralPath (Join-Path -Path $outDir -ChildPath "$moduleName/$version") -Destination (Join-Path -Path $staging -ChildPath $moduleName) -Recurse
+    foreach ($file in 'src/Install.ps1', 'README.md', 'LICENSE.md') {
+        Copy-Item -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath $file) -Destination $staging
+    }
+
+    $zip = Join-Path -Path $releaseDir -ChildPath "$moduleName-$(Get-ReleaseVersion).zip"
+    Compress-Archive -Path (Join-Path -Path $staging -ChildPath '*') -DestinationPath $zip
+    Remove-Item -LiteralPath $staging -Recurse -Force
+    Write-Host "Packaged $zip"
+}
+
 function Invoke-Analyze {
     # In a process of its own: resolving the commands in the tests loads
     # Pester's assembly into whichever process the analyzer runs in, and
@@ -210,8 +238,9 @@ function Write-CIError {
 }
 
 try {
-    if ($Task -in 'All', 'Build', 'Install') { Invoke-Build }
+    if ($Task -in 'All', 'Build', 'Install', 'Package') { Invoke-Build }
     if ($Task -eq 'Install') { Install-BuiltModule }
+    if ($Task -eq 'Package') { New-ReleasePackage }
     if ($Task -in 'All', 'Analyze') {
         # Installed if missing; loaded only by the analyzer's own process.
         Import-BuildTool -Tool ($tools | Where-Object Name -eq 'PSScriptAnalyzer') -InstallOnly
