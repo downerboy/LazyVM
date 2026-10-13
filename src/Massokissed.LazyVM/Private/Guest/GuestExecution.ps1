@@ -14,6 +14,10 @@ function Connect-Guest {
         [int]$TimeoutMinutes = 5
     )
 
+    # Kept so a session the guest drops (a restart, a crashed host process)
+    # can be reopened without the caller's help.
+    $script:GuestCredential = $Credential
+
     if ($script:GuestSession -and $script:GuestSession.State -eq 'Opened') {
         return $script:GuestSession
     }
@@ -40,6 +44,28 @@ function Disconnect-Guest {
         Remove-PSSession -Session $script:GuestSession -ErrorAction SilentlyContinue
         $script:GuestSession = $null
     }
+    $script:GuestCredential = $null
+}
+
+function Restore-GuestSession {
+    <#
+      Reopens the guest session after the guest dropped it, for example when
+      Windows restarted the VM. Returns the open session, or $null when there
+      is no credential to reconnect with.
+    #>
+    param([int]$TimeoutMinutes = 15)
+
+    if ($script:GuestSession -and $script:GuestSession.State -eq 'Opened') { return $script:GuestSession }
+    if (-not $script:GuestCredential) { return $null }
+
+    if ($script:GuestSession) {
+        Remove-PSSession -Session $script:GuestSession -ErrorAction SilentlyContinue
+        $script:GuestSession = $null
+    }
+    Write-LogEntry 'Lost the connection to the guest; reconnecting...' 'WARN'
+    $session = Connect-Guest -Credential $script:GuestCredential -TimeoutMinutes $TimeoutMinutes
+    Write-LogEntry 'Reconnected to the guest' 'OK'
+    return $session
 }
 
 function Invoke-GuestScript {
@@ -55,6 +81,9 @@ function Invoke-GuestScript {
 
     $session = $script:GuestSession
     if (-not $session -or $session.State -ne 'Opened') {
+        $session = Restore-GuestSession
+    }
+    if (-not $session) {
         Stop-WithError "No open guest session for: $Activity"
     }
 
@@ -78,6 +107,112 @@ function Invoke-GuestScript {
     }
     finally {
         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-GuestInstaller {
+    <#
+      Runs a long installer in the guest without depending on the PowerShell
+      Direct session staying open. The installer runs from a scheduled task
+      as SYSTEM, which writes its exit code to a file; the host checks on it
+      every 30 seconds, reconnecting whenever the session drops. If the guest
+      restarts before the installer has finished, the installer is started
+      again (Visual Studio and SQL Server setup both carry on from where they
+      were), up to three times.
+
+      Returns the installer's exit code.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$FilePath,
+        [string]$ArgumentList = '',
+        [Parameter(Mandatory)][string]$Name,
+        [int]$TimeoutMinutes = 90,
+        [string]$Activity = $Name
+    )
+
+    $taskName = "LazyVM-$Name"
+    $setupDir = $CFG.GuestSetupDir
+    $exitFile = "$setupDir\$Name.exit"
+
+    $start = {
+        param($filePath, $argumentList, $taskName, $setupDir, $exitFile, $timeoutSeconds)
+        $ErrorActionPreference = 'Stop'
+        if (-not (Test-Path $setupDir)) { New-Item -ItemType Directory -Path $setupDir -Force | Out-Null }
+        Remove-Item $exitFile -Force -ErrorAction SilentlyContinue
+
+        $scriptPath = Join-Path $setupDir "$taskName.ps1"
+        $quotedArgs = $argumentList -replace "'", "''"
+        $wrapper = @"
+try {
+    `$p = Start-Process -FilePath '$filePath' -ArgumentList '$quotedArgs' -Wait -PassThru -WorkingDirectory '$setupDir'
+    `$p.ExitCode | Set-Content -Path '$exitFile'
+}
+catch { "FAILED: `$(`$_.Exception.Message)" | Set-Content -Path '$exitFile' }
+"@
+        Set-Content -Path $scriptPath -Value $wrapper -Encoding UTF8
+
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds $timeoutSeconds) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+        Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+        Start-ScheduledTask -TaskName $taskName
+        return (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
+    }
+    $startArgs = @($FilePath, $ArgumentList, $taskName, $setupDir, $exitFile, ($TimeoutMinutes * 60))
+
+    $bootTime = Invoke-GuestScript -Activity "starting $Activity" -TimeoutMinutes 5 -ArgumentList $startArgs -ScriptBlock $start
+    $restarts = 0
+    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
+
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 30
+        try {
+            $status = Invoke-GuestScript -Activity "checking on $Activity" -TimeoutMinutes 2 -ArgumentList @($taskName, $exitFile) -ScriptBlock {
+                param($taskName, $exitFile)
+                [pscustomobject]@{
+                    Exit      = if (Test-Path $exitFile) { (Get-Content -Path $exitFile -Raw).Trim() } else { $null }
+                    TaskState = "$((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue).State)"
+                    BootTime  = (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
+                }
+            }
+        }
+        catch {
+            # The guest is restarting or the session dropped; the next pass
+            # reconnects.
+            Disconnect-GuestSessionOnly
+            continue
+        }
+
+        if ($null -ne $status.Exit -and $status.Exit -ne '') {
+            $null = Invoke-GuestScript -Activity "tidying up after $Activity" -TimeoutMinutes 2 -ArgumentList @($taskName) -ScriptBlock {
+                param($taskName) Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+            }
+            if ($status.Exit -like 'FAILED:*') { throw "$Activity could not start in the guest: $($status.Exit.Substring(7).Trim())" }
+            return [int]$status.Exit
+        }
+
+        if ($status.BootTime -ne $bootTime) {
+            Write-LogEntry "  The VM restarted at $($status.BootTime) during $Activity" 'WARN'
+            $bootTime = $status.BootTime
+        }
+
+        if ($status.TaskState -ne 'Running') {
+            if ($restarts -ge 3) { throw "$Activity stopped before finishing, $restarts times" }
+            $restarts++
+            Write-LogEntry "  $Activity stopped before finishing - starting it again (attempt $($restarts + 1))" 'WARN'
+            $bootTime = Invoke-GuestScript -Activity "restarting $Activity" -TimeoutMinutes 5 -ArgumentList $startArgs -ScriptBlock $start
+        }
+    }
+
+    throw "$Activity did not finish within $TimeoutMinutes minutes"
+}
+
+function Disconnect-GuestSessionOnly {
+    <# Drops a broken session but keeps the credential, so the next guest call reconnects. #>
+    if ($script:GuestSession) {
+        Remove-PSSession -Session $script:GuestSession -ErrorAction SilentlyContinue
+        $script:GuestSession = $null
     }
 }
 
@@ -163,11 +298,19 @@ finally { Stop-Transcript | Out-Null }
 }
 
 function Wait-GuestReady {
-    <# Waits for Windows Setup, OOBE and first logon to finish. #>
+    <#
+      Waits for Windows Setup, OOBE and first logon to finish. With
+      -RequireProvisioned (the answer file was used), a reachable guest is not
+      enough: the answer file's first-logon marker must be there too, because
+      the account exists, and answers PowerShell Direct, while OOBE is still
+      on screen.
+    #>
     param(
         [Parameter(Mandatory)][pscredential]$Credential,
-        [int]$TimeoutMinutes
+        [int]$TimeoutMinutes,
+        [switch]$RequireProvisioned
     )
+    $oobeAnnounced = $false
 
     $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
     $announced = $false
@@ -211,6 +354,15 @@ function Wait-GuestReady {
             }
             finally {
                 Remove-PSSession -Session $session -ErrorAction SilentlyContinue
+            }
+
+            if ($RequireProvisioned -and -not $provisioned) {
+                if (-not $oobeAnnounced) {
+                    Write-LogEntry '  guest is reachable but Windows is still finishing setup (OOBE)' 'INFO'
+                    $oobeAnnounced = $true
+                }
+                Start-Sleep -Seconds 20
+                continue
             }
 
             $elapsed = [int]((Get-Date) - $deadline.AddMinutes(-$TimeoutMinutes)).TotalMinutes

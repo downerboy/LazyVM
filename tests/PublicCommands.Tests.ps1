@@ -320,6 +320,70 @@ Describe 'Select-RootVolume' {
     }
 }
 
+Describe 'Get-MissingProductExtension' {
+    BeforeAll {
+        $product = @{
+            Extensions     = @('https://marketplace.visualstudio.com/items?itemName=A.One')
+            UserExtensions = @(
+                @{ Id = 'two'; DisplayName = 'Two'; Publisher = 'B'; MarketplaceItem = 'B.Two' }
+                @{ Id = 'three'; DisplayName = 'Three'; Publisher = 'C' }
+            )
+        }
+    }
+
+    It 'lists everything when the guest has none of them' {
+        $missing = InModuleScope $module -Parameters @{ Product = $product } { param($Product) Get-MissingProductExtension -Product $Product -Observed $null }
+        @($missing).Count | Should -Be 3
+        @($missing | Where-Object { $_.Link }).Count | Should -Be 2
+    }
+
+    It 'leaves out what the guest has, by link or by id' {
+        $observed = @{
+            Extensions     = @('https://marketplace.visualstudio.com/items?itemName=B.Two')
+            UserExtensions = @(@{ Id = 'three' })
+        }
+        $missing = InModuleScope $module -Parameters @{ Product = $product; Observed = $observed } { param($Product, $Observed) Get-MissingProductExtension -Product $Product -Observed $Observed }
+        @($missing).ForEach({ $_.Link }) | Should -Be @('https://marketplace.visualstudio.com/items?itemName=A.One')
+    }
+}
+
+Describe 'Get-GuestUserSetting' {
+    It 'asks for only what is turned on' {
+        $values = InModuleScope $module {
+            $script:Settings.Clear()
+            $script:Settings['GuestDarkMode'] = $false
+            $script:Settings['GuestShowFileExtensions'] = $true
+            $script:Settings['GuestTaskbarLeft'] = $true
+            $script:Settings['GuestHideTaskbarSearch'] = $false
+            Get-GuestUserSetting
+        }
+        @($values).ForEach({ $_.Name }) | Should -Be @('HideFileExt', 'TaskbarAl')
+    }
+
+    It 'asks for nothing when everything is off' {
+        InModuleScope $module {
+            $script:Settings.Clear()
+            foreach ($name in 'GuestDarkMode', 'GuestShowFileExtensions', 'GuestTaskbarLeft', 'GuestHideTaskbarSearch') { $script:Settings[$name] = $false }
+            @(Get-GuestUserSetting).Count
+        } | Should -Be 0
+    }
+}
+
+Describe 'Get-FreeControllerLocation' {
+    It 'returns <Expected> when <Used> are in use' -ForEach @(
+        @{ Used = @(); Expected = 0 }
+        @{ Used = @(0, 1); Expected = 2 }
+        @{ Used = @(0, 1, 3); Expected = 2 }
+        @{ Used = @(1); Expected = 0 }
+    ) {
+        InModuleScope $module -Parameters @{ Used = $Used } { param($Used) Get-FreeControllerLocation -Used $Used } | Should -Be $Expected
+    }
+
+    It 'returns nothing when the controller is full' {
+        InModuleScope $module { Get-FreeControllerLocation -Used (0..63) } | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Test-WindowsIsoName' {
     It "returns <Expected> for '<Name>'" -ForEach @(
         @{ Name = '26100.1742.240906-0331.ge_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso'; Expected = $true }

@@ -66,8 +66,8 @@ function Add-DevDriveDisk {
         return
     }
 
-    Add-VMHardDiskDrive -VMName $CFG.VMName -Path $CFG.DevDrivePath -ControllerType SCSI
-    Write-LogEntry 'Dev Drive disk attached (SCSI)' 'OK'
+    $location = Add-VMScsiHardDisk -VMName $CFG.VMName -Path $CFG.DevDrivePath
+    Write-LogEntry "Dev Drive disk attached (SCSI 0:$location)" 'OK'
     Start-Sleep -Seconds 5
 }
 

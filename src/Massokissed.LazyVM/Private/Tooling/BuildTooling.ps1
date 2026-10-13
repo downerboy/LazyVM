@@ -26,6 +26,35 @@ function Get-BuildTooling {
     return $default
 }
 
+function Get-MissingProductExtension {
+    <#
+      The extensions a product in the tooling list has that the guest's copy
+      of it lacks: each as @{ Id; DisplayName; Publisher; Link }, Link being
+      its Marketplace link, or $null when it has none. $Observed is the
+      matching product from the guest's tooling record, or $null.
+    #>
+    param(
+        [Parameter(Mandatory)]$Product,
+        $Observed
+    )
+
+    $nowLinks = if ($Observed) { @($Observed.Extensions) } else { @() }
+    $nowIds = if ($Observed) { @(@($Observed.UserExtensions) | ForEach-Object { $_.Id }) } else { @() }
+
+    $missing = @()
+    foreach ($link in @(@($Product.Extensions) | Where-Object { $_ })) {
+        if ($nowLinks -notcontains $link) { $missing += @{ Id = $null; DisplayName = $link; Publisher = $null; Link = $link } }
+    }
+    foreach ($extension in @($Product.UserExtensions)) {
+        if ($nowIds -contains $extension.Id) { continue }
+        $item = Get-RecordField -Item $extension -Name 'MarketplaceItem'
+        $link = if ($item) { "https://marketplace.visualstudio.com/items?itemName=$item" } else { $null }
+        if ($link -and $nowLinks -contains $link) { continue }
+        $missing += @{ Id = $extension.Id; DisplayName = $extension.DisplayName; Publisher = $extension.Publisher; Link = $link }
+    }
+    return $missing
+}
+
 function Write-ToolingReinstallReport {
     <#
       After a build: what the tooling list has that the guest still lacks,
@@ -49,12 +78,7 @@ function Write-ToolingReinstallReport {
     foreach ($product in @($Tooling.Products)) {
         $key = "$($product.ProductId)|$($product.ChannelId)"
         $now = @($observed.Products) | Where-Object { "$($_.ProductId)|$($_.ChannelId)" -eq $key } | Select-Object -First 1
-        $nowLinks = if ($now) { @($now.Extensions) } else { @() }
-        $nowIds = if ($now) { @(@($now.UserExtensions) | ForEach-Object { $_.Id }) } else { @() }
-        foreach ($extension in @($product.UserExtensions)) {
-            $item = Get-RecordField -Item $extension -Name 'MarketplaceItem'
-            if ($nowIds -contains $extension.Id) { continue }
-            if ($item -and ($nowLinks -contains "https://marketplace.visualstudio.com/items?itemName=$item")) { continue }
+        foreach ($extension in @(Get-MissingProductExtension -Product $product -Observed $now | Where-Object { $_.Id })) {
             $extensions += [ordered]@{ ProductKey = $key; Id = $extension.Id; DisplayName = $extension.DisplayName; Publisher = $extension.Publisher }
         }
     }

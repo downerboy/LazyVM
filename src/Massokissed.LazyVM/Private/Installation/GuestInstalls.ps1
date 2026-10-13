@@ -42,7 +42,7 @@ function Install-GuestSoftware {
         Write-LogEntry "  administrator named '$($CFG.GuestAdminUser)' with the stored password." 'INFO'
     }
 
-    Wait-GuestReady -Credential $credential -TimeoutMinutes $CFG.GuestWaitMinutes
+    Wait-GuestReady -Credential $credential -TimeoutMinutes $CFG.GuestWaitMinutes -RequireProvisioned:$UsedUnattend
 
     # Provisioning is done, so the answer-file disc (which holds the guest password in
     # clear text) is removed before anything else runs. Doing it here also
@@ -59,6 +59,7 @@ function Install-GuestSoftware {
     Initialize-GuestSqlDisk
     Initialize-GuestDevDrive | Out-Null
     Enable-GuestEnhancedSession
+    Set-GuestCustomization
 
     # The tooling list says what this VM gets: the VM's own recorded list, or
     # the default list for a VM that has none yet.
@@ -201,6 +202,7 @@ function Install-WingetPackage {
                 -1978335215 = 'no applicable installer for this system'
                 -1978334972 = 'the installer hash did not match'
                 -1978335216 = 'the source could not be updated'
+                -1978335226 = 'the package''s own installer failed'
             }
             # Worth one retry; everything else is a real failure.
             $transientCodes = @(-2147012889, -2147012894, -2147012867, -2147012716)
@@ -262,7 +264,9 @@ function Install-WingetPackage {
                     # winget's own output is a progress table, so its last line
                     # is noise. The decoded code is what actually explains it.
                     $meaning = if ($exitMeanings.ContainsKey($exit)) { $exitMeanings[$exit] } else { 'see the winget documentation for this code' }
-                    $hex = '0x{0:X8}' -f [uint32]($exit -band 0xFFFFFFFF)
+                    # An Int32 formats as its two's-complement hex, which is
+                    # how winget documents its codes.
+                    $hex = '0x{0:X8}' -f [int]$exit
                     $log += "FAILED $name ($id) - exit $exit [$hex] $meaning"
                 }
             }
@@ -372,8 +376,8 @@ function Add-SqlDataDisk {
         return
     }
 
-    Add-VMHardDiskDrive -VMName $CFG.VMName -Path $CFG.SQLDiskPath -ControllerType SCSI
-    Write-LogEntry 'SQL data disk attached (SCSI)' 'OK'
+    $location = Add-VMScsiHardDisk -VMName $CFG.VMName -Path $CFG.SQLDiskPath
+    Write-LogEntry "SQL data disk attached (SCSI 0:$location)" 'OK'
     Start-Sleep -Seconds 5    # let the guest enumerate it
 }
 
@@ -574,12 +578,19 @@ function Install-ToolingProduct {
     param([Parameter(Mandatory)]$Tooling)
 
     $installed = @(Get-GuestInstallerProduct)
+    $observed = $null
 
     foreach ($product in @($Tooling.Products)) {
         $label = "$($product.DisplayName)"
         $present = $installed | Where-Object { $_.ProductId -eq $product.ProductId -and $_.ChannelId -eq $product.ChannelId } | Select-Object -First 1
         if ($present) {
-            Write-LogEntry "$label already installed - skipping" 'OK'
+            Write-LogEntry "$label already installed" 'OK'
+            if (@(Get-ProductExtensionLink -Product $product).Count -gt 0) {
+                if (-not $observed) { $observed = ConvertTo-ToolingRecord -Inventory (Get-GuestToolingInventory) }
+                $now = @($observed.Products) | Where-Object { $_.ProductId -eq $product.ProductId -and $_.ChannelId -eq $product.ChannelId } | Select-Object -First 1
+                $links = @(Get-MissingProductExtension -Product $product -Observed $now | Where-Object { $_.Link } | ForEach-Object { $_.Link })
+                if ($links.Count -gt 0) { Add-ProductExtension -Product $product -Installed $present -Links $links }
+            }
             continue
         }
 
@@ -602,7 +613,7 @@ function Install-ToolingProduct {
 
         Write-LogEntry "Installing $label from $url ($(@($product.Components).Count) workload/component id(s), $($extensions.Count) extension(s); up to $($CFG.VSInstallMinutes) minutes)..." 'INFO'
         try {
-            $exitCode = Invoke-GuestScript -Activity "$label install" -TimeoutMinutes $CFG.VSInstallMinutes `
+            $prepared = Invoke-GuestScript -Activity "$label download" -TimeoutMinutes 15 `
                 -ArgumentList @($url, "bootstrap-$edition.exe", $CFG.GuestSetupDir, $configJson, $includeRecommended, ($extensions.Count -gt 0)) -ScriptBlock {
                 param($url, $bootstrapperName, $setupDir, $configJson, $includeRecommended, $hasExtensions)
                 $ErrorActionPreference = 'Stop'
@@ -620,16 +631,57 @@ function Install-ToolingProduct {
                 if ($includeRecommended) { $arguments += '--includeRecommended' }
                 if ($hasExtensions) { $arguments += '--allowUnsignedExtensions' }
 
-                $proc = Start-Process -FilePath $bootstrapper -ArgumentList $arguments -Wait -PassThru -NoNewWindow -WorkingDirectory $setupDir
-                return $proc.ExitCode
+                return [pscustomobject]@{ FilePath = $bootstrapper; Arguments = ($arguments -join ' ') }
             }
+            $exitCode = Invoke-GuestInstaller -FilePath $prepared.FilePath -ArgumentList $prepared.Arguments `
+                -Name "install-$edition" -TimeoutMinutes $CFG.VSInstallMinutes -Activity "the $label install"
             if (-not (Test-InstallExitCode -Product $label -ExitCode $exitCode)) {
-                Write-LogEntry '  Guest log: %TEMP%\dd_bootstrapper_*.log and %TEMP%\dd_setup_*.log for the guest account' 'INFO'
+                Write-LogEntry '  Guest log: C:\Windows\Temp\dd_bootstrapper_*.log and dd_setup_*.log' 'INFO'
             }
         }
         catch {
             Write-LogError "$label install failed" $_
         }
+    }
+}
+
+function Add-ProductExtension {
+    <#
+      Adds Marketplace extensions to a product that is already installed, for
+      all users, with the Visual Studio Installer's modify command. Covers a
+      product installed before its extensions were in the tooling list, or
+      whose first install was interrupted before they went in.
+    #>
+    param(
+        [Parameter(Mandatory)]$Product,
+        [Parameter(Mandatory)]$Installed,
+        [Parameter(Mandatory)][string[]]$Links
+    )
+
+    $label = "$($Product.DisplayName)"
+    $config = [ordered]@{ version = '1.0'; components = @($Product.Components); extensions = @($Links) } | ConvertTo-Json -Depth 4
+    Write-LogEntry "Adding $($Links.Count) extension(s) to $label..." 'INFO'
+    try {
+        $prepared = Invoke-GuestScript -Activity "$label extension list" -TimeoutMinutes 5 `
+            -ArgumentList @($CFG.GuestSetupDir, $config, $Installed.InstallPath) -ScriptBlock {
+            param($setupDir, $configJson, $installPath)
+            $ErrorActionPreference = 'Stop'
+            if (-not (Test-Path $setupDir)) { New-Item -ItemType Directory -Path $setupDir -Force | Out-Null }
+            $configPath = Join-Path $setupDir 'extensions.vsconfig'
+            [IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
+            $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+            if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
+            return [pscustomobject]@{
+                FilePath  = $installer
+                Arguments = "modify --installPath `"$installPath`" --config `"$configPath`" --quiet --norestart --allowUnsignedExtensions"
+            }
+        }
+        $exitCode = Invoke-GuestInstaller -FilePath $prepared.FilePath -ArgumentList $prepared.Arguments `
+            -Name 'add-extensions' -TimeoutMinutes 60 -Activity "adding extensions to $label"
+        $null = Test-InstallExitCode -Product "$label extensions" -ExitCode $exitCode
+    }
+    catch {
+        Write-LogError "Adding extensions to $label failed" $_
     }
 }
 
@@ -701,9 +753,7 @@ function Install-SqlServer {
     Write-LogEntry "Installing SQL Server 2025 Enterprise Developer (up to $($CFG.SQLInstallMinutes) minutes)..." 'INFO'
 
     try {
-        $exitCode = Invoke-GuestScript -Activity 'SQL Server install' -TimeoutMinutes $CFG.SQLInstallMinutes `
-            -ArgumentList @($setupArguments) -ScriptBlock {
-            param($setupArguments)
+        $setupExe = Invoke-GuestScript -Activity 'SQL Server media check' -TimeoutMinutes 5 -ScriptBlock {
             $ErrorActionPreference = 'Stop'
 
             # The guest takes a moment to notice the new media. The Windows
@@ -719,10 +769,10 @@ function Install-SqlServer {
                 if (-not $setupExe) { Start-Sleep -Seconds 2 }
             }
             if (-not $setupExe) { throw 'the SQL Server media did not appear on any DVD drive in the guest' }
-
-            $proc = Start-Process -FilePath $setupExe -ArgumentList $setupArguments -Wait -PassThru -NoNewWindow
-            return $proc.ExitCode
+            return $setupExe
         }
+        $exitCode = Invoke-GuestInstaller -FilePath $setupExe -ArgumentList $setupArguments `
+            -Name 'install-sqlserver' -TimeoutMinutes $CFG.SQLInstallMinutes -Activity 'the SQL Server install'
     }
     finally {
         Set-VMDvdDrive -VMName $CFG.VMName -ControllerNumber $dvd.ControllerNumber `
