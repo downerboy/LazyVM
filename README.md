@@ -1,3 +1,4 @@
+### ALPHA
 # Massokissed.LazyVM
 
 A PowerShell module that builds and looks after Hyper-V development VMs on a Windows host, unattended: Windows 11 Enterprise Evaluation, Visual Studio, SQL Server 2025 Enterprise Developer and whatever other tools you install, with the 90-day evaluation handled for you.
