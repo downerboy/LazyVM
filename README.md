@@ -91,21 +91,6 @@ List only what you want to change:
 
 Open them in VS Code. The schema beside them gives autocomplete, shows each setting's description and default when you hover over it, and underlines mistakes as you type. `Get-LazyVMSetting` lists every setting with its current value.
 
-## Upgrading from LazyVM 1.x
-
-Install the module, then point `Set-LazyVMRoot` at the folder that held the 1.x kit, the one with `Scripts` in it:
-
-```powershell
-Set-LazyVMRoot -Path S:\Source\Massokissed.LazyVM-1.0.0
-```
-
-The command brings everything across:
-- It converts your settings and VM profiles to JSON.
-- It copies the tooling lists and their history.
-- It moves the scheduled maintenance tasks over to the new commands.
-
-Nothing existing is overwritten, and the old files are left as they are. The VMs, their disks and their stored passwords carry on where they are.
-
 ## Documentation
 
 The [guide](docs/Guide.md) covers every command, setting and phase, and what to do when something goes wrong.
