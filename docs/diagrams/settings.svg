@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 536" width="1030" height="536" role="img" aria-labelledby="t-settings">
+<title id="t-settings">View settings: calls in order, with data flowing in from the left and out to the right</title>
+<style>
+svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
+@media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
+text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(--fg)}
+.bg{fill:var(--bg)}
+.cap{font:600 11px system-ui,"Segoe UI",sans-serif;letter-spacing:.12em;fill:var(--muted)}
+.bx-cmd rect{fill:var(--cmd);stroke:var(--fg);stroke-width:1.6}
+.bx-caller rect{fill:var(--cmd);stroke:var(--call);stroke-width:1.2;stroke-dasharray:3 3}
+.bx-mod rect{fill:var(--mod);stroke:var(--line);stroke-width:1.2}
+.bx-store rect{fill:var(--store);stroke:var(--data);stroke-width:1.2;stroke-dasharray:6 3}
+.st{font-size:10px;fill:var(--muted)}
+.nm{font-size:13px;font-weight:600}
+.div{stroke:var(--line)}
+.at{font-size:11.5px;fill:var(--muted)}
+.cl{fill:none;stroke:var(--call);stroke-width:2}
+.df{fill:none;stroke:var(--data);stroke-width:2;stroke-dasharray:7 4}
+.sn circle{fill:var(--call)} .sn text{font:600 10px system-ui,sans-serif;fill:var(--on)}
+.bd circle{fill:var(--data)} .bd text{font:600 9px system-ui,sans-serif;fill:var(--on)}
+.mk-c{fill:var(--call)} .mk-d{fill:var(--data)}
+</style>
+<defs>
+<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1030" height="536"/>
+<text class="cap" x="20" y="16">INPUTS</text>
+<text class="cap" x="335" y="16">CALLS IN ORDER</text>
+<text class="cap" x="740" y="16">OUTPUTS</text>
+<path class="cl" d="M335,76.0 L305,76.0 L305,442"/>
+<path class="cl" d="M305,166 L335,166" marker-end="url(#ac)"/>
+<path class="cl" d="M305,257 L335,257" marker-end="url(#ac)"/>
+<path class="cl" d="M305,442 L335,442" marker-end="url(#ac)"/>
+<path class="df" d="M275,179.5 L335,179.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,270.5 L335,270.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,356.0 L335,356.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,464.0 L740,464.0" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="179.5" r="10"/><text x="293" y="183.0" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="293" cy="270.5" r="10"/><text x="293" y="274.0" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="293" cy="356.0" r="10"/><text x="293" y="359.5" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="690.0" cy="464.0" r="10"/><text x="690.0" y="467.5" text-anchor="middle">D4</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
+<text class="nm" x="487.5" y="64" text-anchor="middle">Get-LazyVMSetting</text>
+<line class="div" x1="335" y1="71" x2="640" y2="71"/>
+<text class="at" x="345" y="86">-Name &lt;VM&gt;</text>
+<text class="at" x="345" y="103">-Setting  (wildcards)</text>
+</g>
+<g class="bx-mod"><rect x="335" y="146" width="305" height="67" rx="3"/>
+<text class="st" x="487.5" y="160" text-anchor="middle">«Configuration»</text>
+<text class="nm" x="487.5" y="176" text-anchor="middle">Resolve-LazyVMRoot()</text>
+<line class="div" x1="335" y1="183" x2="640" y2="183"/>
+<g class="sn"><circle cx="351" cy="167" r="10"/><text x="351" y="171" text-anchor="middle">1</text></g>
+</g>
+<g class="bx-store"><rect x="20" y="146" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="160" text-anchor="middle">«registry»</text>
+<text class="nm" x="147.5" y="176" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<line class="div" x1="20" y1="183" x2="275" y2="183"/>
+<text class="at" x="30" y="198">Root</text>
+</g>
+<g class="bx-mod"><rect x="335" y="237" width="305" height="161" rx="3"/>
+<text class="st" x="487.5" y="251" text-anchor="middle">«Configuration»</text>
+<text class="nm" x="487.5" y="267" text-anchor="middle">Read-VMSetting()</text>
+<line class="div" x1="335" y1="274" x2="640" y2="274"/>
+<g class="sn"><circle cx="351" cy="258" r="10"/><text x="351" y="262" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="289">defaults, then host file,</text>
+<text class="at" x="345" y="306">then VM profile; later wins</text>
+</g>
+<g class="bx-store"><rect x="20" y="237" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="251" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="267" text-anchor="middle">Module Data\</text>
+<line class="div" x1="20" y1="274" x2="275" y2="274"/>
+<text class="at" x="30" y="289">LazyVM.Settings.schema.json</text>
+</g>
+<g class="bx-store"><rect x="20" y="314" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="328" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="344" text-anchor="middle">Config\</text>
+<line class="div" x1="20" y1="351" x2="275" y2="351"/>
+<text class="at" x="30" y="366">LazyVM.Settings.json</text>
+<text class="at" x="30" y="383">VMs\&lt;VM&gt;\VM.json</text>
+</g>
+<g class="bx-mod"><rect x="335" y="422" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="436" text-anchor="middle">«Configuration»</text>
+<text class="nm" x="487.5" y="452" text-anchor="middle">Get-SettingDescription()</text>
+<line class="div" x1="335" y1="459" x2="640" y2="459"/>
+<g class="sn"><circle cx="351" cy="443" r="10"/><text x="351" y="447" text-anchor="middle">3</text></g>
+<text class="at" x="345" y="474">per setting, from the schema</text>
+</g>
+<g class="bx-store"><rect x="740" y="422" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="436" text-anchor="middle">«output»</text>
+<text class="nm" x="875.0" y="452" text-anchor="middle">Pipeline</text>
+<line class="div" x1="740" y1="459" x2="1010" y2="459"/>
+<text class="at" x="750" y="474">LazyVM.Setting: Value,</text>
+<text class="at" x="750" y="491">Source, Description</text>
+</g>
+</svg>

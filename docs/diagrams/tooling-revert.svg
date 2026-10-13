@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 846" width="1030" height="846" role="img" aria-labelledby="t-tooling-revert">
+<title id="t-tooling-revert">Return to an earlier tooling version: calls in order, with data flowing in from the left and out to the right</title>
+<style>
+svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
+@media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
+text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(--fg)}
+.bg{fill:var(--bg)}
+.cap{font:600 11px system-ui,"Segoe UI",sans-serif;letter-spacing:.12em;fill:var(--muted)}
+.bx-cmd rect{fill:var(--cmd);stroke:var(--fg);stroke-width:1.6}
+.bx-caller rect{fill:var(--cmd);stroke:var(--call);stroke-width:1.2;stroke-dasharray:3 3}
+.bx-mod rect{fill:var(--mod);stroke:var(--line);stroke-width:1.2}
+.bx-store rect{fill:var(--store);stroke:var(--data);stroke-width:1.2;stroke-dasharray:6 3}
+.st{font-size:10px;fill:var(--muted)}
+.nm{font-size:13px;font-weight:600}
+.div{stroke:var(--line)}
+.at{font-size:11.5px;fill:var(--muted)}
+.cl{fill:none;stroke:var(--call);stroke-width:2}
+.df{fill:none;stroke:var(--data);stroke-width:2;stroke-dasharray:7 4}
+.sn circle{fill:var(--call)} .sn text{font:600 10px system-ui,sans-serif;fill:var(--on)}
+.bd circle{fill:var(--data)} .bd text{font:600 9px system-ui,sans-serif;fill:var(--on)}
+.mk-c{fill:var(--call)} .mk-d{fill:var(--data)}
+</style>
+<defs>
+<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1030" height="846"/>
+<text class="cap" x="20" y="16">INPUTS</text>
+<text class="cap" x="335" y="16">CALLS IN ORDER</text>
+<text class="cap" x="740" y="16">OUTPUTS</text>
+<path class="cl" d="M335,84.5 L305,84.5 L305,769"/>
+<path class="cl" d="M305,183 L335,183" marker-end="url(#ac)"/>
+<path class="cl" d="M305,325 L335,325" marker-end="url(#ac)"/>
+<path class="cl" d="M305,493 L335,493" marker-end="url(#ac)"/>
+<path class="cl" d="M305,661 L335,661" marker-end="url(#ac)"/>
+<path class="cl" d="M305,769 L335,769" marker-end="url(#ac)"/>
+<path class="df" d="M275,222.0 L335,222.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,196.5 L740,196.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,338.5 L335,338.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,415.5 L335,415.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,506.5 L335,506.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,506.5 L740,506.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,583.5 L740,583.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,674.5 L740,674.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,782.5 L740,782.5" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="222.0" r="10"/><text x="293" y="225.5" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="690.0" cy="196.5" r="10"/><text x="690.0" y="200.0" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="293" cy="338.5" r="10"/><text x="293" y="342.0" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="293" cy="415.5" r="10"/><text x="293" y="419.0" text-anchor="middle">D4</text></g>
+<g class="bd"><circle cx="293" cy="506.5" r="10"/><text x="293" y="510.0" text-anchor="middle">D5</text></g>
+<g class="bd"><circle cx="690.0" cy="506.5" r="10"/><text x="690.0" y="510.0" text-anchor="middle">D6</text></g>
+<g class="bd"><circle cx="690.0" cy="583.5" r="10"/><text x="690.0" y="587.0" text-anchor="middle">D7</text></g>
+<g class="bd"><circle cx="690.0" cy="674.5" r="10"/><text x="690.0" y="678.0" text-anchor="middle">D8</text></g>
+<g class="bd"><circle cx="690.0" cy="782.5" r="10"/><text x="690.0" y="786.0" text-anchor="middle">D9</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
+<text class="nm" x="487.5" y="64" text-anchor="middle">Restore-LazyVMTooling</text>
+<line class="div" x1="335" y1="71" x2="640" y2="71"/>
+<text class="at" x="345" y="86">-Name &lt;VM&gt;</text>
+<text class="at" x="345" y="103">-RestorePoint yyyyMMdd-HHmmss</text>
+<text class="at" x="345" y="120">asks first unless -Force</text>
+</g>
+<g class="bx-mod"><rect x="335" y="163" width="305" height="118" rx="3"/>
+<text class="st" x="487.5" y="177" text-anchor="middle">«Common»</text>
+<text class="nm" x="487.5" y="193" text-anchor="middle">Initialize-CommandRun()</text>
+<line class="div" x1="335" y1="200" x2="640" y2="200"/>
+<g class="sn"><circle cx="351" cy="184" r="10"/><text x="351" y="188" text-anchor="middle">1</text></g>
+<text class="at" x="345" y="215">loads the settings into $CFG</text>
+<text class="at" x="345" y="232">and opens the log</text>
+</g>
+<g class="bx-store"><rect x="20" y="163" width="255" height="118" rx="3"/>
+<text class="st" x="147.5" y="177" text-anchor="middle">«settings»</text>
+<text class="nm" x="147.5" y="193" text-anchor="middle">$CFG sources</text>
+<line class="div" x1="20" y1="200" x2="275" y2="200"/>
+<text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
+<text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="249">Config\VMs\&lt;VM&gt;\VM.json</text>
+<text class="at" x="30" y="266">Backup\&lt;VM&gt;\guest.cred</text>
+</g>
+<g class="bx-store"><rect x="740" y="163" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="177" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="193" text-anchor="middle">Logs\</text>
+<line class="div" x1="740" y1="200" x2="1010" y2="200"/>
+<text class="at" x="750" y="215">&lt;VM&gt;.log  (appended)</text>
+</g>
+<g class="bx-mod"><rect x="335" y="305" width="305" height="144" rx="3"/>
+<text class="st" x="487.5" y="319" text-anchor="middle">«Tooling»</text>
+<text class="nm" x="487.5" y="335" text-anchor="middle">Invoke-ToolingRevert()</text>
+<line class="div" x1="335" y1="342" x2="640" y2="342"/>
+<g class="sn"><circle cx="351" cy="326" r="10"/><text x="351" y="330" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="357">steps 3-5 are its calls;</text>
+<text class="at" x="345" y="374">stops if the checkpoint</text>
+<text class="at" x="345" y="391">or its list is missing</text>
+</g>
+<g class="bx-store"><rect x="20" y="305" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="319" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="147.5" y="335" text-anchor="middle">Checkpoints\&lt;VM&gt;\</text>
+<line class="div" x1="20" y1="342" x2="275" y2="342"/>
+<text class="at" x="30" y="357">&quot;Tooling &lt;stamp&gt;&quot;</text>
+</g>
+<g class="bx-store"><rect x="20" y="382" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="396" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="412" text-anchor="middle">Config\VMs\&lt;VM&gt;\History\</text>
+<line class="div" x1="20" y1="419" x2="275" y2="419"/>
+<text class="at" x="30" y="434">Tooling-&lt;stamp&gt;.json</text>
+</g>
+<g class="bx-mod"><rect x="335" y="473" width="305" height="144" rx="3"/>
+<text class="st" x="487.5" y="487" text-anchor="middle">«Tooling, called by Invoke-ToolingRevert»</text>
+<text class="nm" x="487.5" y="503" text-anchor="middle">New-ToolingCheckpoint()</text>
+<line class="div" x1="335" y1="510" x2="640" y2="510"/>
+<g class="sn"><circle cx="351" cy="494" r="10"/><text x="351" y="498" text-anchor="middle">3</text></g>
+<text class="at" x="345" y="525">-SkipPrune: the current</text>
+<text class="at" x="345" y="542">state, so the revert can</text>
+<text class="at" x="345" y="559">be undone</text>
+</g>
+<g class="bx-store"><rect x="20" y="473" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="487" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="503" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<line class="div" x1="20" y1="510" x2="275" y2="510"/>
+<text class="at" x="30" y="525">Tooling.json</text>
+</g>
+<g class="bx-store"><rect x="740" y="473" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="487" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875.0" y="503" text-anchor="middle">Checkpoints\&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="510" x2="1010" y2="510"/>
+<text class="at" x="750" y="525">&quot;Tooling &lt;now&gt; before revert&quot;</text>
+</g>
+<g class="bx-store"><rect x="740" y="550" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="564" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="580" text-anchor="middle">Config\VMs\&lt;VM&gt;\History\</text>
+<line class="div" x1="740" y1="587" x2="1010" y2="587"/>
+<text class="at" x="750" y="602">Tooling-&lt;now&gt;.json</text>
+</g>
+<g class="bx-mod"><rect x="335" y="641" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="655" text-anchor="middle">«Hyper-V, called by Invoke-ToolingRevert»</text>
+<text class="nm" x="487.5" y="671" text-anchor="middle">Restore-VMSnapshot()</text>
+<line class="div" x1="335" y1="678" x2="640" y2="678"/>
+<g class="sn"><circle cx="351" cy="662" r="10"/><text x="351" y="666" text-anchor="middle">4</text></g>
+<text class="at" x="345" y="693">starts the VM again if it</text>
+<text class="at" x="345" y="710">was running</text>
+</g>
+<g class="bx-store"><rect x="740" y="641" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="655" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875.0" y="671" text-anchor="middle">VM &lt;VM&gt;</text>
+<line class="div" x1="740" y1="678" x2="1010" y2="678"/>
+<text class="at" x="750" y="693">every disk back to &lt;stamp&gt;</text>
+</g>
+<g class="bx-mod"><rect x="335" y="749" width="305" height="67" rx="3"/>
+<text class="st" x="487.5" y="763" text-anchor="middle">«Common, called by Invoke-ToolingRevert»</text>
+<text class="nm" x="487.5" y="779" text-anchor="middle">Write-TextFileAtomic()</text>
+<line class="div" x1="335" y1="786" x2="640" y2="786"/>
+<g class="sn"><circle cx="351" cy="770" r="10"/><text x="351" y="774" text-anchor="middle">5</text></g>
+</g>
+<g class="bx-store"><rect x="740" y="749" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="763" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="779" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="786" x2="1010" y2="786"/>
+<text class="at" x="750" y="801">Tooling.json</text>
+</g>
+</svg>
