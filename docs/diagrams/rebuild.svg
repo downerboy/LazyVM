@@ -1,0 +1,467 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 2438" width="1030" height="2438" role="img" aria-labelledby="t-rebuild">
+<title id="t-rebuild">Rebuild a VM: calls in order, with data flowing in from the left and out to the right</title>
+<style>
+svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
+@media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
+text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(--fg)}
+.bg{fill:var(--bg)}
+.cap{font:600 11px system-ui,"Segoe UI",sans-serif;letter-spacing:.12em;fill:var(--muted)}
+.bx-cmd rect{fill:var(--cmd);stroke:var(--fg);stroke-width:1.6}
+.bx-caller rect{fill:var(--cmd);stroke:var(--call);stroke-width:1.2;stroke-dasharray:3 3}
+.bx-mod rect{fill:var(--mod);stroke:var(--line);stroke-width:1.2}
+.bx-store rect{fill:var(--store);stroke:var(--data);stroke-width:1.2;stroke-dasharray:6 3}
+.st{font-size:10px;fill:var(--muted)}
+.nm{font-size:13px;font-weight:600}
+.div{stroke:var(--line)}
+.at{font-size:11.5px;fill:var(--muted)}
+.cl{fill:none;stroke:var(--call);stroke-width:2}
+.df{fill:none;stroke:var(--data);stroke-width:2;stroke-dasharray:7 4}
+.sn circle{fill:var(--call)} .sn text{font:600 10px system-ui,sans-serif;fill:var(--on)}
+.bd circle{fill:var(--data)} .bd text{font:600 9px system-ui,sans-serif;fill:var(--on)}
+.mk-c{fill:var(--call)} .mk-d{fill:var(--data)}
+</style>
+<defs>
+<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1030" height="2438"/>
+<text class="cap" x="20" y="16">INPUTS</text>
+<text class="cap" x="335" y="16">CALLS IN ORDER</text>
+<text class="cap" x="740" y="16">OUTPUTS</text>
+<path class="cl" d="M335,84.5 L305,84.5 L305,2310"/>
+<path class="cl" d="M305,183 L335,183" marker-end="url(#ac)"/>
+<path class="cl" d="M305,325 L335,325" marker-end="url(#ac)"/>
+<path class="cl" d="M305,416 L335,416" marker-end="url(#ac)"/>
+<path class="cl" d="M305,635 L335,635" marker-end="url(#ac)"/>
+<path class="cl" d="M305,777 L335,777" marker-end="url(#ac)"/>
+<path class="cl" d="M305,902 L335,902" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1104 L335,1104" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1229 L335,1229" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1337 L335,1337" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1445 L335,1445" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1647 L335,1647" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1849 L335,1849" marker-end="url(#ac)"/>
+<path class="cl" d="M305,2017 L335,2017" marker-end="url(#ac)"/>
+<path class="cl" d="M305,2142 L335,2142" marker-end="url(#ac)"/>
+<path class="cl" d="M305,2310 L335,2310" marker-end="url(#ac)"/>
+<path class="cl" d="M275,84.5 L335,84.5" marker-end="url(#ac)"/>
+<path class="df" d="M275,222.0 L335,222.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,196.5 L740,196.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,446.5 L335,446.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,455.0 L740,455.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,557.5 L740,557.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,648.5 L335,648.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,665.5 L740,665.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,807.5 L740,807.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,924.0 L335,924.0" marker-end="url(#ad)"/>
+<path class="df" d="M275,1018.0 L335,1018.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,924.0 L740,924.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,1018.0 L740,1018.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,1126.0 L740,1126.0" marker-end="url(#ad)"/>
+<path class="df" d="M275,1251.0 L335,1251.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,1251.0 L740,1251.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,1350.5 L740,1350.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,1467.0 L335,1467.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,1467.0 L740,1467.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,1561.0 L740,1561.0" marker-end="url(#ad)"/>
+<path class="df" d="M275,1669.0 L335,1669.0" marker-end="url(#ad)"/>
+<path class="df" d="M275,1754.5 L335,1754.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,1677.5 L740,1677.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,1771.5 L740,1771.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,1862.5 L335,1862.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,1939.5 L335,1939.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,1879.5 L740,1879.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,2039.0 L335,2039.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,2030.5 L740,2030.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,2155.5 L335,2155.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,2232.5 L335,2232.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,2340.5 L740,2340.5" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="222.0" r="10"/><text x="293" y="225.5" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="690.0" cy="196.5" r="10"/><text x="690.0" y="200.0" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="293" cy="446.5" r="10"/><text x="293" y="450.0" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="690.0" cy="455.0" r="10"/><text x="690.0" y="458.5" text-anchor="middle">D4</text></g>
+<g class="bd"><circle cx="690.0" cy="557.5" r="10"/><text x="690.0" y="561.0" text-anchor="middle">D5</text></g>
+<g class="bd"><circle cx="293" cy="648.5" r="10"/><text x="293" y="652.0" text-anchor="middle">D6</text></g>
+<g class="bd"><circle cx="690.0" cy="665.5" r="10"/><text x="690.0" y="669.0" text-anchor="middle">D7</text></g>
+<g class="bd"><circle cx="690.0" cy="807.5" r="10"/><text x="690.0" y="811.0" text-anchor="middle">D8</text></g>
+<g class="bd"><circle cx="293" cy="924.0" r="10"/><text x="293" y="927.5" text-anchor="middle">D9</text></g>
+<g class="bd"><circle cx="293" cy="1018.0" r="10"/><text x="293" y="1021.5" text-anchor="middle">D10</text></g>
+<g class="bd"><circle cx="690.0" cy="924.0" r="10"/><text x="690.0" y="927.5" text-anchor="middle">D11</text></g>
+<g class="bd"><circle cx="690.0" cy="1018.0" r="10"/><text x="690.0" y="1021.5" text-anchor="middle">D12</text></g>
+<g class="bd"><circle cx="690.0" cy="1126.0" r="10"/><text x="690.0" y="1129.5" text-anchor="middle">D13</text></g>
+<g class="bd"><circle cx="293" cy="1251.0" r="10"/><text x="293" y="1254.5" text-anchor="middle">D14</text></g>
+<g class="bd"><circle cx="690.0" cy="1251.0" r="10"/><text x="690.0" y="1254.5" text-anchor="middle">D15</text></g>
+<g class="bd"><circle cx="690.0" cy="1350.5" r="10"/><text x="690.0" y="1354.0" text-anchor="middle">D16</text></g>
+<g class="bd"><circle cx="293" cy="1467.0" r="10"/><text x="293" y="1470.5" text-anchor="middle">D17</text></g>
+<g class="bd"><circle cx="690.0" cy="1467.0" r="10"/><text x="690.0" y="1470.5" text-anchor="middle">D18</text></g>
+<g class="bd"><circle cx="690.0" cy="1561.0" r="10"/><text x="690.0" y="1564.5" text-anchor="middle">D19</text></g>
+<g class="bd"><circle cx="293" cy="1669.0" r="10"/><text x="293" y="1672.5" text-anchor="middle">D20</text></g>
+<g class="bd"><circle cx="293" cy="1754.5" r="10"/><text x="293" y="1758.0" text-anchor="middle">D21</text></g>
+<g class="bd"><circle cx="690.0" cy="1677.5" r="10"/><text x="690.0" y="1681.0" text-anchor="middle">D22</text></g>
+<g class="bd"><circle cx="690.0" cy="1771.5" r="10"/><text x="690.0" y="1775.0" text-anchor="middle">D23</text></g>
+<g class="bd"><circle cx="293" cy="1862.5" r="10"/><text x="293" y="1866.0" text-anchor="middle">D24</text></g>
+<g class="bd"><circle cx="293" cy="1939.5" r="10"/><text x="293" y="1943.0" text-anchor="middle">D25</text></g>
+<g class="bd"><circle cx="690.0" cy="1879.5" r="10"/><text x="690.0" y="1883.0" text-anchor="middle">D26</text></g>
+<g class="bd"><circle cx="293" cy="2039.0" r="10"/><text x="293" y="2042.5" text-anchor="middle">D27</text></g>
+<g class="bd"><circle cx="690.0" cy="2030.5" r="10"/><text x="690.0" y="2034.0" text-anchor="middle">D28</text></g>
+<g class="bd"><circle cx="293" cy="2155.5" r="10"/><text x="293" y="2159.0" text-anchor="middle">D29</text></g>
+<g class="bd"><circle cx="293" cy="2232.5" r="10"/><text x="293" y="2236.0" text-anchor="middle">D30</text></g>
+<g class="bd"><circle cx="690.0" cy="2340.5" r="10"/><text x="690.0" y="2344.0" text-anchor="middle">D31</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
+<text class="nm" x="487.5" y="64" text-anchor="middle">Invoke-LazyVMRebuild</text>
+<line class="div" x1="335" y1="71" x2="640" y2="71"/>
+<text class="at" x="345" y="86">-Name &lt;VM&gt;</text>
+<text class="at" x="345" y="103">-SkipCapture, -NoUnattend</text>
+<text class="at" x="345" y="120">asks first unless -Force</text>
+</g>
+<g class="bx-caller"><rect x="20" y="51.0" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="65.0" text-anchor="middle">«command, scheduled»</text>
+<text class="nm" x="147.5" y="81.0" text-anchor="middle">Invoke-LazyVMMaintenance</text>
+<line class="div" x1="20" y1="88.0" x2="275" y2="88.0"/>
+<text class="at" x="30" y="103.0">no rearms left</text>
+</g>
+<g class="bx-mod"><rect x="335" y="163" width="305" height="118" rx="3"/>
+<text class="st" x="487.5" y="177" text-anchor="middle">«Common»</text>
+<text class="nm" x="487.5" y="193" text-anchor="middle">Initialize-CommandRun()</text>
+<line class="div" x1="335" y1="200" x2="640" y2="200"/>
+<g class="sn"><circle cx="351" cy="184" r="10"/><text x="351" y="188" text-anchor="middle">1</text></g>
+<text class="at" x="345" y="215">loads the settings into $CFG</text>
+<text class="at" x="345" y="232">and opens the log</text>
+</g>
+<g class="bx-store"><rect x="20" y="163" width="255" height="118" rx="3"/>
+<text class="st" x="147.5" y="177" text-anchor="middle">«settings»</text>
+<text class="nm" x="147.5" y="193" text-anchor="middle">$CFG sources</text>
+<line class="div" x1="20" y1="200" x2="275" y2="200"/>
+<text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
+<text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="249">Config\VMs\&lt;VM&gt;\VM.json</text>
+<text class="at" x="30" y="266">Backup\&lt;VM&gt;\guest.cred</text>
+</g>
+<g class="bx-store"><rect x="740" y="163" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="177" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="193" text-anchor="middle">Logs\</text>
+<line class="div" x1="740" y1="200" x2="1010" y2="200"/>
+<text class="at" x="750" y="215">&lt;VM&gt;.log  (appended)</text>
+</g>
+<g class="bx-mod"><rect x="335" y="305" width="305" height="67" rx="3"/>
+<text class="st" x="487.5" y="319" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="487.5" y="335" text-anchor="middle">Invoke-Rebuild()</text>
+<line class="div" x1="335" y1="342" x2="640" y2="342"/>
+<g class="sn"><circle cx="351" cy="326" r="10"/><text x="351" y="330" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="357">steps 3-15 are its calls</text>
+</g>
+<g class="bx-mod"><rect x="335" y="396" width="305" height="195" rx="3"/>
+<text class="st" x="487.5" y="410" text-anchor="middle">«Capture, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="426" text-anchor="middle">Save-GuestState()</text>
+<line class="div" x1="335" y1="433" x2="640" y2="433"/>
+<g class="sn"><circle cx="351" cy="417" r="10"/><text x="351" y="421" text-anchor="middle">3</text></g>
+<text class="at" x="345" y="448">skipped with -SkipCapture:</text>
+<text class="at" x="345" y="465">the last manifest is used</text>
+</g>
+<g class="bx-store"><rect x="20" y="396" width="255" height="101" rx="3"/>
+<text class="st" x="147.5" y="410" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="426" text-anchor="middle">Running guest</text>
+<line class="div" x1="20" y1="433" x2="275" y2="433"/>
+<text class="at" x="30" y="448">VS settings, .vsconfig</text>
+<text class="at" x="30" y="465">SQL databases + logins</text>
+<text class="at" x="30" y="482">env, certs, tasks, apps</text>
+</g>
+<g class="bx-store"><rect x="740" y="396" width="270" height="118" rx="3"/>
+<text class="st" x="875.0" y="410" text-anchor="middle">«folder»</text>
+<text class="nm" x="875.0" y="426" text-anchor="middle">State\&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="433" x2="1010" y2="433"/>
+<text class="at" x="750" y="448">vs\  windows\  sql\</text>
+<text class="at" x="750" y="465">projects\  apps\</text>
+<text class="at" x="750" y="482">manifest.json</text>
+<text class="at" x="750" y="499">manifest-&lt;stamp&gt;.json</text>
+</g>
+<g class="bx-store"><rect x="740" y="524" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="538" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="554" text-anchor="middle">D:\SQLBackup\</text>
+<line class="div" x1="740" y1="561" x2="1010" y2="561"/>
+<text class="at" x="750" y="576">&lt;database&gt;.bak</text>
+</g>
+<g class="bx-mod"><rect x="335" y="615" width="305" height="118" rx="3"/>
+<text class="st" x="487.5" y="629" text-anchor="middle">«Maintenance, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="645" text-anchor="middle">Invoke-RetireCurrentVM()</text>
+<line class="div" x1="335" y1="652" x2="640" y2="652"/>
+<g class="sn"><circle cx="351" cy="636" r="10"/><text x="351" y="640" text-anchor="middle">4</text></g>
+<text class="at" x="345" y="667">only if the VM exists;</text>
+<text class="at" x="345" y="684">shuts down, removes</text>
+<text class="at" x="345" y="701">checkpoints and the VM</text>
+<text class="at" x="345" y="718">definition; keeps disks</text>
+</g>
+<g class="bx-store"><rect x="20" y="615" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="629" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="147.5" y="645" text-anchor="middle">VM &lt;VM&gt;</text>
+<line class="div" x1="20" y1="652" x2="275" y2="652"/>
+<text class="at" x="30" y="667">old VM, checkpoints</text>
+</g>
+<g class="bx-store"><rect x="740" y="615" width="270" height="101" rx="3"/>
+<text class="st" x="875.0" y="629" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="645" text-anchor="middle">VMs\</text>
+<line class="div" x1="740" y1="652" x2="1010" y2="652"/>
+<text class="at" x="750" y="667">&lt;VM&gt;-OS.retired-&lt;stamp&gt;.vhdx</text>
+<text class="at" x="750" y="684">&lt;VM&gt;.retired-&lt;stamp&gt;\</text>
+<text class="at" x="750" y="701">&lt;VM&gt;-Seed.iso deleted</text>
+</g>
+<g class="bx-mod"><rect x="335" y="757" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="771" text-anchor="middle">«Host, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="787" text-anchor="middle">Initialize-HostFolder()</text>
+<line class="div" x1="335" y1="794" x2="640" y2="794"/>
+<g class="sn"><circle cx="351" cy="778" r="10"/><text x="351" y="782" text-anchor="middle">5</text></g>
+<text class="at" x="345" y="809">phase 3</text>
+</g>
+<g class="bx-store"><rect x="740" y="757" width="270" height="101" rx="3"/>
+<text class="st" x="875.0" y="771" text-anchor="middle">«folder»</text>
+<text class="nm" x="875.0" y="787" text-anchor="middle">&lt;Root&gt;\</text>
+<line class="div" x1="740" y1="794" x2="1010" y2="794"/>
+<text class="at" x="750" y="809">ISO, Installers, VMs, SQLDisk</text>
+<text class="at" x="750" y="826">DevDrive, Backup, Logs</text>
+<text class="at" x="750" y="843">Checkpoints\&lt;VM&gt;</text>
+</g>
+<g class="bx-mod"><rect x="335" y="882" width="305" height="178" rx="3"/>
+<text class="st" x="487.5" y="896" text-anchor="middle">«Host, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="912" text-anchor="middle">Confirm-InstallMedia()</text>
+<line class="div" x1="335" y1="919" x2="640" y2="919"/>
+<g class="sn"><circle cx="351" cy="903" r="10"/><text x="351" y="907" text-anchor="middle">6</text></g>
+<text class="at" x="345" y="934">phase 4: Resolve-InstallationIso</text>
+<text class="at" x="345" y="951">and Resolve-SqlServerIso</text>
+</g>
+<g class="bx-store"><rect x="20" y="882" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="896" text-anchor="middle">«folder»</text>
+<text class="nm" x="147.5" y="912" text-anchor="middle">ISO\  or  Downloads\</text>
+<line class="div" x1="20" y1="919" x2="275" y2="919"/>
+<text class="at" x="30" y="934">Windows 11 Enterprise</text>
+<text class="at" x="30" y="951">Evaluation ISO</text>
+</g>
+<g class="bx-store"><rect x="20" y="976" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="990" text-anchor="middle">«web»</text>
+<text class="nm" x="147.5" y="1006" text-anchor="middle">download.microsoft.com</text>
+<line class="div" x1="20" y1="1013" x2="275" y2="1013"/>
+<text class="at" x="30" y="1028">SQL Server 2025 ISO</text>
+<text class="at" x="30" y="1045">only if missing</text>
+</g>
+<g class="bx-store"><rect x="740" y="882" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="896" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="912" text-anchor="middle">ISO\</text>
+<line class="div" x1="740" y1="919" x2="1010" y2="919"/>
+<text class="at" x="750" y="934">Win11Ent_Eval.iso</text>
+<text class="at" x="750" y="951">(moved from Downloads)</text>
+</g>
+<g class="bx-store"><rect x="740" y="976" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="990" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="1006" text-anchor="middle">Installers\</text>
+<line class="div" x1="740" y1="1013" x2="1010" y2="1013"/>
+<text class="at" x="750" y="1028">SQLServer2025-x64-ENU-</text>
+<text class="at" x="750" y="1045">  EntDev.iso</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1084" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="1098" text-anchor="middle">«Host, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="1114" text-anchor="middle">Initialize-SqlDataVhd()</text>
+<line class="div" x1="335" y1="1121" x2="640" y2="1121"/>
+<g class="sn"><circle cx="351" cy="1105" r="10"/><text x="351" y="1109" text-anchor="middle">7</text></g>
+<text class="at" x="345" y="1136">phase 5; also Initialize-</text>
+<text class="at" x="345" y="1153">DevDriveVhd. Existing disks</text>
+<text class="at" x="345" y="1170">are kept: they hold your data</text>
+</g>
+<g class="bx-store"><rect x="740" y="1084" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="1098" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="1114" text-anchor="middle">SQLDisk\  DevDrive\</text>
+<line class="div" x1="740" y1="1121" x2="1010" y2="1121"/>
+<text class="at" x="750" y="1136">&lt;VM&gt;.vhdx  (100 GB)</text>
+<text class="at" x="750" y="1153">&lt;VM&gt;.vhdx  (250 GB)</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1209" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="1223" text-anchor="middle">«Credentials, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="1239" text-anchor="middle">Get-GuestCredential()</text>
+<line class="div" x1="335" y1="1246" x2="640" y2="1246"/>
+<g class="sn"><circle cx="351" cy="1230" r="10"/><text x="351" y="1234" text-anchor="middle">8</text></g>
+<text class="at" x="345" y="1261">-CreateIfMissing; skipped with</text>
+<text class="at" x="345" y="1278">-NoUnattend</text>
+</g>
+<g class="bx-store"><rect x="20" y="1209" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="1223" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="1239" text-anchor="middle">Backup\</text>
+<line class="div" x1="20" y1="1246" x2="275" y2="1246"/>
+<text class="at" x="30" y="1261">.lazyvm.key</text>
+<text class="at" x="30" y="1278">&lt;VM&gt;\guest.cred</text>
+</g>
+<g class="bx-store"><rect x="740" y="1209" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="1223" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="1239" text-anchor="middle">Backup\</text>
+<line class="div" x1="740" y1="1246" x2="1010" y2="1246"/>
+<text class="at" x="750" y="1261">.lazyvm.key</text>
+<text class="at" x="750" y="1278">&lt;VM&gt;\guest.cred</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1317" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="1331" text-anchor="middle">«Host, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="1347" text-anchor="middle">New-UnattendSeedDisk()</text>
+<line class="div" x1="335" y1="1354" x2="640" y2="1354"/>
+<g class="sn"><circle cx="351" cy="1338" r="10"/><text x="351" y="1342" text-anchor="middle">9</text></g>
+<text class="at" x="345" y="1369">answer file for Setup;</text>
+<text class="at" x="345" y="1386">skipped in the same cases</text>
+</g>
+<g class="bx-store"><rect x="740" y="1317" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="1331" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="1347" text-anchor="middle">VMs\</text>
+<line class="div" x1="740" y1="1354" x2="1010" y2="1354"/>
+<text class="at" x="750" y="1369">&lt;VM&gt;-Seed.iso</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1425" width="305" height="178" rx="3"/>
+<text class="st" x="487.5" y="1439" text-anchor="middle">«Host, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="1455" text-anchor="middle">New-GuestVM()</text>
+<line class="div" x1="335" y1="1462" x2="640" y2="1462"/>
+<g class="sn"><circle cx="351" cy="1446" r="10"/><text x="351" y="1450" text-anchor="middle">10</text></g>
+<text class="at" x="345" y="1477">phase 6: Gen 2, Secure Boot,</text>
+<text class="at" x="345" y="1494">TPM, dynamic memory</text>
+</g>
+<g class="bx-store"><rect x="20" y="1425" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="1439" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="1455" text-anchor="middle">ISO\  VMs\</text>
+<line class="div" x1="20" y1="1462" x2="275" y2="1462"/>
+<text class="at" x="30" y="1477">Win11Ent_Eval.iso</text>
+<text class="at" x="30" y="1494">&lt;VM&gt;-Seed.iso</text>
+</g>
+<g class="bx-store"><rect x="740" y="1425" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="1439" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="1455" text-anchor="middle">VMs\</text>
+<line class="div" x1="740" y1="1462" x2="1010" y2="1462"/>
+<text class="at" x="750" y="1477">&lt;VM&gt;-OS.vhdx</text>
+<text class="at" x="750" y="1494">&lt;VM&gt;\  (VM configuration)</text>
+</g>
+<g class="bx-store"><rect x="740" y="1519" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="1533" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875.0" y="1549" text-anchor="middle">VM &lt;VM&gt;</text>
+<line class="div" x1="740" y1="1556" x2="1010" y2="1556"/>
+<text class="at" x="750" y="1571">started from the ISO,</text>
+<text class="at" x="750" y="1588">Windows installs unattended</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1627" width="305" height="178" rx="3"/>
+<text class="st" x="487.5" y="1641" text-anchor="middle">«Installation, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="1657" text-anchor="middle">Install-GuestSoftware()</text>
+<line class="div" x1="335" y1="1664" x2="640" y2="1664"/>
+<g class="sn"><circle cx="351" cy="1648" r="10"/><text x="351" y="1652" text-anchor="middle">11</text></g>
+<text class="at" x="345" y="1679">phase 7: waits for Setup,</text>
+<text class="at" x="345" y="1696">attaches D: and W:,</text>
+<text class="at" x="345" y="1713">customizes Windows, installs</text>
+<text class="at" x="345" y="1730">the tooling list</text>
+</g>
+<g class="bx-store"><rect x="20" y="1627" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="1641" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="1657" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<line class="div" x1="20" y1="1664" x2="275" y2="1664"/>
+<text class="at" x="30" y="1679">Tooling.json, or the module&#x27;s</text>
+<text class="at" x="30" y="1696">Data\Tooling.Default.json</text>
+</g>
+<g class="bx-store"><rect x="20" y="1721" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="1735" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="1751" text-anchor="middle">Installers\</text>
+<line class="div" x1="20" y1="1758" x2="275" y2="1758"/>
+<text class="at" x="30" y="1773">SQLServer2025 ISO</text>
+</g>
+<g class="bx-store"><rect x="740" y="1627" width="270" height="101" rx="3"/>
+<text class="st" x="875.0" y="1641" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="1657" text-anchor="middle">Guest</text>
+<line class="div" x1="740" y1="1664" x2="1010" y2="1664"/>
+<text class="at" x="750" y="1679">D: data disk, W: Dev Drive</text>
+<text class="at" x="750" y="1696">VS + SSMS, extensions</text>
+<text class="at" x="750" y="1713">SQL Server 2025, winget apps</text>
+</g>
+<g class="bx-store"><rect x="740" y="1738" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="1752" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="1768" text-anchor="middle">State\&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="1775" x2="1010" y2="1775"/>
+<text class="at" x="750" y="1790">reinstall-by-hand.txt</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1829" width="305" height="144" rx="3"/>
+<text class="st" x="487.5" y="1843" text-anchor="middle">«Installation, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="1859" text-anchor="middle">Complete-GuestConfiguration()</text>
+<line class="div" x1="335" y1="1866" x2="640" y2="1866"/>
+<g class="sn"><circle cx="351" cy="1850" r="10"/><text x="351" y="1854" text-anchor="middle">12</text></g>
+<text class="at" x="345" y="1881">phase 8: SQL files to D:,</text>
+<text class="at" x="345" y="1898">VS settings, databases</text>
+</g>
+<g class="bx-store"><rect x="20" y="1829" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="1843" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="1859" text-anchor="middle">Backup\&lt;VM&gt;\</text>
+<line class="div" x1="20" y1="1866" x2="275" y2="1866"/>
+<text class="at" x="30" y="1881">VisualStudio.vssettings</text>
+</g>
+<g class="bx-store"><rect x="20" y="1906" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="1920" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="1936" text-anchor="middle">D:\SQLBackup\</text>
+<line class="div" x1="20" y1="1943" x2="275" y2="1943"/>
+<text class="at" x="30" y="1958">&lt;database&gt;.bak</text>
+</g>
+<g class="bx-store"><rect x="740" y="1829" width="270" height="101" rx="3"/>
+<text class="st" x="875.0" y="1843" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="1859" text-anchor="middle">Guest</text>
+<line class="div" x1="740" y1="1866" x2="1010" y2="1866"/>
+<text class="at" x="750" y="1881">SQL data on D:\SQLData</text>
+<text class="at" x="750" y="1898">VS settings imported</text>
+<text class="at" x="750" y="1915">databases restored</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1997" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="2011" text-anchor="middle">«Restore, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="2027" text-anchor="middle">Restore-GuestState()</text>
+<line class="div" x1="335" y1="2034" x2="640" y2="2034"/>
+<g class="sn"><circle cx="351" cy="2018" r="10"/><text x="351" y="2022" text-anchor="middle">13</text></g>
+<text class="at" x="345" y="2049">Windows, VS, SQL, projects,</text>
+<text class="at" x="345" y="2066">app settings; a failed step</text>
+<text class="at" x="345" y="2083">does not stop the rest</text>
+</g>
+<g class="bx-store"><rect x="20" y="1997" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="2011" text-anchor="middle">«folder»</text>
+<text class="nm" x="147.5" y="2027" text-anchor="middle">State\&lt;VM&gt;\</text>
+<line class="div" x1="20" y1="2034" x2="275" y2="2034"/>
+<text class="at" x="30" y="2049">manifest.json and</text>
+<text class="at" x="30" y="2066">captured files</text>
+</g>
+<g class="bx-store"><rect x="740" y="1997" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="2011" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="2027" text-anchor="middle">New guest</text>
+<line class="div" x1="740" y1="2034" x2="1010" y2="2034"/>
+<text class="at" x="750" y="2049">state put back</text>
+</g>
+<g class="bx-mod"><rect x="335" y="2122" width="305" height="144" rx="3"/>
+<text class="st" x="487.5" y="2136" text-anchor="middle">«Maintenance, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="2152" text-anchor="middle">Test-RebuiltVM()</text>
+<line class="div" x1="335" y1="2159" x2="640" y2="2159"/>
+<g class="sn"><circle cx="351" cy="2143" r="10"/><text x="351" y="2147" text-anchor="middle">14</text></g>
+<text class="at" x="345" y="2174">VM running and reachable,</text>
+<text class="at" x="345" y="2191">products, SQL, databases</text>
+<text class="at" x="345" y="2208">online, D: and W: mounted</text>
+</g>
+<g class="bx-store"><rect x="20" y="2122" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="2136" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="2152" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<line class="div" x1="20" y1="2159" x2="275" y2="2159"/>
+<text class="at" x="30" y="2174">Tooling.json</text>
+</g>
+<g class="bx-store"><rect x="20" y="2199" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="2213" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="2229" text-anchor="middle">State\&lt;VM&gt;\</text>
+<line class="div" x1="20" y1="2236" x2="275" y2="2236"/>
+<text class="at" x="30" y="2251">manifest.json  Databases</text>
+</g>
+<g class="bx-mod"><rect x="335" y="2290" width="305" height="118" rx="3"/>
+<text class="st" x="487.5" y="2304" text-anchor="middle">«Maintenance, called by Invoke-Rebuild»</text>
+<text class="nm" x="487.5" y="2320" text-anchor="middle">Remove-RetiredVM()</text>
+<line class="div" x1="335" y1="2327" x2="640" y2="2327"/>
+<g class="sn"><circle cx="351" cy="2311" r="10"/><text x="351" y="2315" text-anchor="middle">15</text></g>
+<text class="at" x="345" y="2342">passed: deletes the retired</text>
+<text class="at" x="345" y="2359">disk (DeleteRetiredDisk-</text>
+<text class="at" x="345" y="2376">OnSuccess). Failed: keeps it</text>
+<text class="at" x="345" y="2393">and logs how to roll back</text>
+</g>
+<g class="bx-store"><rect x="740" y="2290" width="270" height="101" rx="3"/>
+<text class="st" x="875.0" y="2304" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="2320" text-anchor="middle">VMs\</text>
+<line class="div" x1="740" y1="2327" x2="1010" y2="2327"/>
+<text class="at" x="750" y="2342">&lt;VM&gt;-OS.retired-&lt;stamp&gt;.vhdx</text>
+<text class="at" x="750" y="2359">&lt;VM&gt;.retired-&lt;stamp&gt;\</text>
+<text class="at" x="750" y="2376">deleted</text>
+</g>
+</svg>

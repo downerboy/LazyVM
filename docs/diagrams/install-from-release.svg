@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 368" width="1030" height="368" role="img" aria-labelledby="t-install-from-release">
+<title id="t-install-from-release">Install from a release: calls in order, with data flowing in from the left and out to the right</title>
+<style>
+svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
+@media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
+text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(--fg)}
+.bg{fill:var(--bg)}
+.cap{font:600 11px system-ui,"Segoe UI",sans-serif;letter-spacing:.12em;fill:var(--muted)}
+.bx-cmd rect{fill:var(--cmd);stroke:var(--fg);stroke-width:1.6}
+.bx-caller rect{fill:var(--cmd);stroke:var(--call);stroke-width:1.2;stroke-dasharray:3 3}
+.bx-mod rect{fill:var(--mod);stroke:var(--line);stroke-width:1.2}
+.bx-store rect{fill:var(--store);stroke:var(--data);stroke-width:1.2;stroke-dasharray:6 3}
+.st{font-size:10px;fill:var(--muted)}
+.nm{font-size:13px;font-weight:600}
+.div{stroke:var(--line)}
+.at{font-size:11.5px;fill:var(--muted)}
+.cl{fill:none;stroke:var(--call);stroke-width:2}
+.df{fill:none;stroke:var(--data);stroke-width:2;stroke-dasharray:7 4}
+.sn circle{fill:var(--call)} .sn text{font:600 10px system-ui,sans-serif;fill:var(--on)}
+.bd circle{fill:var(--data)} .bd text{font:600 9px system-ui,sans-serif;fill:var(--on)}
+.mk-c{fill:var(--call)} .mk-d{fill:var(--data)}
+</style>
+<defs>
+<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1030" height="368"/>
+<text class="cap" x="20" y="16">INPUTS</text>
+<text class="cap" x="335" y="16">CALLS IN ORDER</text>
+<text class="cap" x="740" y="16">OUTPUTS</text>
+<path class="cl" d="M335,76.0 L305,76.0 L305,274"/>
+<path class="cl" d="M305,166 L335,166" marker-end="url(#ac)"/>
+<path class="cl" d="M305,274 L335,274" marker-end="url(#ac)"/>
+<path class="df" d="M275,179.5 L335,179.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,188.0 L740,188.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,287.5 L740,287.5" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="179.5" r="10"/><text x="293" y="183.0" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="690.0" cy="188.0" r="10"/><text x="690.0" y="191.5" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="690.0" cy="287.5" r="10"/><text x="690.0" y="291.0" text-anchor="middle">D3</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="48" text-anchor="middle">«script»</text>
+<text class="nm" x="487.5" y="64" text-anchor="middle">.\LazyVM\Install.ps1</text>
+<line class="div" x1="335" y1="71" x2="640" y2="71"/>
+<text class="at" x="345" y="86">in the extracted release zip</text>
+<text class="at" x="345" y="103">PowerShell 7, as administrator</text>
+</g>
+<g class="bx-mod"><rect x="335" y="146" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="160" text-anchor="middle">«Install.ps1»</text>
+<text class="nm" x="487.5" y="176" text-anchor="middle">Copy-Item()</text>
+<line class="div" x1="335" y1="183" x2="640" y2="183"/>
+<g class="sn"><circle cx="351" cy="167" r="10"/><text x="351" y="171" text-anchor="middle">1</text></g>
+<text class="at" x="345" y="198">newest version folder</text>
+<text class="at" x="345" y="215">beside the script</text>
+</g>
+<g class="bx-store"><rect x="20" y="146" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="160" text-anchor="middle">«folder»</text>
+<text class="nm" x="147.5" y="176" text-anchor="middle">LazyVM\Massokissed.LazyVM\</text>
+<line class="div" x1="20" y1="183" x2="275" y2="183"/>
+<text class="at" x="30" y="198">&lt;version&gt;\</text>
+</g>
+<g class="bx-store"><rect x="740" y="146" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="160" text-anchor="middle">«folder»</text>
+<text class="nm" x="875.0" y="176" text-anchor="middle">$env:ProgramFiles\PowerShell\</text>
+<line class="div" x1="740" y1="183" x2="1010" y2="183"/>
+<text class="at" x="750" y="198">Modules\Massokissed.LazyVM\</text>
+<text class="at" x="750" y="215">  &lt;version&gt;\</text>
+</g>
+<g class="bx-mod"><rect x="335" y="254" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="268" text-anchor="middle">«Install.ps1»</text>
+<text class="nm" x="487.5" y="284" text-anchor="middle">Unblock-File()</text>
+<line class="div" x1="335" y1="291" x2="640" y2="291"/>
+<g class="sn"><circle cx="351" cy="275" r="10"/><text x="351" y="279" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="306">removes the downloaded-</text>
+<text class="at" x="345" y="323">from-internet mark</text>
+</g>
+<g class="bx-store"><rect x="740" y="254" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="268" text-anchor="middle">«folder»</text>
+<text class="nm" x="875.0" y="284" text-anchor="middle">Modules\Massokissed.LazyVM\</text>
+<line class="div" x1="740" y1="291" x2="1010" y2="291"/>
+<text class="at" x="750" y="306">&lt;version&gt;\  (unblocked)</text>
+</g>
+</svg>

@@ -1,0 +1,284 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 1539" width="1030" height="1539" role="img" aria-labelledby="t-maintenance">
+<title id="t-maintenance">Daily maintenance: calls in order, with data flowing in from the left and out to the right</title>
+<style>
+svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
+@media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
+text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(--fg)}
+.bg{fill:var(--bg)}
+.cap{font:600 11px system-ui,"Segoe UI",sans-serif;letter-spacing:.12em;fill:var(--muted)}
+.bx-cmd rect{fill:var(--cmd);stroke:var(--fg);stroke-width:1.6}
+.bx-caller rect{fill:var(--cmd);stroke:var(--call);stroke-width:1.2;stroke-dasharray:3 3}
+.bx-mod rect{fill:var(--mod);stroke:var(--line);stroke-width:1.2}
+.bx-store rect{fill:var(--store);stroke:var(--data);stroke-width:1.2;stroke-dasharray:6 3}
+.st{font-size:10px;fill:var(--muted)}
+.nm{font-size:13px;font-weight:600}
+.div{stroke:var(--line)}
+.at{font-size:11.5px;fill:var(--muted)}
+.cl{fill:none;stroke:var(--call);stroke-width:2}
+.df{fill:none;stroke:var(--data);stroke-width:2;stroke-dasharray:7 4}
+.sn circle{fill:var(--call)} .sn text{font:600 10px system-ui,sans-serif;fill:var(--on)}
+.bd circle{fill:var(--data)} .bd text{font:600 9px system-ui,sans-serif;fill:var(--on)}
+.mk-c{fill:var(--call)} .mk-d{fill:var(--data)}
+</style>
+<defs>
+<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1030" height="1539"/>
+<text class="cap" x="20" y="16">INPUTS</text>
+<text class="cap" x="335" y="16">CALLS IN ORDER</text>
+<text class="cap" x="740" y="16">OUTPUTS</text>
+<path class="cl" d="M335,84.5 L305,84.5 L305,1428"/>
+<path class="cl" d="M305,183 L335,183" marker-end="url(#ac)"/>
+<path class="cl" d="M305,325 L335,325" marker-end="url(#ac)"/>
+<path class="cl" d="M305,450 L335,450" marker-end="url(#ac)"/>
+<path class="cl" d="M305,558 L335,558" marker-end="url(#ac)"/>
+<path class="cl" d="M305,837 L335,837" marker-end="url(#ac)"/>
+<path class="cl" d="M305,945 L335,945" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1070 L335,1070" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1212 L335,1212" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1320 L335,1320" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1428 L335,1428" marker-end="url(#ac)"/>
+<path class="cl" d="M275,84.5 L335,84.5" marker-end="url(#ac)"/>
+<path class="df" d="M275,222.0 L335,222.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,196.5 L740,196.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,338.5 L335,338.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,472.0 L335,472.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,463.5 L740,463.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,588.5 L335,588.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,682.5 L335,682.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,571.5 L740,571.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,657.0 L740,657.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,751.0 L740,751.0" marker-end="url(#ad)"/>
+<path class="df" d="M275,859.0 L335,859.0" marker-end="url(#ad)"/>
+<path class="df" d="M275,958.5 L335,958.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,1100.5 L335,1100.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,1109.0 L740,1109.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,1234.0 L740,1234.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,1333.5 L740,1333.5" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="222.0" r="10"/><text x="293" y="225.5" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="690.0" cy="196.5" r="10"/><text x="690.0" y="200.0" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="293" cy="338.5" r="10"/><text x="293" y="342.0" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="293" cy="472.0" r="10"/><text x="293" y="475.5" text-anchor="middle">D4</text></g>
+<g class="bd"><circle cx="690.0" cy="463.5" r="10"/><text x="690.0" y="467.0" text-anchor="middle">D5</text></g>
+<g class="bd"><circle cx="293" cy="588.5" r="10"/><text x="293" y="592.0" text-anchor="middle">D6</text></g>
+<g class="bd"><circle cx="293" cy="682.5" r="10"/><text x="293" y="686.0" text-anchor="middle">D7</text></g>
+<g class="bd"><circle cx="690.0" cy="571.5" r="10"/><text x="690.0" y="575.0" text-anchor="middle">D8</text></g>
+<g class="bd"><circle cx="690.0" cy="657.0" r="10"/><text x="690.0" y="660.5" text-anchor="middle">D9</text></g>
+<g class="bd"><circle cx="690.0" cy="751.0" r="10"/><text x="690.0" y="754.5" text-anchor="middle">D10</text></g>
+<g class="bd"><circle cx="293" cy="859.0" r="10"/><text x="293" y="862.5" text-anchor="middle">D11</text></g>
+<g class="bd"><circle cx="293" cy="958.5" r="10"/><text x="293" y="962.0" text-anchor="middle">D12</text></g>
+<g class="bd"><circle cx="293" cy="1100.5" r="10"/><text x="293" y="1104.0" text-anchor="middle">D13</text></g>
+<g class="bd"><circle cx="690.0" cy="1109.0" r="10"/><text x="690.0" y="1112.5" text-anchor="middle">D14</text></g>
+<g class="bd"><circle cx="690.0" cy="1234.0" r="10"/><text x="690.0" y="1237.5" text-anchor="middle">D15</text></g>
+<g class="bd"><circle cx="690.0" cy="1333.5" r="10"/><text x="690.0" y="1337.0" text-anchor="middle">D16</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="48" text-anchor="middle">«command, scheduled»</text>
+<text class="nm" x="487.5" y="64" text-anchor="middle">Invoke-LazyVMMaintenance</text>
+<line class="div" x1="335" y1="71" x2="640" y2="71"/>
+<text class="at" x="345" y="86">-Name &lt;VM&gt;</text>
+<text class="at" x="345" y="103">returns None, Rearmed,</text>
+<text class="at" x="345" y="120">Rebuilt or Built</text>
+</g>
+<g class="bx-caller"><rect x="20" y="42.5" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="56.5" text-anchor="middle">«task»</text>
+<text class="nm" x="147.5" y="72.5" text-anchor="middle">LazyVM-Maintain-&lt;VM&gt;</text>
+<line class="div" x1="20" y1="79.5" x2="275" y2="79.5"/>
+<text class="at" x="30" y="94.5">daily at MaintenanceTime</text>
+<text class="at" x="30" y="111.5">as SYSTEM</text>
+</g>
+<g class="bx-mod"><rect x="335" y="163" width="305" height="118" rx="3"/>
+<text class="st" x="487.5" y="177" text-anchor="middle">«Common»</text>
+<text class="nm" x="487.5" y="193" text-anchor="middle">Initialize-CommandRun()</text>
+<line class="div" x1="335" y1="200" x2="640" y2="200"/>
+<g class="sn"><circle cx="351" cy="184" r="10"/><text x="351" y="188" text-anchor="middle">1</text></g>
+<text class="at" x="345" y="215">loads the settings into $CFG</text>
+<text class="at" x="345" y="232">and opens the log</text>
+</g>
+<g class="bx-store"><rect x="20" y="163" width="255" height="118" rx="3"/>
+<text class="st" x="147.5" y="177" text-anchor="middle">«settings»</text>
+<text class="nm" x="147.5" y="193" text-anchor="middle">$CFG sources</text>
+<line class="div" x1="20" y1="200" x2="275" y2="200"/>
+<text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
+<text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="249">Config\VMs\&lt;VM&gt;\VM.json</text>
+<text class="at" x="30" y="266">Backup\&lt;VM&gt;\guest.cred</text>
+</g>
+<g class="bx-store"><rect x="740" y="163" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="177" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="193" text-anchor="middle">Logs\</text>
+<line class="div" x1="740" y1="200" x2="1010" y2="200"/>
+<text class="at" x="750" y="215">&lt;VM&gt;.log  (appended)</text>
+</g>
+<g class="bx-mod"><rect x="335" y="305" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="319" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="487.5" y="335" text-anchor="middle">Invoke-Maintenance()</text>
+<line class="div" x1="335" y1="342" x2="640" y2="342"/>
+<g class="sn"><circle cx="351" cy="326" r="10"/><text x="351" y="330" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="357">steps 3-9 are its calls;</text>
+<text class="at" x="345" y="374">no VM: returns &quot;build&quot; and</text>
+<text class="at" x="345" y="391">Invoke-Rebuild runs instead</text>
+</g>
+<g class="bx-store"><rect x="20" y="305" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="319" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="147.5" y="335" text-anchor="middle">Hyper-V</text>
+<line class="div" x1="20" y1="342" x2="275" y2="342"/>
+<text class="at" x="30" y="357">Get-VM &lt;VM&gt;</text>
+</g>
+<g class="bx-mod"><rect x="335" y="430" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="444" text-anchor="middle">«Guest, called by Invoke-Maintenance»</text>
+<text class="nm" x="487.5" y="460" text-anchor="middle">Connect-Guest()</text>
+<line class="div" x1="335" y1="467" x2="640" y2="467"/>
+<g class="sn"><circle cx="351" cy="451" r="10"/><text x="351" y="455" text-anchor="middle">3</text></g>
+<text class="at" x="345" y="482">starts the VM first if off</text>
+<text class="at" x="345" y="499">(Wait-GuestReady)</text>
+</g>
+<g class="bx-store"><rect x="20" y="430" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="444" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="460" text-anchor="middle">Backup\</text>
+<line class="div" x1="20" y1="467" x2="275" y2="467"/>
+<text class="at" x="30" y="482">.lazyvm.key</text>
+<text class="at" x="30" y="499">&lt;VM&gt;\guest.cred</text>
+</g>
+<g class="bx-store"><rect x="740" y="430" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="444" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875.0" y="460" text-anchor="middle">VM &lt;VM&gt;</text>
+<line class="div" x1="740" y1="467" x2="1010" y2="467"/>
+<text class="at" x="750" y="482">running, reachable</text>
+</g>
+<g class="bx-mod"><rect x="335" y="538" width="305" height="255" rx="3"/>
+<text class="st" x="487.5" y="552" text-anchor="middle">«Tooling, called by Invoke-Maintenance»</text>
+<text class="nm" x="487.5" y="568" text-anchor="middle">Update-ToolingRecord()</text>
+<line class="div" x1="335" y1="575" x2="640" y2="575"/>
+<g class="sn"><circle cx="351" cy="559" r="10"/><text x="351" y="563" text-anchor="middle">4</text></g>
+<text class="at" x="345" y="590">takes the checkpoint before</text>
+<text class="at" x="345" y="607">adopting a change; a failure</text>
+<text class="at" x="345" y="624">does not stop the run</text>
+</g>
+<g class="bx-store"><rect x="20" y="538" width="255" height="101" rx="3"/>
+<text class="st" x="147.5" y="552" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="568" text-anchor="middle">Guest tooling</text>
+<line class="div" x1="20" y1="575" x2="275" y2="575"/>
+<text class="at" x="30" y="590">vswhere + vs_installer export</text>
+<text class="at" x="30" y="607">winget export</text>
+<text class="at" x="30" y="624">Marketplace extensions</text>
+</g>
+<g class="bx-store"><rect x="20" y="649" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="663" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="679" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<line class="div" x1="20" y1="686" x2="275" y2="686"/>
+<text class="at" x="30" y="701">Tooling.json</text>
+</g>
+<g class="bx-store"><rect x="740" y="538" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="552" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="568" text-anchor="middle">Config\VMs\&lt;VM&gt;\History\</text>
+<line class="div" x1="740" y1="575" x2="1010" y2="575"/>
+<text class="at" x="750" y="590">Daily\Tooling-&lt;date&gt;.json</text>
+</g>
+<g class="bx-store"><rect x="740" y="615" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="629" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875.0" y="645" text-anchor="middle">Checkpoints\&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="652" x2="1010" y2="652"/>
+<text class="at" x="750" y="667">checkpoint &quot;Tooling &lt;stamp&gt;&quot;</text>
+<text class="at" x="750" y="684">oldest pruned past 3</text>
+</g>
+<g class="bx-store"><rect x="740" y="709" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="723" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="739" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="746" x2="1010" y2="746"/>
+<text class="at" x="750" y="761">Tooling.json</text>
+<text class="at" x="750" y="778">History\Tooling-&lt;stamp&gt;.json</text>
+</g>
+<g class="bx-mod"><rect x="335" y="817" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="831" text-anchor="middle">«Maintenance, called by Invoke-Maintenance»</text>
+<text class="nm" x="487.5" y="847" text-anchor="middle">Get-GuestLicenseStatus()</text>
+<line class="div" x1="335" y1="854" x2="640" y2="854"/>
+<g class="sn"><circle cx="351" cy="838" r="10"/><text x="351" y="842" text-anchor="middle">5</text></g>
+<text class="at" x="345" y="869">days left, rearms left</text>
+</g>
+<g class="bx-store"><rect x="20" y="817" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="831" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="847" text-anchor="middle">Running guest</text>
+<line class="div" x1="20" y1="854" x2="275" y2="854"/>
+<text class="at" x="30" y="869">SoftwareLicensingProduct</text>
+<text class="at" x="30" y="886">SoftwareLicensingService</text>
+</g>
+<g class="bx-mod"><rect x="335" y="925" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="939" text-anchor="middle">«Maintenance, called by Invoke-Maintenance»</text>
+<text class="nm" x="487.5" y="955" text-anchor="middle">Get-MaintenanceDecision()</text>
+<line class="div" x1="335" y1="962" x2="640" y2="962"/>
+<g class="sn"><circle cx="351" cy="946" r="10"/><text x="351" y="950" text-anchor="middle">6</text></g>
+<text class="at" x="345" y="977">&gt; threshold or no countdown:</text>
+<text class="at" x="345" y="994">none; rearms left: rearm;</text>
+<text class="at" x="345" y="1011">otherwise: rebuild</text>
+</g>
+<g class="bx-store"><rect x="20" y="925" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="939" text-anchor="middle">«setting»</text>
+<text class="nm" x="147.5" y="955" text-anchor="middle">$CFG</text>
+<line class="div" x1="20" y1="962" x2="275" y2="962"/>
+<text class="at" x="30" y="977">RebuildThresholdDays = 10</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1050" width="305" height="118" rx="3"/>
+<text class="st" x="487.5" y="1064" text-anchor="middle">«Capture, called by Invoke-Maintenance»</text>
+<text class="nm" x="487.5" y="1080" text-anchor="middle">Save-GuestState()</text>
+<line class="div" x1="335" y1="1087" x2="640" y2="1087"/>
+<g class="sn"><circle cx="351" cy="1071" r="10"/><text x="351" y="1075" text-anchor="middle">7</text></g>
+<text class="at" x="345" y="1102">only on rearm or rebuild</text>
+<text class="at" x="345" y="1119">(see Capture state)</text>
+</g>
+<g class="bx-store"><rect x="20" y="1050" width="255" height="101" rx="3"/>
+<text class="st" x="147.5" y="1064" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="1080" text-anchor="middle">Running guest</text>
+<line class="div" x1="20" y1="1087" x2="275" y2="1087"/>
+<text class="at" x="30" y="1102">VS settings, .vsconfig</text>
+<text class="at" x="30" y="1119">SQL databases + logins</text>
+<text class="at" x="30" y="1136">env, certs, tasks, apps</text>
+</g>
+<g class="bx-store"><rect x="740" y="1050" width="270" height="118" rx="3"/>
+<text class="st" x="875.0" y="1064" text-anchor="middle">«folder»</text>
+<text class="nm" x="875.0" y="1080" text-anchor="middle">State\&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="1087" x2="1010" y2="1087"/>
+<text class="at" x="750" y="1102">vs\  windows\  sql\</text>
+<text class="at" x="750" y="1119">projects\  apps\</text>
+<text class="at" x="750" y="1136">manifest.json</text>
+<text class="at" x="750" y="1153">manifest-&lt;stamp&gt;.json</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1192" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="1206" text-anchor="middle">«Maintenance, called by Invoke-Maintenance»</text>
+<text class="nm" x="487.5" y="1222" text-anchor="middle">Invoke-GuestRearm()</text>
+<line class="div" x1="335" y1="1229" x2="640" y2="1229"/>
+<g class="sn"><circle cx="351" cy="1213" r="10"/><text x="351" y="1217" text-anchor="middle">8</text></g>
+<text class="at" x="345" y="1244">slmgr rearm, then</text>
+<text class="at" x="345" y="1261">Restart-GuestAndWait</text>
+</g>
+<g class="bx-store"><rect x="740" y="1192" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="1206" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="1222" text-anchor="middle">Running guest</text>
+<line class="div" x1="740" y1="1229" x2="1010" y2="1229"/>
+<text class="at" x="750" y="1244">evaluation reset to 90 days</text>
+<text class="at" x="750" y="1261">one rearm used</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1300" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="1314" text-anchor="middle">«Maintenance, called by Invoke-Maintenance»</text>
+<text class="nm" x="487.5" y="1330" text-anchor="middle">Stop-GuestGracefully()</text>
+<line class="div" x1="335" y1="1337" x2="640" y2="1337"/>
+<g class="sn"><circle cx="351" cy="1321" r="10"/><text x="351" y="1325" text-anchor="middle">9</text></g>
+<text class="at" x="345" y="1352">only if the VM was off</text>
+<text class="at" x="345" y="1369">before the run</text>
+</g>
+<g class="bx-store"><rect x="740" y="1300" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="1314" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875.0" y="1330" text-anchor="middle">VM &lt;VM&gt;</text>
+<line class="div" x1="740" y1="1337" x2="1010" y2="1337"/>
+<text class="at" x="750" y="1352">off</text>
+</g>
+<g class="bx-cmd"><rect x="335" y="1408" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="1422" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="487.5" y="1438" text-anchor="middle">Invoke-Rebuild -SkipCapture</text>
+<line class="div" x1="335" y1="1445" x2="640" y2="1445"/>
+<g class="sn"><circle cx="351" cy="1429" r="10"/><text x="351" y="1433" text-anchor="middle">10</text></g>
+<text class="at" x="345" y="1460">only when no rearms are left</text>
+<text class="at" x="345" y="1477">or the rearm failed</text>
+<text class="at" x="345" y="1494">(see Rebuild)</text>
+</g>
+</svg>

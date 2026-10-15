@@ -1,0 +1,254 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 1241" width="1030" height="1241" role="img" aria-labelledby="t-restore">
+<title id="t-restore">Restore state: calls in order, with data flowing in from the left and out to the right</title>
+<style>
+svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
+@media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
+text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(--fg)}
+.bg{fill:var(--bg)}
+.cap{font:600 11px system-ui,"Segoe UI",sans-serif;letter-spacing:.12em;fill:var(--muted)}
+.bx-cmd rect{fill:var(--cmd);stroke:var(--fg);stroke-width:1.6}
+.bx-caller rect{fill:var(--cmd);stroke:var(--call);stroke-width:1.2;stroke-dasharray:3 3}
+.bx-mod rect{fill:var(--mod);stroke:var(--line);stroke-width:1.2}
+.bx-store rect{fill:var(--store);stroke:var(--data);stroke-width:1.2;stroke-dasharray:6 3}
+.st{font-size:10px;fill:var(--muted)}
+.nm{font-size:13px;font-weight:600}
+.div{stroke:var(--line)}
+.at{font-size:11.5px;fill:var(--muted)}
+.cl{fill:none;stroke:var(--call);stroke-width:2}
+.df{fill:none;stroke:var(--data);stroke-width:2;stroke-dasharray:7 4}
+.sn circle{fill:var(--call)} .sn text{font:600 10px system-ui,sans-serif;fill:var(--on)}
+.bd circle{fill:var(--data)} .bd text{font:600 9px system-ui,sans-serif;fill:var(--on)}
+.mk-c{fill:var(--call)} .mk-d{fill:var(--data)}
+</style>
+<defs>
+<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1030" height="1241"/>
+<text class="cap" x="20" y="16">INPUTS</text>
+<text class="cap" x="335" y="16">CALLS IN ORDER</text>
+<text class="cap" x="740" y="16">OUTPUTS</text>
+<path class="cl" d="M335,76.0 L305,76.0 L305,1164"/>
+<path class="cl" d="M305,166 L335,166" marker-end="url(#ac)"/>
+<path class="cl" d="M305,308 L335,308" marker-end="url(#ac)"/>
+<path class="cl" d="M305,433 L335,433" marker-end="url(#ac)"/>
+<path class="cl" d="M305,524 L335,524" marker-end="url(#ac)"/>
+<path class="cl" d="M305,632 L335,632" marker-end="url(#ac)"/>
+<path class="cl" d="M305,723 L335,723" marker-end="url(#ac)"/>
+<path class="cl" d="M305,814 L335,814" marker-end="url(#ac)"/>
+<path class="cl" d="M305,905 L335,905" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1073 L335,1073" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1164 L335,1164" marker-end="url(#ac)"/>
+<path class="df" d="M275,205.0 L335,205.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,179.5 L740,179.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,446.5 L335,446.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,546.0 L335,546.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,537.5 L740,537.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,736.5 L335,736.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,736.5 L740,736.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,827.5 L335,827.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,827.5 L740,827.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,918.5 L335,918.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,995.5 L335,995.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,918.5 L740,918.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,1086.5 L335,1086.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,1086.5 L740,1086.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,1177.5 L335,1177.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,1177.5 L740,1177.5" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="205.0" r="10"/><text x="293" y="208.5" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="690.0" cy="179.5" r="10"/><text x="690.0" y="183.0" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="293" cy="446.5" r="10"/><text x="293" y="450.0" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="293" cy="546.0" r="10"/><text x="293" y="549.5" text-anchor="middle">D4</text></g>
+<g class="bd"><circle cx="690.0" cy="537.5" r="10"/><text x="690.0" y="541.0" text-anchor="middle">D5</text></g>
+<g class="bd"><circle cx="293" cy="736.5" r="10"/><text x="293" y="740.0" text-anchor="middle">D6</text></g>
+<g class="bd"><circle cx="690.0" cy="736.5" r="10"/><text x="690.0" y="740.0" text-anchor="middle">D7</text></g>
+<g class="bd"><circle cx="293" cy="827.5" r="10"/><text x="293" y="831.0" text-anchor="middle">D8</text></g>
+<g class="bd"><circle cx="690.0" cy="827.5" r="10"/><text x="690.0" y="831.0" text-anchor="middle">D9</text></g>
+<g class="bd"><circle cx="293" cy="918.5" r="10"/><text x="293" y="922.0" text-anchor="middle">D10</text></g>
+<g class="bd"><circle cx="293" cy="995.5" r="10"/><text x="293" y="999.0" text-anchor="middle">D11</text></g>
+<g class="bd"><circle cx="690.0" cy="918.5" r="10"/><text x="690.0" y="922.0" text-anchor="middle">D12</text></g>
+<g class="bd"><circle cx="293" cy="1086.5" r="10"/><text x="293" y="1090.0" text-anchor="middle">D13</text></g>
+<g class="bd"><circle cx="690.0" cy="1086.5" r="10"/><text x="690.0" y="1090.0" text-anchor="middle">D14</text></g>
+<g class="bd"><circle cx="293" cy="1177.5" r="10"/><text x="293" y="1181.0" text-anchor="middle">D15</text></g>
+<g class="bd"><circle cx="690.0" cy="1177.5" r="10"/><text x="690.0" y="1181.0" text-anchor="middle">D16</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
+<text class="nm" x="487.5" y="64" text-anchor="middle">Restore-LazyVMState</text>
+<line class="div" x1="335" y1="71" x2="640" y2="71"/>
+<text class="at" x="345" y="86">-Name &lt;VM&gt;</text>
+<text class="at" x="345" y="103">asks first</text>
+</g>
+<g class="bx-mod"><rect x="335" y="146" width="305" height="118" rx="3"/>
+<text class="st" x="487.5" y="160" text-anchor="middle">«Common»</text>
+<text class="nm" x="487.5" y="176" text-anchor="middle">Initialize-CommandRun()</text>
+<line class="div" x1="335" y1="183" x2="640" y2="183"/>
+<g class="sn"><circle cx="351" cy="167" r="10"/><text x="351" y="171" text-anchor="middle">1</text></g>
+<text class="at" x="345" y="198">loads the settings into $CFG</text>
+<text class="at" x="345" y="215">and opens the log</text>
+</g>
+<g class="bx-store"><rect x="20" y="146" width="255" height="118" rx="3"/>
+<text class="st" x="147.5" y="160" text-anchor="middle">«settings»</text>
+<text class="nm" x="147.5" y="176" text-anchor="middle">$CFG sources</text>
+<line class="div" x1="20" y1="183" x2="275" y2="183"/>
+<text class="at" x="30" y="198">HKLM:\SOFTWARE\LazyVM  Root</text>
+<text class="at" x="30" y="215">Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="232">Config\VMs\&lt;VM&gt;\VM.json</text>
+<text class="at" x="30" y="249">Backup\&lt;VM&gt;\guest.cred</text>
+</g>
+<g class="bx-store"><rect x="740" y="146" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="160" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="176" text-anchor="middle">Logs\</text>
+<line class="div" x1="740" y1="183" x2="1010" y2="183"/>
+<text class="at" x="750" y="198">&lt;VM&gt;.log  (appended)</text>
+</g>
+<g class="bx-mod"><rect x="335" y="288" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="302" text-anchor="middle">«Restore»</text>
+<text class="nm" x="487.5" y="318" text-anchor="middle">Restore-GuestState()</text>
+<line class="div" x1="335" y1="325" x2="640" y2="325"/>
+<g class="sn"><circle cx="351" cy="309" r="10"/><text x="351" y="313" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="340">steps 3-10 are its calls;</text>
+<text class="at" x="345" y="357">a failed step is logged</text>
+<text class="at" x="345" y="374">and the rest still run</text>
+</g>
+<g class="bx-mod"><rect x="335" y="413" width="305" height="67" rx="3"/>
+<text class="st" x="487.5" y="427" text-anchor="middle">«Capture, called by Restore-GuestState»</text>
+<text class="nm" x="487.5" y="443" text-anchor="middle">Get-CaptureManifest()</text>
+<line class="div" x1="335" y1="450" x2="640" y2="450"/>
+<g class="sn"><circle cx="351" cy="434" r="10"/><text x="351" y="438" text-anchor="middle">3</text></g>
+<text class="at" x="345" y="465">none: nothing to restore</text>
+</g>
+<g class="bx-store"><rect x="20" y="413" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="427" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="443" text-anchor="middle">State\&lt;VM&gt;\</text>
+<line class="div" x1="20" y1="450" x2="275" y2="450"/>
+<text class="at" x="30" y="465">manifest.json</text>
+</g>
+<g class="bx-mod"><rect x="335" y="504" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="518" text-anchor="middle">«Guest, called by Restore-GuestState»</text>
+<text class="nm" x="487.5" y="534" text-anchor="middle">Connect-Guest()</text>
+<line class="div" x1="335" y1="541" x2="640" y2="541"/>
+<g class="sn"><circle cx="351" cy="525" r="10"/><text x="351" y="529" text-anchor="middle">4</text></g>
+<text class="at" x="345" y="556">starts the VM first if off</text>
+</g>
+<g class="bx-store"><rect x="20" y="504" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="518" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="534" text-anchor="middle">Backup\</text>
+<line class="div" x1="20" y1="541" x2="275" y2="541"/>
+<text class="at" x="30" y="556">.lazyvm.key</text>
+<text class="at" x="30" y="573">&lt;VM&gt;\guest.cred</text>
+</g>
+<g class="bx-store"><rect x="740" y="504" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="518" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875.0" y="534" text-anchor="middle">VM &lt;VM&gt;</text>
+<line class="div" x1="740" y1="541" x2="1010" y2="541"/>
+<text class="at" x="750" y="556">running, reachable</text>
+</g>
+<g class="bx-mod"><rect x="335" y="612" width="305" height="67" rx="3"/>
+<text class="st" x="487.5" y="626" text-anchor="middle">«Installation, called by Restore-GuestState»</text>
+<text class="nm" x="487.5" y="642" text-anchor="middle">Initialize-GuestSqlDisk()</text>
+<line class="div" x1="335" y1="649" x2="640" y2="649"/>
+<g class="sn"><circle cx="351" cy="633" r="10"/><text x="351" y="637" text-anchor="middle">5</text></g>
+<text class="at" x="345" y="664">makes sure D: is online</text>
+</g>
+<g class="bx-mod"><rect x="335" y="703" width="305" height="67" rx="3"/>
+<text class="st" x="487.5" y="717" text-anchor="middle">«Restore, called by Restore-GuestState»</text>
+<text class="nm" x="487.5" y="733" text-anchor="middle">Restore-GuestWindowsState()</text>
+<line class="div" x1="335" y1="740" x2="640" y2="740"/>
+<g class="sn"><circle cx="351" cy="724" r="10"/><text x="351" y="728" text-anchor="middle">6</text></g>
+<text class="at" x="345" y="755">10a</text>
+</g>
+<g class="bx-store"><rect x="20" y="703" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="717" text-anchor="middle">«folder»</text>
+<text class="nm" x="147.5" y="733" text-anchor="middle">State\&lt;VM&gt;\windows\</text>
+<line class="div" x1="20" y1="740" x2="275" y2="740"/>
+<text class="at" x="30" y="755">zip</text>
+</g>
+<g class="bx-store"><rect x="740" y="703" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="717" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="733" text-anchor="middle">Guest</text>
+<line class="div" x1="740" y1="740" x2="1010" y2="740"/>
+<text class="at" x="750" y="755">environment, certificates</text>
+</g>
+<g class="bx-mod"><rect x="335" y="794" width="305" height="67" rx="3"/>
+<text class="st" x="487.5" y="808" text-anchor="middle">«Restore, called by Restore-GuestState»</text>
+<text class="nm" x="487.5" y="824" text-anchor="middle">Restore-GuestVisualStudioState()</text>
+<line class="div" x1="335" y1="831" x2="640" y2="831"/>
+<g class="sn"><circle cx="351" cy="815" r="10"/><text x="351" y="819" text-anchor="middle">7</text></g>
+<text class="at" x="345" y="846">10b</text>
+</g>
+<g class="bx-store"><rect x="20" y="794" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="808" text-anchor="middle">«folder»</text>
+<text class="nm" x="147.5" y="824" text-anchor="middle">State\&lt;VM&gt;\vs\</text>
+<line class="div" x1="20" y1="831" x2="275" y2="831"/>
+<text class="at" x="30" y="846">settings, vs.vsconfig</text>
+</g>
+<g class="bx-store"><rect x="740" y="794" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="808" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="824" text-anchor="middle">Guest</text>
+<line class="div" x1="740" y1="831" x2="1010" y2="831"/>
+<text class="at" x="750" y="846">VS settings imported</text>
+</g>
+<g class="bx-mod"><rect x="335" y="885" width="305" height="144" rx="3"/>
+<text class="st" x="487.5" y="899" text-anchor="middle">«Restore, called by Restore-GuestState»</text>
+<text class="nm" x="487.5" y="915" text-anchor="middle">Restore-GuestSqlState()</text>
+<line class="div" x1="335" y1="922" x2="640" y2="922"/>
+<g class="sn"><circle cx="351" cy="906" r="10"/><text x="351" y="910" text-anchor="middle">8</text></g>
+<text class="at" x="345" y="937">10c</text>
+</g>
+<g class="bx-store"><rect x="20" y="885" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="899" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="915" text-anchor="middle">D:\SQLBackup\</text>
+<line class="div" x1="20" y1="922" x2="275" y2="922"/>
+<text class="at" x="30" y="937">&lt;database&gt;.bak</text>
+</g>
+<g class="bx-store"><rect x="20" y="962" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="976" text-anchor="middle">«folder»</text>
+<text class="nm" x="147.5" y="992" text-anchor="middle">State\&lt;VM&gt;\sql\</text>
+<line class="div" x1="20" y1="999" x2="275" y2="999"/>
+<text class="at" x="30" y="1014">logins</text>
+</g>
+<g class="bx-store"><rect x="740" y="885" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="899" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="915" text-anchor="middle">SQL Server</text>
+<line class="div" x1="740" y1="922" x2="1010" y2="922"/>
+<text class="at" x="750" y="937">databases and logins</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1053" width="305" height="67" rx="3"/>
+<text class="st" x="487.5" y="1067" text-anchor="middle">«Restore, called by Restore-GuestState»</text>
+<text class="nm" x="487.5" y="1083" text-anchor="middle">Restore-GuestProjectFolder()</text>
+<line class="div" x1="335" y1="1090" x2="640" y2="1090"/>
+<g class="sn"><circle cx="351" cy="1074" r="10"/><text x="351" y="1078" text-anchor="middle">9</text></g>
+<text class="at" x="345" y="1105">10d, under GuestRestoreRoot</text>
+</g>
+<g class="bx-store"><rect x="20" y="1053" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="1067" text-anchor="middle">«folder»</text>
+<text class="nm" x="147.5" y="1083" text-anchor="middle">State\&lt;VM&gt;\projects\</text>
+<line class="div" x1="20" y1="1090" x2="275" y2="1090"/>
+<text class="at" x="30" y="1105">zip</text>
+</g>
+<g class="bx-store"><rect x="740" y="1053" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="1067" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="1083" text-anchor="middle">Guest</text>
+<line class="div" x1="740" y1="1090" x2="1010" y2="1090"/>
+<text class="at" x="750" y="1105">%USERPROFILE%\source</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1144" width="305" height="67" rx="3"/>
+<text class="st" x="487.5" y="1158" text-anchor="middle">«Restore, called by Restore-GuestState»</text>
+<text class="nm" x="487.5" y="1174" text-anchor="middle">Restore-GuestAppSetting()</text>
+<line class="div" x1="335" y1="1181" x2="640" y2="1181"/>
+<g class="sn"><circle cx="351" cy="1165" r="10"/><text x="351" y="1169" text-anchor="middle">10</text></g>
+<text class="at" x="345" y="1196">10e</text>
+</g>
+<g class="bx-store"><rect x="20" y="1144" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="1158" text-anchor="middle">«folder»</text>
+<text class="nm" x="147.5" y="1174" text-anchor="middle">State\&lt;VM&gt;\apps\</text>
+<line class="div" x1="20" y1="1181" x2="275" y2="1181"/>
+<text class="at" x="30" y="1196">&lt;Name&gt;.reg</text>
+</g>
+<g class="bx-store"><rect x="740" y="1144" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="1158" text-anchor="middle">«guest»</text>
+<text class="nm" x="875.0" y="1174" text-anchor="middle">Guest</text>
+<line class="div" x1="740" y1="1181" x2="1010" y2="1181"/>
+<text class="at" x="750" y="1196">HKCU keys imported</text>
+</g>
+</svg>

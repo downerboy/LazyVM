@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 1062" width="1030" height="1062" role="img" aria-labelledby="t-remove">
+<title id="t-remove">Remove a VM: calls in order, with data flowing in from the left and out to the right</title>
+<style>
+svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
+@media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
+text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(--fg)}
+.bg{fill:var(--bg)}
+.cap{font:600 11px system-ui,"Segoe UI",sans-serif;letter-spacing:.12em;fill:var(--muted)}
+.bx-cmd rect{fill:var(--cmd);stroke:var(--fg);stroke-width:1.6}
+.bx-caller rect{fill:var(--cmd);stroke:var(--call);stroke-width:1.2;stroke-dasharray:3 3}
+.bx-mod rect{fill:var(--mod);stroke:var(--line);stroke-width:1.2}
+.bx-store rect{fill:var(--store);stroke:var(--data);stroke-width:1.2;stroke-dasharray:6 3}
+.st{font-size:10px;fill:var(--muted)}
+.nm{font-size:13px;font-weight:600}
+.div{stroke:var(--line)}
+.at{font-size:11.5px;fill:var(--muted)}
+.cl{fill:none;stroke:var(--call);stroke-width:2}
+.df{fill:none;stroke:var(--data);stroke-width:2;stroke-dasharray:7 4}
+.sn circle{fill:var(--call)} .sn text{font:600 10px system-ui,sans-serif;fill:var(--on)}
+.bd circle{fill:var(--data)} .bd text{font:600 9px system-ui,sans-serif;fill:var(--on)}
+.mk-c{fill:var(--call)} .mk-d{fill:var(--data)}
+</style>
+<defs>
+<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1030" height="1062"/>
+<text class="cap" x="20" y="16">INPUTS</text>
+<text class="cap" x="335" y="16">CALLS IN ORDER</text>
+<text class="cap" x="740" y="16">OUTPUTS</text>
+<path class="cl" d="M335,84.5 L305,84.5 L305,772"/>
+<path class="cl" d="M305,183 L335,183" marker-end="url(#ac)"/>
+<path class="cl" d="M305,325 L335,325" marker-end="url(#ac)"/>
+<path class="cl" d="M305,510 L335,510" marker-end="url(#ac)"/>
+<path class="cl" d="M305,772 L335,772" marker-end="url(#ac)"/>
+<path class="df" d="M275,222.0 L335,222.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,196.5 L740,196.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,338.5 L335,338.5" marker-end="url(#ad)"/>
+<path class="df" d="M275,424.0 L335,424.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,347.0 L740,347.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,532.0 L740,532.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,617.5 L740,617.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,694.5 L740,694.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,828.0 L740,828.0" marker-end="url(#ad)"/>
+<path class="df" d="M640,973.0 L740,973.0" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="222.0" r="10"/><text x="293" y="225.5" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="690.0" cy="196.5" r="10"/><text x="690.0" y="200.0" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="293" cy="338.5" r="10"/><text x="293" y="342.0" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="293" cy="424.0" r="10"/><text x="293" y="427.5" text-anchor="middle">D4</text></g>
+<g class="bd"><circle cx="690.0" cy="347.0" r="10"/><text x="690.0" y="350.5" text-anchor="middle">D5</text></g>
+<g class="bd"><circle cx="690.0" cy="532.0" r="10"/><text x="690.0" y="535.5" text-anchor="middle">D6</text></g>
+<g class="bd"><circle cx="690.0" cy="617.5" r="10"/><text x="690.0" y="621.0" text-anchor="middle">D7</text></g>
+<g class="bd"><circle cx="690.0" cy="694.5" r="10"/><text x="690.0" y="698.0" text-anchor="middle">D8</text></g>
+<g class="bd"><circle cx="690.0" cy="828.0" r="10"/><text x="690.0" y="831.5" text-anchor="middle">D9</text></g>
+<g class="bd"><circle cx="690.0" cy="973.0" r="10"/><text x="690.0" y="976.5" text-anchor="middle">D10</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="101" rx="3"/>
+<text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
+<text class="nm" x="487.5" y="64" text-anchor="middle">Remove-LazyVM</text>
+<line class="div" x1="335" y1="71" x2="640" y2="71"/>
+<text class="at" x="345" y="86">-Name &lt;VM&gt;</text>
+<text class="at" x="345" y="103">asks first unless -Force</text>
+<text class="at" x="345" y="120">-WhatIf lists everything</text>
+</g>
+<g class="bx-mod"><rect x="335" y="163" width="305" height="118" rx="3"/>
+<text class="st" x="487.5" y="177" text-anchor="middle">«Common»</text>
+<text class="nm" x="487.5" y="193" text-anchor="middle">Initialize-CommandRun()</text>
+<line class="div" x1="335" y1="200" x2="640" y2="200"/>
+<g class="sn"><circle cx="351" cy="184" r="10"/><text x="351" y="188" text-anchor="middle">1</text></g>
+<text class="at" x="345" y="215">loads the settings into $CFG</text>
+<text class="at" x="345" y="232">and opens the log</text>
+</g>
+<g class="bx-store"><rect x="20" y="163" width="255" height="118" rx="3"/>
+<text class="st" x="147.5" y="177" text-anchor="middle">«settings»</text>
+<text class="nm" x="147.5" y="193" text-anchor="middle">$CFG sources</text>
+<line class="div" x1="20" y1="200" x2="275" y2="200"/>
+<text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
+<text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="249">Config\VMs\&lt;VM&gt;\VM.json</text>
+<text class="at" x="30" y="266">Backup\&lt;VM&gt;\guest.cred</text>
+</g>
+<g class="bx-store"><rect x="740" y="163" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="177" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="193" text-anchor="middle">Logs\</text>
+<line class="div" x1="740" y1="200" x2="1010" y2="200"/>
+<text class="at" x="750" y="215">&lt;VM&gt;.log  (appended)</text>
+</g>
+<g class="bx-mod"><rect x="335" y="305" width="305" height="161" rx="3"/>
+<text class="st" x="487.5" y="319" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="487.5" y="335" text-anchor="middle">Get-VMRemovalContext()</text>
+<line class="div" x1="335" y1="342" x2="640" y2="342"/>
+<g class="sn"><circle cx="351" cy="326" r="10"/><text x="351" y="330" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="357">Get-VMRemovalPlan decides</text>
+<text class="at" x="345" y="374">what to delete and keep;</text>
+<text class="at" x="345" y="391">lists it with sizes</text>
+</g>
+<g class="bx-store"><rect x="20" y="305" width="255" height="67" rx="3"/>
+<text class="st" x="147.5" y="319" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="335" text-anchor="middle">Config\VMs\*\</text>
+<line class="div" x1="20" y1="342" x2="275" y2="342"/>
+<text class="at" x="30" y="357">other VMs&#x27; VM.json</text>
+</g>
+<g class="bx-store"><rect x="20" y="382" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="396" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="147.5" y="412" text-anchor="middle">Hyper-V</text>
+<line class="div" x1="20" y1="419" x2="275" y2="419"/>
+<text class="at" x="30" y="434">disks of &lt;VM&gt;</text>
+<text class="at" x="30" y="451">disks of other VMs</text>
+</g>
+<g class="bx-store"><rect x="740" y="305" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="319" text-anchor="middle">«output»</text>
+<text class="nm" x="875.0" y="335" text-anchor="middle">Log and screen</text>
+<line class="div" x1="740" y1="342" x2="1010" y2="342"/>
+<text class="at" x="750" y="357">what will be deleted</text>
+<text class="at" x="750" y="374">what is kept, and why</text>
+</g>
+<g class="bx-mod"><rect x="335" y="490" width="305" height="238" rx="3"/>
+<text class="st" x="487.5" y="504" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="487.5" y="520" text-anchor="middle">Invoke-VMRemoval()</text>
+<line class="div" x1="335" y1="527" x2="640" y2="527"/>
+<g class="sn"><circle cx="351" cy="511" r="10"/><text x="351" y="515" text-anchor="middle">3</text></g>
+<text class="at" x="345" y="542">after you confirm;</text>
+<text class="at" x="345" y="559">stops at the VM if it</text>
+<text class="at" x="345" y="576">cannot be removed</text>
+</g>
+<g class="bx-store"><rect x="740" y="490" width="270" height="84" rx="3"/>
+<text class="st" x="875.0" y="504" text-anchor="middle">«task»</text>
+<text class="nm" x="875.0" y="520" text-anchor="middle">Task Scheduler</text>
+<line class="div" x1="740" y1="527" x2="1010" y2="527"/>
+<text class="at" x="750" y="542">LazyVM-Maintain-&lt;VM&gt;</text>
+<text class="at" x="750" y="559">LazyVM-ResumeAfterReboot-&lt;VM&gt;</text>
+</g>
+<g class="bx-store"><rect x="740" y="584" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="598" text-anchor="middle">«registry»</text>
+<text class="nm" x="875.0" y="614" text-anchor="middle">HKLM:\SOFTWARE\LazyVM\&lt;VM&gt;</text>
+<line class="div" x1="740" y1="621" x2="1010" y2="621"/>
+<text class="at" x="750" y="636">deleted</text>
+</g>
+<g class="bx-store"><rect x="740" y="661" width="270" height="67" rx="3"/>
+<text class="st" x="875.0" y="675" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875.0" y="691" text-anchor="middle">Hyper-V</text>
+<line class="div" x1="740" y1="698" x2="1010" y2="698"/>
+<text class="at" x="750" y="713">VM &lt;VM&gt; turned off, removed</text>
+</g>
+<g class="bx-mod"><rect x="335" y="752" width="305" height="280" rx="3"/>
+<text class="st" x="487.5" y="766" text-anchor="middle">«Maintenance, called by Invoke-VMRemoval»</text>
+<text class="nm" x="487.5" y="782" text-anchor="middle">Remove-PathWithRetry()</text>
+<line class="div" x1="335" y1="789" x2="640" y2="789"/>
+<g class="sn"><circle cx="351" cy="773" r="10"/><text x="351" y="777" text-anchor="middle">4</text></g>
+<text class="at" x="345" y="804">files, then folders;</text>
+<text class="at" x="345" y="821">the log goes last</text>
+</g>
+<g class="bx-store"><rect x="740" y="752" width="270" height="152" rx="3"/>
+<text class="st" x="875.0" y="766" text-anchor="middle">«file»</text>
+<text class="nm" x="875.0" y="782" text-anchor="middle">Files</text>
+<line class="div" x1="740" y1="789" x2="1010" y2="789"/>
+<text class="at" x="750" y="804">SQLDisk\&lt;VM&gt;.vhdx</text>
+<text class="at" x="750" y="821">DevDrive\&lt;VM&gt;.vhdx</text>
+<text class="at" x="750" y="838">VMs\&lt;VM&gt;-OS.vhdx, -Seed.iso</text>
+<text class="at" x="750" y="855">Backup\&lt;VM&gt;\*.cred, .vssettings</text>
+<text class="at" x="750" y="872">.lazyvm.key if no other VM</text>
+<text class="at" x="750" y="889">Logs\&lt;VM&gt;.log</text>
+</g>
+<g class="bx-store"><rect x="740" y="914" width="270" height="118" rx="3"/>
+<text class="st" x="875.0" y="928" text-anchor="middle">«folder»</text>
+<text class="nm" x="875.0" y="944" text-anchor="middle">Folders</text>
+<line class="div" x1="740" y1="951" x2="1010" y2="951"/>
+<text class="at" x="750" y="966">Checkpoints\&lt;VM&gt;</text>
+<text class="at" x="750" y="983">State\&lt;VM&gt;</text>
+<text class="at" x="750" y="1000">VMs\&lt;VM&gt;</text>
+<text class="at" x="750" y="1017">Config\VMs\&lt;VM&gt;</text>
+</g>
+</svg>

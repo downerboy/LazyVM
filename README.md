@@ -39,7 +39,7 @@ cd S:\Source\Massokissed.LazyVM
 ./build.ps1 -Bootstrap -Task Install
 ```
 
-This builds, tests and installs the module for all users, which the scheduled maintenance needs because it runs as SYSTEM. Open a new PowerShell 7 window afterwards.
+This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, installs it for all users, which the scheduled maintenance needs because it runs as SYSTEM. `-Bootstrap` installs Pester and PSScriptAnalyzer the first time. Open a new PowerShell 7 window afterwards.
 
 ## Quick start
 
@@ -105,6 +105,8 @@ Open them in VS Code. The schema beside them gives autocomplete, shows each sett
 ## Documentation
 
 The [guide](docs/Guide.md) covers every command, setting and phase, and what to do when something goes wrong.
+
+The [diagrams](docs/Diagrams.md) show, for each thing you do with LazyVM, which functions run in what order and what each one reads and writes.
 
 ## Development
 

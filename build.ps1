@@ -11,8 +11,9 @@ Builds, checks and tests the Massokissed.LazyVM module.
            fails the build.
   Test     Runs the Pester tests and writes out\testResults.xml.
   All      All three, in that order (the default).
-  Install  Build, then install the module for all users, where PowerShell
-           and the scheduled tasks find it. Needs an elevated PowerShell.
+  Install  Build, Analyze and Test, then, only if they all pass, install
+           the module for all users, where PowerShell and the scheduled
+           tasks find it. Needs an elevated PowerShell.
   Package  Build, then zip the module with Install.ps1, the README and the
            licence into out\release, ready to attach to a GitHub release.
 
@@ -33,9 +34,10 @@ the current user, if they are missing.
 ./build.ps1 -Bootstrap
 
 .EXAMPLE
-./build.ps1 -Task Install
+./build.ps1 -Bootstrap -Task Install
 
-Builds LazyVM and installs it, ready to use: Build-LazyVM -Name DevBox
+Builds and checks LazyVM and installs it, ready to use: Build-LazyVM -Name DevBox.
+-Bootstrap installs Pester and PSScriptAnalyzer the first time.
 #>
 [CmdletBinding()]
 param(
@@ -239,17 +241,18 @@ function Write-CIError {
 
 try {
     if ($Task -in 'All', 'Build', 'Install', 'Package') { Invoke-Build }
-    if ($Task -eq 'Install') { Install-BuiltModule }
-    if ($Task -eq 'Package') { New-ReleasePackage }
-    if ($Task -in 'All', 'Analyze') {
+    # Install checks first, so a module that fails them is never installed.
+    if ($Task -in 'All', 'Analyze', 'Install') {
         # Installed if missing; loaded only by the analyzer's own process.
         Import-BuildTool -Tool ($tools | Where-Object Name -eq 'PSScriptAnalyzer') -InstallOnly
         Invoke-Analyze
     }
-    if ($Task -in 'All', 'Test') {
+    if ($Task -in 'All', 'Test', 'Install') {
         Import-BuildTool -Tool ($tools | Where-Object Name -eq 'Pester')
         Invoke-Test
     }
+    if ($Task -eq 'Install') { Install-BuiltModule }
+    if ($Task -eq 'Package') { New-ReleasePackage }
 }
 catch {
     Write-CIError -Message "$($_.Exception.Message)`n$($_.ScriptStackTrace)"
