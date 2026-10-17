@@ -1,4 +1,12 @@
 ### ALPHA
+*I lost my eyesight nine years ago and am finally at a point where I can regularly use a computer with almost the same ease as before the accident. I was a full-stack developer. My go-to tools were C#, Visual Studio, SQL Server, and much more.
+
+A lot has changed, and I have a lot of catching up to do. Installing Visual Studio, SQL Server, and other heavy tooling on the only machine I rely on seemed like a good way to end up blocked from dealing with life's obligations while troubleshooting development issues. It also increases the machine's attack surface.
+
+I decided to use Hyper-V and put Visual Studio and other tooling in VMs. That also gave me an opportunity to try vibe coding with Copilot and Claude.
+
+Vibe coding is proving to be an exercise in herding cats. The code starts as spaghetti, gets refactored into gumbo, and eventually I realize some of the spaghetti never got served.* 
+
 # Massokissed.LazyVM
 
 A PowerShell module that builds and looks after Hyper-V development VMs on a Windows host, unattended: Windows 11 Enterprise Evaluation, Visual Studio, SQL Server 2025 Enterprise Developer and whatever other tools you install, with the 90-day evaluation handled for you.
