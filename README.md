@@ -1,4 +1,7 @@
-### ALPHA
+### ALPHA - A masochistic exploration of Vibe Coding 
+<br/>
+Motivation:
+<br/>
 <i>I lost my eyesight nine years ago and am finally at a point where I can regularly use a computer with almost the same ease as before the accident. I was a full-stack developer. My go-to tools were C#, Visual Studio, SQL Server, and much more.
 
 A lot has changed, and I have a lot of catching up to do. Installing Visual Studio, SQL Server, and other heavy tooling on the only machine I rely on seemed like a good way to end up blocked from dealing with life's obligations while troubleshooting development issues. It also increases the machine's attack surface.
@@ -9,7 +12,24 @@ Vibe coding is proving to be an exercise in herding cats. The code starts as spa
 
 # Massokissed.LazyVM
 
-A PowerShell module that builds and looks after Hyper-V development VMs on a Windows host, unattended: Windows 11 Enterprise Evaluation, Visual Studio, SQL Server 2025 Enterprise Developer and whatever other tools you install, with the 90-day evaluation handled for you.
+Currently this is a tool for setting up educational Visual Studio dev environment VMs on Windows using Hyper-V.  
+
+If I can master herding cats this will be a tool for deploying, maintain and destroying Hyper-V virtual machine in Windows.  This tool will have templates geared for different workloads that community can maintain that will not only be educational dev environments coupled to Windows Enterprise evaluation. 
+
+One-person entities, like a bookkeeper, will benefit having free tooling for easily(chuckle) setup and maintain VMs created for each customer. Making isolating, protecting, lightening the load for when disaster recovery is needed and greatly aid in satisfying ethical and legal requiredments eg. a health provider's business associate.
+
+P.S. This might be migrated to C# since I lack the knowledge of the best practices and the proven patterns for authoring maintainable PowerShell tools.  This was going to be a vehicle for pushing me to gain that knowledge, but I am feeling irresponsible for sharing a learning project as tool to the communit.
+
+Why is the information badly fragmented now?  I can't find a coherent horse's mouth.
+
+
+## What it needs
+
+` A cert for signing code
+
+## What is is
+
+-A PowerShell module that builds and looks after Hyper-V development VMs on a Windows host, unattended: Windows 11 Enterprise Evaluation, Visual Studio, SQL Server Enterprise Developer and whatever other tools you install, with the 90-day evaluation handled for you.  The reset flag has a lifespan of being flipped three times.  <code>4 * 90 = 360</code>
 
 ## What it does
 
