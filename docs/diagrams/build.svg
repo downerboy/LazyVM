@@ -369,7 +369,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="335" y1="1906" x2="640" y2="1906"/>
 <g class="sn"><circle cx="351" cy="1890" r="10"/><text x="351" y="1894" text-anchor="middle">13</text></g>
 <text class="at" x="345" y="1921">phase 7: waits for Setup,</text>
-<text class="at" x="345" y="1938">attaches D: and W:,</text>
+<text class="at" x="345" y="1938">extends C:, attaches D:, W:,</text>
 <text class="at" x="345" y="1955">customizes Windows, installs</text>
 <text class="at" x="345" y="1972">the tooling list</text>
 </g>

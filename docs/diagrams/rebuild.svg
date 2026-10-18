@@ -344,7 +344,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="335" y1="1664" x2="640" y2="1664"/>
 <g class="sn"><circle cx="351" cy="1648" r="10"/><text x="351" y="1652" text-anchor="middle">11</text></g>
 <text class="at" x="345" y="1679">phase 7: waits for Setup,</text>
-<text class="at" x="345" y="1696">attaches D: and W:,</text>
+<text class="at" x="345" y="1696">extends C:, attaches D:, W:,</text>
 <text class="at" x="345" y="1713">customizes Windows, installs</text>
 <text class="at" x="345" y="1730">the tooling list</text>
 </g>
