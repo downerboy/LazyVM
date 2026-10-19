@@ -191,14 +191,44 @@ function Read-SettingsFile {
     $schemaPath = Join-Path -Path $script:DataDir -ChildPath $script:SchemaFileName
     $json = ConvertTo-Json -InputObject $values -Depth 20
     $schemaErrors = $null
-    $null = Test-Json -Json $json -SchemaFile $schemaPath -ErrorVariable schemaErrors -ErrorAction SilentlyContinue
+    $valid = Test-Json -Json $json -SchemaFile $schemaPath -ErrorVariable schemaErrors -ErrorAction SilentlyContinue
     foreach ($schemaError in @($schemaErrors)) {
         $problems.Add((Format-SchemaProblem -Message $schemaError.Exception.Message))
     }
 
+    # PowerShell 7.6 reports only top-level problems: one inside a list item
+    # fails the check without saying why. So each list item is also checked
+    # against its own part of the schema, where its problems are top-level.
+    foreach ($name in $values.Keys) {
+        if (-not $schema.properties.Contains($name)) { continue }
+        $items = $schema.properties[$name]['items']
+        if (-not $items -or $values[$name] -isnot [System.Collections.IList]) { continue }
+
+        $itemSchema = [ordered]@{ '$schema' = $schema['$schema'] }
+        foreach ($key in $items.Keys) { $itemSchema[$key] = $items[$key] }
+        $itemSchemaJson = ConvertTo-Json -InputObject $itemSchema -Depth 20
+
+        for ($i = 0; $i -lt $values[$name].Count; $i++) {
+            $itemJson = ConvertTo-Json -InputObject $values[$name][$i] -Depth 20
+            $itemErrors = $null
+            $null = Test-Json -Json $itemJson -Schema $itemSchemaJson -ErrorVariable itemErrors -ErrorAction SilentlyContinue
+            foreach ($itemError in @($itemErrors)) {
+                # at '/Extra' -> at '/AppSettings/0/Extra'
+                $message = $itemError.Exception.Message -replace " at '([^']*)'$", " at '/$name/$i`$1'"
+                $problems.Add((Format-SchemaProblem -Message $message))
+            }
+        }
+    }
+
+    # Never accept a file the schema rejects, even when no reason was given.
+    if (-not $valid -and $problems.Count -eq 0) {
+        $problems.Add('It does not match the settings schema. Open it in VS Code to see where.')
+    }
+
     if ($problems.Count -gt 0) {
-        $list = ($problems | Sort-Object -Unique | ForEach-Object { "  - $_" }) -join "`n"
-        throw "This settings file has $($problems.Count) problem(s), so none of it was used:`n  $Path`n$list"
+        $unique = @($problems | Sort-Object -Unique)
+        $list = ($unique | ForEach-Object { "  - $_" }) -join "`n"
+        throw "This settings file has $($unique.Count) problem(s), so none of it was used:`n  $Path`n$list"
     }
 
     return ConvertTo-PlainValue -Value $values
