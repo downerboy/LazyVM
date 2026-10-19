@@ -204,7 +204,7 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
 3. `Connect-Guest` (Guest, called by Invoke-Maintenance): starts the VM first if off (Wait-GuestReady)
    - Reads D4, guest credential: Backup\ (.lazyvm.key, <VM>\guest.cred)
    - Writes D5, PowerShell Direct session: VM <VM> (running, reachable)
-   - Then `Expand-GuestSystemDrive` (Installation): extends C: into new OS-disk space, removing the recovery partition after C: if there is one; a failure does not stop the run
+   - Then `Expand-GuestSystemDrive` (Installation): when the OS disk has new space: checkpoint, then moves the recovery partition to the end of the disk and extends C: up to it; a failure keeps the checkpoint and does not stop the run
 4. `Update-ToolingRecord` (Tooling, called by Invoke-Maintenance): takes the checkpoint before adopting a change; a failure does not stop the run
    - Reads D6, what is installed: Guest tooling (vswhere + vs_installer export, winget export, Marketplace extensions)
    - Reads D7, last recorded tooling list: Config\VMs\<VM>\ (Tooling.json)
