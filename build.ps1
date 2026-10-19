@@ -218,7 +218,9 @@ function Invoke-Test {
     foreach ($test in $result.Failed) {
         Write-CIError -Message "$($test.ExpandedPath): $($test.ErrorRecord[0].Exception.Message)" -File $test.ScriptBlock.File -Line $test.StartLine
     }
-    foreach ($container in @($result.Containers | Where-Object Result -eq 'Failed')) {
+    # A test file is also marked failed when only its tests failed; those are
+    # reported above, so only a file that broke on its own is reported here.
+    foreach ($container in @($result.Containers | Where-Object { $_.Result -eq 'Failed' -and @($_.ErrorRecord).Count -gt 0 })) {
         Write-CIError -Message "$($container.Item): $(@($container.ErrorRecord)[0])"
     }
     if ($result.FailedCount -gt 0 -or $result.FailedContainersCount -gt 0) {

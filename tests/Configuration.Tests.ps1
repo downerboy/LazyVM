@@ -175,6 +175,14 @@ Describe 'Read-SettingsFile' {
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } |
             Should -Throw -ExpectedMessage '*has 3 problem(s), so none of it was used*'
     }
+
+    It 'reports a problem inside a list together with a top-level one' {
+        # PowerShell 7.6's Test-Json leaves out problems inside list items.
+        $path = New-TestFile -Text '{ "vCPU": "lots", "ProjectExcludeDirs": [ "bin", 2 ] }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } |
+            Should -Throw -ExpectedMessage "*has 2 problem(s)*'ProjectExcludeDirs, item 2' should be text*"
+    }
 }
 
 Describe 'Import-SettingsFile' {
