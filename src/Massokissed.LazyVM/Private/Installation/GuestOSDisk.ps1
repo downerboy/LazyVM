@@ -158,7 +158,7 @@ function Get-OSDiskExpandScript {
             return (Invoke-Tool -FilePath reagentc.exe -ArgumentList @('/info')).Output -match 'Windows RE status:\s+Enabled'
         }
 
-        function Move-RecoveryPartition {
+        function Move-RecoveryPartition([int]$SizeMB) {
             $ErrorActionPreference = 'Stop'
             Update-HostStorageCache
             $os = Get-Partition -DriveLetter C
@@ -183,7 +183,7 @@ function Get-OSDiskExpandScript {
             }
             Update-HostStorageCache
             $before = (Get-Partition -DriveLetter C).Size
-            $target = (Get-PartitionSupportedSize -DriveLetter C).SizeMax - ($recoveryMB * 1MB)
+            $target = (Get-PartitionSupportedSize -DriveLetter C).SizeMax - ($SizeMB * 1MB)
             if ([math]::Abs($target - $before) -gt 16MB) {
                 Resize-Partition -DriveLetter C -Size $target
                 $notes.Add("OK|C: resized from $([math]::Round($before / 1GB, 1)) GB to $([math]::Round($target / 1GB, 1)) GB")
@@ -224,10 +224,10 @@ function Get-OSDiskExpandScript {
             finally {
                 $null = Invoke-DiskPart -Commands @("select disk $diskNumber", "select partition $($recovery.PartitionNumber)", "remove letter=$letter")
             }
-            $notes.Add("OK|recovery partition moved to the end of the disk ($recoveryMB MB) and recovery turned on")
+            $notes.Add("OK|recovery partition moved to the end of the disk ($SizeMB MB) and recovery turned on")
         }
 
-        try { Move-RecoveryPartition }
+        try { Move-RecoveryPartition -SizeMB $recoveryMB }
         catch {
             $notes.Add("WARN|stopped part way: $($_.Exception.Message)")
         }
