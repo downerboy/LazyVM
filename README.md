@@ -1,4 +1,4 @@
-### ALPHA - A masochistic exploration of Vibe Coding 
+### ALPHA - A masochistic exploration into Vibe Coding the wrong way.
 <br/>
 Motivation:
 <br/>
