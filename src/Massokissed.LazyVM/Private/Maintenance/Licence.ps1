@@ -207,7 +207,11 @@ function Invoke-Maintenance {
     }
     Connect-Guest -Credential $credential | Out-Null
 
-    # Tooling first, every day: record what is installed, taking a checkpoint
+    # A user who made the OS disk bigger gets the space on C: tonight,
+    # with nothing to do inside the guest.
+    Expand-GuestSystemDrive
+
+    # Then tooling, every day: record what is installed, taking a checkpoint
     # before adopting any change. A failure here must not stop the licence
     # work below.
     try { Update-ToolingRecord | Out-Null }

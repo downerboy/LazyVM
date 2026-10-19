@@ -169,7 +169,7 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
    - Reads D20, install discs: ISO\  VMs\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
    - Writes D21, Windows disk, VM files: VMs\ (<VM>-OS.vhdx, <VM>\  (VM configuration))
    - Writes D22, new VM: VM <VM> (started from the ISO,, Windows installs unattended)
-13. `Install-GuestSoftware` (Installation, called by Invoke-VMBuild): phase 7: waits for Setup, attaches D: and W:, customizes Windows, installs the tooling list
+13. `Install-GuestSoftware` (Installation, called by Invoke-VMBuild): phase 7: waits for Setup, extends C: over the whole OS disk, attaches D: and W:, customizes Windows, installs the tooling list
    - Reads D23, tooling list: Config\VMs\<VM>\ (Tooling.json, or the module's, Data\Tooling.Default.json)
    - Reads D24, SQL Server media: Installers\ (SQLServer2025 ISO)
    - Writes D25, installed tooling: Guest (D: data disk, W: Dev Drive, VS + SSMS, extensions, SQL Server 2025, winget apps)
@@ -190,7 +190,7 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
 
 `Invoke-LazyVMMaintenance` `-Name <VM>`
 
-Records tooling changes every day, then acts on the evaluation licence only when it is within RebuildThresholdDays (10) of expiry.
+Extends C: into any space added to the OS disk and records tooling changes every day, then acts on the evaluation licence only when it is within RebuildThresholdDays (10) of expiry.
 
 Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
 
@@ -204,6 +204,7 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
 3. `Connect-Guest` (Guest, called by Invoke-Maintenance): starts the VM first if off (Wait-GuestReady)
    - Reads D4, guest credential: Backup\ (.lazyvm.key, <VM>\guest.cred)
    - Writes D5, PowerShell Direct session: VM <VM> (running, reachable)
+   - Then `Expand-GuestSystemDrive` (Installation): extends C: into new OS-disk space, removing the recovery partition after C: if there is one; a failure does not stop the run
 4. `Update-ToolingRecord` (Tooling, called by Invoke-Maintenance): takes the checkpoint before adopting a change; a failure does not stop the run
    - Reads D6, what is installed: Guest tooling (vswhere + vs_installer export, winget export, Marketplace extensions)
    - Reads D7, last recorded tooling list: Config\VMs\<VM>\ (Tooling.json)
@@ -281,7 +282,7 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
    - Reads D17, install discs: ISO\  VMs\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
    - Writes D18, Windows disk, VM files: VMs\ (<VM>-OS.vhdx, <VM>\  (VM configuration))
    - Writes D19, new VM: VM <VM> (started from the ISO,, Windows installs unattended)
-11. `Install-GuestSoftware` (Installation, called by Invoke-Rebuild): phase 7: waits for Setup, attaches D: and W:, customizes Windows, installs the tooling list
+11. `Install-GuestSoftware` (Installation, called by Invoke-Rebuild): phase 7: waits for Setup, extends C: over the whole OS disk, attaches D: and W:, customizes Windows, installs the tooling list
    - Reads D20, tooling list: Config\VMs\<VM>\ (Tooling.json, or the module's, Data\Tooling.Default.json)
    - Reads D21, SQL Server media: Installers\ (SQLServer2025 ISO)
    - Writes D22, installed tooling: Guest (D: data disk, W: Dev Drive, VS + SSMS, extensions, SQL Server 2025, winget apps)

@@ -56,6 +56,7 @@ function Install-GuestSoftware {
     Add-SqlDataDisk
     Add-DevDriveDisk
     Connect-Guest -Credential $credential | Out-Null
+    Expand-GuestSystemDrive
     Initialize-GuestSqlDisk
     Initialize-GuestDevDrive | Out-Null
     Enable-GuestEnhancedSession
