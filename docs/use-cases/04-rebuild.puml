@@ -1,0 +1,44 @@
+@startuml
+!include _style.iuml
+title Rebuild the VM (Invoke-LazyVMRebuild)
+
+actor "Administrator" as Admin
+actor "Task Scheduler\n(SYSTEM)" as Sched
+
+rectangle "Massokissed.LazyVM" {
+  usecase "Rebuild the VM\n<size:10>Invoke-LazyVMRebuild</size>" as Rebuild
+  usecase "Capture state" as Capture
+  usecase "Retire the old VM" as Retire
+  usecase "Create the VM and install\nWindows unattended" as CreateVM
+  usecase "Install the tooling list" as Tooling
+  usecase "Extend C: to the whole disk" as ExpandC
+  usecase "Configure the guest" as Configure
+  usecase "Restore state" as Restore
+  usecase "Verify the rebuilt VM" as Verify
+  usecase "Delete the retired disk" as DelRetired
+}
+
+actor "Hyper-V" as HV <<system>>
+actor "Guest Windows" as Guest <<system>>
+
+Admin --> Rebuild
+Sched --> Rebuild
+
+Capture ..> Rebuild : <<extend>>\n[not -SkipCapture]
+Rebuild ..> Retire : <<include>>
+Rebuild ..> CreateVM : <<include>>
+Rebuild ..> Tooling : <<include>>
+Rebuild ..> Configure : <<include>>
+Rebuild ..> Restore : <<include>>
+Rebuild ..> Verify : <<include>>
+Tooling ..> ExpandC : <<include>>
+DelRetired ..> Verify : <<extend>>\n[passed and\nDeleteRetiredDiskOnSuccess]
+
+Retire --> HV
+CreateVM --> HV
+Verify --> HV
+Capture --> Guest
+Tooling --> Guest
+Configure --> Guest
+Restore --> Guest
+@enduml

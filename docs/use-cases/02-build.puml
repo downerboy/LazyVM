@@ -1,0 +1,59 @@
+@startuml
+!include _style.iuml
+title Build a VM (Build-LazyVM)
+
+actor "Administrator" as Admin
+actor "Task Scheduler\n(SYSTEM)" as Sched
+
+rectangle "Massokissed.LazyVM" {
+  usecase "Build a VM" as Build
+  usecase "Choose the LazyVM folder\nautomatically" as AutoRoot
+  usecase "Create the VM profile" as Profile
+  usecase "Check and prepare the host\n<size:10>phases 0-3</size>" as Host
+  usecase "Turn on Hyper-V\nand restart the host" as HVOn
+  usecase "Get the installation media\n<size:10>phase 4</size>" as Media
+  usecase "Open the evaluation\ndownload page" as EvalPage
+  usecase "Download the SQL Server ISO" as SqlIso
+  usecase "Create the data disk\nand Dev Drive\n<size:10>phase 5</size>" as Disks
+  usecase "Create the VM and install\nWindows unattended\n<size:10>phase 6</size>" as CreateVM
+  usecase "Generate the guest account" as GenCred
+  usecase "Install the tooling list\n<size:10>phase 7</size>" as Tooling
+  usecase "Extend C: to the whole disk" as ExpandC
+  usecase "Configure the guest\n<size:10>phase 8</size>" as Configure
+  usecase "Schedule daily maintenance" as Sched_UC
+}
+
+actor "Hyper-V" as HV <<system>>
+actor "Guest Windows" as Guest <<system>>
+actor "Microsoft downloads" as MS <<system>>
+
+Admin --> Build
+Sched --> Build
+
+Build ..> Host : <<include>>
+Build ..> Media : <<include>>
+Build ..> Disks : <<include>>
+Build ..> CreateVM : <<include>>
+Build ..> Tooling : <<include>>
+Build ..> Configure : <<include>>
+Build ..> Sched_UC : <<include>>
+Tooling ..> ExpandC : <<include>>
+
+AutoRoot ..> Build : <<extend>>\n[no folder registered]
+Profile ..> Build : <<extend>>\n[no profile for -Name]
+HVOn ..> Host : <<extend>>\n[Hyper-V is off]
+EvalPage ..> Media : <<extend>>\n[no Windows ISO found]
+SqlIso ..> Media : <<extend>>\n[SQL ISO missing]
+GenCred ..> CreateVM : <<extend>>\n[no stored credential]
+
+Host --> HV
+CreateVM --> HV
+Disks --> HV
+Tooling --> Guest
+ExpandC --> Guest
+Configure --> Guest
+SqlIso --> MS
+EvalPage --> MS
+Tooling --> MS
+
+@enduml

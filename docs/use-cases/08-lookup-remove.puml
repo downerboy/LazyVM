@@ -1,0 +1,38 @@
+@startuml
+!include _style.iuml
+title Look up and remove
+
+actor "Host user" as User
+actor "Administrator" as Admin
+Admin --|> User
+
+rectangle "Massokissed.LazyVM" {
+  usecase "List VMs\n<size:10>Get-LazyVM</size>" as List
+  usecase "View settings\n<size:10>Get-LazyVMSetting</size>" as Set
+  usecase "View the guest account\n<size:10>Get-LazyVMCredential</size>" as CredV
+  usecase "Check the licence\n<size:10>Get-LazyVMLicense</size>" as Lic
+  usecase "Start the VM" as Start
+  usecase "Remove a VM\n<size:10>Remove-LazyVM</size>" as Rem
+  usecase "List what will be\ndeleted and kept" as Plan
+}
+
+actor "Hyper-V" as HV <<system>>
+actor "Task Scheduler" as TS <<system>>
+actor "Guest Windows" as Guest <<system>>
+
+User --> List
+User --> Set
+Admin --> CredV
+Admin --> Lic
+Admin --> Rem
+
+Start ..> Lic : <<extend>>\n[VM is off]
+Rem ..> Plan : <<include>>
+
+List --> HV
+List --> TS
+Lic --> Guest
+Start --> HV
+Rem --> HV
+Rem --> TS
+@enduml

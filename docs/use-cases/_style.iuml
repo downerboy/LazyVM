@@ -1,0 +1,36 @@
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "DejaVu Sans"
+skinparam defaultFontSize 13
+skinparam ArrowColor #3B4754
+skinparam ArrowFontSize 11
+skinparam ArrowFontColor #3B4754
+skinparam actorStyle default
+skinparam actor {
+  BorderColor #1F3A5F
+  BackgroundColor #FFFFFF
+  FontColor #17202A
+}
+skinparam usecase {
+  BackgroundColor #EEF3FA
+  BorderColor #1F5FBF
+  BorderThickness 1.4
+  FontColor #17202A
+}
+skinparam rectangle {
+  BackgroundColor #FBFCFE
+  BorderColor #52606D
+  FontStyle bold
+  FontSize 14
+}
+skinparam note {
+  BackgroundColor #FFF8E6
+  BorderColor #B86E00
+  FontSize 11
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #9AA5B1
+  FontSize 12
+}
+left to right direction

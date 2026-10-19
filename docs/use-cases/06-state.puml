@@ -1,0 +1,28 @@
+@startuml
+!include _style.iuml
+title State
+
+actor "Administrator" as Admin
+
+rectangle "Massokissed.LazyVM" {
+  usecase "Capture state\n<size:10>Save-LazyVMState</size>" as Capture
+  usecase "Restore state\n<size:10>Restore-LazyVMState</size>" as Restore
+  usecase "Start the VM" as Start
+  usecase "Bring the SQL data disk online" as Disk
+}
+
+actor "Guest Windows" as Guest <<system>>
+actor "Hyper-V" as HV <<system>>
+
+Admin --> Capture
+Admin --> Restore
+Capture ..> Disk : <<include>>
+Restore ..> Disk : <<include>>
+Start ..> Capture : <<extend>>\n[VM is off]
+Start ..> Restore : <<extend>>\n[VM is off]
+
+Capture --> Guest
+Restore --> Guest
+Disk --> Guest
+Start --> HV
+@enduml

@@ -1,0 +1,28 @@
+@startuml
+!include _style.iuml
+title Install the module
+
+actor "Administrator" as Admin
+
+rectangle "build.ps1 (repository)" {
+  usecase "Install from the repository\n<size:10>./build.ps1 -Task Install</size>" as RepoInstall
+  usecase "Build the module" as Build
+  usecase "Analyze with PSScriptAnalyzer" as Analyze
+  usecase "Run the Pester tests" as Test
+  usecase "Install the build tools" as Tools
+}
+rectangle "Install.ps1 (release zip)" {
+  usecase "Install from a release\n<size:10>.\\LazyVM\\Install.ps1</size>" as RelInstall
+}
+
+actor "PowerShell Gallery" as Gallery <<system>>
+
+Admin --> RepoInstall
+Admin --> RelInstall
+RepoInstall ..> Build : <<include>>
+RepoInstall ..> Analyze : <<include>>
+RepoInstall ..> Test : <<include>>
+Tools ..> RepoInstall : <<extend>>\n[-Bootstrap and\ntools missing]
+Tools --> Gallery
+
+@enduml

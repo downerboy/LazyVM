@@ -134,7 +134,7 @@ Open them in VS Code. The schema beside them gives autocomplete, shows each sett
 
 The [guide](docs/Guide.md) covers every command, setting and phase, and what to do when something goes wrong.
 
-The [diagrams](docs/Diagrams.md) show, for each thing you do with LazyVM, which functions run in what order and what each one reads and writes.
+The [use case diagrams](docs/UseCases.md) show who does what with LazyVM, in UML. The [flow diagrams](docs/Diagrams.md) show, for each thing you do with LazyVM, which functions run in what order and what each one reads and writes.
 
 ## Development
 

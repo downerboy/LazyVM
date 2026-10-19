@@ -1,0 +1,62 @@
+@startuml
+!include _style.iuml
+title LazyVM module: all use cases
+
+actor "Host user" as User
+actor "Administrator" as Admin
+actor "Task Scheduler\n(SYSTEM)" as Sched
+Admin --|> User
+
+rectangle "Massokissed.LazyVM" {
+  package "Look up" {
+    usecase "List VMs\n<size:10>Get-LazyVM</size>" as UC_List
+    usecase "View settings\n<size:10>Get-LazyVMSetting</size>" as UC_Set
+    usecase "Check the licence\n<size:10>Get-LazyVMLicense</size>" as UC_Lic
+    usecase "View the guest account\n<size:10>Get-LazyVMCredential</size>" as UC_CredV
+  }
+  package "Set up" {
+    usecase "Create a VM profile\n<size:10>New-LazyVM</size>" as UC_New
+    usecase "Choose the LazyVM folder\n<size:10>Set-LazyVMRoot</size>" as UC_Root
+    usecase "Store the guest account\n<size:10>Set-LazyVMCredential</size>" as UC_Cred
+  }
+  package "Build and maintain" {
+    usecase "Build a VM\n<size:10>Build-LazyVM</size>" as UC_Build
+    usecase "Schedule daily maintenance\n<size:10>Register-LazyVMMaintenance</size>" as UC_Reg
+    usecase "Run daily maintenance\n<size:10>Invoke-LazyVMMaintenance</size>" as UC_Maint
+    usecase "Rebuild the VM\n<size:10>Invoke-LazyVMRebuild</size>" as UC_Rebuild
+  }
+  package "Tooling" {
+    usecase "View installed tooling\n<size:10>Get-LazyVMTooling</size>" as UC_ToolV
+    usecase "Record tooling changes\n<size:10>Save-LazyVMTooling</size>" as UC_ToolS
+    usecase "List tooling restore points\n<size:10>Get-LazyVMRestorePoint</size>" as UC_RP
+    usecase "Return to a tooling version\n<size:10>Restore-LazyVMTooling</size>" as UC_ToolR
+  }
+  package "State" {
+    usecase "Capture state\n<size:10>Save-LazyVMState</size>" as UC_Cap
+    usecase "Restore state\n<size:10>Restore-LazyVMState</size>" as UC_Res
+  }
+  usecase "Remove a VM\n<size:10>Remove-LazyVM</size>" as UC_Rem
+}
+
+User --> UC_List
+User --> UC_Set
+User --> UC_New
+Admin --> UC_Lic
+Admin --> UC_CredV
+Admin --> UC_Root
+Admin --> UC_Cred
+Admin --> UC_Build
+Admin --> UC_Reg
+Admin --> UC_Maint
+Admin --> UC_Rebuild
+Admin --> UC_ToolV
+Admin --> UC_ToolS
+Admin --> UC_RP
+Admin --> UC_ToolR
+Admin --> UC_Cap
+Admin --> UC_Res
+Admin --> UC_Rem
+UC_Maint <-- Sched
+UC_Build <-- Sched
+
+@enduml

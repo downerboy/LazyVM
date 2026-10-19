@@ -1,0 +1,47 @@
+@startuml
+!include _style.iuml
+title Run daily maintenance (Invoke-LazyVMMaintenance)
+
+actor "Task Scheduler\n(SYSTEM)" as Sched
+actor "Administrator" as Admin
+
+rectangle "Massokissed.LazyVM" {
+  usecase "Schedule daily maintenance\n<size:10>Register-LazyVMMaintenance</size>" as Reg
+  usecase "Run daily maintenance\n<size:10>Invoke-LazyVMMaintenance</size>" as Maint
+  usecase "Start the VM" as Start
+  usecase "Extend C: to the whole disk" as ExpandC
+  usecase "Record tooling changes" as Record
+  usecase "Take a tooling checkpoint" as Checkpoint
+  usecase "Check the evaluation licence" as Lic
+  usecase "Capture state" as Capture
+  usecase "Rearm the evaluation" as Rearm
+  usecase "Rebuild the VM" as Rebuild
+  usecase "Build a VM" as Build
+}
+
+actor "Hyper-V" as HV <<system>>
+actor "Guest Windows" as Guest <<system>>
+
+Sched --> Maint
+Admin --> Maint
+Admin --> Reg
+Reg --> Sched
+
+Maint ..> ExpandC : <<include>>
+Maint ..> Record : <<include>>
+Maint ..> Lic : <<include>>
+Start ..> Maint : <<extend>>\n[VM is off]
+Checkpoint ..> Record : <<extend>>\n[tooling changed]
+Capture ..> Maint : <<extend>>\n[within RebuildThresholdDays]
+Rearm ..> Maint : <<extend>>\n[rearms left]
+Rebuild ..> Maint : <<extend>>\n[no rearms left\nor rearm failed]
+Build ..> Maint : <<extend>>\n[VM does not exist]
+
+Start --> HV
+Checkpoint --> HV
+ExpandC --> Guest
+Record --> Guest
+Lic --> Guest
+Rearm --> Guest
+Capture --> Guest
+@enduml

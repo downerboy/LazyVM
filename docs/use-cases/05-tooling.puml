@@ -1,0 +1,36 @@
+@startuml
+!include _style.iuml
+title Tooling
+
+actor "Administrator" as Admin
+
+rectangle "Massokissed.LazyVM" {
+  usecase "View installed tooling\n<size:10>Get-LazyVMTooling</size>" as View
+  usecase "Record tooling changes\n<size:10>Save-LazyVMTooling</size>" as Record
+  usecase "List tooling restore points\n<size:10>Get-LazyVMRestorePoint</size>" as List
+  usecase "Return to a tooling version\n<size:10>Restore-LazyVMTooling</size>" as Revert
+  usecase "Take an inventory\nof the guest" as Inventory
+  usecase "Take a tooling checkpoint" as Checkpoint
+  usecase "Start the VM" as Start
+}
+
+actor "Guest Windows" as Guest <<system>>
+actor "Hyper-V" as HV <<system>>
+
+Admin --> View
+Admin --> Record
+Admin --> List
+Admin --> Revert
+
+View ..> Inventory : <<include>>
+Record ..> Inventory : <<include>>
+Checkpoint ..> Record : <<extend>>\n[tooling changed]
+Revert ..> Checkpoint : <<include>>
+Start ..> Inventory : <<extend>>\n[VM is off]
+
+Inventory --> Guest
+Checkpoint --> HV
+Revert --> HV
+List --> HV
+Start --> HV
+@enduml
