@@ -200,6 +200,7 @@ Describe 'Get-LazyVMSetting' {
         $schemaCount = InModuleScope $module { @((Get-SettingsSchema).properties.Keys | Where-Object { $_ -ne '$schema' }).Count }
 
         $settings.Count | Should -Be $schemaCount
+        $settings.Name | Select-Object -Unique | Should -Be 'Alpha'
         $vcpu = $settings | Where-Object Setting -eq 'vCPU'
         $vcpu.Value | Should -Be 6
         $vcpu.Source | Should -Be 'VMs\Alpha\VM.json'

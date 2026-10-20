@@ -54,7 +54,7 @@
 
         [pscustomobject]@{
             PSTypeName  = 'LazyVM.Setting'
-            VMName      = $configuration.VMName
+            Name        = $configuration.VMName
             Setting     = $settingName
             Value       = $configuration.Settings[$settingName]
             Source      = $configuration.Sources[$settingName]
