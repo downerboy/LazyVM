@@ -213,6 +213,31 @@ Describe 'Get-LazyVMSetting' {
     }
 }
 
+Describe 'Pipeline input' {
+    It '<_> takes Name from the pipeline, by value and by property name' -ForEach @(
+        'Build-LazyVM', 'Get-LazyVM', 'Get-LazyVMCredential', 'Get-LazyVMLicense', 'Get-LazyVMRestorePoint',
+        'Get-LazyVMSetting', 'Get-LazyVMTooling', 'Invoke-LazyVMMaintenance', 'Invoke-LazyVMRebuild',
+        'Register-LazyVMMaintenance', 'Remove-LazyVM', 'Restore-LazyVMState', 'Save-LazyVMState',
+        'Save-LazyVMTooling', 'Set-LazyVMCredential'
+    ) {
+        $attribute = (Get-Command -Name $_).Parameters['Name'].Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] }
+        $attribute.ValueFromPipeline | Should -BeTrue
+        $attribute.ValueFromPipelineByPropertyName | Should -BeTrue
+    }
+
+    It 'runs once per VM piped in' {
+        $root = New-TestRoot -VMs 'Alpha', 'Beta'
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $root; Source = 'a test' } }.GetNewClosure()
+
+        $byObject = @(Get-LazyVM | Get-LazyVMSetting -Setting 'vCPU')
+        $byName = @('Alpha', 'Beta' | Get-LazyVMSetting -Setting 'vCPU')
+
+        $byObject.Name | Should -Be @('Alpha', 'Beta')
+        $byName.Name | Should -Be @('Alpha', 'Beta')
+    }
+}
+
 Describe 'New-LazyVM' {
     BeforeEach {
         $root = New-TestRoot

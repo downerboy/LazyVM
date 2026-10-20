@@ -36,38 +36,40 @@
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     [OutputType([void])]
     param(
-        [Parameter(Mandatory, Position = 0)]
+        [Parameter(Mandatory, Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
         [switch]$Force
     )
 
-    if ($Force -and -not $PSBoundParameters.ContainsKey('Confirm')) {
-        $ConfirmPreference = 'None'
-    }
-
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Remove' -Name $Name
-
-        $context = Get-VMRemovalContext -ScriptDir $MyInvocation.MyCommand.Module.ModuleBase
-        if (-not $context) { return }
-
-        if (-not $PSCmdlet.ShouldProcess($CFG.VMName, 'Delete the VM and everything listed above, which cannot be undone')) {
-            Write-LogEntry 'Removal cancelled - nothing has been changed.' 'INFO'
-            return
+    process {
+        if ($Force -and -not $PSBoundParameters.ContainsKey('Confirm')) {
+            $ConfirmPreference = 'None'
         }
 
-        $outcome = Invoke-VMRemoval -Context $context
-        if ($outcome -eq 'incomplete') {
-            throw "'$($CFG.VMName)' was only partly removed. The log lists what is left: $($CFG.LogFile)"
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Remove' -Name $Name
+
+            $context = Get-VMRemovalContext -ScriptDir $MyInvocation.MyCommand.Module.ModuleBase
+            if (-not $context) { return }
+
+            if (-not $PSCmdlet.ShouldProcess($CFG.VMName, 'Delete the VM and everything listed above, which cannot be undone')) {
+                Write-LogEntry 'Removal cancelled - nothing has been changed.' 'INFO'
+                return
+            }
+
+            $outcome = Invoke-VMRemoval -Context $context
+            if ($outcome -eq 'incomplete') {
+                throw "'$($CFG.VMName)' was only partly removed. The log lists what is left: $($CFG.LogFile)"
+            }
         }
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'Remove stopped' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+        catch {
+            if ($script:LogReady) { Write-LogError 'Remove stopped' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
+        }
+        finally {
+            Complete-CommandRun
+        }
     }
 }

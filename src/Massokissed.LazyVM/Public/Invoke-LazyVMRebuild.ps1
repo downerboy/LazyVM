@@ -34,7 +34,7 @@
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     [OutputType([void])]
     param(
-        [Parameter(Mandatory, Position = 0)]
+        [Parameter(Mandatory, Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
         [switch]$SkipCapture,
@@ -44,29 +44,31 @@
         [switch]$Force
     )
 
-    if ($Force -and -not $PSBoundParameters.ContainsKey('Confirm')) {
-        $ConfirmPreference = 'None'
-    }
-
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Rebuild' -Name $Name
-        $action = 'Rebuild from scratch. State is captured first and restored afterwards, and the old Windows disk is kept until the new VM is checked'
-        if (-not $PSCmdlet.ShouldProcess($CFG.VMName, $action)) {
-            Write-LogEntry 'Rebuild cancelled' 'INFO'
-            return
+    process {
+        if ($Force -and -not $PSBoundParameters.ContainsKey('Confirm')) {
+            $ConfirmPreference = 'None'
         }
 
-        $ok = @(Invoke-Rebuild -SkipCapture:$SkipCapture -NoUnattend:$NoUnattend)[-1]
-        if ($ok -ne $true) {
-            throw "The rebuild of '$($CFG.VMName)' did not complete cleanly. The log says what happened and how to go back: $($CFG.LogFile)"
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Rebuild' -Name $Name
+            $action = 'Rebuild from scratch. State is captured first and restored afterwards, and the old Windows disk is kept until the new VM is checked'
+            if (-not $PSCmdlet.ShouldProcess($CFG.VMName, $action)) {
+                Write-LogEntry 'Rebuild cancelled' 'INFO'
+                return
+            }
+
+            $ok = @(Invoke-Rebuild -SkipCapture:$SkipCapture -NoUnattend:$NoUnattend)[-1]
+            if ($ok -ne $true) {
+                throw "The rebuild of '$($CFG.VMName)' did not complete cleanly. The log says what happened and how to go back: $($CFG.LogFile)"
+            }
         }
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'The rebuild stopped' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+        catch {
+            if ($script:LogReady) { Write-LogError 'The rebuild stopped' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
+        }
+        finally {
+            Complete-CommandRun
+        }
     }
 }

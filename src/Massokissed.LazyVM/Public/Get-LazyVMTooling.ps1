@@ -32,20 +32,22 @@
     [CmdletBinding()]
     [OutputType('LazyVM.Tooling')]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name
     )
 
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Tooling inventory' -Name $Name
-        Get-GuestToolingReport
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'The tooling inventory failed' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+    process {
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Tooling inventory' -Name $Name
+            Get-GuestToolingReport
+        }
+        catch {
+            if ($script:LogReady) { Write-LogError 'The tooling inventory failed' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
+        }
+        finally {
+            Complete-CommandRun
+        }
     }
 }

@@ -36,7 +36,7 @@
     [CmdletBinding()]
     [OutputType('LazyVM.Setting')]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
         [Parameter(Position = 1)]
@@ -44,21 +44,23 @@
         [string[]]$Setting = '*'
     )
 
-    $root = (Resolve-LazyVMRoot).Path
-    $configuration = Read-VMSetting -Root $root -VMName $Name
-    foreach ($warning in $configuration.Warnings) { Write-Warning $warning }
+    process {
+        $root = (Resolve-LazyVMRoot).Path
+        $configuration = Read-VMSetting -Root $root -VMName $Name
+        foreach ($warning in $configuration.Warnings) { Write-Warning $warning }
 
-    $schema = Get-SettingsSchema
-    foreach ($settingName in @($schema.properties.Keys | Where-Object { $_ -ne '$schema' })) {
-        if (-not ($Setting | Where-Object { $settingName -like $_ })) { continue }
+        $schema = Get-SettingsSchema
+        foreach ($settingName in @($schema.properties.Keys | Where-Object { $_ -ne '$schema' })) {
+            if (-not ($Setting | Where-Object { $settingName -like $_ })) { continue }
 
-        [pscustomobject]@{
-            PSTypeName  = 'LazyVM.Setting'
-            Name        = $configuration.VMName
-            Setting     = $settingName
-            Value       = $configuration.Settings[$settingName]
-            Source      = $configuration.Sources[$settingName]
-            Description = Get-SettingDescription -Name $settingName
+            [pscustomobject]@{
+                PSTypeName  = 'LazyVM.Setting'
+                Name        = $configuration.VMName
+                Setting     = $settingName
+                Value       = $configuration.Settings[$settingName]
+                Source      = $configuration.Sources[$settingName]
+                Description = Get-SettingDescription -Name $settingName
+            }
         }
     }
 }

@@ -30,35 +30,37 @@
     [OutputType([pscredential])]
     [OutputType('LazyVM.PlainCredential')]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
         [switch]$AsPlainText
     )
 
-    Assert-Administrator
-    $configuration = Read-VMSetting -Root (Resolve-LazyVMRoot).Path -VMName $Name
+    process {
+        Assert-Administrator
+        $configuration = Read-VMSetting -Root (Resolve-LazyVMRoot).Path -VMName $Name
 
-    # The key that decrypts the store lives in the settings just read, so the
-    # module's current settings are pointed at them for the read.
-    $script:Settings.Clear()
-    foreach ($key in $configuration.Settings.Keys) { $script:Settings[$key] = $configuration.Settings[$key] }
-    try {
-        $credential = Get-StoredCredential -Path $CFG.GuestCredFile
-    }
-    finally {
+        # The key that decrypts the store lives in the settings just read, so the
+        # module's current settings are pointed at them for the read.
         $script:Settings.Clear()
-    }
+        foreach ($key in $configuration.Settings.Keys) { $script:Settings[$key] = $configuration.Settings[$key] }
+        try {
+            $credential = Get-StoredCredential -Path $CFG.GuestCredFile
+        }
+        finally {
+            $script:Settings.Clear()
+        }
 
-    if (-not $credential) {
-        throw "No credential is stored for '$($configuration.VMName)' yet. Build-LazyVM creates one, or store one with: Set-LazyVMCredential -Name $($configuration.VMName)"
-    }
+        if (-not $credential) {
+            throw "No credential is stored for '$($configuration.VMName)' yet. Build-LazyVM creates one, or store one with: Set-LazyVMCredential -Name $($configuration.VMName)"
+        }
 
-    if (-not $AsPlainText) { return $credential }
-    return [pscustomobject]@{
-        PSTypeName = 'LazyVM.PlainCredential'
-        Name       = $configuration.VMName
-        UserName   = $credential.UserName
-        Password   = $credential.GetNetworkCredential().Password
+        if (-not $AsPlainText) { return $credential }
+        return [pscustomobject]@{
+            PSTypeName = 'LazyVM.PlainCredential'
+            Name       = $configuration.VMName
+            UserName   = $credential.UserName
+            Password   = $credential.GetNetworkCredential().Password
+        }
     }
 }

@@ -171,7 +171,11 @@ Get commands return objects, so they work with the rest of PowerShell:
 Get-LazyVMSetting | Where-Object Source -ne 'Default'       # only what you have changed
 (Get-LazyVMTooling).PendingChanges                          # what the next run would record
 Get-LazyVMRestorePoint | Select-Object -Last 1 | Restore-LazyVMTooling
+Get-LazyVM | Get-LazyVMLicense                              # every VM's licence at once
+'DevBox', 'TestBox' | Save-LazyVMState                       # VM names work too
 ```
+
+Every command that works on a VM takes the VM from the pipeline: a name, or anything with a `Name` property. If one VM fails, the commands after it in the pipeline do not run.
 
 ## 4. Everyday use
 

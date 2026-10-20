@@ -25,50 +25,52 @@
     [CmdletBinding()]
     [OutputType('LazyVM.VM')]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [SupportsWildcards()]
         [string]$Name = '*'
     )
 
-    $root = (Resolve-LazyVMRoot).Path
-    $configDir = Get-ConfigDir -Root $root
-    $hyperV = [bool](Get-Command -Name Get-VM -ErrorAction SilentlyContinue)
-    $scheduledTasks = [bool](Get-Command -Name Get-ScheduledTask -ErrorAction SilentlyContinue)
+    process {
+        $root = (Resolve-LazyVMRoot).Path
+        $configDir = Get-ConfigDir -Root $root
+        $hyperV = [bool](Get-Command -Name Get-VM -ErrorAction SilentlyContinue)
+        $scheduledTasks = [bool](Get-Command -Name Get-ScheduledTask -ErrorAction SilentlyContinue)
 
-    foreach ($vmName in @(Get-VMProfileName -ConfigDir $configDir | Where-Object { $_ -like $Name })) {
-        $state = 'Not built'
-        if ($hyperV) {
-            $lookupErrors = $null
-            $vm = Get-VM -Name $vmName -ErrorAction SilentlyContinue -ErrorVariable lookupErrors
-            if ($vm) {
-                $state = "$($vm.State)"
+        foreach ($vmName in @(Get-VMProfileName -ConfigDir $configDir | Where-Object { $_ -like $Name })) {
+            $state = 'Not built'
+            if ($hyperV) {
+                $lookupErrors = $null
+                $vm = Get-VM -Name $vmName -ErrorAction SilentlyContinue -ErrorVariable lookupErrors
+                if ($vm) {
+                    $state = "$($vm.State)"
+                }
+                elseif (@($lookupErrors | Where-Object { $_.CategoryInfo.Category -ne 'ObjectNotFound' }).Count -gt 0) {
+                    # Not "missing" but unreadable, usually for want of Hyper-V rights.
+                    $state = 'Unknown'
+                }
             }
-            elseif (@($lookupErrors | Where-Object { $_.CategoryInfo.Category -ne 'ObjectNotFound' }).Count -gt 0) {
-                # Not "missing" but unreadable, usually for want of Hyper-V rights.
-                $state = 'Unknown'
+
+            $maintenanceTime = $null
+            $settingsStatus = 'OK'
+            try {
+                $maintenanceTime = (Read-VMSetting -Root $root -VMName $vmName).Settings.MaintenanceTime
             }
-        }
+            catch {
+                $settingsStatus = $_.Exception.Message
+            }
 
-        $maintenanceTime = $null
-        $settingsStatus = 'OK'
-        try {
-            $maintenanceTime = (Read-VMSetting -Root $root -VMName $vmName).Settings.MaintenanceTime
-        }
-        catch {
-            $settingsStatus = $_.Exception.Message
-        }
+            $task = $null
+            if ($scheduledTasks) { $task = Get-ScheduledTask -TaskName "LazyVM-Maintain-$vmName" -ErrorAction SilentlyContinue }
 
-        $task = $null
-        if ($scheduledTasks) { $task = Get-ScheduledTask -TaskName "LazyVM-Maintain-$vmName" -ErrorAction SilentlyContinue }
-
-        [pscustomobject]@{
-            PSTypeName      = 'LazyVM.VM'
-            Name            = $vmName
-            State           = $state
-            MaintenanceTime = $maintenanceTime
-            MaintenanceTask = $(if ($task) { 'Registered' } else { 'Not registered' })
-            Settings        = $settingsStatus
-            ProfilePath     = Get-VMProfilePath -ConfigDir $configDir -Name $vmName
+            [pscustomobject]@{
+                PSTypeName      = 'LazyVM.VM'
+                Name            = $vmName
+                State           = $state
+                MaintenanceTime = $maintenanceTime
+                MaintenanceTask = $(if ($task) { 'Registered' } else { 'Not registered' })
+                Settings        = $settingsStatus
+                ProfilePath     = Get-VMProfilePath -ConfigDir $configDir -Name $vmName
+            }
         }
     }
 }

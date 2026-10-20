@@ -20,26 +20,28 @@
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     [OutputType([void])]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name
     )
 
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Restore' -Name $Name
-        if (-not $PSCmdlet.ShouldProcess($CFG.VMName, "Apply the capture in $($CFG.StateDir) to the VM")) {
-            return
+    process {
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Restore' -Name $Name
+            if (-not $PSCmdlet.ShouldProcess($CFG.VMName, "Apply the capture in $($CFG.StateDir) to the VM")) {
+                return
+            }
+            $restoreOk = @(Restore-GuestState)[-1]
+            if ($restoreOk -eq $false) {
+                throw "The restore into '$($CFG.VMName)' did not complete. The log says what failed: $($CFG.LogFile)"
+            }
         }
-        $restoreOk = @(Restore-GuestState)[-1]
-        if ($restoreOk -eq $false) {
-            throw "The restore into '$($CFG.VMName)' did not complete. The log says what failed: $($CFG.LogFile)"
+        catch {
+            if ($script:LogReady) { Write-LogError 'The restore failed' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
         }
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'The restore failed' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+        finally {
+            Complete-CommandRun
+        }
     }
 }

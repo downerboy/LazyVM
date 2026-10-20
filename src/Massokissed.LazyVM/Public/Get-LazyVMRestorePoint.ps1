@@ -20,20 +20,22 @@
     [CmdletBinding()]
     [OutputType('LazyVM.RestorePoint')]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name
     )
 
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Restore points' -Name $Name
-        Get-ToolingRestorePoint
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'Listing the restore points failed' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+    process {
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Restore points' -Name $Name
+            Get-ToolingRestorePoint
+        }
+        catch {
+            if ($script:LogReady) { Write-LogError 'Listing the restore points failed' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
+        }
+        finally {
+            Complete-CommandRun
+        }
     }
 }

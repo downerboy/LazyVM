@@ -24,20 +24,22 @@
     [CmdletBinding()]
     [OutputType('LazyVM.License')]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name
     )
 
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Licence' -Name $Name
-        Get-LicenseReport
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'Reading the licence failed' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+    process {
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Licence' -Name $Name
+            Get-LicenseReport
+        }
+        catch {
+            if ($script:LogReady) { Write-LogError 'Reading the licence failed' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
+        }
+        finally {
+            Complete-CommandRun
+        }
     }
 }

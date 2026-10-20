@@ -59,7 +59,7 @@
     [CmdletBinding()]
     [OutputType([void])]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
         [ValidateRange(0, 8)]
@@ -68,38 +68,40 @@
         [switch]$NoUnattend
     )
 
-    Assert-Administrator
-    try {
-        Initialize-BuildTarget -Name $Name
-        $null = Initialize-CommandRun -Title 'Build' -Name $Name
-
-        $result = Invoke-VMBuild -FromPhase $FromPhase -NoUnattend:$NoUnattend
-        if ($result -eq 'RestartPending') {
-            Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
-            return
-        }
-
-        # The daily maintenance, so nothing has to be remembered. A problem
-        # here is reported but does not undo a good build.
+    process {
+        Assert-Administrator
         try {
-            Register-RebuildSchedule
+            Initialize-BuildTarget -Name $Name
+            $null = Initialize-CommandRun -Title 'Build' -Name $Name
+
+            $result = Invoke-VMBuild -FromPhase $FromPhase -NoUnattend:$NoUnattend
+            if ($result -eq 'RestartPending') {
+                Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
+                return
+            }
+
+            # The daily maintenance, so nothing has to be remembered. A problem
+            # here is reported but does not undo a good build.
+            try {
+                Register-RebuildSchedule
+            }
+            catch {
+                Write-LogEntry "The daily maintenance could not be scheduled: $($_.Exception.Message)" 'WARN'
+                Write-LogEntry "  Schedule it with: Register-LazyVMMaintenance -Name $($CFG.VMName)" 'INFO'
+            }
+
+            Write-LogEntry '' 'INFO'
+            Write-LogEntry '========================================================' 'INFO'
+            Write-LogEntry "  All phases complete. $($CFG.VMName) is ready."          'OK'
+            Write-LogEntry "  Log : $($CFG.LogFile)"                                 'INFO'
+            Write-LogEntry '========================================================' 'INFO'
         }
         catch {
-            Write-LogEntry "The daily maintenance could not be scheduled: $($_.Exception.Message)" 'WARN'
-            Write-LogEntry "  Schedule it with: Register-LazyVMMaintenance -Name $($CFG.VMName)" 'INFO'
+            if ($script:LogReady) { Write-LogError 'Build stopped' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
         }
-
-        Write-LogEntry '' 'INFO'
-        Write-LogEntry '========================================================' 'INFO'
-        Write-LogEntry "  All phases complete. $($CFG.VMName) is ready."          'OK'
-        Write-LogEntry "  Log : $($CFG.LogFile)"                                 'INFO'
-        Write-LogEntry '========================================================' 'INFO'
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'Build stopped' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+        finally {
+            Complete-CommandRun
+        }
     }
 }

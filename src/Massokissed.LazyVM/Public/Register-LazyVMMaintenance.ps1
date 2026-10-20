@@ -22,22 +22,24 @@
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([void])]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name
     )
 
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Schedule maintenance' -Name $Name
-        if ($PSCmdlet.ShouldProcess($CFG.ScheduleTaskName, "Run maintenance of $($CFG.VMName) daily at $($CFG.MaintenanceTime)")) {
-            Register-RebuildSchedule
+    process {
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Schedule maintenance' -Name $Name
+            if ($PSCmdlet.ShouldProcess($CFG.ScheduleTaskName, "Run maintenance of $($CFG.VMName) daily at $($CFG.MaintenanceTime)")) {
+                Register-RebuildSchedule
+            }
         }
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'Scheduling maintenance failed' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+        catch {
+            if ($script:LogReady) { Write-LogError 'Scheduling maintenance failed' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
+        }
+        finally {
+            Complete-CommandRun
+        }
     }
 }

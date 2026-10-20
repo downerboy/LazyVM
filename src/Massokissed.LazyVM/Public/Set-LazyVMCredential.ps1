@@ -39,7 +39,7 @@
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([void])]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
         [pscredential]$Credential,
@@ -47,37 +47,39 @@
         [switch]$Force
     )
 
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Credential' -Name $Name
+    process {
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Credential' -Name $Name
 
-        $existing = Get-StoredCredential -Path $CFG.GuestCredFile
-        if ($existing -and -not $Force) {
-            $question = "A credential for '$($existing.UserName)' is already stored for $($CFG.VMName). Replace it? This does not change the password inside the VM."
-            if (-not $PSCmdlet.ShouldContinue($question, 'Replace the stored credential')) {
-                Write-LogEntry 'Kept the existing credential' 'INFO'
-                return
+            $existing = Get-StoredCredential -Path $CFG.GuestCredFile
+            if ($existing -and -not $Force) {
+                $question = "A credential for '$($existing.UserName)' is already stored for $($CFG.VMName). Replace it? This does not change the password inside the VM."
+                if (-not $PSCmdlet.ShouldContinue($question, 'Replace the stored credential')) {
+                    Write-LogEntry 'Kept the existing credential' 'INFO'
+                    return
+                }
             }
-        }
 
-        if (-not $Credential) {
-            $message = "The administrator account INSIDE $($CFG.VMName). Leave the password empty to have one generated (for a VM LazyVM will build)."
-            $Credential = Get-Credential -UserName $CFG.GuestAdminUser -Message $message
             if (-not $Credential) {
-                Write-LogEntry 'No credential entered - nothing was changed' 'INFO'
-                return
+                $message = "The administrator account INSIDE $($CFG.VMName). Leave the password empty to have one generated (for a VM LazyVM will build)."
+                $Credential = Get-Credential -UserName $CFG.GuestAdminUser -Message $message
+                if (-not $Credential) {
+                    Write-LogEntry 'No credential entered - nothing was changed' 'INFO'
+                    return
+                }
+            }
+
+            if ($PSCmdlet.ShouldProcess($CFG.VMName, "Store the credential for '$($Credential.UserName)'")) {
+                $null = Set-StoredGuestCredential -Credential $Credential
             }
         }
-
-        if ($PSCmdlet.ShouldProcess($CFG.VMName, "Store the credential for '$($Credential.UserName)'")) {
-            $null = Set-StoredGuestCredential -Credential $Credential
+        catch {
+            if ($script:LogReady) { Write-LogError 'Storing the credential failed' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
         }
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'Storing the credential failed' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+        finally {
+            Complete-CommandRun
+        }
     }
 }

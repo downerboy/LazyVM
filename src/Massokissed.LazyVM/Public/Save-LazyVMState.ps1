@@ -24,22 +24,24 @@
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([void])]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name
     )
 
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Capture' -Name $Name
-        if ($PSCmdlet.ShouldProcess($CFG.VMName, "Capture the VM's state to $($CFG.StateDir)")) {
-            $null = Save-GuestState
+    process {
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Capture' -Name $Name
+            if ($PSCmdlet.ShouldProcess($CFG.VMName, "Capture the VM's state to $($CFG.StateDir)")) {
+                $null = Save-GuestState
+            }
         }
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'The capture failed' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+        catch {
+            if ($script:LogReady) { Write-LogError 'The capture failed' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
+        }
+        finally {
+            Complete-CommandRun
+        }
     }
 }

@@ -26,26 +26,28 @@
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param(
-        [Parameter(Position = 0)]
+        [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name
     )
 
-    Assert-Administrator
-    try {
-        $null = Initialize-CommandRun -Title 'Record tooling' -Name $Name
-        if (-not $PSCmdlet.ShouldProcess($CFG.VMName, 'Record the tooling, with a checkpoint if it changed')) {
-            return
-        }
+    process {
+        Assert-Administrator
+        try {
+            $null = Initialize-CommandRun -Title 'Record tooling' -Name $Name
+            if (-not $PSCmdlet.ShouldProcess($CFG.VMName, 'Record the tooling, with a checkpoint if it changed')) {
+                return
+            }
 
-        $startedHere = Open-GuestSession -Purpose 'record its tooling'
-        Update-ToolingRecord
-        if ($startedHere) { Stop-GuestGracefully }
-    }
-    catch {
-        if ($script:LogReady) { Write-LogError 'Recording the tooling failed' $_ }
-        $PSCmdlet.ThrowTerminatingError($_)
-    }
-    finally {
-        Complete-CommandRun
+            $startedHere = Open-GuestSession -Purpose 'record its tooling'
+            Update-ToolingRecord
+            if ($startedHere) { Stop-GuestGracefully }
+        }
+        catch {
+            if ($script:LogReady) { Write-LogError 'Recording the tooling failed' $_ }
+            $PSCmdlet.ThrowTerminatingError($_)
+        }
+        finally {
+            Complete-CommandRun
+        }
     }
 }
