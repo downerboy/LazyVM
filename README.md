@@ -1,33 +1,33 @@
 ### ALPHA - A masochistic exploration into Vibe Coding the wrong way.
+
 <br/>
 Motivation:
 <br/>
-<i>I lost my eyesight nine years ago and am finally at a point where I can regularly use a computer with almost the same ease as before the accident. I was a full-stack developer. My go-to tools were C#, Visual Studio, SQL Server, and much more.
+<i>I lost my eyesight nine years ago and am finally at a point where I can regularly use a computer with almost the same ease as before the accident. I was a full-stack developer. My go-to tools were C#, Visual Studio, SQL Server, and other tooling capable of wreaking havoc to the only semi-accessible setup I have access to.
 
-A lot has changed, and I have a lot of catching up to do. Installing Visual Studio, SQL Server, and other heavy tooling on the only machine I rely on seemed like a good way to end up blocked from dealing with life's obligations while troubleshooting development issues. It also increases the machine's attack surface.
+*A lot has changed, and I have a lot of catching up to do. Installing Visual Studio, SQL Server, and other heavy tooling on the only machine I rely on seemed like a good way to end up blocked from dealing with life's obligations while troubleshooting development issues. It also increases the machine's attack surface.*
 
-I decided to use Hyper-V and put Visual Studio and other tooling in VMs. That also gave me an opportunity to try vibe coding with Copilot and Claude.
+*I decided to use Hyper-V and put Visual Studio and other tooling in VMs. An opportunity to try vibe coding with Copilot and Claude.*
 
-Vibe coding is proving to be an exercise in herding cats. The code starts as spaghetti, gets refactored into gumbo, and eventually I realize some of the spaghetti never got served.</i>
+*Vibe coding is proving to be an exercise in herding cats. The code starts as spaghetti, gets refactored into gumbo, and eventually I realize some of the spaghetti never got served.*
+
+*Copilot was let go.  Both Copilot and Claude are a wee bit way too creative, but Claude's work output runs and tends to be aligned with the specs following the patterns and practices it has been provided.  Copilot's behavior and work output was discerning and I am concerned Copilot may have a substance use disorder.
 
 # LazyVM
 
 Currently this is a tool for setting up educational Visual Studio dev environment VMs on Windows using Hyper-V.  
 
-If I can master herding cats this will be a tool for deploying, maintain and destroying Hyper-V virtual machine in Windows.  This tool will have templates geared for different workloads that community can maintain that will not only be educational dev environments coupled to Windows Enterprise evaluation. 
+PowerShell has always been a weak point for me.  My history with PowerShell consists of me hacking a few lines into a script when needing tooling for soemting as ridiculous as a one-liners invoke-webrequest "IIS application" by a schedule task to prevent IIS from timing and recycling the worker processor.  Otherwise, there would be help request tickets every morning, after lunch, and after staff events reporting an app was down or an app was taking too long.  The joys of web froms back in the day.
 
-One-person entities, like a bookkeeper, will benefit having free tooling for easily(chuckle) setup and maintain VMs created for each customer. Making isolating, protecting, lightening the load for when disaster recovery is needed and greatly aid in satisfying ethical and legal requiredments eg. a health provider's business associate.
+If I master herding cats this will be a tool for deploying, maintainin and destroying Hyper-V virtual machine in Windows. VM templated configuration will be provided with this tool, changes to made to harnessed VMs created by this tool will create matching config templates in a qausi-green manner, to migitage template prolferation only the latest VM changes will be written to the corresponding template.  The goal is persist all environment changes, including changes to the VM's UI eg. dark mode, text size, Explorer.exe settings, tooling settings and etc with the exception of sensitive information like credentials, on the VM's configuration file.  Hopefully, this will support VMs that are not educational dev environments coupled to Windows Enterprise evaluation, Visual Sttudio, MsSQL and other tooling.
 
-P.S. This might be migrated to C# since I lack the knowledge of the best practices and the proven patterns for authoring maintainable PowerShell tools.  This was going to be a vehicle for pushing me to gain that knowledge, but I am feeling irresponsible for sharing a learning project as tool to the communit.
+Entities, like a independent contracdtors, will benefit having free reliable tooling that is intuitive, effortless and reliable for creating and maintaining VMs eg a bookkeeper needing to a dedicated isolated work environment for each customer.. The intention is lightening the load for disaster recovery, ethical a legally mandated  requiredments, e.g. HITECH/HIPAA requirements for health provider's business associate.
 
-Why is the information badly fragmented now?  I can't find a coherent horse's mouth.
-
-
-## What it needs
+What it needs
 
 ` A cert for signing code
 
-## What is is
+## Currently What is it:
 
 -A PowerShell module that builds and looks after Hyper-V development VMs on a Windows host, unattended: Windows 11 Enterprise Evaluation, Visual Studio, SQL Server Enterprise Developer and whatever other tools you install, with the 90-day evaluation handled for you.  The reset flag has a lifespan of being flipped three times.  <code>4 * 90 = 360</code>
 
@@ -92,22 +92,22 @@ To sign in to the VM yourself, `Get-LazyVMCredential -Name DevBox -AsPlainText` 
 
 Every command has full help: `Get-Help Build-LazyVM -Full`. `-Name` can be left out while the host has only one VM, and it tab-completes.
 
-| Command | What it does |
-|---|---|
-| `Set-LazyVMRoot` | Chooses your own folder for LazyVM instead of the automatic one. Brings a 1.x kit across. |
-| `New-LazyVM` | Creates a VM's profile without building it. `-From` starts from another VM's settings and tools. |
-| `Build-LazyVM` | Builds the VM, setting up whatever is missing first, and schedules its maintenance. Safe to run again. |
-| `Get-LazyVM` | Lists the VMs, their state and their maintenance. |
-| `Get-LazyVMSetting` | Every setting as a VM uses it, where the value came from, and what it does. |
-| `Set-LazyVMCredential` / `Get-LazyVMCredential` | The administrator account LazyVM uses inside the VM. |
-| `Get-LazyVMLicense` | Evaluation days and rearms left, and what maintenance will do. |
-| `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. |
-| `Save-LazyVMTooling` | Records tooling changes now, with a checkpoint. |
-| `Get-LazyVMRestorePoint` / `Restore-LazyVMTooling` | Lists recorded tooling versions, and returns to one. |
-| `Save-LazyVMState` / `Restore-LazyVMState` | Captures the VM's state to the host, and puts it back. |
-| `Invoke-LazyVMRebuild` | Rebuilds the VM from scratch, keeping your work. |
-| `Invoke-LazyVMMaintenance` / `Register-LazyVMMaintenance` | The daily maintenance run, and scheduling it. |
-| `Remove-LazyVM` | Deletes a VM and everything created for it. `-WhatIf` lists it all first. |
+| Command                                                       | What it does                                                                                           |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `Set-LazyVMRoot`                                            | Chooses your own folder for LazyVM instead of the automatic one.                                       |
+| `New-LazyVM`                                                | Creates a VM's profile without building it. `-From` starts from another VM's settings and tools.     |
+| `Build-LazyVM`                                              | Builds the VM, setting up whatever is missing first, and schedules its maintenance. Safe to run again. |
+| `Get-LazyVM`                                                | Lists the VMs, their state and their maintenance.                                                      |
+| `Get-LazyVMSetting`                                         | Every setting as a VM uses it, where the value came from, and what it does.                            |
+| `Set-LazyVMCredential` / `Get-LazyVMCredential`           | The administrator account LazyVM uses inside the VM.                                                   |
+| `Get-LazyVMLicense`                                         | Evaluation days and rearms left, and what maintenance will do.                                         |
+| `Get-LazyVMTooling`                                         | What is installed in the VM, and what the next maintenance run would record.                           |
+| `Save-LazyVMTooling`                                        | Records tooling changes now, with a checkpoint.                                                        |
+| `Get-LazyVMRestorePoint` / `Restore-LazyVMTooling`        | Lists recorded tooling versions, and restore to specified version.                                    |
+| `Save-LazyVMState` / `Restore-LazyVMState`                | Captures the VM's state to the host, and puts it back.                                                 |
+| `Invoke-LazyVMRebuild`                                      | Rebuilds the VM from scratch, keeping your work.                                                       |
+| `Invoke-LazyVMMaintenance` / `Register-LazyVMMaintenance` | The daily maintenance run, and scheduling it.                                                          |
+| `Remove-LazyVM`                                             | Deletes a VM and everything created for it. `-WhatIf` lists it all first.                            |
 
 Commands that change something support `-WhatIf` and `-Confirm`.
 
