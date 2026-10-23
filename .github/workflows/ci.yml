@@ -1,10 +1,11 @@
-# Builds, analyzes and tests LazyVM on every push and pull request, on
-# Windows with PowerShell 7, the only place LazyVM runs.
+# Builds, analyzes and tests LazyVM on every pull request and on every push
+# to main or a release branch, on Windows with PowerShell 7, the only place
+# LazyVM runs. Other branches are checked through their pull request.
 name: CI
 
 on:
   push:
-    branches: [ main, 'refactor/**' ]
+    branches: [ main, 'release/**' ]
   pull_request:
   workflow_dispatch:
 
