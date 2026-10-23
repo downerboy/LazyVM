@@ -1,0 +1,30 @@
+# Checks that a pull request's title follows Conventional Commits. Pull
+# requests are squash-merged, so the title becomes the commit on main, and
+# release-please reads it to choose the next version.
+name: PR title
+
+on:
+  pull_request:
+    types: [ opened, edited, synchronize, reopened ]
+  # Started by release-please on its own pull request, whose title it writes.
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  title:
+    name: Conventional Commits title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the title
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|perf|revert|docs|refactor|test|build|ci|chore|style)(\([a-zA-Z0-9 ._/-]+\))?!?: .+'
+          if [[ "$TITLE" =~ $pattern ]]; then
+            echo "Title OK: $TITLE"
+          else
+            echo "::error::The pull request title must start with a type, such as 'fix: ...' or 'feat: ...'. See CONTRIBUTING.md. Got: $TITLE"
+            exit 1
+          fi
