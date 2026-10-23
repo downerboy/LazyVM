@@ -1,4 +1,4 @@
-﻿# LazyVM.Maintenance.Tests.ps1
+﻿# RemoveVM.Tests.ps1
 # Removing a VM (-RemoveVM): what it deletes, and what it keeps because every
 # VM, or another VM, still uses it. Only the planning is tested here; it reads
 # nothing from disk and touches neither Hyper-V nor the Task Scheduler.

@@ -1,4 +1,4 @@
-﻿# LazyVM.Tooling.Tests.ps1
+﻿# Tooling.Tests.ps1
 # The tooling list: normalizing names, comparing lists, and carrying
 # AwaitingReinstall items across a rebuild. Nothing here touches Hyper-V or a guest.
 #
