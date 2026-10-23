@@ -5,7 +5,7 @@ title Rebuild the VM (Invoke-LazyVMRebuild)
 actor "Administrator" as Admin
 actor "Task Scheduler\n(SYSTEM)" as Sched
 
-rectangle "Massokissed.LazyVM" {
+rectangle "LazyVM" {
   usecase "Rebuild the VM\n<size:10>Invoke-LazyVMRebuild</size>" as Rebuild
   usecase "Capture state" as Capture
   usecase "Retire the old VM" as Retire

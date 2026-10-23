@@ -9,7 +9,7 @@ BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
     Import-LazyVMModule
 
-    $module = 'Massokissed.LazyVM'
+    $module = 'LazyVM'
 }
 
 Describe 'Expand-GuestSystemDrive' {

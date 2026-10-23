@@ -1,6 +1,6 @@
 # LazyVM use cases
 
-UML use case diagrams for the Massokissed.LazyVM module, drawn from the code in `src/`, not from the plans. Each diagram is followed by the same information as text.
+UML use case diagrams for the LazyVM module, drawn from the code in `src/`, not from the plans. Each diagram is followed by the same information as text.
 
 [Diagrams.md](Diagrams.md) shows how each use case works inside: the calls in order and the data each one reads and writes.
 

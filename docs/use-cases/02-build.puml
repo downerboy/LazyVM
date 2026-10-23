@@ -5,7 +5,7 @@ title Build a VM (Build-LazyVM)
 actor "Administrator" as Admin
 actor "Task Scheduler\n(SYSTEM)" as Sched
 
-rectangle "Massokissed.LazyVM" {
+rectangle "LazyVM" {
   usecase "Build a VM" as Build
   usecase "Choose the LazyVM folder\nautomatically" as AutoRoot
   usecase "Create the VM profile" as Profile

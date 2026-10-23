@@ -4,7 +4,7 @@ title State
 
 actor "Administrator" as Admin
 
-rectangle "Massokissed.LazyVM" {
+rectangle "LazyVM" {
   usecase "Capture state\n<size:10>Save-LazyVMState</size>" as Capture
   usecase "Restore state\n<size:10>Restore-LazyVMState</size>" as Restore
   usecase "Start the VM" as Start

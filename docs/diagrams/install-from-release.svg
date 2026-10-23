@@ -54,7 +54,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="146" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="160" text-anchor="middle">«folder»</text>
-<text class="nm" x="147.5" y="176" text-anchor="middle">LazyVM\Massokissed.LazyVM\</text>
+<text class="nm" x="147.5" y="176" text-anchor="middle">LazyVM\LazyVM\</text>
 <line class="div" x1="20" y1="183" x2="275" y2="183"/>
 <text class="at" x="30" y="198">&lt;version&gt;\</text>
 </g>
@@ -62,7 +62,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="875.0" y="160" text-anchor="middle">«folder»</text>
 <text class="nm" x="875.0" y="176" text-anchor="middle">$env:ProgramFiles\PowerShell\</text>
 <line class="div" x1="740" y1="183" x2="1010" y2="183"/>
-<text class="at" x="750" y="198">Modules\Massokissed.LazyVM\</text>
+<text class="at" x="750" y="198">Modules\LazyVM\</text>
 <text class="at" x="750" y="215">  &lt;version&gt;\</text>
 </g>
 <g class="bx-mod"><rect x="335" y="254" width="305" height="84" rx="3"/>
@@ -75,7 +75,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="254" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="268" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="284" text-anchor="middle">Modules\Massokissed.LazyVM\</text>
+<text class="nm" x="875.0" y="284" text-anchor="middle">Modules\LazyVM\</text>
 <line class="div" x1="740" y1="291" x2="1010" y2="291"/>
 <text class="at" x="750" y="306">&lt;version&gt;\  (unblocked)</text>
 </g>

@@ -1,11 +1,11 @@
 ﻿#Requires -Version 7.4
 <#
 .SYNOPSIS
-Builds, checks and tests the Massokissed.LazyVM module.
+Builds, checks and tests the LazyVM module.
 
 .DESCRIPTION
-  Build    Merges src\Massokissed.LazyVM into one .psm1 under
-           out\Massokissed.LazyVM\<version>, ready to publish or install,
+  Build    Merges src\LazyVM into one .psm1 under
+           out\LazyVM\<version>, ready to publish or install,
            then imports the result to check it exports the public commands.
   Analyze  Runs PSScriptAnalyzer over the module and the tests. Any finding
            fails the build.
@@ -50,7 +50,7 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
-$moduleName = 'Massokissed.LazyVM'
+$moduleName = 'LazyVM'
 $sourceDir = Join-Path -Path $PSScriptRoot -ChildPath "src/$moduleName"
 $outDir = Join-Path -Path $PSScriptRoot -ChildPath 'out'
 

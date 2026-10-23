@@ -10,7 +10,7 @@ I decided to use Hyper-V and put Visual Studio and other tooling in VMs. That al
 
 Vibe coding is proving to be an exercise in herding cats. The code starts as spaghetti, gets refactored into gumbo, and eventually I realize some of the spaghetti never got served.</i>
 
-# Massokissed.LazyVM
+# LazyVM
 
 Currently this is a tool for setting up educational Visual Studio dev environment VMs on Windows using Hyper-V.  
 
@@ -51,19 +51,19 @@ Why is the information badly fragmented now?  I can't find a coherent horse's mo
 
 Open **PowerShell 7** (`pwsh`, not Windows PowerShell) as administrator.
 
-**From a release** (no Git needed): download `Massokissed.LazyVM-<version>.zip` from the [latest release](https://github.com/downerboy/Massokissed.LazyVM/releases), then, in the folder you saved it to:
+**From a release** (no Git needed): download `LazyVM-<version>.zip` from the [latest release](https://github.com/downerboy/LazyVM/releases), then, in the folder you saved it to:
 
 ```powershell
-Unblock-File .\Massokissed.LazyVM-*.zip
-Expand-Archive .\Massokissed.LazyVM-*.zip -DestinationPath .\LazyVM -Force
+Unblock-File .\LazyVM-*.zip
+Expand-Archive .\LazyVM-*.zip -DestinationPath .\LazyVM -Force
 .\LazyVM\Install.ps1
 ```
 
 **From the repository:**
 
 ```powershell
-git clone https://github.com/downerboy/Massokissed.LazyVM S:\Source\Massokissed.LazyVM
-cd S:\Source\Massokissed.LazyVM
+git clone https://github.com/downerboy/LazyVM S:\Source\LazyVM
+cd S:\Source\LazyVM
 ./build.ps1 -Bootstrap -Task Install
 ```
 
@@ -139,8 +139,8 @@ The [use case diagrams](docs/UseCases.md) show who does what with LazyVM, in UML
 ## Development
 
 ```
-src/Massokissed.LazyVM/
-  Massokissed.LazyVM.psd1, .psm1   the module
+src/LazyVM/
+  LazyVM.psd1, .psm1   the module
   Public/                          one file per command
   Private/<Area>/                  everything else, by area
   Data/                            the settings schema and the default tooling list

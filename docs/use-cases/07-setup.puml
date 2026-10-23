@@ -6,7 +6,7 @@ actor "Host user" as User
 actor "Administrator" as Admin
 Admin --|> User
 
-rectangle "Massokissed.LazyVM" {
+rectangle "LazyVM" {
   usecase "Create a VM profile\n<size:10>New-LazyVM</size>" as New
   usecase "Copy another VM's\nsettings and tooling" as Copy
   usecase "Choose the LazyVM folder\n<size:10>Set-LazyVMRoot</size>" as Root

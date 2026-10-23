@@ -32,8 +32,8 @@ Builds the module, checks it and runs the tests, then installs it for all users 
 ![Install from the repository: call order and data flow](diagrams/install-from-repo.svg)
 
 1. `Invoke-Build` (build.ps1): merges Public\ and Private\ into one .psm1, then imports it to check the exports
-   - Reads D1, module source: src\Massokissed.LazyVM\ (Public\  Private\  Data\, Massokissed.LazyVM.psd1)
-   - Writes D2, built module: out\Massokissed.LazyVM\ (<version>\)
+   - Reads D1, module source: src\LazyVM\ (Public\  Private\  Data\, LazyVM.psd1)
+   - Writes D2, built module: out\LazyVM\ (<version>\)
 2. `Import-BuildTool` (build.ps1): missing and no -Bootstrap: stops with a message
    - Reads D3, pinned build tools: PowerShell Gallery (PSScriptAnalyzer 1.24.0, Pester 5.7.1)
    - Writes D4, build tools, if they were missing: CurrentUser modules (PSScriptAnalyzer, Pester)
@@ -43,8 +43,8 @@ Builds the module, checks it and runs the tests, then installs it for all users 
    - Reads D6, Pester tests: Repo (tests\*.Tests.ps1)
    - Writes D7, test results: out\ (testResults.xml)
 5. `Install-BuiltModule` (build.ps1): replaces the same version, leaves other versions
-   - Reads D8, built module: out\Massokissed.LazyVM\ (<version>\)
-   - Writes D9, module installed for all users, SYSTEM included: $env:ProgramFiles\PowerShell\ (Modules\Massokissed.LazyVM\, <version>\)
+   - Reads D8, built module: out\LazyVM\ (<version>\)
+   - Writes D9, module installed for all users, SYSTEM included: $env:ProgramFiles\PowerShell\ (Modules\LazyVM\, <version>\)
 
 <a id="install-from-release"></a>
 
@@ -57,10 +57,10 @@ Copies the module from a downloaded release and unblocks it.
 ![Install from a release: call order and data flow](diagrams/install-from-release.svg)
 
 1. `Copy-Item` (Install.ps1): newest version folder beside the script
-   - Reads D1, module from the zip: LazyVM\Massokissed.LazyVM\ (<version>\)
-   - Writes D2, module installed for all users: $env:ProgramFiles\PowerShell\ (Modules\Massokissed.LazyVM\, <version>\)
+   - Reads D1, module from the zip: LazyVM\LazyVM\ (<version>\)
+   - Writes D2, module installed for all users: $env:ProgramFiles\PowerShell\ (Modules\LazyVM\, <version>\)
 2. `Unblock-File` (Install.ps1): removes the downloaded- from-internet mark
-   - Writes D3, files PowerShell will load: Modules\Massokissed.LazyVM\ (<version>\  (unblocked))
+   - Writes D3, files PowerShell will load: Modules\LazyVM\ (<version>\  (unblocked))
 
 <a id="set-root"></a>
 

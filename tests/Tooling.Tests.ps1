@@ -1,4 +1,4 @@
-﻿# Massokissed.LazyVM.Tooling.Tests.ps1
+﻿# LazyVM.Tooling.Tests.ps1
 # The tooling list: normalizing names, comparing lists, and carrying
 # AwaitingReinstall items across a rebuild. Nothing here touches Hyper-V or a guest.
 #
@@ -11,7 +11,7 @@ BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
     Import-LazyVMModule
 
-    $module = 'Massokissed.LazyVM'
+    $module = 'LazyVM'
 
     function New-TestProduct {
         param(

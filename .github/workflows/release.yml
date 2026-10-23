@@ -31,7 +31,7 @@ jobs:
         run: |
           $tag = '${{ github.ref_name }}'
           $zip = Get-Item out/release/*.zip
-          $expected = "Massokissed.LazyVM-$($tag.TrimStart('v')).zip"
+          $expected = "LazyVM-$($tag.TrimStart('v')).zip"
           if ($zip.Name -ne $expected) {
               throw "The tag $tag does not match the module manifest, which packaged $($zip.Name). Set ModuleVersion and Prerelease in the manifest to match the tag."
           }

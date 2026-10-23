@@ -7,7 +7,7 @@ actor "Administrator" as Admin
 actor "Task Scheduler\n(SYSTEM)" as Sched
 Admin --|> User
 
-rectangle "Massokissed.LazyVM" {
+rectangle "LazyVM" {
   package "Look up" {
     usecase "List VMs\n<size:10>Get-LazyVM</size>" as UC_List
     usecase "View settings\n<size:10>Get-LazyVMSetting</size>" as UC_Set

@@ -1,9 +1,9 @@
 # Each host's own VMs: their profiles, tooling lists and tooling history.
 # Created by -NewVM; never part of the kit.
-src/Massokissed.LazyVM/Data/VMs/
+src/LazyVM/Data/VMs/
 
 # Each user's own settings file, copied from LazyVM.Config.example.psd1.
-src/Massokissed.LazyVM/Data/LazyVM.Config.psd1
+src/LazyVM/Data/LazyVM.Config.psd1
 
 # Word's lock file while the guide is open.
 ~$*

@@ -71,14 +71,14 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="163" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="177" text-anchor="middle">«folder»</text>
-<text class="nm" x="147.5" y="193" text-anchor="middle">src\Massokissed.LazyVM\</text>
+<text class="nm" x="147.5" y="193" text-anchor="middle">src\LazyVM\</text>
 <line class="div" x1="20" y1="200" x2="275" y2="200"/>
 <text class="at" x="30" y="215">Public\  Private\  Data\</text>
-<text class="at" x="30" y="232">Massokissed.LazyVM.psd1</text>
+<text class="at" x="30" y="232">LazyVM.psd1</text>
 </g>
 <g class="bx-store"><rect x="740" y="163" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="177" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="193" text-anchor="middle">out\Massokissed.LazyVM\</text>
+<text class="nm" x="875.0" y="193" text-anchor="middle">out\LazyVM\</text>
 <line class="div" x1="740" y1="200" x2="1010" y2="200"/>
 <text class="at" x="750" y="215">&lt;version&gt;\</text>
 </g>
@@ -147,7 +147,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="595" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="609" text-anchor="middle">«folder»</text>
-<text class="nm" x="147.5" y="625" text-anchor="middle">out\Massokissed.LazyVM\</text>
+<text class="nm" x="147.5" y="625" text-anchor="middle">out\LazyVM\</text>
 <line class="div" x1="20" y1="632" x2="275" y2="632"/>
 <text class="at" x="30" y="647">&lt;version&gt;\</text>
 </g>
@@ -155,7 +155,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="875.0" y="609" text-anchor="middle">«folder»</text>
 <text class="nm" x="875.0" y="625" text-anchor="middle">$env:ProgramFiles\PowerShell\</text>
 <line class="div" x1="740" y1="632" x2="1010" y2="632"/>
-<text class="at" x="750" y="647">Modules\Massokissed.LazyVM\</text>
+<text class="at" x="750" y="647">Modules\LazyVM\</text>
 <text class="at" x="750" y="664">  &lt;version&gt;\</text>
 </g>
 </svg>

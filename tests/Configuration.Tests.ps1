@@ -11,7 +11,7 @@ BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
     Import-LazyVMModule
 
-    $module = 'Massokissed.LazyVM'
+    $module = 'LazyVM'
 
     function New-TestFile {
         <# A file under $TestDrive with the given text. #>

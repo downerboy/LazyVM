@@ -7,7 +7,7 @@ BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
     Import-LazyVMModule
 
-    $module = 'Massokissed.LazyVM'
+    $module = 'LazyVM'
 
     # Initialize-CommandRun is mocked in most tests; the settings it would
     # load are set directly instead, in BeforeEach.
@@ -274,7 +274,7 @@ Describe 'Get-ModuleImportCommand' {
             $saved = $env:PSModulePath
             try {
                 $env:PSModulePath = (Split-Path -Path $base -Parent) + [IO.Path]::PathSeparator + $saved
-                Get-ModuleImportCommand | Should -Be "Import-Module -Name 'Massokissed.LazyVM'"
+                Get-ModuleImportCommand | Should -Be "Import-Module -Name 'LazyVM'"
             }
             finally { $env:PSModulePath = $saved }
         }
@@ -285,7 +285,7 @@ Describe 'Get-ModuleImportCommand' {
             $saved = $env:PSModulePath
             try {
                 $env:PSModulePath = ''
-                Get-ModuleImportCommand | Should -BeLike "Import-Module -Name '*Massokissed.LazyVM.psd1'"
+                Get-ModuleImportCommand | Should -BeLike "Import-Module -Name '*LazyVM.psd1'"
             }
             finally { $env:PSModulePath = $saved }
         }

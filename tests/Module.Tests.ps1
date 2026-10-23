@@ -3,7 +3,7 @@
 # the help Get-Help shows.
 
 BeforeDiscovery {
-    $manifestPath = Join-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -ChildPath 'src/Massokissed.LazyVM/Massokissed.LazyVM.psd1'
+    $manifestPath = Join-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -ChildPath 'src/LazyVM/LazyVM.psd1'
     $commands = @((Import-PowerShellDataFile -LiteralPath $manifestPath).FunctionsToExport | ForEach-Object { @{ Command = $_ } })
 }
 
@@ -15,14 +15,14 @@ BeforeAll {
 Describe 'The module' {
     It 'exports exactly the commands in Public, each from a file of the same name' {
         $public = @(Get-ChildItem -LiteralPath (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Public') -Filter '*.ps1' | ForEach-Object { $_.BaseName } | Sort-Object)
-        $exported = @(Get-Command -Module 'Massokissed.LazyVM' | ForEach-Object { $_.Name } | Sort-Object)
+        $exported = @(Get-Command -Module 'LazyVM' | ForEach-Object { $_.Name } | Sort-Object)
 
         $exported | Should -Be $public
     }
 
     It 'uses only approved verbs' {
         $approved = @(Get-Verb | ForEach-Object { $_.Verb })
-        foreach ($command in Get-Command -Module 'Massokissed.LazyVM') {
+        foreach ($command in Get-Command -Module 'LazyVM') {
             $approved | Should -Contain $command.Verb -Because "$($command.Name) should use an approved verb"
         }
     }
@@ -31,13 +31,13 @@ Describe 'The module' {
         # Build and Invoke run whole unattended operations, which a WhatIf
         # could not meaningfully preview; the verbs below change one thing.
         $changing = 'New', 'Set', 'Remove', 'Restore', 'Save', 'Register'
-        foreach ($command in Get-Command -Module 'Massokissed.LazyVM' | Where-Object { $changing -contains $_.Verb }) {
+        foreach ($command in Get-Command -Module 'LazyVM' | Where-Object { $changing -contains $_.Verb }) {
             $command.Parameters.Keys | Should -Contain 'WhatIf' -Because "$($command.Name) changes something"
         }
     }
 
     It 'has a valid manifest' {
-        { Test-ModuleManifest -Path (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Massokissed.LazyVM.psd1') -ErrorAction Stop } | Should -Not -Throw
+        { Test-ModuleManifest -Path (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'LazyVM.psd1') -ErrorAction Stop } | Should -Not -Throw
     }
 }
 

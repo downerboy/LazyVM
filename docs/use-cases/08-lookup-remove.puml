@@ -6,7 +6,7 @@ actor "Host user" as User
 actor "Administrator" as Admin
 Admin --|> User
 
-rectangle "Massokissed.LazyVM" {
+rectangle "LazyVM" {
   usecase "List VMs\n<size:10>Get-LazyVM</size>" as List
   usecase "View settings\n<size:10>Get-LazyVMSetting</size>" as Set
   usecase "View the guest account\n<size:10>Get-LazyVMCredential</size>" as CredV

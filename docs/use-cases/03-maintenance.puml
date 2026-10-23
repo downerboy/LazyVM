@@ -5,7 +5,7 @@ title Run daily maintenance (Invoke-LazyVMMaintenance)
 actor "Task Scheduler\n(SYSTEM)" as Sched
 actor "Administrator" as Admin
 
-rectangle "Massokissed.LazyVM" {
+rectangle "LazyVM" {
   usecase "Schedule daily maintenance\n<size:10>Register-LazyVMMaintenance</size>" as Reg
   usecase "Run daily maintenance\n<size:10>Invoke-LazyVMMaintenance</size>" as Maint
   usecase "Start the VM" as Start

@@ -4,7 +4,7 @@ title Tooling
 
 actor "Administrator" as Admin
 
-rectangle "Massokissed.LazyVM" {
+rectangle "LazyVM" {
   usecase "View installed tooling\n<size:10>Get-LazyVMTooling</size>" as View
   usecase "Record tooling changes\n<size:10>Save-LazyVMTooling</size>" as Record
   usecase "List tooling restore points\n<size:10>Get-LazyVMRestorePoint</size>" as List

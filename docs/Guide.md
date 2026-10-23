@@ -65,11 +65,11 @@ These are detected and reported by name rather than migrated. Doing them correct
 
 ### Installing LazyVM
 
-LazyVM is a PowerShell module. The simplest way to install it is from a [release](https://github.com/downerboy/Massokissed.LazyVM/releases): download the zip, then, in an elevated PowerShell 7, in the folder you saved it to:
+LazyVM is a PowerShell module. The simplest way to install it is from a [release](https://github.com/downerboy/LazyVM/releases): download the zip, then, in an elevated PowerShell 7, in the folder you saved it to:
 
 ```powershell
-Unblock-File .\Massokissed.LazyVM-*.zip
-Expand-Archive .\Massokissed.LazyVM-*.zip -DestinationPath .\LazyVM -Force
+Unblock-File .\LazyVM-*.zip
+Expand-Archive .\LazyVM-*.zip -DestinationPath .\LazyVM -Force
 .\LazyVM\Install.ps1
 ```
 
@@ -78,8 +78,8 @@ Expand-Archive .\Massokissed.LazyVM-*.zip -DestinationPath .\LazyVM -Force
 Or build it from the repository, in an elevated PowerShell 7:
 
 ```powershell
-git clone https://github.com/downerboy/Massokissed.LazyVM S:\Source\Massokissed.LazyVM
-cd S:\Source\Massokissed.LazyVM
+git clone https://github.com/downerboy/LazyVM S:\Source\LazyVM
+cd S:\Source\LazyVM
 ./build.ps1 -Bootstrap -Task Install
 ```
 
@@ -341,7 +341,7 @@ On the host, everything lives under the LazyVM folder. The table shows the defau
 | `D:\DevVM\Installers` | The SQL Server ISO. |
 | `D:\DevVM\Checkpoints\DevBox` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
 
-The module itself is installed in `C:\Program Files\PowerShell\Modules\Massokissed.LazyVM`. Nothing of yours is kept there.
+The module itself is installed in `C:\Program Files\PowerShell\Modules\LazyVM`. Nothing of yours is kept there.
 
 ### Inside the VM
 

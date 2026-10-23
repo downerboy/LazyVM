@@ -5,7 +5,7 @@
 Installs LazyVM from a release download.
 
 .DESCRIPTION
-Copies the Massokissed.LazyVM module beside this script to
+Copies the LazyVM module beside this script to
 $env:ProgramFiles\PowerShell\Modules, where PowerShell 7 and LazyVM's
 scheduled tasks (which run as SYSTEM) find it. An earlier copy of the same
 version is replaced; other versions are left alone.
@@ -22,7 +22,7 @@ Run it in PowerShell 7 (pwsh), as administrator.
 param()
 
 $ErrorActionPreference = 'Stop'
-$moduleName = 'Massokissed.LazyVM'
+$moduleName = 'LazyVM'
 
 $versionDir = Get-ChildItem -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath $moduleName) -Directory |
     Sort-Object -Property { [version]$_.Name } -Descending |
