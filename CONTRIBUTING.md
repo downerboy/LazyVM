@@ -14,33 +14,39 @@ LazyVM uses [GitHub Flow](https://docs.github.com/en/get-started/using-github/gi
    ./build.ps1
    ```
 
-3. Push the branch and open a pull request into `main`. Put `Fixes #42` in the description to close the issue when it merges.
-4. CI (**Build, analyze and test**) must pass before the pull request can merge. `main` does not accept direct pushes, from anyone.
-5. Merge, and the branch is deleted.
+3. Push the branch and open a pull request into `main`, with a title in the form described under [Versioning](#versioning). Put `Fixes #42` in the description to close the issue when it merges.
+4. CI (**Build, analyze and test**) and the title check (**Conventional Commits title**) must pass before the pull request can merge. `main` does not accept direct pushes, from anyone.
+5. Squash-merge, so the pull request becomes one commit on `main` whose message is its title. The branch is then deleted.
+
+## Versioning
+
+LazyVM follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`, held in `ModuleVersion` in `src/LazyVM/LazyVM.psd1`. Nobody edits it by hand; it is worked out from the titles of the merged pull requests, which follow [Conventional Commits](https://www.conventionalcommits.org):
+
+| Pull request title | Next version |
+|---|---|
+| `fix: rearm count off by one` | patch: 2.0.0 → 2.0.1 |
+| `feat: export VM templates` | minor: 2.0.1 → 2.1.0 |
+| `feat!: rename Build-LazyVM`, or `BREAKING CHANGE:` in the description | major: 2.1.0 → 3.0.0 |
+| `perf:` or `revert:` | patch |
+| `docs:`, `refactor:`, `test:`, `build:`, `ci:`, `chore:`, `style:` | no release of their own |
+
+A scope in brackets is optional: `fix(maintenance): …`.
 
 ## Releasing
 
-A release is a tag on `main`. The [Release workflow](.github/workflows/release.yml) builds, tests and packages the tagged commit and publishes it as a GitHub release.
+Releases are made by [release-please](https://github.com/googleapis/release-please). Every time a pull request merges into `main`, the [Release Please workflow](.github/workflows/release-please.yml) opens or updates one **release pull request**, titled `chore(main): release 2.1.0`. It holds the next version: the `ModuleVersion` bump and the new section of [CHANGELOG.md](CHANGELOG.md).
 
-1. In a pull request, set `ModuleVersion` (and `Prerelease`, for a prerelease) in `src/LazyVM/LazyVM.psd1`, and merge it.
-2. Tag the merge commit on `main` and push the tag:
+To release, merge the release pull request. That tags `main` with `v` and the version (`v2.1.0`), publishes the GitHub release with the changelog, and attaches the built and tested `LazyVM-2.1.0.zip`.
 
-   ```powershell
-   git switch main
-   git pull
-   git tag v2.1.0
-   git push origin v2.1.0
-   ```
-
-Tags start with a lowercase `v` and match the manifest exactly: `v2.1.0`, or `v2.1.0-alpha1` for a prerelease. The workflow refuses a tag that does not match.
+While LazyVM is in alpha, releases are marked as pre-releases on GitHub. To stop, set `PRERELEASE` to `'false'` in the workflow.
 
 ## Patching an older release
 
-Release branches are made only when an older version needs a fix after `main` has moved on. Branch from that version's tag, then make the fix through a pull request into the release branch, the same way as into `main`:
+Release branches are made only when an older version needs a fix after `main` has moved on. Branch from that version's tag:
 
 ```powershell
 git switch -c release/2.0 v2.0.0
 git push -u origin release/2.0
 ```
 
-Bump the patch version on the release branch, tag it (`v2.0.1`), and push the tag. If `main` has the same bug, fix it there too.
+Then make the fix through a pull request into `release/2.0`, titled `fix: …`. The branch gets its own release pull request, and merging it releases `v2.0.1`. If `main` has the same bug, fix it there too.

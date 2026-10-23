@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "efcf68af2563f387441b7242795b6d7686557840",
+  "include-component-in-tag": false,
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "package-name": "LazyVM",
+      "initial-version": "2.0.0",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        { "type": "generic", "path": "src/LazyVM/LazyVM.psd1" }
+      ]
+    }
+  }
+}

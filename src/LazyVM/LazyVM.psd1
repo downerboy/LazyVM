@@ -1,6 +1,7 @@
 ﻿@{
     RootModule           = 'LazyVM.psm1'
-    ModuleVersion        = '2.0.0'
+    # Set by release-please from the merged pull request titles; see CONTRIBUTING.md.
+    ModuleVersion        = '2.0.0' # x-release-please-version
     GUID                 = '08c1f0fc-8b41-4102-a4a7-847ac770437b'
     Author               = 'Massokissed'
     CompanyName          = 'Massokissed'
@@ -38,9 +39,9 @@
             Tags       = @('Hyper-V', 'VM', 'VisualStudio', 'SQLServer', 'DevBox', 'Windows')
             ProjectUri = 'https://github.com/downerboy/LazyVM'
             LicenseUri = 'https://github.com/downerboy/LazyVM/blob/main/LICENSE.md'
-            # Empty for a final release. The release tag is v<ModuleVersion>
-            # followed by -<Prerelease> when this is set.
-            Prerelease = 'alpha1'
+            # Left empty: release-please tags v<ModuleVersion>, and the alpha
+            # releases are marked as pre-releases on GitHub instead.
+            Prerelease = ''
         }
     }
 }
