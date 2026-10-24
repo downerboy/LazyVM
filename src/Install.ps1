@@ -7,8 +7,9 @@ Installs LazyVM from a release download.
 .DESCRIPTION
 Copies the LazyVM module beside this script to
 $env:ProgramFiles\PowerShell\Modules, where PowerShell 7 and LazyVM's
-scheduled tasks (which run as SYSTEM) find it. Any LazyVM versions already
-installed there are removed first, so only this one is left.
+scheduled tasks (which run as SYSTEM) find it. The module versions already
+installed there are removed first, so only this one is left. LazyVM's own
+folder, with its VMs and settings, is not touched.
 
 Files downloaded from the internet are marked as such, and PowerShell will
 not load a marked module, so the copies are unblocked as they are installed.
@@ -46,7 +47,10 @@ if (-not $versionDir) {
 
 $installDir = Join-Path -Path $env:ProgramFiles -ChildPath "PowerShell\Modules\$moduleName"
 $target = Join-Path -Path $installDir -ChildPath $versionDir.Name
-if (Test-Path -LiteralPath $installDir) { Remove-Item -LiteralPath $installDir -Recurse -Force }
+# Only the module's version folders (2.0.0, 2.0.1, ...) are removed.
+$installed = Get-ChildItem -LiteralPath $installDir -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -as [version] }
+foreach ($old in $installed) { Remove-Item -LiteralPath $old.FullName -Recurse -Force }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
 Copy-Item -Path (Join-Path -Path $versionDir.FullName -ChildPath '*') -Destination $target -Recurse -Force
 Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File
