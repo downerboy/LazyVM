@@ -1,15 +1,21 @@
 # Keeps a release pull request open that holds the next version: on every
 # push to main, release-please reads the merged pull request titles, bumps
 # ModuleVersion in the manifest and adds them to CHANGELOG.md. Merging that
-# pull request tags main (v2.1.0) and publishes the release, and the publish
-# job attaches the built zip. A release/x.y branch gets its own release pull
-# request the same way, for patching an older version.
+# pull request makes a draft release (v2.1.0); the publish job builds and
+# tests it, attaches the zip and publishes it, which tags the commit.
+# Releases are immutable once published, so the zip has to go on before.
+# A release/x.y branch gets its own release pull request the same way, for
+# patching an older version.
 name: Release Please
 
 on:
   push:
     branches: [ main, 'release/**' ]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Build, attach the zip to and publish this draft release instead, such as v2.1.0
+        required: false
 
 permissions:
   contents: write
@@ -23,6 +29,7 @@ env:
 jobs:
   release-please:
     name: Update the release pull request
+    if: inputs.tag == ''
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -38,27 +45,46 @@ jobs:
       # A pull request opened or updated with the workflow's own token does
       # not start other workflows, so the checks main requires are started
       # here, on the release pull request's branch.
+      # After a release there is no pull request, and the output is empty.
       - name: Run the required checks on the release pull request
-        if: steps.release.outputs.pr
         env:
           GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          PR: ${{ steps.release.outputs.pr }}
         run: |
-          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
-          gh workflow run pr-title.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          if [[ -z "$PR" ]]; then
+            echo 'No release pull request to check.'
+            exit 0
+          fi
+          branch=$(jq -r .headBranchName <<< "$PR")
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+          gh workflow run pr-title.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
 
   publish:
     name: Build, test and attach the release zip
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || inputs.tag != '') }}
     runs-on: windows-latest
     defaults:
       run:
         shell: pwsh
+    env:
+      TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
+      GH_TOKEN: ${{ github.token }}
     steps:
+      # A draft release has no tag yet, only the commit it will tag.
+      - name: Find the release's commit
+        id: commit
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $release = gh release view $env:TAG --repo $env:GITHUB_REPOSITORY --json isDraft,targetCommitish | ConvertFrom-Json
+          if (-not $release.isDraft) {
+              throw "$env:TAG is already published. Published releases are immutable, so the zip cannot be added."
+          }
+          "sha=$($release.targetCommitish)" >> $env:GITHUB_OUTPUT
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ steps.commit.outputs.sha }}
 
       - name: Build, analyze and test
         run: ./build.ps1 -Bootstrap
@@ -66,17 +92,14 @@ jobs:
       - name: Package
         run: ./build.ps1 -Task Package
 
-      - name: Attach the zip and install notes
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
+      - name: Attach the zip and install notes, and publish
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           $zip = Get-Item out/release/*.zip
           $expected = "LazyVM-$($env:TAG.TrimStart('v')).zip"
           if ($zip.Name -ne $expected) {
               throw "The tag $env:TAG does not match the module manifest, which packaged $($zip.Name)."
           }
-          gh release upload $env:TAG $zip.FullName
 
           $install = @"
           ## Install
@@ -97,9 +120,15 @@ jobs:
 
           See the README in the zip, or [docs/Guide.md](https://github.com/$env:GITHUB_REPOSITORY/blob/$env:TAG/docs/Guide.md), for the rest.
           "@ -replace '(?m)^          ', ''
-          $changes = gh release view $env:TAG --json body --jq .body
+          # Run again on the same release, the install notes are replaced, not repeated.
+          $changes = (gh release view $env:TAG --json body --jq .body) -join "`n"
+          $changes = $changes -replace '(?sm)^## Install.*?(?=^## \d)', ''
           Set-Content -Path notes.md -Value "$install`n$changes"
 
           $flags = @('--notes-file', 'notes.md', '--title', "LazyVM $($env:TAG.TrimStart('v'))")
           if ($env:PRERELEASE -eq 'true') { $flags += '--prerelease' }
           gh release edit $env:TAG @flags
+          gh release upload $env:TAG $zip.FullName --clobber
+
+          # Publishing tags the commit and makes the release immutable.
+          gh release edit $env:TAG --draft=false
