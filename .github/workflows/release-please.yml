@@ -1,9 +1,11 @@
 # Keeps a release pull request open that holds the next version: on every
 # push to main, release-please reads the merged pull request titles, bumps
 # ModuleVersion in the manifest and adds them to CHANGELOG.md. Merging that
-# pull request tags main (v2.1.0) and publishes the release, and the publish
-# job attaches the built zip. A release/x.y branch gets its own release pull
-# request the same way, for patching an older version.
+# pull request makes a draft release (v2.1.0); the publish job builds and
+# tests it, attaches the zip and publishes it, which tags the commit.
+# Releases are immutable once published, so the zip has to go on before.
+# A release/x.y branch gets its own release pull request the same way, for
+# patching an older version.
 name: Release Please
 
 on:
@@ -12,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Build and attach the zip to this existing release instead, such as v2.0.0
+        description: Build, attach the zip to and publish this draft release instead, such as v2.1.0
         required: false
 
 permissions:
@@ -67,10 +69,22 @@ jobs:
         shell: pwsh
     env:
       TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
+      GH_TOKEN: ${{ github.token }}
     steps:
+      # A draft release has no tag yet, only the commit it will tag.
+      - name: Find the release's commit
+        id: commit
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $release = gh release view $env:TAG --repo $env:GITHUB_REPOSITORY --json isDraft,targetCommitish | ConvertFrom-Json
+          if (-not $release.isDraft) {
+              throw "$env:TAG is already published. Published releases are immutable, so the zip cannot be added."
+          }
+          "sha=$($release.targetCommitish)" >> $env:GITHUB_OUTPUT
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ steps.commit.outputs.sha }}
 
       - name: Build, analyze and test
         run: ./build.ps1 -Bootstrap
@@ -78,16 +92,14 @@ jobs:
       - name: Package
         run: ./build.ps1 -Task Package
 
-      - name: Attach the zip and install notes
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Attach the zip and install notes, and publish
         run: |
+          $PSNativeCommandUseErrorActionPreference = $true
           $zip = Get-Item out/release/*.zip
           $expected = "LazyVM-$($env:TAG.TrimStart('v')).zip"
           if ($zip.Name -ne $expected) {
               throw "The tag $env:TAG does not match the module manifest, which packaged $($zip.Name)."
           }
-          gh release upload $env:TAG $zip.FullName --clobber
 
           $install = @"
           ## Install
@@ -116,3 +128,7 @@ jobs:
           $flags = @('--notes-file', 'notes.md', '--title', "LazyVM $($env:TAG.TrimStart('v'))")
           if ($env:PRERELEASE -eq 'true') { $flags += '--prerelease' }
           gh release edit $env:TAG @flags
+          gh release upload $env:TAG $zip.FullName --clobber
+
+          # Publishing tags the commit and makes the release immutable.
+          gh release edit $env:TAG --draft=false

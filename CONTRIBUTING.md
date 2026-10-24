@@ -38,6 +38,8 @@ Releases are made by [release-please](https://github.com/googleapis/release-plea
 
 To release, merge the release pull request. That tags `main` with `v` and the version (`v2.1.0`), publishes the GitHub release with the changelog, and attaches the built and tested `LazyVM-2.1.0.zip`.
 
+Releases are immutable once published: their files and tag cannot change. So release-please first makes a draft, and the workflow publishes it only once the zip is attached. If that job fails, the draft stays; fix the cause, then run the Release Please workflow by hand with the draft's tag (`v2.1.0`) to finish it.
+
 While LazyVM is in alpha, releases are marked as pre-releases on GitHub. To stop, set `PRERELEASE` to `'false'` in the workflow.
 
 ## Patching an older release
