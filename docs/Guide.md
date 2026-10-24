@@ -333,7 +333,7 @@ D:\DevVM\
     Installers\     the SQL Server ISO
     Credentials\    .lazyvm.key
   DevBox\
-    Config\         VM.json, Tooling.json, History\
+    Config\         VM.json, Tooling.json, Tooling.Template.json, History\
     Virtual Machines\
     Checkpoints\
     Disks\          DevBox-OS.vhdx, DevBox-SQL.vhdx, DevBox-DevDrive.vhdx, DevBox-Seed.iso
@@ -350,7 +350,7 @@ D:\DevVM\
 | `D:\DevVM\Shared\Installers` | The SQL Server ISO. |
 | `D:\DevVM\Shared\Credentials` | `.lazyvm.key`, the key that encrypts every VM's stored passwords. |
 | `D:\DevVM\DevBox` | Everything that belongs to the VM DevBox. Removing the VM deletes this folder. |
-| `D:\DevVM\DevBox\Config` | The VM's profile (`VM.json`), its tooling list (`Tooling.json`), and `History`: every recorded version of the list, plus a daily copy kept for 30 days. |
+| `D:\DevVM\DevBox\Config` | The VM's profile (`VM.json`), its tooling list (`Tooling.json`), the list it was first built from (`Tooling.Template.json`), and `History`: every recorded version of the list, plus a daily copy kept for 30 days. |
 | `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
 | `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
 | `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk and the Dev Drive persist across rebuilds: one carries the database backups, the other your working source. |
@@ -512,7 +512,26 @@ Phase 7 installs the whole list, in this order:
 
 Anything already present is skipped.
 
+The first build also keeps a copy of the list it installs as `DevBox\Config\Tooling.Template.json`. See [What the VM started with](#what-the-vm-started-with).
+
 Programs winget does not provide, and extensions with no Marketplace match, cannot be installed automatically. After a build they are logged and written to `DevBox\State\reinstall-by-hand.txt`. The list marks them as awaiting reinstall, so they are not mistaken for removals. Each one leaves that list once you install it.
+
+### What the VM started with
+
+`Tooling.json` changes as you work: maintenance adds what you install and drops what you remove. `Tooling.Template.json`, beside it, is the list the VM was first built from: the default list, or the VM's own list if it had one before its first build. It is written once and never changed:
+
+- maintenance, `Save-LazyVMTooling` and `Restore-LazyVMTooling` change only `Tooling.json`;
+- running `Build-LazyVM` again, or a rebuild of a replacement VM, keeps the copy that is there;
+- `Remove-LazyVM` deletes it with the rest of the VM's folder.
+
+Both files are written the same way, so a diff lines up entry by entry and shows what has changed since the build, along with when each list was recorded (`RecordedAt`). With Visual Studio Code or Git:
+
+```powershell
+code --diff D:\DevVM\DevBox\Config\Tooling.Template.json D:\DevVM\DevBox\Config\Tooling.json
+git diff --no-index D:\DevVM\DevBox\Config\Tooling.Template.json D:\DevVM\DevBox\Config\Tooling.json
+```
+
+WinMerge, from the default list, compares them too. A VM built before LazyVM kept this copy gets one at its next build or rebuild, holding the list that build installs.
 
 ### Application settings
 

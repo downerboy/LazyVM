@@ -26,6 +26,27 @@ function Get-BuildTooling {
     return $default
 }
 
+function Save-ToolingTemplate {
+    <#
+      Keeps the tooling list a build installs as <Name>\Config\Tooling.Template.json,
+      so the living Tooling.json can be diffed against what the VM started
+      with. Written once: a VM that already has a copy keeps it, so running the
+      build again or rebuilding a replacement VM never overwrites it, and
+      maintenance never touches it.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][ToolingRecord]$Tooling
+    )
+
+    $templatePath = (Get-ToolingPath -VM $VM).Template
+    if (Test-Path -LiteralPath $templatePath -PathType Leaf) { return }
+
+    # Written as Tooling.json is, so the two diff line for line.
+    Save-ToolingRecord -Record $Tooling -Path $templatePath
+    Write-LogEntry "Kept a copy of the tooling list this VM is built from: $templatePath" 'INFO'
+}
+
 function Write-ToolingReinstallReport {
     <#
       After a build: what the tooling list has that the guest still lacks,

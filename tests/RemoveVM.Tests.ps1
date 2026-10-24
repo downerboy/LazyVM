@@ -238,7 +238,7 @@ Describe 'Invoke-VMRemoval' {
             New-Item -ItemType Directory -Path (Join-Path -Path $vmRoot -ChildPath $folder) -Force | Out-Null
         }
         New-Item -ItemType Directory -Path (Join-Path -Path $shared -ChildPath 'ISO') -Force | Out-Null
-        foreach ($file in 'Disks\Alpha-OS.vhdx', 'Disks\Alpha-OS_28A36081-36CC-4C10-9FDE-A1A5489978B7.avhdx', 'Config\VM.json', 'Logs\Alpha.log') {
+        foreach ($file in 'Disks\Alpha-OS.vhdx', 'Disks\Alpha-OS_28A36081-36CC-4C10-9FDE-A1A5489978B7.avhdx', 'Config\VM.json', 'Config\Tooling.Template.json', 'Logs\Alpha.log') {
             Set-Content -LiteralPath (Join-Path -Path $vmRoot -ChildPath $file) -Value 'x'
         }
         $iso = Join-Path -Path $shared -ChildPath 'ISO\Win11Ent_Eval.iso'
@@ -266,6 +266,19 @@ Describe 'Invoke-VMRemoval' {
 
         "$outcome" | Should -Be 'Removed'
         Test-Path -LiteralPath $vmRoot | Should -BeFalse
+    }
+
+    It 'deletes the copy of the tooling list the VM was built from, with its Config folder (#71)' {
+        $templateCopy = Join-Path -Path $vmRoot -ChildPath 'Config\Tooling.Template.json'
+        $templateCopy | Should -Exist
+
+        InModuleScope $module -Parameters @{ Settings = $settings; Context = $context } {
+            param($Settings, $Context)
+            Start-Log -Path $Settings.LogFile -MaxSizeMB 10
+            $null = Invoke-VMRemoval -VM ([VMContext]::new($Settings)) -Context $Context 6>$null
+        }
+
+        $templateCopy | Should -Not -Exist
     }
 
     It 'leaves the Shared folder alone' {
