@@ -1,4 +1,4 @@
-﻿#Requires -Version 7.4
+﻿#Requires -Version 7.6
 <#
 .SYNOPSIS
 Checks a change to LazyVM: assembles the module, analyzes the code and runs the tests.

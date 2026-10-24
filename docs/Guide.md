@@ -58,7 +58,7 @@ These are detected and reported by name rather than migrated. Doing them correct
 
 ### Requirements
 
-- PowerShell 7.4 or later, **run as administrator**. Every command that touches Hyper-V, the registry or scheduled tasks checks for this and says so if it is missing.
+- PowerShell 7.6 or later, **run as administrator**. Every command that touches Hyper-V, the registry or scheduled tasks checks for this and says so if it is missing.
 - Windows Pro, Enterprise or Education on the host. Hyper-V is not available on Home editions, and LazyVM stops with a clear message if it detects one.
 - A genuine Windows 11 Enterprise Evaluation ISO, downloaded by hand ([see below](#the-windows-iso-must-be-supplied-by-hand)). Leaving it in Downloads is enough.
 

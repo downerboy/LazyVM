@@ -43,7 +43,7 @@ What it needs
 ## Requirements
 
 - Windows 10 or 11 Pro, Enterprise or Education on the host (Hyper-V is not available on Home).
-- [PowerShell 7.4 or later](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows), run as administrator: `winget install Microsoft.PowerShell`.
+- [PowerShell 7.6 or later](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows), run as administrator: `winget install Microsoft.PowerShell`.
 - A Windows 11 Enterprise Evaluation ISO, downloaded by hand from the [Microsoft Evaluation Center](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise). LazyVM opens that page for you if it can't find one.
 - Memory and disk for each VM. By default a VM starts with 8 GB of memory and can grow to 16 GB. Its disks are 120 GB for Windows, 100 GB for SQL data and 250 GB for the Dev Drive, all dynamically expanding.
 

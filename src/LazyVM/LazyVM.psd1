@@ -7,7 +7,7 @@
     CompanyName          = 'Massokissed'
     Copyright            = '(c) Massokissed. All rights reserved.'
     Description          = 'Builds and looks after Hyper-V development VMs, unattended: Windows 11, Visual Studio, SQL Server and each VM''s own tooling, rebuilt automatically before the Windows evaluation expires.'
-    PowerShellVersion    = '7.4'
+    PowerShellVersion    = '7.6'
     CompatiblePSEditions = @('Core')
 
     FunctionsToExport    = @(
