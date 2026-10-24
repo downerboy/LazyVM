@@ -17,12 +17,12 @@ Builds, checks and tests the LazyVM module.
   Package  Build, then zip the module with Install.ps1, the README and the
            licence into out\release, ready to attach to a GitHub release.
 
+  Analyze and Test use pinned versions of PSScriptAnalyzer and Pester. When
+  one is missing it is installed for the current user from the PowerShell
+  Gallery, beside any other versions, which are left alone.
+
 .PARAMETER Task
 Which step to run.
-
-.PARAMETER Bootstrap
-Install the versions of Pester and PSScriptAnalyzer the build uses, for
-the current user, if they are missing.
 
 .EXAMPLE
 ./build.ps1
@@ -31,20 +31,14 @@ the current user, if they are missing.
 ./build.ps1 -Task Test
 
 .EXAMPLE
-./build.ps1 -Bootstrap
-
-.EXAMPLE
-./build.ps1 -Bootstrap -Task Install
+./build.ps1 -Task Install
 
 Builds and checks LazyVM and installs it, ready to use: Build-LazyVM -Name DevBox.
--Bootstrap installs Pester and PSScriptAnalyzer the first time.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('All', 'Build', 'Analyze', 'Test', 'Install', 'Package')]
-    [string]$Task = 'All',
-
-    [switch]$Bootstrap
+    [string]$Task = 'All'
 )
 
 Set-StrictMode -Version 3.0
@@ -70,10 +64,6 @@ function Import-BuildTool
     $installed = Get-Module -ListAvailable -Name $Tool.Name | Where-Object { $_.Version -eq [version]$Tool.Version }
     if (-not $installed)
     {
-        if (-not $Bootstrap)
-        {
-            throw "$($Tool.Name) $($Tool.Version) is not installed. Run ./build.ps1 -Bootstrap to install it."
-        }
         Write-Host "Installing $($Tool.Name) $($Tool.Version)..."
         Install-Module -Name $Tool.Name -RequiredVersion $Tool.Version -Scope CurrentUser -Force -SkipPublisherCheck
     }

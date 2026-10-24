@@ -25,7 +25,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 
 ## Install from the repository
 
-`./build.ps1 -Task Install` `-Bootstrap  (first time)`
+`./build.ps1 -Task Install`
 
 Builds the module, checks it and runs the tests, then installs it for all users only if every check passes. Any failure stops the script before step 5.
 
@@ -34,7 +34,7 @@ Builds the module, checks it and runs the tests, then installs it for all users 
 1. `Invoke-Build` (build.ps1): merges Public\ and Private\ into one .psm1, then imports it to check the exports
    - Reads D1, module source: src\LazyVM\ (Public\  Private\  Data\, LazyVM.psd1)
    - Writes D2, built module: out\LazyVM\ (<version>\)
-2. `Import-BuildTool` (build.ps1): missing and no -Bootstrap: stops with a message
+2. `Import-BuildTool` (build.ps1): installs the pinned version when it is missing; other versions are left alone
    - Reads D3, pinned build tools: PowerShell Gallery (PSScriptAnalyzer 1.24.0, Pester 5.7.1)
    - Writes D4, build tools, if they were missing: CurrentUser modules (PSScriptAnalyzer, Pester)
 3. `Invoke-Analyze` (build.ps1): in a job of its own; any finding stops here

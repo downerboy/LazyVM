@@ -87,7 +87,7 @@ jobs:
           ref: ${{ steps.commit.outputs.sha }}
 
       - name: Build, analyze and test
-        run: ./build.ps1 -Bootstrap
+        run: ./build.ps1
 
       - name: Package
         run: ./build.ps1 -Task Package

@@ -64,10 +64,10 @@ Expand-Archive .\LazyVM-*.zip -DestinationPath .\LazyVM -Force
 ```powershell
 git clone https://github.com/downerboy/LazyVM S:\Source\LazyVM
 cd S:\Source\LazyVM
-./build.ps1 -Bootstrap -Task Install
+./build.ps1 -Task Install
 ```
 
-This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, installs it for all users, which the scheduled maintenance needs because it runs as SYSTEM. `-Bootstrap` installs Pester and PSScriptAnalyzer the first time. Open a new PowerShell 7 window afterwards.
+This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, installs it for all users, which the scheduled maintenance needs because it runs as SYSTEM. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Open a new PowerShell 7 window afterwards.
 
 ## Quick start
 

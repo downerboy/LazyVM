@@ -80,10 +80,10 @@ Or build it from the repository, in an elevated PowerShell 7:
 ```powershell
 git clone https://github.com/downerboy/LazyVM S:\Source\LazyVM
 cd S:\Source\LazyVM
-./build.ps1 -Bootstrap -Task Install
+./build.ps1 -Task Install
 ```
 
-`-Task Install` builds the module, checks it with PSScriptAnalyzer and runs the Pester tests, then, only if they all pass, installs it for all users: the scheduled maintenance runs as SYSTEM and has to be able to find it. `-Bootstrap` installs Pester and PSScriptAnalyzer the first time. Once installed, PowerShell loads it by itself the first time you use one of its commands.
+`-Task Install` builds the module, checks it with PSScriptAnalyzer and runs the Pester tests, then, only if they all pass, installs it for all users: the scheduled maintenance runs as SYSTEM and has to be able to find it. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Once installed, PowerShell loads it by itself the first time you use one of its commands.
 
 Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the module, and reports its commands as not recognized. To update, pull the repository and run the same `build.ps1` command again. The scheduled tasks pick up the new version on their next run.
 
