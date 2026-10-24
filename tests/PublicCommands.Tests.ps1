@@ -31,7 +31,9 @@ BeforeAll {
 Describe 'Remove-LazyVM' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }
-        Mock -ModuleName $module Initialize-CommandRun { $testVM }.GetNewClosure()
+        # GetNewClosure keeps only this block's own variables.
+        $vm = $testVM
+        Mock -ModuleName $module Initialize-CommandRun { $vm }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Get-VMRemovalContext { [pscustomobject]@{ Files = @('x') } }
         Mock -ModuleName $module Invoke-VMRemoval { 'Removed' }
@@ -76,7 +78,9 @@ Describe 'Remove-LazyVM' {
 Describe 'Invoke-LazyVMMaintenance' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }
-        Mock -ModuleName $module Initialize-CommandRun { $testVM }.GetNewClosure()
+        # GetNewClosure keeps only this block's own variables.
+        $vm = $testVM
+        Mock -ModuleName $module Initialize-CommandRun { $vm }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Invoke-Rebuild { $true }
@@ -113,7 +117,9 @@ Describe 'Build-LazyVM' {
         Mock -ModuleName $module Initialize-BuildTarget { }
         Mock -ModuleName $module Register-RebuildSchedule { }
         Mock -ModuleName $module Assert-Administrator { }
-        Mock -ModuleName $module Initialize-CommandRun { $testVM }.GetNewClosure()
+        # GetNewClosure keeps only this block's own variables.
+        $vm = $testVM
+        Mock -ModuleName $module Initialize-CommandRun { $vm }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Write-LogEntry { }
     }
@@ -165,7 +171,9 @@ Describe 'Build-LazyVM' {
 Describe 'Restore-LazyVMTooling' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }
-        Mock -ModuleName $module Initialize-CommandRun { $testVM }.GetNewClosure()
+        # GetNewClosure keeps only this block's own variables.
+        $vm = $testVM
+        Mock -ModuleName $module Initialize-CommandRun { $vm }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Invoke-ToolingRevert { }

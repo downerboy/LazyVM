@@ -26,7 +26,8 @@ function Invoke-Test {
     $failures = [System.Collections.Generic.List[string]]::new()
     foreach ($test in $result.Failed) {
         $message = "$($test.ExpandedPath): $($test.ErrorRecord[0].Exception.Message)"
-        $failures.Add("$message ($([IO.Path]::GetFileName($test.ScriptBlock.File)):$($test.StartLine))")
+        # The first line only: the rest is Pester quoting the test's code.
+        $failures.Add("$(($message -split "`n")[0].Trim()) ($([IO.Path]::GetFileName($test.ScriptBlock.File)):$($test.StartLine))")
         Write-CIError -Message $message -File $test.ScriptBlock.File -Line $test.StartLine
     }
     # A test file is also marked failed when only its tests failed; those are
