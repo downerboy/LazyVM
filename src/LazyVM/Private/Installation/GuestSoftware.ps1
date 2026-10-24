@@ -55,6 +55,7 @@ function Install-GuestSoftware {
 
     # The VM's own recorded list, or the default list for a VM that has none.
     $tooling = Get-BuildTooling -VM $VM
+    Save-ToolingTemplate -VM $VM -Tooling $tooling
 
     # Anything already present is skipped: SQL setup with /ACTION=Install
     # against an existing instance fails outright, and running a bootstrapper

@@ -19,6 +19,8 @@ $script:ProfileFileName = 'VM.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'
 $script:ToolingFileName = 'Tooling.json'
 $script:DefaultToolingFileName = 'Tooling.Default.json'
+# The tooling list a VM was first built from, kept beside Tooling.json to diff against it.
+$script:ToolingTemplateFileName = 'Tooling.Template.json'
 
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.

@@ -123,12 +123,13 @@ function Compare-ToolingRecord {
 }
 
 function Get-ToolingPath {
-    <# The VM's tooling list and its history folders. #>
+    <# The VM's tooling list, the copy of the list it was first built from, and its history folders. #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $historyDir = Join-Path $VM.Settings.ProfileDir 'History'
     return [pscustomobject]@{
         Record     = Join-Path $VM.Settings.ProfileDir $script:ToolingFileName
+        Template   = Join-Path $VM.Settings.ProfileDir $script:ToolingTemplateFileName
         HistoryDir = $historyDir
         DailyDir   = Join-Path $historyDir 'Daily'
     }

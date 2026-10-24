@@ -475,3 +475,77 @@ Describe 'Merge-AwaitingReinstall' {
         Should -Invoke Write-LogEntry -ModuleName $module -Times 0 -Exactly -Scope It
     }
 }
+
+Describe 'The copy of the tooling list a VM is built from (#71)' {
+    BeforeEach {
+        $profileDir = Join-Path -Path $TestDrive -ChildPath 'LazyVM\Alpha\Config'
+        $settings = @{ VMName = 'Alpha'; ProfileDir = $profileDir; ToolingWingetExclude = @(); ToolingHistoryDays = 30 }
+        $templatePath = Join-Path -Path $profileDir -ChildPath 'Tooling.Template.json'
+        $buildList = New-TestRecord -Products @(New-TestProduct) -WingetIds @('Git.Git') -ProgramNames @('Git')
+    }
+
+    It 'is kept as Config\Tooling.Template.json, written as Tooling.json is written' {
+        $expected = InModuleScope $module -Parameters @{ Settings = $settings; Tooling = $buildList } {
+            param($Settings, $Tooling)
+            $record = [ToolingRecord]::FromObject($Tooling)
+            Save-ToolingTemplate -VM ([VMContext]::new($Settings)) -Tooling $record 6>$null
+            $record.ToJson()
+        }
+
+        $templatePath | Should -Exist
+        [IO.File]::ReadAllText($templatePath) | Should -BeExactly $expected
+    }
+
+    It 'is not overwritten when the VM is built again or a replacement is rebuilt' {
+        New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
+        Set-Content -LiteralPath $templatePath -Value 'the original list' -NoNewline
+
+        InModuleScope $module -Parameters @{ Settings = $settings; Tooling = $buildList } {
+            param($Settings, $Tooling)
+            Save-ToolingTemplate -VM ([VMContext]::new($Settings)) -Tooling ([ToolingRecord]::FromObject($Tooling)) 6>$null
+        }
+
+        Get-Content -LiteralPath $templatePath -Raw | Should -BeExactly 'the original list'
+    }
+
+    It 'is left untouched when maintenance records a tooling change' {
+        Mock -ModuleName $module Get-GuestToolingInventory {
+            # The product New-TestProduct describes, as the guest reports it.
+            [pscustomobject]@{
+                Products       = @([pscustomobject]@{
+                        ProductId          = 'Microsoft.VisualStudio.Product.Community'
+                        ChannelId          = 'VisualStudio.18.Release'
+                        DisplayName        = 'Visual Studio Community 2026'
+                        Components         = @()
+                        ExportedExtensions = @()
+                        UserExtensions     = @()
+                    })
+                WingetPackages = @([pscustomobject]@{ Id = 'Git.Git'; Source = 'winget' }, [pscustomobject]@{ Id = 'Notepad++.Notepad++'; Source = 'winget' })
+                Programs       = @([pscustomobject]@{ Name = 'Git'; Publisher = 'Test Publisher' })
+            }
+        }
+        Mock -ModuleName $module Add-MarketplaceItem {}
+        Mock -ModuleName $module Get-ToolingStamp { '20261024-120000' }
+        Mock -ModuleName $module New-ToolingCheckpoint {}
+
+        # As a build leaves the VM: the living list and the copy, the same.
+        InModuleScope $module -Parameters @{ Settings = $settings; Tooling = $buildList } {
+            param($Settings, $Tooling)
+            $vm = [VMContext]::new($Settings)
+            $record = [ToolingRecord]::FromObject($Tooling)
+            Save-ToolingTemplate -VM $vm -Tooling $record 6>$null
+            Save-ToolingRecord -Record $record -Path (Get-ToolingPath -VM $vm).Record
+        }
+        $before = Get-Content -LiteralPath $templatePath -Raw
+
+        $changes = InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            Update-ToolingRecord -VM ([VMContext]::new($Settings)) 6>$null
+        }
+
+        @($changes) | Should -Contain '+ winget: Notepad++.Notepad++'
+        Get-Content -LiteralPath (Join-Path -Path $profileDir -ChildPath 'Tooling.json') -Raw | Should -Match 'Notepad\+\+'
+        Get-Content -LiteralPath $templatePath -Raw | Should -BeExactly $before
+        Get-Content -LiteralPath $templatePath -Raw | Should -Not -Match 'Notepad\+\+'
+    }
+}
