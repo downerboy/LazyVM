@@ -9,7 +9,11 @@ $script:RootRegistryKey = 'HKLM:\SOFTWARE\LazyVM'
 # here once Windows Setup and OOBE are done.
 $script:GuestMarkerKey = 'HKLM:\SOFTWARE\LazyVM'
 
-# The settings files in <Root>\Config, and each VM's files in Config\VMs\<Name>.
+# The LazyVM folder holds one folder per VM, <Root>\<Name>, and one folder
+# for what every VM uses, <Root>\Shared. The host-wide settings are in
+# Shared\Config; each VM's profile and tooling list are in <Name>\Config.
+$script:SharedFolderName = 'Shared'
+$script:ConfigFolderName = 'Config'
 $script:SettingsFileName = 'LazyVM.Settings.json'
 $script:ProfileFileName = 'VM.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'

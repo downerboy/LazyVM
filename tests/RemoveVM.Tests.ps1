@@ -1,7 +1,8 @@
 ﻿# RemoveVM.Tests.ps1
 # Removing a VM (Remove-LazyVM): what it deletes, and what it keeps because every
-# VM, or another VM, still uses it. Only the planning is tested here; it reads
-# nothing from disk and touches neither Hyper-V nor the Task Scheduler.
+# VM, or another VM, still uses it. The planning reads nothing from disk; the
+# deleting is tested against a VM folder in TestDrive, with Hyper-V and the
+# Task Scheduler left out.
 
 BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
@@ -20,24 +21,26 @@ BeforeAll {
         $settings = @{
             VMName           = $Name
             Root             = 'D:\DevVM'
-            ProfileDir       = "D:\DevVM\Scripts\Config\VMs\$Name"
-            VHDXRoot         = 'D:\DevVM\VMs'
-            OSDiskPath       = "D:\DevVM\VMs\$Name-OS.vhdx"
-            VMConfigDir      = "D:\DevVM\VMs\$Name"
-            ISOPath          = 'D:\DevVM\ISO\Win11Ent_Eval.iso'
-            ISOSearchRoot    = 'D:\DevVM\ISO'
-            SQLIsoPath       = 'D:\DevVM\Installers\SQLServer2025-x64-ENU-EntDev.iso'
-            SQLDiskPath      = "D:\DevVM\SQLDisk\$Name.vhdx"
-            DevDrivePath     = "D:\DevVM\DevDrive\$Name.vhdx"
-            SeedDiskPath     = "D:\DevVM\VMs\$Name-Seed.vhdx"
-            CheckpointDir    = "D:\DevVM\Checkpoints\$Name"
-            VSSettingsBackup = "D:\DevVM\Backup\$Name\VisualStudio.vssettings"
-            LogFile          = "D:\DevVM\Logs\$Name.log"
-            CredStoreDir     = 'D:\DevVM\Backup'
-            CredKeyFile      = 'D:\DevVM\Backup\.lazyvm.key'
-            GuestCredFile    = "D:\DevVM\Backup\$Name\guest.cred"
-            CertCredFile     = "D:\DevVM\Backup\$Name\certs.cred"
-            StateDir         = "D:\DevVM\State\$Name"
+            VMRoot           = "D:\DevVM\$Name"
+            ConfigDir        = 'D:\DevVM\Shared\Config'
+            ProfileDir       = "D:\DevVM\$Name\Config"
+            DiskDir          = "D:\DevVM\$Name\Disks"
+            OSDiskPath       = "D:\DevVM\$Name\Disks\$Name-OS.vhdx"
+            VMConfigDir      = "D:\DevVM\$Name\Virtual Machines"
+            ISOPath          = 'D:\DevVM\Shared\ISO\Win11Ent_Eval.iso'
+            ISOSearchRoot    = 'D:\DevVM\Shared\ISO'
+            SQLIsoPath       = 'D:\DevVM\Shared\Installers\SQLServer2025-x64-ENU-EntDev.iso'
+            SQLDiskPath      = "D:\DevVM\$Name\Disks\$Name-SQL.vhdx"
+            DevDrivePath     = "D:\DevVM\$Name\Disks\$Name-DevDrive.vhdx"
+            SeedDiskPath     = "D:\DevVM\$Name\Disks\$Name-Seed.iso"
+            CheckpointDir    = "D:\DevVM\$Name\Checkpoints"
+            VSSettingsBackup = "D:\DevVM\$Name\Backups\VisualStudio.vssettings"
+            LogFile          = "D:\DevVM\$Name\Logs\$Name.log"
+            CredStoreDir     = 'D:\DevVM\Shared\Credentials'
+            CredKeyFile      = 'D:\DevVM\Shared\Credentials\.lazyvm.key'
+            GuestCredFile    = "D:\DevVM\$Name\Credentials\guest.cred"
+            CertCredFile     = "D:\DevVM\$Name\Credentials\certs.cred"
+            StateDir         = "D:\DevVM\$Name\State"
             ResumeRegKey     = "HKLM:\SOFTWARE\LazyVM\$Name"
             ResumeTaskName   = "LazyVM-ResumeAfterReboot-$Name"
             ScheduleTaskName = "LazyVM-Maintain-$Name"
@@ -90,37 +93,52 @@ Describe 'Test-PathWithin' {
     }
 }
 
+Describe 'Assert-VMRootFolder' {
+    It 'returns the VM folder, its name inside the LazyVM folder' {
+        InModuleScope $module -Parameters @{ Settings = (New-TestVMSetting -Name 'Alpha') } {
+            param($Settings)
+            Assert-VMRootFolder -Settings $Settings
+        } | Should -Be 'D:\DevVM\Alpha'
+    }
+
+    It 'refuses <Case>' -ForEach @(
+        @{ Case = 'the LazyVM folder itself'; Overrides = @{ VMRoot = 'D:\DevVM' } }
+        @{ Case = 'the Shared folder'; Overrides = @{ VMName = 'Shared'; VMRoot = 'D:\DevVM\Shared' } }
+        @{ Case = 'an empty VM name'; Overrides = @{ VMName = ''; VMRoot = 'D:\DevVM\' } }
+        @{ Case = 'a folder that is not named after the VM'; Overrides = @{ VMRoot = 'D:\DevVM\Beta' } }
+        @{ Case = 'a folder outside the LazyVM folder'; Overrides = @{ VMRoot = 'E:\Alpha' } }
+        @{ Case = 'an empty LazyVM folder'; Overrides = @{ Root = ''; VMRoot = '\Alpha' } }
+    ) {
+        $settings = New-TestVMSetting -Name 'Alpha' -Overrides $Overrides
+        {
+            InModuleScope $module -Parameters @{ Settings = $settings } {
+                param($Settings)
+                Assert-VMRootFolder -Settings $Settings
+            }
+        } | Should -Throw -ExpectedMessage '*Refusing to remove*'
+    }
+}
+
 Describe 'Get-VMRemovalPlan' {
-    Context 'with no other VM on the host' {
+    Context 'with the default layout and no other VM on the host' {
         BeforeAll {
-            $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha')
+            $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') -AttachedDisks @(
+                'D:\DevVM\Alpha\Disks\Alpha-OS_1234.avhdx'
+                'D:\DevVM\Alpha\Disks\Alpha-OS.vhdx'
+            )
         }
 
-        It 'deletes every disk the VM has, including the Dev Drive' {
-            $plan.Files | Should -Contain 'D:\DevVM\VMs\Alpha-OS.vhdx'
-            $plan.Files | Should -Contain 'D:\DevVM\SQLDisk\Alpha.vhdx'
-            $plan.Files | Should -Contain 'D:\DevVM\DevDrive\Alpha.vhdx'
-            $plan.Files | Should -Contain 'D:\DevVM\VMs\Alpha-Seed.vhdx'
+        It 'deletes the VM folder, which holds every disk, checkpoint disk, profile and log' {
+            $plan.VMRoot | Should -Be 'D:\DevVM\Alpha'
         }
 
-        It 'deletes its credentials, Visual Studio settings backup and log' {
-            $plan.Files | Should -Contain 'D:\DevVM\Backup\Alpha\guest.cred'
-            $plan.Files | Should -Contain 'D:\DevVM\Backup\Alpha\certs.cred'
-            $plan.Files | Should -Contain 'D:\DevVM\Backup\Alpha\VisualStudio.vssettings'
-            $plan.Files | Should -Contain 'D:\DevVM\Logs\Alpha.log'
+        It 'does not list anything inside the VM folder apart' {
+            @($plan.Files + $plan.Folders | Where-Object { $_ -like 'D:\DevVM\Alpha\*' }) | Should -BeNullOrEmpty
+            $plan.Folders | Should -BeNullOrEmpty
         }
 
         It 'deletes the credential key, which no other VM needs' {
-            $plan.Files | Should -Contain 'D:\DevVM\Backup\.lazyvm.key'
-        }
-
-        It 'deletes its checkpoints, captured state, Hyper-V configuration and profile folders' {
-            $plan.Folders | Should -Be @(
-                'D:\DevVM\Checkpoints\Alpha'
-                'D:\DevVM\State\Alpha'
-                'D:\DevVM\VMs\Alpha'
-                'D:\DevVM\Scripts\Config\VMs\Alpha'
-            )
+            $plan.Files | Should -Be @('D:\DevVM\Shared\Credentials\.lazyvm.key')
         }
 
         It 'removes both scheduled tasks and the resume registry key' {
@@ -136,34 +154,39 @@ Describe 'Get-VMRemovalPlan' {
     It 'keeps the credential key while another VM uses it' {
         $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') -OtherSettings @(New-TestVMSetting -Name 'Beta')
 
-        $plan.Files | Should -Not -Contain 'D:\DevVM\Backup\.lazyvm.key'
-        $plan.Kept.Path | Should -Contain 'D:\DevVM\Backup\.lazyvm.key'
-        ($plan.Kept | Where-Object { $_.Path -eq 'D:\DevVM\Backup\.lazyvm.key' }).Reason | Should -BeLike "*VM 'Beta'*"
+        $plan.Files | Should -Not -Contain 'D:\DevVM\Shared\Credentials\.lazyvm.key'
+        ($plan.Kept | Where-Object { $_.Path -eq 'D:\DevVM\Shared\Credentials\.lazyvm.key' }).Reason | Should -BeLike "*VM 'Beta'*"
     }
 
-    It 'keeps a folder that holds another VM''s files' {
-        # Built before VMs had their own folders, Alpha keeps its state in
-        # State itself; Beta's state is in State\Beta.
-        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ StateDir = 'D:\DevVM\State' }
-        $plan = Get-TestPlan -Settings $alpha -OtherSettings @(New-TestVMSetting -Name 'Beta')
+    It 'lists a disk the settings put outside the VM folder' {
+        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ DevDrivePath = 'E:\DevDrives\Alpha.vhdx' }
+        $plan = Get-TestPlan -Settings $alpha
 
-        $plan.Folders | Should -Not -Contain 'D:\DevVM\State'
-        ($plan.Kept | Where-Object { $_.Path -eq 'D:\DevVM\State' }).Reason | Should -BeLike "*VM 'Beta' also uses D:\DevVM\State\Beta*"
+        $plan.Files | Should -Contain 'E:\DevDrives\Alpha.vhdx'
     }
 
-    It 'keeps a disk attached to another VM' {
-        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ SQLDiskPath = 'D:\DevVM\SQLDisk\Shared.vhdx' }
-        $plan = Get-TestPlan -Settings $alpha -OtherVMDisks @('D:\DevVM\SQLDisk\Shared.vhdx')
+    It 'lists a disk Hyper-V reports attached outside the VM folder, once' {
+        $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') -AttachedDisks @(
+            'E:\Elsewhere\Extra.vhdx'
+            'e:\elsewhere\extra.vhdx'
+        )
 
-        $plan.Files | Should -Not -Contain 'D:\DevVM\SQLDisk\Shared.vhdx'
-        ($plan.Kept | Where-Object { $_.Path -eq 'D:\DevVM\SQLDisk\Shared.vhdx' }).Reason | Should -BeLike '*attached to another VM*'
+        @($plan.Files | Where-Object { $_ -like 'E:\Elsewhere\Extra.vhdx' }).Count | Should -Be 1
     }
 
-    It "never deletes a folder that holds what every VM uses: '<Folder>'" -ForEach @(
+    It 'keeps a disk outside the VM folder that is attached to another VM' {
+        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ SQLDiskPath = 'E:\SQL\Common.vhdx' }
+        $plan = Get-TestPlan -Settings $alpha -OtherVMDisks @('E:\SQL\Common.vhdx')
+
+        $plan.Files | Should -Not -Contain 'E:\SQL\Common.vhdx'
+        ($plan.Kept | Where-Object { $_.Path -eq 'E:\SQL\Common.vhdx' }).Reason | Should -BeLike '*attached to another VM*'
+    }
+
+    It "never deletes a folder outside the VM folder that holds what every VM uses: '<Folder>'" -ForEach @(
         @{ Folder = 'D:\DevVM' }
-        @{ Folder = 'D:\DevVM\ISO' }
+        @{ Folder = 'D:\DevVM\Shared' }
+        @{ Folder = 'D:\DevVM\Shared\ISO' }
         @{ Folder = 'D:\DevVM\Scripts' }
-        @{ Folder = 'D:\DevVM\Backup' }
     ) {
         $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ StateDir = $Folder }
         $plan = Get-TestPlan -Settings $alpha
@@ -172,26 +195,16 @@ Describe 'Get-VMRemovalPlan' {
         ($plan.Kept | Where-Object { $_.Path -eq $Folder }).Reason | Should -BeLike '*which every VM uses*'
     }
 
-    It 'adds the disks Hyper-V reports attached, without listing one twice' {
-        $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') -AttachedDisks @(
-            'd:\devvm\sqldisk\alpha.vhdx'
-            'D:\DevVM\Checkpoints\Alpha\Alpha-OS_1234.avhdx'
-            'E:\Elsewhere\Extra.vhdx'
-        )
+    It 'removes nothing when the VM folder holds something another VM uses' {
+        $beta = New-TestVMSetting -Name 'Beta' -Overrides @{ DevDrivePath = 'D:\DevVM\Alpha\Disks\Beta-DevDrive.vhdx' }
 
-        @($plan.Files | Where-Object { $_ -like '*\SQLDisk\Alpha.vhdx' }).Count | Should -Be 1
-        $plan.Files | Should -Contain 'D:\DevVM\Checkpoints\Alpha\Alpha-OS_1234.avhdx'
-        $plan.Files | Should -Contain 'E:\Elsewhere\Extra.vhdx'
+        { Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') -OtherSettings @($beta) } |
+            Should -Throw -ExpectedMessage "*nothing has been removed*VM 'Beta' also uses*"
     }
 
-    It 'adds retired disks, rotated logs and retired configuration folders' {
-        $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') `
-            -ExtraFiles @('D:\DevVM\VMs\Alpha-OS.retired-20261001-020000.vhdx', 'D:\DevVM\Logs\Alpha.20261001-020000.log') `
-            -ExtraFolders @('D:\DevVM\VMs\Alpha.retired-20261001-020000')
-
-        $plan.Files | Should -Contain 'D:\DevVM\VMs\Alpha-OS.retired-20261001-020000.vhdx'
-        $plan.Files | Should -Contain 'D:\DevVM\Logs\Alpha.20261001-020000.log'
-        $plan.Folders | Should -Contain 'D:\DevVM\VMs\Alpha.retired-20261001-020000'
+    It 'removes nothing when the VM folder holds a disk attached to another VM' {
+        { Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') -OtherVMDisks @('D:\DevVM\Alpha\Disks\Borrowed.vhdx') } |
+            Should -Throw -ExpectedMessage '*nothing has been removed*attached to another VM*'
     }
 
     It 'keeps a scheduled task another VM uses' {
@@ -211,5 +224,57 @@ Describe 'Get-VMRemovalPlan' {
 
         $plan.RegistryKey | Should -BeNullOrEmpty
         $plan.Kept.Path | Should -Contain 'HKLM:\SOFTWARE\LazyVM'
+    }
+}
+
+Describe 'Invoke-VMRemoval' {
+    BeforeEach {
+        # A VM folder as a build leaves it, with a checkpoint disk that is no
+        # longer in the VM's disk chain, so nothing lists it (#72).
+        $root = Join-Path -Path $TestDrive -ChildPath 'LazyVM'
+        $vmRoot = Join-Path -Path $root -ChildPath 'Alpha'
+        $shared = Join-Path -Path $root -ChildPath 'Shared'
+        foreach ($folder in 'Disks', 'Config', 'Logs', 'Virtual Machines') {
+            New-Item -ItemType Directory -Path (Join-Path -Path $vmRoot -ChildPath $folder) -Force | Out-Null
+        }
+        New-Item -ItemType Directory -Path (Join-Path -Path $shared -ChildPath 'ISO') -Force | Out-Null
+        foreach ($file in 'Disks\Alpha-OS.vhdx', 'Disks\Alpha-OS_28A36081-36CC-4C10-9FDE-A1A5489978B7.avhdx', 'Config\VM.json', 'Logs\Alpha.log') {
+            Set-Content -LiteralPath (Join-Path -Path $vmRoot -ChildPath $file) -Value 'x'
+        }
+        $iso = Join-Path -Path $shared -ChildPath 'ISO\Win11Ent_Eval.iso'
+        Set-Content -LiteralPath $iso -Value 'x'
+
+        $settings = @{ VMName = 'Alpha'; LogFile = (Join-Path -Path $vmRoot -ChildPath 'Logs\Alpha.log') }
+        $context = [pscustomobject]@{
+            Machine     = $null
+            Tasks       = @()
+            RegistryKey = $null
+            VMRoot      = $vmRoot
+            Files       = @()
+            Folders     = @()
+            RotatedLogs = @()
+            Total       = 0
+        }
+    }
+
+    It 'deletes the whole VM folder, including a checkpoint disk nothing listed' {
+        $outcome = InModuleScope $module -Parameters @{ Settings = $settings; Context = $context } {
+            param($Settings, $Context)
+            Start-Log -Path $Settings.LogFile -MaxSizeMB 10
+            Invoke-VMRemoval -VM ([VMContext]::new($Settings)) -Context $Context 6>$null
+        }
+
+        "$outcome" | Should -Be 'Removed'
+        Test-Path -LiteralPath $vmRoot | Should -BeFalse
+    }
+
+    It 'leaves the Shared folder alone' {
+        InModuleScope $module -Parameters @{ Settings = $settings; Context = $context } {
+            param($Settings, $Context)
+            Start-Log -Path $Settings.LogFile -MaxSizeMB 10
+            $null = Invoke-VMRemoval -VM ([VMContext]::new($Settings)) -Context $Context 6>$null
+        }
+
+        Test-Path -LiteralPath $iso | Should -BeTrue
     }
 }

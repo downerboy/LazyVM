@@ -89,9 +89,8 @@ Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the mod
 ### Choosing the LazyVM folder
 
 Everything LazyVM creates on the host lives under one folder, the **LazyVM folder** (sometimes called the root):
-- the VM disks, ISO and installers;
-- logs, encrypted passwords and captured state;
-- your settings.
+- a folder for each VM, named after it, with its disks, configuration, profile, logs, encrypted passwords and captured state;
+- `Shared`, with the ISO, installers, your settings and the credential key.
 
 The first `Build-LazyVM` chooses it for you: a `LazyVM` folder on the local NTFS drive with the most free space, leaving out drives on a virtual disk. It says which folder it chose. To choose your own, run this before the first build:
 
@@ -99,7 +98,7 @@ The first `Build-LazyVM` chooses it for you: a `LazyVM` folder on the local NTFS
 Set-LazyVMRoot -Path D:\DevVM
 ```
 
-Either way it is recorded in the registry, under `HKLM:\SOFTWARE\LazyVM`, for every later command and for the scheduled tasks. The folder is created if needed. So are `Config\LazyVM.Settings.json`, your settings file, and a copy of the settings schema beside it ([section 8](#8-settings)).
+Either way it is recorded in the registry, under `HKLM:\SOFTWARE\LazyVM`, for every later command and for the scheduled tasks. The folder is created if needed. So are `Shared\Config\LazyVM.Settings.json`, your settings file, and a copy of the settings schema beside it ([section 8](#8-settings)).
 
 > **Important**
 > Choose the LazyVM folder before the first build. The VM disks, the credential key and the captured state all live under it, so moving it later means moving those files too.
@@ -108,7 +107,7 @@ Either way it is recorded in the registry, under `HKLM:\SOFTWARE\LazyVM`, for ev
 
 Microsoft's Windows 11 Enterprise evaluation download sits behind a registration form, so it cannot be fetched unattended. An automated attempt returns an HTML page, not an image.
 
-LazyVM therefore **verifies** the ISO rather than downloading it. It reads the ISO 9660 signature at offset 0x8001, so a disguised HTML page is rejected whatever it is named. It looks in three places, in order: the configured path (`ISO\Win11Ent_Eval.iso` in the LazyVM folder), any other real image in the `ISO` folder, then a Windows 11 or Enterprise Evaluation ISO in your Downloads folder, which it moves into place. If there is none, the build stops before changing anything on the host and opens the download page in your browser.
+LazyVM therefore **verifies** the ISO rather than downloading it. It reads the ISO 9660 signature at offset 0x8001, so a disguised HTML page is rejected whatever it is named. It looks in three places, in order: the configured path (`Shared\ISO\Win11Ent_Eval.iso` in the LazyVM folder), any other real image in the `Shared\ISO` folder, then a Windows 11 or Enterprise Evaluation ISO in your Downloads folder, which it moves into place. If there is none, the build stops before changing anything on the host and opens the download page in your browser.
 
 Download from <https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise>, leave it in Downloads, and run `Build-LazyVM` again.
 
@@ -235,7 +234,7 @@ Get-ScheduledTaskInfo -TaskName LazyVM-Maintain-DevBox | Select-Object LastRunTi
 
 ```powershell
 Start-ScheduledTask -TaskName LazyVM-Maintain-DevBox
-Get-Content D:\DevVM\Logs\DevBox.log -Tail 30
+Get-Content D:\DevVM\DevBox\Logs\DevBox.log -Tail 30
 ```
 
 With plenty of days left, it decides no action is needed and stops.
@@ -276,7 +275,7 @@ Windows allows an evaluation period to be reset a limited number of times. Each 
 
 ### What a rebuild does
 
-1. Captures the VM's state to `D:\DevVM\State\DevBox` on the host.
+1. Captures the VM's state to `D:\DevVM\DevBox\State` on the host.
 2. Shuts the VM down gracefully.
 3. Renames the old Windows disk aside. It is never deleted at this stage.
 4. Builds a new VM and installs Windows unattended from a generated answer file.
@@ -324,21 +323,43 @@ Capture (`Save-LazyVMState`) and restore (`Restore-LazyVMState`) run on their ow
 
 ## 7. Files and folders
 
-On the host, everything lives under the LazyVM folder. The table shows the default layout under `D:\DevVM`. A folder you have moved by giving its setting a full path is wherever you put it.
+On the host, everything lives under the LazyVM folder: one folder for each VM, named after it, and `Shared` for what every VM uses. The table shows the default layout under `D:\DevVM`. An item you have moved by giving its setting a full path is wherever you put it.
+
+```
+D:\DevVM\
+  Shared\
+    Config\         LazyVM.Settings.json and the schema
+    ISO\            Win11Ent_Eval.iso
+    Installers\     the SQL Server ISO
+    Credentials\    .lazyvm.key
+  DevBox\
+    Config\         VM.json, Tooling.json, History\
+    Virtual Machines\
+    Checkpoints\
+    Disks\          DevBox-OS.vhdx, DevBox-SQL.vhdx, DevBox-DevDrive.vhdx, DevBox-Seed.iso
+    State\
+    Backups\        VisualStudio.vssettings
+    Credentials\    guest.cred, certs.cred
+    Logs\           DevBox.log
+```
 
 | Path | Purpose |
 |---|---|
-| `D:\DevVM\Config` | Your settings file `LazyVM.Settings.json`, and the schema beside it. |
-| `D:\DevVM\Config\VMs\DevBox` | The VM's profile (`VM.json`), its tooling list (`Tooling.json`), and `History`: every recorded version of the list, plus a daily copy kept for 30 days. |
-| `D:\DevVM\Logs` | `DevBox.log`: every run for that VM appends here. Set aside at 5 MB. |
-| `D:\DevVM\State\DevBox` | Captured state and its manifest, application settings, `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
-| `D:\DevVM\Backup` | The encryption key, and a folder for each VM with its account and certificate credentials and its Visual Studio settings backup. |
-| `D:\DevVM\VMs` | Each VM's configuration and Windows disk. |
-| `D:\DevVM\SQLDisk` | `DevBox.vhdx`: the VM's 100 GB data disk. Persists across rebuilds and carries the database backups. |
-| `D:\DevVM\DevDrive` | `DevBox.vhdx`: the VM's Dev Drive. Persists across rebuilds and holds your working source. |
-| `D:\DevVM\ISO` | The Windows installation ISO. |
-| `D:\DevVM\Installers` | The SQL Server ISO. |
-| `D:\DevVM\Checkpoints\DevBox` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
+| `D:\DevVM\Shared\Config` | Your settings file `LazyVM.Settings.json`, and the schema beside it. |
+| `D:\DevVM\Shared\ISO` | The Windows installation ISO. |
+| `D:\DevVM\Shared\Installers` | The SQL Server ISO. |
+| `D:\DevVM\Shared\Credentials` | `.lazyvm.key`, the key that encrypts every VM's stored passwords. |
+| `D:\DevVM\DevBox` | Everything that belongs to the VM DevBox. Removing the VM deletes this folder. |
+| `D:\DevVM\DevBox\Config` | The VM's profile (`VM.json`), its tooling list (`Tooling.json`), and `History`: every recorded version of the list, plus a daily copy kept for 30 days. |
+| `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
+| `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
+| `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk and the Dev Drive persist across rebuilds: one carries the database backups, the other your working source. |
+| `D:\DevVM\DevBox\State` | Captured state and its manifest, application settings, `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
+| `D:\DevVM\DevBox\Backups` | The Visual Studio settings backup. |
+| `D:\DevVM\DevBox\Credentials` | The VM's encrypted account and certificate credentials. |
+| `D:\DevVM\DevBox\Logs` | `DevBox.log`: every run for that VM appends here. Set aside at 5 MB. |
+
+`Shared` cannot be used as a VM name.
 
 The module itself is installed in `C:\Program Files\PowerShell\Modules\LazyVM`. Nothing of yours is kept there.
 
@@ -353,7 +374,7 @@ The module itself is installed in `C:\Program Files\PowerShell\Modules\LazyVM`. 
 
 ### Credential storage
 
-Account and certificate passwords are encrypted with a 256-bit key in `D:\DevVM\Backup\.lazyvm.key`, which only SYSTEM and Administrators can read.
+Account and certificate passwords are encrypted with a 256-bit key in `D:\DevVM\Shared\Credentials\.lazyvm.key`, which only SYSTEM and Administrators can read.
 
 A key file is used rather than Windows DPAPI on purpose. The scheduled task runs as SYSTEM and has to read credentials stored by an interactive administrator, which DPAPI would prevent. The trade-off is that any local administrator on the host can recover these passwords. That is acceptable for a disposable lab VM, and not appropriate for anything holding real secrets.
 
@@ -361,8 +382,8 @@ A key file is used rather than Windows DPAPI on purpose. The scheduled task runs
 
 Every setting has a default. You list only the ones you want to change, in a JSON file:
 
-- `Config\LazyVM.Settings.json` applies to every VM on the host.
-- `Config\VMs\<Name>\VM.json` applies to one VM, and overrides the host-wide file.
+- `Shared\Config\LazyVM.Settings.json` applies to every VM on the host.
+- `<Name>\Config\VM.json` applies to one VM, and overrides the host-wide file.
 
 A file changing two settings looks like this:
 
@@ -378,7 +399,7 @@ In a VM's `VM.json`, the first line is `"$schema": "../../LazyVM.Settings.schema
 
 ### Editing settings
 
-Open the files in VS Code (or any editor that understands JSON Schema). The schema, `Config\LazyVM.Settings.schema.json`, holds every setting, its default and a description:
+Open the files in VS Code (or any editor that understands JSON Schema). The schema, `Shared\Config\LazyVM.Settings.schema.json`, holds every setting, its default and a description:
 
 - **Autocomplete.** Start typing inside the braces and the setting names are offered.
 - **Descriptions.** Hover over a setting's name to see what it does and its default.
@@ -411,7 +432,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in a
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `VHDXRoot`, `StateDir` and the other folder settings | under the LazyVM folder | Where each item goes on the host. A relative path such as `VMs` sits under the LazyVM folder; a full path such as `F:\Hyper-V` puts that one item anywhere. |
+| `DiskDir`, `StateDir` and the other folder settings | in the VM's folder or `Shared` | Where each item goes on the host. A relative path such as `{VM}\Disks` sits under the LazyVM folder; a full path such as `F:\Hyper-V` puts that one item anywhere. |
 | `RebuildThresholdDays` | 10 | How many days before expiry maintenance acts. |
 | `MoveSqlDataToDataDisk` | true | Whether phase 8 relocates existing databases from `C:` onto the data disk. |
 | `DeleteRetiredDiskOnSuccess` | true | Whether the old Windows disk is deleted after a verified rebuild. `false` keeps every generation, which uses disk quickly. |
@@ -446,7 +467,7 @@ A VM with no tooling list of its own is built from the default list that ships w
 - Tools from winget: Git, GitHub CLI, GitHub Desktop, Visual Studio Code, Windows Terminal, PowerShell 7, WSL, LINQPad 9, Notepad++, WinMerge and 7-Zip.
 - SDKs and runtimes from winget: the Windows SDK, the SQL Server ODBC and OLE DB drivers, System CLR Types, the Visual C++ redistributables and Web Deploy.
 
-To give a VM less, before its first build, copy the default list from the module's `Data` folder to `Config\VMs\<Name>\Tooling.json` and remove what you don't need. To build a new VM with another VM's tools instead, create it with `New-LazyVM -From` ([section 10](#10-several-vms-on-one-host)).
+To give a VM less, before its first build, copy the default list from the module's `Data` folder to `<Name>\Config\Tooling.json` and remove what you don't need. To build a new VM with another VM's tools instead, create it with `New-LazyVM -From` ([section 10](#10-several-vms-on-one-host)).
 
 ### A note on networking
 
@@ -454,7 +475,7 @@ The Default Switch is managed by Windows. Its address range **cannot** be set; W
 
 ## 9. Tooling, and going back
 
-Each VM has a tooling list, `Config\VMs\DevBox\Tooling.json`: what is installed in it, without version numbers. It is what a build installs, so a rebuilt VM comes back with the tools the old one had, not the ones it started with.
+Each VM has a tooling list, `DevBox\Config\Tooling.json`: what is installed in it, without version numbers. It is what a build installs, so a rebuilt VM comes back with the tools the old one had, not the ones it started with.
 
 ### What the list holds
 
@@ -491,7 +512,7 @@ Phase 7 installs the whole list, in this order:
 
 Anything already present is skipped.
 
-Programs winget does not provide, and extensions with no Marketplace match, cannot be installed automatically. After a build they are logged and written to `State\DevBox\reinstall-by-hand.txt`. The list marks them as awaiting reinstall, so they are not mistaken for removals. Each one leaves that list once you install it.
+Programs winget does not provide, and extensions with no Marketplace match, cannot be installed automatically. After a build they are logged and written to `DevBox\State\reinstall-by-hand.txt`. The list marks them as awaiting reinstall, so they are not mistaken for removals. Each one leaves that list once you install it.
 
 ### Application settings
 
@@ -515,7 +536,7 @@ The three most recent tooling checkpoints are kept (`ToolingCheckpointsToKeep`);
 
 ## 10. Several VMs on one host
 
-Each VM has its own profile, `Config\VMs\<Name>\VM.json`. With it come its own disks, captured state, log, credentials, tooling list, checkpoints and maintenance task. Settings apply in layers: the defaults, then `LazyVM.Settings.json` for the whole host, then the VM's `VM.json`.
+Each VM has its own profile, `<Name>\Config\VM.json`, in its own folder. With it come its own disks, captured state, log, credentials, tooling list, checkpoints and maintenance task. Settings apply in layers: the defaults, then `LazyVM.Settings.json` for the whole host, then the VM's `VM.json`.
 
 ### Adding a VM
 
@@ -544,16 +565,15 @@ Remove-LazyVM -Name WebDev
 
 This deletes the VM and everything created for it:
 - the Hyper-V VM with its checkpoints;
-- its Windows, SQL data and Dev Drive disks, and any retired ones;
-- its scheduled tasks and its registry key;
-- its credentials, Visual Studio settings backup, captured state and logs;
-- its profile and tooling history.
+- its folder, `D:\DevVM\WebDev`, with everything in it: its disks and checkpoint disks, configuration, profile and tooling history, credentials, Visual Studio settings backup, captured state and logs;
+- anything you moved out of that folder with a full path in a setting, such as a Dev Drive on another drive;
+- its scheduled tasks and its registry key.
 
 Before anything is deleted, it lists everything with sizes and asks you to confirm. `-Force` skips the question.
 
 The Dev Drive goes too, and with it any source code not yet pushed. Push or copy your work first.
 
-What every VM uses is never touched: the LazyVM folder, the ISOs and your settings file. Anything another VM also uses is kept as well, such as the shared credential key, and the list says why.
+What every VM uses is never touched: the LazyVM folder and `Shared`, with the ISOs and your settings file. Anything another VM also uses is kept as well, such as the credential key, and the list says why. If the VM's folder holds something another VM uses, nothing is removed and you are told what to move out first.
 
 ## 11. Moving files between host and VM
 
@@ -593,7 +613,7 @@ For scripted copies, `Copy-VMFile` copies files from the host into the VM, and `
 
 ## 12. Troubleshooting
 
-The log is the first place to look: `D:\DevVM\Logs\DevBox.log`. Every line is prefixed: `[+]` success, `[!]` warning, `[X]` error, `[ ]` information. The start of each run records the module version, the VM, the LazyVM folder and which settings you have changed.
+The log is the first place to look: `D:\DevVM\DevBox\Logs\DevBox.log`. Every line is prefixed: `[+]` success, `[!]` warning, `[X]` error, `[ ]` information. The start of each run records the module version, the VM, the LazyVM folder and which settings you have changed.
 
 | Symptom | Cause and fix |
 |---|---|
@@ -602,7 +622,7 @@ The log is the first place to look: `D:\DevVM\Logs\DevBox.log`. Every line is pr
 | "LazyVM needs an elevated PowerShell" | Start PowerShell 7 with Run as administrator. |
 | "No stored guest credential" | Store one with `Set-LazyVMCredential`, for an account that is a local administrator inside the VM. |
 | The VM never becomes reachable | Open the VM's console. Windows Setup may be waiting on something, or the stored password may not match the account. Check by signing in at the console with the password `Get-LazyVMCredential -AsPlainText` shows. |
-| "No valid Windows installation ISO" | The file at the configured path is not a real ISO, most often the registration page saved with an `.iso` name. Download the image by hand and save it in the `ISO` folder. |
+| "No valid Windows installation ISO" | The file at the configured path is not a real ISO, most often the registration page saved with an `.iso` name. Download the image by hand and save it in the `Shared\ISO` folder. |
 | "SQL Server ISO - download failed" | The download address may have changed. Download the SQL Server 2025 Enterprise Developer ISO by hand and save it as the path the message gives, or set `SQLIsoUrl`. |
 | "This settings file has N problem(s), so none of it was used" | The message lists every problem, with the file and the setting. Open the file in VS Code: the same problems are underlined. |
 | A warning that a last good copy of a settings file was used | The scheduled maintenance found the file broken and used the copy from the last time it loaded cleanly. Fix the file; the next run uses it. |
@@ -623,7 +643,7 @@ On the host:
 Get-LazyVM
 Get-VMHardDiskDrive -VMName DevBox | Select-Object Path, ControllerLocation
 Get-VMSnapshot -VMName DevBox | Select-Object Name, CreationTime
-Get-Content D:\DevVM\Logs\DevBox.log -Tail 40
+Get-Content D:\DevVM\DevBox\Logs\DevBox.log -Tail 40
 ```
 
 Inside the VM:

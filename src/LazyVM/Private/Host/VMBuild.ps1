@@ -39,7 +39,7 @@ function New-GuestVM {
     }
 
     Write-LogEntry "Creating VM '$($VM.Name)' (Generation 2) on switch '$switchName'..." 'INFO'
-    New-VM -Name $VM.Name -Generation 2 -VHDPath $osDiskPath -Path $settings.VHDXRoot -SwitchName $switchName | Out-Null
+    New-VM -Name $VM.Name -Generation 2 -VHDPath $osDiskPath -Path $settings.Root -SwitchName $switchName | Out-Null
 
     Set-VMProcessor -VMName $VM.Name -Count $settings.vCPU
     Write-LogEntry "vCPUs: $($settings.vCPU)" 'OK'

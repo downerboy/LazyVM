@@ -10,10 +10,10 @@
       "type": "string",
       "description": "Points your editor at this schema, for autocomplete and checking. Leave it as it is."
     },
-    "VHDXRoot": {
+    "DiskDir": {
       "type": "string",
-      "default": "VMs",
-      "description": "Where each VM's configuration and Windows disk are kept, in a folder named after the VM. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "{VM}\\Disks",
+      "description": "Where the VM's Windows disk and answer-file disc are kept. Hyper-V keeps checkpoint disks (.avhdx) beside the disks they belong to. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
@@ -83,8 +83,8 @@
     },
     "ISOPath": {
       "type": "string",
-      "default": "ISO\\Win11Ent_Eval.iso",
-      "description": "The Windows 11 Enterprise evaluation ISO. If it is not found here, the ISO folder is searched for one. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "Shared\\ISO\\Win11Ent_Eval.iso",
+      "description": "The Windows 11 Enterprise evaluation ISO. If it is not found here, the ISO folder is searched for one. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
@@ -96,8 +96,8 @@
     },
     "ISOSearchRoot": {
       "type": "string",
-      "default": "ISO",
-      "description": "The folder searched for a Windows ISO when ISOPath does not exist. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "Shared\\ISO",
+      "description": "The folder searched for a Windows ISO when ISOPath does not exist. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
@@ -109,8 +109,8 @@
     },
     "SQLIsoPath": {
       "type": "string",
-      "default": "Installers\\SQLServer2025-x64-ENU-EntDev.iso",
-      "description": "The SQL Server installation ISO. Downloaded from SQLIsoUrl when missing. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "Shared\\Installers\\SQLServer2025-x64-ENU-EntDev.iso",
+      "description": "The SQL Server installation ISO. Downloaded from SQLIsoUrl when missing. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
@@ -122,8 +122,8 @@
     },
     "SQLDiskPath": {
       "type": "string",
-      "default": "SQLDisk\\{VM}.vhdx",
-      "description": "The SQL data disk. It is never deleted by a rebuild, so databases survive one. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "{VM}\\Disks\\{VM}-SQL.vhdx",
+      "description": "The SQL data disk. It is never deleted by a rebuild, so databases survive one. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
@@ -153,8 +153,8 @@
     },
     "DevDrivePath": {
       "type": "string",
-      "default": "DevDrive\\{VM}.vhdx",
-      "description": "The Dev Drive disk on the host. Keep it here, not inside the VM: a rebuild replaces the VM's own disks. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "{VM}\\Disks\\{VM}-DevDrive.vhdx",
+      "description": "The Dev Drive disk on the host. Keep it here, not inside the VM: a rebuild replaces the VM's own disks. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
@@ -190,22 +190,22 @@
     },
     "CheckpointDir": {
       "type": "string",
-      "default": "Checkpoints\\{VM}",
-      "description": "Where Hyper-V checkpoints of the VM are kept. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "{VM}\\Checkpoints",
+      "description": "Where Hyper-V checkpoints of the VM are kept. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "VSSettingsBackup": {
       "type": "string",
-      "default": "Backup\\{VM}\\VisualStudio.vssettings",
-      "description": "Where the Visual Studio settings export is kept between rebuilds. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "{VM}\\Backups\\VisualStudio.vssettings",
+      "description": "Where the Visual Studio settings export is kept between rebuilds. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "LogFile": {
       "type": "string",
-      "default": "Logs\\{VM}.log",
-      "description": "The VM's log file. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "{VM}\\Logs\\{VM}.log",
+      "description": "The VM's log file. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
@@ -218,15 +218,15 @@
     },
     "CredStoreDir": {
       "type": "string",
-      "default": "Backup",
-      "description": "Where the encrypted guest passwords and their key are kept. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "Shared\\Credentials",
+      "description": "Where the key that encrypts every VM's stored passwords is kept. The encrypted passwords themselves are in each VM's Credentials folder. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "StateDir": {
       "type": "string",
-      "default": "State\\{VM}",
-      "description": "Where the guest's captured state (databases, settings, files) is kept for a rebuild. A path inside the LazyVM folder (like 'VMs') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "default": "{VM}\\State",
+      "description": "Where the guest's captured state (databases, settings, files) is kept for a rebuild. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },

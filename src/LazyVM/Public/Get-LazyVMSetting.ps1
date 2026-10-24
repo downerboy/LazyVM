@@ -9,8 +9,8 @@
     defaults. Source says which of those set the value. Paths are shown in
     full, as LazyVM will use them.
 
-    To change a setting, add it to Config\LazyVM.Settings.json in the LazyVM
-    folder (every VM) or to Config\VMs\<Name>\VM.json (one VM). Opened in VS
+    To change a setting, add it to Shared\Config\LazyVM.Settings.json in the
+    LazyVM folder (every VM) or to <Name>\Config\VM.json (one VM). Opened in VS
     Code, both files offer autocomplete and check your values as you type.
 
     .PARAMETER Name

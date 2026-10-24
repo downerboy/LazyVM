@@ -5,7 +5,7 @@
 # the root folder. Paths inside the guest (GuestSetupDir, GuestProjectPaths,
 # ...) are deliberately absent: they are not host paths.
 $script:HostPathSettings = @(
-    'VHDXRoot'
+    'DiskDir'
     'ISOPath'
     'ISOSearchRoot'
     'SQLIsoPath'
@@ -34,7 +34,7 @@ function Resolve-HostPathSetting {
             continue
         }
         if (-not $value -or $value -match '^[A-Za-z]:' -or $value.StartsWith('\')) {
-            $problems.Add("'$name' must be a path inside the LazyVM folder (like 'VMs') or a full path (like 'E:\VMs'), not '$value'.")
+            $problems.Add("'$name' must be a path inside the LazyVM folder (like 'Shared\ISO') or a full path (like 'E:\VMs'), not '$value'.")
             continue
         }
 
@@ -57,13 +57,17 @@ function Add-DerivedSetting {
     param([Parameter(Mandatory)][hashtable]$Settings)
 
     $vm = $Settings.VMName
-    $vhdxRoot = "$($Settings.VHDXRoot)".TrimEnd('\')
-    $Settings.OSDiskPath = "$vhdxRoot\$vm-OS.vhdx"
-    $Settings.VMConfigDir = "$vhdxRoot\$vm"
-    $Settings.SeedDiskPath = "$vhdxRoot\$vm-Seed.iso"
+    $vmRoot = Get-VMRoot -Root $Settings.Root -Name $vm
+    $diskDir = "$($Settings.DiskDir)".TrimEnd('\')
+    $Settings.VMRoot = $vmRoot
+    $Settings.OSDiskPath = "$diskDir\$vm-OS.vhdx"
+    $Settings.SeedDiskPath = "$diskDir\$vm-Seed.iso"
+    # New-VM -Path <Root> makes <Root>\<Name>\Virtual Machines for the
+    # VM's configuration, inside the VM's own folder.
+    $Settings.VMConfigDir = "$vmRoot\Virtual Machines"
     $Settings.CredKeyFile = "$($Settings.CredStoreDir)\.lazyvm.key"
-    $Settings.GuestCredFile = "$($Settings.CredStoreDir)\$vm\guest.cred"
-    $Settings.CertCredFile = "$($Settings.CredStoreDir)\$vm\certs.cred"
+    $Settings.GuestCredFile = "$vmRoot\Credentials\guest.cred"
+    $Settings.CertCredFile = "$vmRoot\Credentials\certs.cred"
     $Settings.ResumeRegKey = "$script:RootRegistryKey\$vm"
     $Settings.ResumeTaskName = "${script:TaskPrefix}ResumeAfterReboot-$vm"
     $Settings.ScheduleTaskName = Get-MaintenanceTaskName -VMName $vm
@@ -129,9 +133,9 @@ function Read-VMSetting {
         $changedKeys = @(& $applyLayer $hostFile $script:SettingsFileName $Unattended.IsPresent)
     }
 
-    $vm = Resolve-VMSelection -ConfigDir $configDir -Requested $VMName
-    $profilePath = Get-VMProfilePath -ConfigDir $configDir -Name $vm
-    $profileKeys = @(& $applyLayer $profilePath "VMs\$vm\$script:ProfileFileName" $Unattended.IsPresent)
+    $vm = Resolve-VMSelection -Root $Root -Requested $VMName
+    $profilePath = Get-VMProfilePath -Root $Root -Name $vm
+    $profileKeys = @(& $applyLayer $profilePath "$vm\$script:ConfigFolderName\$script:ProfileFileName" $Unattended.IsPresent)
 
     $settings.VMName = $vm
     $settings.Root = $Root

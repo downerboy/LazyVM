@@ -9,14 +9,18 @@
 #    scheduled tasks   its maintenance task and any resume-after-reboot task
 #    registry          its resume key
 #    Hyper-V           the VM itself, with its checkpoints
-#    disks             OS disk (and any retired ones), SQL data disk, Dev Drive,
-#                      answer-file disc, and every disk Hyper-V reports attached to it
-#    folders           checkpoints, captured state, the VM's configuration
-#                      folder and its profile (Config\VMs\<Name>)
-#    files             credentials, Visual Studio settings backup, logs
+#    VM folder         <Root>\<Name>, with everything in it: disks and their
+#                      checkpoint disks, configuration, profile, state,
+#                      credentials, backups and logs
+#    anything else     a disk or folder the settings put outside the VM
+#                      folder, and every disk Hyper-V reports attached to it
 #
-#  What every VM uses is never touched: the root folder, the ISO, installers,
-#  the scripts and settings, and the credential folder itself. Anything another
+#  Deleting the whole VM folder means nothing in it can be left behind, such
+#  as a checkpoint disk no longer in the VM's disk chain (#72). The folder is
+#  only ever <Root>\<Name> for a valid VM name, never the root or Shared.
+#
+#  What every VM uses is never touched: the root folder, Shared (the ISO,
+#  installers, settings and the credential key) and the module itself. Anything another
 #  VM also uses is kept too: a path another VM's settings name, a folder
 #  holding one, a disk attached to another VM, a task name or registry key
 #  another VM shares. The confirmation lists exactly what will go and what is
@@ -78,6 +82,25 @@ function Get-VMOwnedPath {
     }
 }
 
+function Assert-VMRootFolder {
+    <#
+      The VM's own folder, <Root>\<Name>, checked before anything deletes it:
+      a valid VM name directly inside the root, so an empty or wrong name can
+      never point it at the root, Shared or somewhere else.
+    #>
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Settings)
+
+    $name = [string]$Settings.VMName
+    $root = ([string]$Settings.Root).TrimEnd('\')
+    $vmRoot = ([string]$Settings.VMRoot).TrimEnd('\')
+    $expected = "$root\$name"
+
+    if (-not $root -or -not (Test-VMName $name) -or -not $vmRoot.Equals($expected, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove '$vmRoot': a VM's folder must be its name directly inside the LazyVM folder ('$expected')."
+    }
+    return $vmRoot
+}
+
 function Get-VMRemovalPlan {
     <#
       What removing the VM in $Settings deletes, and what it keeps and why.
@@ -96,14 +119,13 @@ function Get-VMRemovalPlan {
         [Parameter(Mandatory)][string]$ScriptDir
     )
 
-    $configDir = Get-ParentFolder -Path (Get-ParentFolder -Path $Settings.ProfileDir)
+    $vmRoot = Assert-VMRootFolder -Settings $Settings
 
     # Used by every VM on the host, so never deleted, nor any folder holding them.
     $protected = @(
         $Settings.Root
         $ScriptDir
-        $configDir
-        $Settings.VHDXRoot
+        $Settings.ConfigDir
         $Settings.ISOSearchRoot
         $Settings.ISOPath
         (Get-ParentFolder -Path $Settings.SQLIsoPath)
@@ -142,12 +164,22 @@ function Get-VMRemovalPlan {
         return $null
     }
 
+    # The VM folder goes as a whole, so it must hold nothing anything else uses.
+    $rootReason = & $reasonToKeep $vmRoot
+    if ($rootReason) {
+        throw "Cannot remove the VM folder $vmRoot, so nothing has been removed: $rootReason. Move that out of the folder first."
+    }
+
     $owned = Get-VMOwnedPath -Settings $Settings
     $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
+    # Anything inside the VM folder goes with it, so only what is outside is listed apart.
+    $insideRoot = { param([string]$Candidate) Test-PathWithin -Path $Candidate -Folder $vmRoot }
 
     $files = @()
     foreach ($candidate in @($owned.Files) + @($AttachedDisks) + @($ExtraFiles)) {
         if (-not $candidate -or -not $seen.Add($candidate.TrimEnd('\'))) { continue }
+        if (& $insideRoot $candidate) { continue }
         $reason = & $reasonToKeep $candidate
         if ($reason) { $kept.Add([pscustomobject]@{ Path = $candidate; Reason = $reason }); continue }
         $files += $candidate
@@ -156,6 +188,7 @@ function Get-VMRemovalPlan {
     $folders = @()
     foreach ($candidate in @($owned.Folders) + @($ExtraFolders)) {
         if (-not $candidate -or -not $seen.Add($candidate.TrimEnd('\'))) { continue }
+        if (& $insideRoot $candidate) { continue }
         $reason = & $reasonToKeep $candidate
         if ($reason) { $kept.Add([pscustomobject]@{ Path = $candidate; Reason = $reason }); continue }
         $folders += $candidate
@@ -186,6 +219,7 @@ function Get-VMRemovalPlan {
     return [pscustomobject]@{
         Tasks       = $tasks
         RegistryKey = $registryKey
+        VMRoot      = $vmRoot
         Files       = $files
         Folders     = $folders
         Kept        = @($kept)
@@ -249,7 +283,7 @@ function Get-VMRemovalContext {
     # Every other VM's settings, read the way a run for that VM would read
     # them, so nothing they use is deleted.
     $otherSettings = @()
-    foreach ($name in @(Get-VMProfileName -ConfigDir $settings.ConfigDir)) {
+    foreach ($name in @(Get-VMProfileName -Root $settings.Root)) {
         if ($name -eq $VM.Name) { continue }
         try {
             $otherSettings += (Read-VMSetting -Root $settings.Root -VMName $name).Settings
@@ -296,8 +330,9 @@ function Get-VMRemovalContext {
     $registryKey = if ($plan.RegistryKey -and (Test-Path -LiteralPath $plan.RegistryKey)) { $plan.RegistryKey } else { $null }
     $files = @($plan.Files | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     $folders = @($plan.Folders | Where-Object { Test-Path -LiteralPath $_ -PathType Container })
+    $vmRoot = if (Test-Path -LiteralPath $plan.VMRoot -PathType Container) { $plan.VMRoot } else { $null }
 
-    if (-not $machine -and $tasks.Count -eq 0 -and -not $registryKey -and $files.Count + $folders.Count -eq 0) {
+    if (-not $machine -and $tasks.Count -eq 0 -and -not $registryKey -and -not $vmRoot -and $files.Count + $folders.Count -eq 0) {
         Write-LogEntry "Nothing of '$($VM.Name)' was found to remove." 'INFO'
         return $null
     }
@@ -309,7 +344,7 @@ function Get-VMRemovalContext {
     foreach ($task in $tasks) { Write-LogEntry "  Task         $task" 'INFO' }
     if ($registryKey) { Write-LogEntry "  Registry     $registryKey" 'INFO' }
     $total = 0
-    foreach ($path in $files + $folders) {
+    foreach ($path in @($vmRoot | Where-Object { $_ }) + $files + $folders) {
         $size = Get-PathSize -Path $path
         $total += $size
         Write-LogEntry ("  {0,-12} {1}  ({2})" -f $(if ($files -contains $path) { 'File' } else { 'Folder' }), $path, (Format-Size $size)) 'INFO'
@@ -320,7 +355,9 @@ function Get-VMRemovalContext {
         Write-LogEntry "  Kept         $($item.Path) - $($item.Reason)" 'INFO'
     }
 
-    if ($settings.DevDrivePath -and ($files | Where-Object { $_ -eq $settings.DevDrivePath })) {
+    $devDriveInRoot = $vmRoot -and $settings.DevDrivePath -and (Test-PathWithin -Path $settings.DevDrivePath -Folder $vmRoot)
+    $devDriveGoes = ($files -contains $settings.DevDrivePath) -or ($devDriveInRoot -and (Test-Path -LiteralPath $settings.DevDrivePath -PathType Leaf))
+    if ($settings.DevDrivePath -and $devDriveGoes) {
         Write-LogEntry '' 'INFO'
         Write-LogEntry "The Dev Drive is deleted too: $($settings.DevDrivePath) ($(Format-Size (Get-PathSize -Path $settings.DevDrivePath)))." 'WARN'
         Write-LogEntry '  It holds this VM''s source code. Push or copy anything not yet in source control first.' 'WARN'
@@ -330,6 +367,7 @@ function Get-VMRemovalContext {
         Machine     = $machine
         Tasks       = $tasks
         RegistryKey = $registryKey
+        VMRoot      = $vmRoot
         Files       = $files
         Folders     = $folders
         RotatedLogs = $rotatedLogs
@@ -391,6 +429,15 @@ function Invoke-VMRemoval {
         if ($problem) { $failures.Add("$path - $problem") } else { Write-LogEntry "Deleted: $path" 'OK' }
     }
 
+    # The VM folder, all but what holds the log, which goes after the log is closed.
+    if ($Context.VMRoot) {
+        foreach ($item in @(Get-ChildItem -LiteralPath $Context.VMRoot -Force)) {
+            if (Test-PathWithin -Path $VM.Settings.LogFile -Folder $item.FullName) { continue }
+            $problem = Remove-PathWithRetry -Path $item.FullName
+            if ($problem) { $failures.Add("$($item.FullName) - $problem") } else { Write-LogEntry "Deleted: $($item.FullName)" 'OK' }
+        }
+    }
+
     if ($failures.Count -gt 0) {
         Write-LogList -Heading "'$($VM.Name)' was removed, but $($failures.Count) item(s) could not be deleted:" -Items $failures -Level WARN
         Write-LogEntry 'Delete them by hand, or run Remove-LazyVM again once whatever holds them has let go.' 'INFO'
@@ -402,9 +449,16 @@ function Invoke-VMRemoval {
     # Nothing more goes to the log, or it would be written again.
     Stop-Log
     foreach ($path in $logFiles) { Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue }
+    if ($Context.VMRoot) {
+        $problem = Remove-PathWithRetry -Path $Context.VMRoot
+        if ($problem) {
+            Write-Warning "The VM folder could not be deleted: $($Context.VMRoot) - $problem"
+            return [RemovalOutcome]::Incomplete
+        }
+    }
 
-    # A folder named after the VM that only held its files, such as
-    # Backup\<Name>, goes too once it is empty.
+    # A folder named after the VM outside its VM folder that only held its
+    # files, such as E:\Disks\<Name>, goes too once it is empty.
     foreach ($parent in @($files | ForEach-Object { Split-Path -Path $_ -Parent } | Sort-Object -Unique)) {
         if ((Split-Path -Path $parent -Leaf) -ne $VM.Name) { continue }
         if (-not (Test-Path -LiteralPath $parent -PathType Container)) { continue }

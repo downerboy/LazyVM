@@ -9,7 +9,7 @@
     folder. Set-LazyVMRoot records it once, in the registry, for every later
     command and for the scheduled tasks.
 
-    The folder is created if needed, along with Config\LazyVM.Settings.json
+    The folder is created if needed, along with Shared\Config\LazyVM.Settings.json
     (your settings) and a copy of the settings schema beside it, so VS Code
     can offer autocomplete and check the file as you type.
 
