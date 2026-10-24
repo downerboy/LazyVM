@@ -10,6 +10,10 @@ on:
   push:
     branches: [ main, 'release/**' ]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Build and attach the zip to this existing release instead, such as v2.0.0
+        required: false
 
 permissions:
   contents: write
@@ -23,6 +27,7 @@ env:
 jobs:
   release-please:
     name: Update the release pull request
+    if: inputs.tag == ''
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -38,27 +43,34 @@ jobs:
       # A pull request opened or updated with the workflow's own token does
       # not start other workflows, so the checks main requires are started
       # here, on the release pull request's branch.
+      # After a release there is no pull request, and the output is empty.
       - name: Run the required checks on the release pull request
-        if: steps.release.outputs.pr
         env:
           GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          PR: ${{ steps.release.outputs.pr }}
         run: |
-          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
-          gh workflow run pr-title.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          if [[ -z "$PR" ]]; then
+            echo 'No release pull request to check.'
+            exit 0
+          fi
+          branch=$(jq -r .headBranchName <<< "$PR")
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+          gh workflow run pr-title.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
 
   publish:
     name: Build, test and attach the release zip
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || inputs.tag != '') }}
     runs-on: windows-latest
     defaults:
       run:
         shell: pwsh
+    env:
+      TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ env.TAG }}
 
       - name: Build, analyze and test
         run: ./build.ps1 -Bootstrap
@@ -69,14 +81,13 @@ jobs:
       - name: Attach the zip and install notes
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
           $zip = Get-Item out/release/*.zip
           $expected = "LazyVM-$($env:TAG.TrimStart('v')).zip"
           if ($zip.Name -ne $expected) {
               throw "The tag $env:TAG does not match the module manifest, which packaged $($zip.Name)."
           }
-          gh release upload $env:TAG $zip.FullName
+          gh release upload $env:TAG $zip.FullName --clobber
 
           $install = @"
           ## Install
@@ -97,7 +108,9 @@ jobs:
 
           See the README in the zip, or [docs/Guide.md](https://github.com/$env:GITHUB_REPOSITORY/blob/$env:TAG/docs/Guide.md), for the rest.
           "@ -replace '(?m)^          ', ''
-          $changes = gh release view $env:TAG --json body --jq .body
+          # Run again on the same release, the install notes are replaced, not repeated.
+          $changes = (gh release view $env:TAG --json body --jq .body) -join "`n"
+          $changes = $changes -replace '(?sm)^## Install.*?(?=^## \d)', ''
           Set-Content -Path notes.md -Value "$install`n$changes"
 
           $flags = @('--notes-file', 'notes.md', '--title', "LazyVM $($env:TAG.TrimStart('v'))")
