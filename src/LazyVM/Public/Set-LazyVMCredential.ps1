@@ -1,4 +1,4 @@
-﻿function Set-LazyVMCredential {
+function Set-LazyVMCredential {
     <#
     .SYNOPSIS
     Stores the administrator account LazyVM uses inside a VM.
@@ -48,38 +48,30 @@
     )
 
     process {
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Credential' -Name $Name
-
-            $existing = Get-StoredCredential -Path $CFG.GuestCredFile
+        Invoke-CommandRun -Title 'Credential' -Name $Name -FailureMessage 'Storing the credential failed' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            $existing = Get-GuestCredential -VM $VM
             if ($existing -and -not $Force) {
-                $question = "A credential for '$($existing.UserName)' is already stored for $($CFG.VMName). Replace it? This does not change the password inside the VM."
+                $question = "A credential for '$($existing.UserName)' is already stored for $($VM.Name). Replace it? This does not change the password inside the VM."
                 if (-not $PSCmdlet.ShouldContinue($question, 'Replace the stored credential')) {
                     Write-LogEntry 'Kept the existing credential' 'INFO'
                     return
                 }
             }
 
-            if (-not $Credential) {
-                $message = "The administrator account INSIDE $($CFG.VMName). Leave the password empty to have one generated (for a VM LazyVM will build)."
-                $Credential = Get-Credential -UserName $CFG.GuestAdminUser -Message $message
-                if (-not $Credential) {
+            $account = $Credential
+            if (-not $account) {
+                $message = "The administrator account INSIDE $($VM.Name). Leave the password empty to have one generated (for a VM LazyVM will build)."
+                $account = Get-Credential -UserName $VM.Runtime.GuestAdminUser -Message $message
+                if (-not $account) {
                     Write-LogEntry 'No credential entered - nothing was changed' 'INFO'
                     return
                 }
             }
 
-            if ($PSCmdlet.ShouldProcess($CFG.VMName, "Store the credential for '$($Credential.UserName)'")) {
-                $null = Set-StoredGuestCredential -Credential $Credential
+            if ($PSCmdlet.ShouldProcess($VM.Name, "Store the credential for '$($account.UserName)'")) {
+                $null = Set-StoredGuestCredential -VM $VM -Credential $account
             }
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'Storing the credential failed' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
         }
     }
 }

@@ -53,7 +53,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="345" y="86">-Name  (wildcards, default *)</text>
 </g>
 <g class="bx-mod"><rect x="335" y="129" width="305" height="67" rx="3"/>
-<text class="st" x="487.5" y="143" text-anchor="middle">«Configuration»</text>
+<text class="st" x="487.5" y="143" text-anchor="middle">«Settings»</text>
 <text class="nm" x="487.5" y="159" text-anchor="middle">Resolve-LazyVMRoot()</text>
 <line class="div" x1="335" y1="166" x2="640" y2="166"/>
 <g class="sn"><circle cx="351" cy="150" r="10"/><text x="351" y="154" text-anchor="middle">1</text></g>
@@ -65,7 +65,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="30" y="181">Root</text>
 </g>
 <g class="bx-mod"><rect x="335" y="220" width="305" height="67" rx="3"/>
-<text class="st" x="487.5" y="234" text-anchor="middle">«Configuration»</text>
+<text class="st" x="487.5" y="234" text-anchor="middle">«Settings»</text>
 <text class="nm" x="487.5" y="250" text-anchor="middle">Get-VMProfileName()</text>
 <line class="div" x1="335" y1="257" x2="640" y2="257"/>
 <g class="sn"><circle cx="351" cy="241" r="10"/><text x="351" y="245" text-anchor="middle">2</text></g>
@@ -77,7 +77,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="30" y="272">VM.json</text>
 </g>
 <g class="bx-mod"><rect x="335" y="311" width="305" height="84" rx="3"/>
-<text class="st" x="487.5" y="325" text-anchor="middle">«Configuration»</text>
+<text class="st" x="487.5" y="325" text-anchor="middle">«Settings»</text>
 <text class="nm" x="487.5" y="341" text-anchor="middle">Read-VMSetting()</text>
 <line class="div" x1="335" y1="348" x2="640" y2="348"/>
 <g class="sn"><circle cx="351" cy="332" r="10"/><text x="351" y="336" text-anchor="middle">3</text></g>

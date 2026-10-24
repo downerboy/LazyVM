@@ -1,4 +1,4 @@
-﻿function Register-LazyVMMaintenance {
+function Register-LazyVMMaintenance {
     <#
     .SYNOPSIS
     Schedules a VM's daily maintenance.
@@ -27,19 +27,11 @@
     )
 
     process {
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Schedule maintenance' -Name $Name
-            if ($PSCmdlet.ShouldProcess($CFG.ScheduleTaskName, "Run maintenance of $($CFG.VMName) daily at $($CFG.MaintenanceTime)")) {
-                Register-RebuildSchedule
+        Invoke-CommandRun -Title 'Schedule maintenance' -Name $Name -FailureMessage 'Scheduling maintenance failed' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            if ($PSCmdlet.ShouldProcess($VM.Settings.ScheduleTaskName, "Run maintenance of $($VM.Name) daily at $($VM.Settings.MaintenanceTime)")) {
+                Register-RebuildSchedule -VM $VM
             }
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'Scheduling maintenance failed' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
         }
     }
 }

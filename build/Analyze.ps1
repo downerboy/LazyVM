@@ -1,7 +1,6 @@
 ﻿# Analyze.ps1 - Runs PSScriptAnalyzer. Dot-sourced by the scripts at the repository root.
 
-function Invoke-Analyze
-{
+function Invoke-Analyze {
     <# Analyzes src\ and tests\ with their settings files; any finding fails. #>
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -19,13 +18,11 @@ function Invoke-Analyze
     } -ArgumentList $Root, $Version
     $findings = @(Receive-Job -Job $job -Wait -AutoRemoveJob -ErrorAction Stop)
 
-    foreach ($finding in $findings)
-    {
+    foreach ($finding in $findings) {
         Write-Host "$($finding.ScriptName):$($finding.Line)  $($finding.RuleName)  $($finding.Message)"
         Write-CIError -Message "$($finding.RuleName): $($finding.Message)" -File $finding.ScriptPath -Line $finding.Line
     }
-    if ($findings.Count -gt 0)
-    {
+    if ($findings.Count -gt 0) {
         throw "PSScriptAnalyzer found $($findings.Count) problem(s)."
     }
     Write-Host 'PSScriptAnalyzer: no findings'

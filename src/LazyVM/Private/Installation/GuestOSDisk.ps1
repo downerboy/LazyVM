@@ -1,4 +1,4 @@
-﻿# GuestOSDisk.ps1 - Keeps C: able to use the whole OS disk.
+# GuestOSDisk.ps1 - Keeps C: able to use the whole OS disk.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 # The recovery partition LazyVM puts after C:, in MB. Microsoft recommends
@@ -28,46 +28,44 @@ function Expand-GuestSystemDrive {
       space, nothing changes and nothing is logged. Nothing here stops a build
       or a maintenance run: anything that fails is logged.
     #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
     try {
-        $earlier = @(Get-ExpansionCheckpoint)
+        $earlier = @(Get-ExpansionCheckpoint -VM $VM)
         if ($earlier.Count -gt 0) {
             Write-LogEntry "OS disk (C:): an earlier attempt to extend C: failed, so it is not tried again while its checkpoint '$($earlier[0])' exists." 'WARN'
             Write-LogEntry "  See the log of that run. Once the VM is as it should be, delete that checkpoint and the next run tries again." 'INFO'
             return
         }
 
-        $plan = Invoke-GuestScript -Activity 'OS disk check' -TimeoutMinutes 5 -ScriptBlock (Get-OSDiskPlanScript)
-        if ($plan.Action -eq 'None') { return }
+        $plan = Invoke-GuestScript -VM $VM -Activity 'OS disk check' -TimeoutMinutes 5 -ScriptBlock (Get-OSDiskPlanScript)
+        $action = [OSDiskAction]$plan.Action
+        if ($action -eq [OSDiskAction]::None) { return }
 
         Write-LogEntry 'OS disk (C:):' 'INFO'
-        if ($plan.Action -eq 'Blocked') {
+        if ($action -eq [OSDiskAction]::Blocked) {
             Write-LogEntry "  $($plan.Reason)" 'WARN'
             return
         }
 
         Write-LogEntry "  $($plan.Reason) - moving the recovery partition to the end of the disk and extending C:" 'INFO'
-        $checkpoint = "C: expansion $(Get-Date -Format 'yyyyMMdd-HHmmss')"
-        try { New-ToolingCheckpoint -Name $checkpoint -SkipPrune }
+        $checkpoint = "$script:ExpansionCheckpointPrefix $(Get-Stamp)"
+        try { New-ToolingCheckpoint -VM $VM -Name $checkpoint -SkipPrune }
         catch {
             Write-LogError '  No checkpoint could be taken, so C: was left as it was' $_
             return
         }
 
-        $report = Invoke-GuestScript -Activity 'C: drive expansion' -TimeoutMinutes 20 `
+        $notes = Invoke-GuestScript -VM $VM -Activity 'C: drive expansion' -TimeoutMinutes 20 `
             -ArgumentList @($script:RecoveryPartitionMB) -ScriptBlock (Get-OSDiskExpandScript)
-        $failed = $false
-        foreach ($line in @($report | Where-Object { $_ })) {
-            $level, $text = "$line" -split '\|', 2
-            if ($level -eq 'WARN') { $failed = $true }
-            Write-LogEntry "  $text" $level
-        }
+        Write-GuestNote -Notes $notes
 
-        if ($failed) {
-            Write-LogEntry "  Kept the checkpoint '$checkpoint'. To put the VM back as it was: Restore-VMSnapshot -VMName '$($CFG.VMName)' -Name '$checkpoint'" 'WARN'
+        if (Test-GuestNoteFailed -Notes $notes) {
+            Write-LogEntry "  Kept the checkpoint '$checkpoint'. To put the VM back as it was: Restore-VMSnapshot -VMName '$($VM.Name)' -Name '$checkpoint'" 'WARN'
         }
         else {
             try {
-                Remove-ExpansionCheckpoint -Name $checkpoint
+                Remove-ExpansionCheckpoint -VM $VM -Name $checkpoint
                 Write-LogEntry "  Checkpoint '$checkpoint' removed: it is no longer needed" 'OK'
             }
             catch {
@@ -83,19 +81,25 @@ function Expand-GuestSystemDrive {
 
 function Get-ExpansionCheckpoint {
     <# Names of this VM's checkpoints taken before extending C:. #>
-    return @(Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -like 'C: expansion *' } | ForEach-Object { $_.Name })
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    return @(Get-VMSnapshot -VMName $VM.Name -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "$script:ExpansionCheckpointPrefix *" } | ForEach-Object { $_.Name })
 }
 
 function Remove-ExpansionCheckpoint {
-    param([Parameter(Mandatory)][string]$Name)
-    Remove-VMSnapshot -VMName $CFG.VMName -Name $Name -Confirm:$false -ErrorAction Stop
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    Remove-VMSnapshot -VMName $VM.Name -Name $Name -Confirm:$false -ErrorAction Stop
 }
 
 function Get-OSDiskPlanScript {
     <#
       Guest script that changes nothing: says whether C: has new space to
-      grow into, as [pscustomobject]@{ Action = None | Expand | Blocked; Reason }.
+      grow into, as [pscustomobject]@{ Action = None | Expand | Blocked (OSDiskAction); Reason }.
     #>
     return {
         $recoveryType = '{de94bba4-06d1-4d40-a16a-bfd50179d6ac}'
@@ -130,7 +134,7 @@ function Get-OSDiskPlanScript {
 function Get-OSDiskExpandScript {
     <#
       Guest script that moves the recovery partition to the end of the disk
-      and extends C: up to it. Returns notes as 'LEVEL|text'; a WARN note
+      and extends C: up to it. Returns notes (New-GuestNote); a WARN note
       means the work did not finish. Whatever happens, it ends with recovery
       turned on if it can be.
     #>
@@ -139,7 +143,7 @@ function Get-OSDiskExpandScript {
 
         $recoveryType = '{de94bba4-06d1-4d40-a16a-bfd50179d6ac}'
         $wim = "$env:SystemRoot\System32\Recovery\Winre.wim"
-        $notes = [System.Collections.Generic.List[string]]::new()
+        $notes = [System.Collections.Generic.List[object]]::new()
 
         # Native tools report failure through their exit code and write to
         # stderr. Capturing stderr must not turn it into a terminating error.
@@ -168,12 +172,12 @@ function Get-OSDiskExpandScript {
             if (Test-RecoveryEnabled) {
                 $result = Invoke-Tool -FilePath reagentc.exe -ArgumentList @('/disable')
                 if ($result.Code -ne 0) {
-                    $notes.Add("WARN|nothing changed: reagentc /disable failed (exit $($result.Code)): $($result.Output)")
+                    $notes.Add((New-GuestNote -Level WARN -Text "nothing changed: reagentc /disable failed (exit $($result.Code)): $($result.Output)"))
                     return
                 }
             }
             if (-not (Test-Path -LiteralPath $wim)) {
-                $notes.Add('WARN|nothing changed: the recovery tools (Winre.wim) are not on C:, so there is nothing to put on a new recovery partition')
+                $notes.Add((New-GuestNote -Level WARN -Text 'nothing changed: the recovery tools (Winre.wim) are not on C:, so there is nothing to put on a new recovery partition'))
                 return
             }
 
@@ -186,7 +190,7 @@ function Get-OSDiskExpandScript {
             $target = (Get-PartitionSupportedSize -DriveLetter C).SizeMax - ($SizeMB * 1MB)
             if ([math]::Abs($target - $before) -gt 16MB) {
                 Resize-Partition -DriveLetter C -Size $target
-                $notes.Add("OK|C: resized from $([math]::Round($before / 1GB, 1)) GB to $([math]::Round($target / 1GB, 1)) GB")
+                $notes.Add((New-GuestNote -Level OK -Text "C: resized from $([math]::Round($before / 1GB, 1)) GB to $([math]::Round($target / 1GB, 1)) GB"))
             }
 
             # 3. New recovery partition at the end of the disk.
@@ -194,14 +198,14 @@ function Get-OSDiskExpandScript {
             $null = Format-Volume -Partition $recovery -FileSystem NTFS -NewFileSystemLabel 'Recovery' -Confirm:$false
             $letter = [char[]](82..90) | Where-Object { -not (Test-Path -LiteralPath "${_}:\") } | Select-Object -First 1
             if (-not $letter) {
-                $notes.Add('WARN|no free drive letter between R: and Z: to set up the recovery partition')
+                $notes.Add((New-GuestNote -Level WARN -Text 'no free drive letter between R: and Z: to set up the recovery partition'))
                 return
             }
             $result = Invoke-DiskPart -Commands @(
                 "select disk $diskNumber", "select partition $($recovery.PartitionNumber)",
                 "set id=$($recoveryType.Trim('{}')) override", 'gpt attributes=0x8000000000000001', "assign letter=$letter")
             if ($result.Code -ne 0) {
-                $notes.Add("WARN|could not mark the new partition as a recovery partition (diskpart exit $($result.Code)): $($result.Output)")
+                $notes.Add((New-GuestNote -Level WARN -Text "could not mark the new partition as a recovery partition (diskpart exit $($result.Code)): $($result.Output)"))
                 return
             }
 
@@ -212,24 +216,24 @@ function Get-OSDiskExpandScript {
                 Copy-Item -LiteralPath $wim -Destination $folder -Force
                 $result = Invoke-Tool -FilePath reagentc.exe -ArgumentList @('/setreimage', '/path', $folder, '/target', "$env:SystemRoot")
                 if ($result.Code -ne 0) {
-                    $notes.Add("WARN|reagentc /setreimage failed (exit $($result.Code)): $($result.Output)")
+                    $notes.Add((New-GuestNote -Level WARN -Text "reagentc /setreimage failed (exit $($result.Code)): $($result.Output)"))
                     return
                 }
                 $result = Invoke-Tool -FilePath reagentc.exe -ArgumentList @('/enable')
                 if ($result.Code -ne 0) {
-                    $notes.Add("WARN|reagentc /enable failed (exit $($result.Code)): $($result.Output)")
+                    $notes.Add((New-GuestNote -Level WARN -Text "reagentc /enable failed (exit $($result.Code)): $($result.Output)"))
                     return
                 }
             }
             finally {
                 $null = Invoke-DiskPart -Commands @("select disk $diskNumber", "select partition $($recovery.PartitionNumber)", "remove letter=$letter")
             }
-            $notes.Add("OK|recovery partition moved to the end of the disk ($SizeMB MB) and recovery turned on")
+            $notes.Add((New-GuestNote -Level OK -Text "recovery partition moved to the end of the disk ($SizeMB MB) and recovery turned on"))
         }
 
         try { Move-RecoveryPartition -SizeMB $recoveryMB }
         catch {
-            $notes.Add("WARN|stopped part way: $($_.Exception.Message)")
+            $notes.Add((New-GuestNote -Level WARN -Text "stopped part way: $($_.Exception.Message)"))
         }
         finally {
             # Never leave the guest without recovery when it can be helped.
@@ -237,10 +241,10 @@ function Get-OSDiskExpandScript {
             if (-not (Test-RecoveryEnabled)) {
                 $null = Invoke-Tool -FilePath reagentc.exe -ArgumentList @('/enable')
                 if (-not (Test-RecoveryEnabled)) {
-                    $notes.Add('WARN|recovery (Windows RE) is turned off in the guest')
+                    $notes.Add((New-GuestNote -Level WARN -Text 'recovery (Windows RE) is turned off in the guest'))
                 }
             }
         }
-        return $notes
+        return @($notes)
     }
 }

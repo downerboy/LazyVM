@@ -1,5 +1,40 @@
-﻿# VMDisk.ps1 - Attaching extra virtual disks to a VM.
+﻿# VMDisk.ps1 - The VM's extra virtual disks: creating them and attaching them.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
+#
+# The SQL data disk and the Dev Drive carry data across rebuilds, so an
+# existing disk is always kept and reported, never created again.
+
+function Initialize-DataVhd {
+    <# Creates a dynamic VHDX of $SizeGB at $Path, or reports the one already there. #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][int]$SizeGB,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    if (Test-Path -LiteralPath $Path) {
+        # The file's length is what the dynamic disk has allocated so far, not
+        # its capacity, so both are reported.
+        $onDisk = Format-Size (Get-Item -LiteralPath $Path).Length
+        try {
+            $vhd = Get-VHD -Path $Path
+            Write-LogEntry "$Label exists - capacity $(Format-Size $vhd.Size), currently allocated $onDisk, type $($vhd.VhdType)" 'OK'
+            if ($vhd.Size -lt ($SizeGB * 1GB)) {
+                Write-LogEntry "  Its capacity is smaller than the configured $SizeGB GB. Expand it with Resize-VHD if needed." 'WARN'
+            }
+        }
+        catch {
+            Write-LogEntry "$Label exists ($onDisk on disk) - could not read its details: $($_.Exception.Message)" 'WARN'
+        }
+        Write-LogEntry "  Existing $Label contents kept" 'INFO'
+        return
+    }
+
+    New-Folder -Path (Split-Path -Path $Path -Parent)
+    Write-LogEntry "Creating the $SizeGB GB dynamic $Label..." 'INFO'
+    New-VHD -Path $Path -SizeBytes ([long]$SizeGB * 1GB) -Dynamic | Out-Null
+    Write-LogEntry "$Label created at $Path" 'OK'
+}
 
 function Get-FreeControllerLocation {
     <#
@@ -39,4 +74,21 @@ function Add-VMScsiHardDisk {
 
     Add-VMHardDiskDrive -VMName $VMName -ControllerType SCSI -ControllerNumber 0 -ControllerLocation $location -Path $Path
     return $location
+}
+
+function Add-VMDataDisk {
+    <# Attaches the disk at $Path to the VM unless it already is, and gives the guest a moment to see it. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    if (@(Get-VMHardDiskDrive -VMName $VM.Name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Path }).Count -gt 0) {
+        Write-LogEntry "$Label already attached" 'OK'
+        return
+    }
+    $location = Add-VMScsiHardDisk -VMName $VM.Name -Path $Path
+    Write-LogEntry "$Label attached (SCSI 0:$location)" 'OK'
+    Start-Sleep -Seconds 5
 }

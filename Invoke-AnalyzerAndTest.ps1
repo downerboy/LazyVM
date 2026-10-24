@@ -36,28 +36,22 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
-foreach ($step in 'CIReport', 'Tools', 'Assemble', 'Analyze', 'Test')
-{
+foreach ($step in 'CIReport', 'Tools', 'Assemble', 'Analyze', 'Test') {
     . (Join-Path -Path $PSScriptRoot -ChildPath "build/$step.ps1")
 }
 
-try
-{
-    if ($PSCmdlet.ParameterSetName -eq 'All')
-    {
+try {
+    if ($PSCmdlet.ParameterSetName -eq 'All') {
         Invoke-Assemble -Root $PSScriptRoot -ModuleName 'LazyVM'
     }
-    if (-not $TestOnly)
-    {
+    if (-not $TestOnly) {
         Invoke-Analyze -Root $PSScriptRoot -Version (Install-BuildTool -Name PSScriptAnalyzer)
     }
-    if (-not $AnalyzerOnly)
-    {
+    if (-not $AnalyzerOnly) {
         Invoke-Test -Root $PSScriptRoot -PesterVersion (Install-BuildTool -Name Pester)
     }
 }
-catch
-{
+catch {
     Write-CIError -Message "$($_.Exception.Message)`n$($_.ScriptStackTrace)"
     throw
 }

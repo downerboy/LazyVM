@@ -52,14 +52,13 @@ function Get-ParentFolder {
 
 function Get-VMOwnedPath {
     <# The files and folders a VM's settings say belong to it, before any check for sharing. #>
-    param([Parameter(Mandatory)][hashtable]$Settings)
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Settings)
 
-    $vhdxRoot = "$($Settings.VHDXRoot)".TrimEnd('\')
     $files = @(
         $Settings.SQLDiskPath
         $Settings.DevDrivePath
         $Settings.SeedDiskPath
-        "$vhdxRoot\$($Settings.VMName)-OS.vhdx"
+        $Settings.OSDiskPath
         $Settings.VSSettingsBackup
         $Settings.GuestCredFile
         $Settings.CertCredFile
@@ -69,7 +68,7 @@ function Get-VMOwnedPath {
     $folders = @(
         $Settings.CheckpointDir
         $Settings.StateDir
-        "$vhdxRoot\$($Settings.VMName)"
+        $Settings.VMConfigDir
         $Settings.ProfileDir
     )
 
@@ -88,7 +87,7 @@ function Get-VMRemovalPlan {
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'OtherVMDisks is used inside the reasonToKeep script block, which the analyzer cannot follow.')]
     param(
-        [Parameter(Mandatory)][hashtable]$Settings,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Settings,
         [hashtable[]]$OtherSettings = @(),
         [string[]]$AttachedDisks = @(),
         [string[]]$OtherVMDisks = @(),
@@ -235,21 +234,25 @@ function Remove-PathWithRetry {
 
 function Get-VMRemovalContext {
     <#
-      Works out everything removing the VM in $CFG would delete, lists it in
-      the log, and returns it for Invoke-VMRemoval. Changes nothing.
-      Returns $null when nothing of the VM exists.
+      Works out everything removing the VM would delete, lists it in the
+      log, and returns it for Invoke-VMRemoval. Changes nothing. Returns
+      $null when nothing of the VM exists.
     #>
-    param([Parameter(Mandatory)][string]$ScriptDir)
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$ScriptDir
+    )
 
-    Write-LogEntry "REMOVE VM - $($CFG.VMName)" 'PHASE'
+    $settings = $VM.Settings
+    Write-LogEntry "REMOVE VM - $($VM.Name)" 'PHASE'
 
     # Every other VM's settings, read the way a run for that VM would read
     # them, so nothing they use is deleted.
     $otherSettings = @()
-    foreach ($name in @(Get-VMProfileName -ConfigDir $CFG.ConfigDir)) {
-        if ($name -eq $CFG.VMName) { continue }
+    foreach ($name in @(Get-VMProfileName -ConfigDir $settings.ConfigDir)) {
+        if ($name -eq $VM.Name) { continue }
         try {
-            $otherSettings += (Read-VMSetting -Root $CFG.Root -VMName $name).Settings
+            $otherSettings += (Read-VMSetting -Root $settings.Root -VMName $name).Settings
         }
         catch {
             throw "Cannot tell what VM '$name' uses, so nothing has been removed. Fix its settings first:`n  $($_.Exception.Message)"
@@ -260,17 +263,17 @@ function Get-VMRemovalContext {
     # every disk any other VM has attached. A VM whose profile was created
     # but never built may be removed before Hyper-V is even turned on.
     $hyperVPresent = [bool](Get-Command -Name Get-VM -ErrorAction SilentlyContinue)
-    $vm = if ($hyperVPresent) { Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue } else { $null }
+    $machine = if ($hyperVPresent) { Get-VM -Name $VM.Name -ErrorAction SilentlyContinue } else { $null }
     $attachedDisks = @()
     $checkpointCount = 0
-    if ($vm) {
-        foreach ($drive in @(Get-VMHardDiskDrive -VMName $CFG.VMName)) {
+    if ($machine) {
+        foreach ($drive in @(Get-VMHardDiskDrive -VMName $VM.Name)) {
             if ($drive.Path) { $attachedDisks += Get-DiskChain -Path $drive.Path }
         }
-        $checkpointCount = @(Get-VMSnapshot -VMName $CFG.VMName -ErrorAction SilentlyContinue).Count
+        $checkpointCount = @(Get-VMSnapshot -VMName $VM.Name -ErrorAction SilentlyContinue).Count
     }
     $otherVMDisks = @()
-    $otherVMs = if ($hyperVPresent) { @(Get-VM | Where-Object { $_.Name -ne $CFG.VMName }) } else { @() }
+    $otherVMs = if ($hyperVPresent) { @(Get-VM | Where-Object { $_.Name -ne $VM.Name }) } else { @() }
     foreach ($otherVM in $otherVMs) {
         foreach ($drive in @(Get-VMHardDiskDrive -VMName $otherVM.Name)) {
             if ($drive.Path) { $otherVMDisks += Get-DiskChain -Path $drive.Path }
@@ -278,14 +281,14 @@ function Get-VMRemovalContext {
     }
 
     # Left behind by rebuilds and log rotation, named after the VM.
-    $logDir = Split-Path -Path $CFG.LogFile -Parent
-    $logStem = [IO.Path]::GetFileNameWithoutExtension($CFG.LogFile)
-    $rotatedLogs = @(Get-ChildItem -LiteralPath $logDir -Filter "$logStem.*.log" -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
-    $extraFiles = @(Get-ChildItem -LiteralPath $CFG.VHDXRoot -Filter "$($CFG.VMName)-OS.retired-*.vhdx" -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    $logStem = [IO.Path]::GetFileNameWithoutExtension($settings.LogFile)
+    $rotatedLogs = @(Get-ChildItem -LiteralPath (Split-Path -Path $settings.LogFile -Parent) -Filter "$logStem.*.log" -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    $osDiskStem = [IO.Path]::GetFileNameWithoutExtension($settings.OSDiskPath)
+    $extraFiles = @(Get-ChildItem -LiteralPath (Split-Path -Path $settings.OSDiskPath -Parent) -Filter "$osDiskStem.retired-*.vhdx" -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
     $extraFiles += $rotatedLogs
-    $extraFolders = @(Get-ChildItem -LiteralPath $CFG.VHDXRoot -Filter "$($CFG.VMName).retired-*" -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    $extraFolders = @(Get-ChildItem -LiteralPath (Split-Path -Path $settings.VMConfigDir -Parent) -Filter "$(Split-Path -Path $settings.VMConfigDir -Leaf).retired-*" -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
 
-    $plan = Get-VMRemovalPlan -Settings $CFG -OtherSettings $otherSettings -AttachedDisks $attachedDisks `
+    $plan = Get-VMRemovalPlan -Settings $settings -OtherSettings $otherSettings -AttachedDisks $attachedDisks `
         -OtherVMDisks $otherVMDisks -ExtraFiles $extraFiles -ExtraFolders $extraFolders -ScriptDir $ScriptDir
 
     # Only what is actually there is listed and deleted.
@@ -294,14 +297,14 @@ function Get-VMRemovalContext {
     $files = @($plan.Files | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     $folders = @($plan.Folders | Where-Object { Test-Path -LiteralPath $_ -PathType Container })
 
-    if (-not $vm -and $tasks.Count -eq 0 -and -not $registryKey -and $files.Count + $folders.Count -eq 0) {
-        Write-LogEntry "Nothing of '$($CFG.VMName)' was found to remove." 'INFO'
+    if (-not $machine -and $tasks.Count -eq 0 -and -not $registryKey -and $files.Count + $folders.Count -eq 0) {
+        Write-LogEntry "Nothing of '$($VM.Name)' was found to remove." 'INFO'
         return $null
     }
 
-    Write-LogEntry "Removing '$($CFG.VMName)' deletes all of this, and it cannot be undone:" 'WARN'
-    if ($vm) {
-        Write-LogEntry "  Hyper-V VM   $($CFG.VMName) ($($vm.State), $checkpointCount checkpoint(s))" 'INFO'
+    Write-LogEntry "Removing '$($VM.Name)' deletes all of this, and it cannot be undone:" 'WARN'
+    if ($machine) {
+        Write-LogEntry "  Hyper-V VM   $($VM.Name) ($($machine.State), $checkpointCount checkpoint(s))" 'INFO'
     }
     foreach ($task in $tasks) { Write-LogEntry "  Task         $task" 'INFO' }
     if ($registryKey) { Write-LogEntry "  Registry     $registryKey" 'INFO' }
@@ -317,14 +320,14 @@ function Get-VMRemovalContext {
         Write-LogEntry "  Kept         $($item.Path) - $($item.Reason)" 'INFO'
     }
 
-    if ($CFG.DevDrivePath -and ($files | Where-Object { $_ -eq $CFG.DevDrivePath })) {
+    if ($settings.DevDrivePath -and ($files | Where-Object { $_ -eq $settings.DevDrivePath })) {
         Write-LogEntry '' 'INFO'
-        Write-LogEntry "The Dev Drive is deleted too: $($CFG.DevDrivePath) ($(Format-Size (Get-PathSize -Path $CFG.DevDrivePath)))." 'WARN'
+        Write-LogEntry "The Dev Drive is deleted too: $($settings.DevDrivePath) ($(Format-Size (Get-PathSize -Path $settings.DevDrivePath)))." 'WARN'
         Write-LogEntry '  It holds this VM''s source code. Push or copy anything not yet in source control first.' 'WARN'
     }
 
     return [pscustomobject]@{
-        VM          = $vm
+        Machine     = $machine
         Tasks       = $tasks
         RegistryKey = $registryKey
         Files       = $files
@@ -336,23 +339,18 @@ function Get-VMRemovalContext {
 
 function Invoke-VMRemoval {
     <#
-      Deletes what Get-VMRemovalContext listed. Returns 'removed', or
-      'incomplete' when something could not be deleted (the log says what).
+      Deletes what Get-VMRemovalContext listed. Returns Removed, or
+      Incomplete when something could not be deleted (the log says what).
     #>
-    param([Parameter(Mandatory)]$Context)
-
-    $vm = $Context.VM
-    $tasks = @($Context.Tasks)
-    $registryKey = $Context.RegistryKey
-    $files = @($Context.Files)
-    $folders = @($Context.Folders)
-    $rotatedLogs = @($Context.RotatedLogs)
-    $total = $Context.Total
-
+    [OutputType([RemovalOutcome])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)]$Context
+    )
 
     $failures = [System.Collections.Generic.List[string]]::new()
 
-    foreach ($task in $tasks) {
+    foreach ($task in @($Context.Tasks)) {
         try {
             Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction Stop
             Write-LogEntry "Task removed: $task" 'OK'
@@ -360,70 +358,60 @@ function Invoke-VMRemoval {
         catch { $failures.Add("task $task - $($_.Exception.Message)") }
     }
 
-    if ($registryKey) {
+    if ($Context.RegistryKey) {
         try {
-            Remove-Item -LiteralPath $registryKey -Recurse -Force -ErrorAction Stop
-            Write-LogEntry "Registry key removed: $registryKey" 'OK'
+            Remove-Item -LiteralPath $Context.RegistryKey -Recurse -Force -ErrorAction Stop
+            Write-LogEntry "Registry key removed: $($Context.RegistryKey)" 'OK'
         }
-        catch { $failures.Add("$registryKey - $($_.Exception.Message)") }
+        catch { $failures.Add("$($Context.RegistryKey) - $($_.Exception.Message)") }
     }
 
-    if ($vm) {
+    if ($Context.Machine) {
         try {
-            if ($vm.State -ne 'Off') {
-                Stop-VM -Name $CFG.VMName -TurnOff -Force -ErrorAction Stop
-            }
-            Remove-VM -Name $CFG.VMName -Force -ErrorAction Stop
-            Write-LogEntry "Hyper-V VM removed: $($CFG.VMName)" 'OK'
+            if ($Context.Machine.State -ne 'Off') { Stop-VM -Name $VM.Name -TurnOff -Force -ErrorAction Stop }
+            Remove-VM -Name $VM.Name -Force -ErrorAction Stop
+            Write-LogEntry "Hyper-V VM removed: $($VM.Name)" 'OK'
         }
         catch {
             # The disks are still attached, so deleting them would fail or,
             # worse, half-succeed. Stop with everything else left in place.
-            Write-LogError "Could not remove the Hyper-V VM '$($CFG.VMName)'" $_
+            Write-LogError "Could not remove the Hyper-V VM '$($VM.Name)'" $_
             Write-LogEntry 'Its disks and folders have been left in place. Fix the problem and run Remove-LazyVM again.' 'WARN'
-            return 'incomplete'
+            return [RemovalOutcome]::Incomplete
         }
     }
 
     # The log is written to until the very end, so it and its rotated copies go last.
-    $logFiles = @($files | Where-Object { $_ -eq $CFG.LogFile -or $rotatedLogs -contains $_ })
-
-    foreach ($path in $files | Where-Object { $logFiles -notcontains $_ }) {
+    $files = @($Context.Files)
+    $logFiles = @($files | Where-Object { $_ -eq $VM.Settings.LogFile -or @($Context.RotatedLogs) -contains $_ })
+    foreach ($path in @($files | Where-Object { $logFiles -notcontains $_ }) + @($Context.Folders)) {
         # Removing the VM can take its checkpoint files with it.
-        if (-not (Test-Path -LiteralPath $path)) { continue }
-        $problem = Remove-PathWithRetry -Path $path
-        if ($problem) { $failures.Add("$path - $problem") } else { Write-LogEntry "Deleted: $path" 'OK' }
-    }
-    foreach ($path in $folders) {
         if (-not (Test-Path -LiteralPath $path)) { continue }
         $problem = Remove-PathWithRetry -Path $path
         if ($problem) { $failures.Add("$path - $problem") } else { Write-LogEntry "Deleted: $path" 'OK' }
     }
 
     if ($failures.Count -gt 0) {
-        Write-LogEntry "'$($CFG.VMName)' was removed, but $($failures.Count) item(s) could not be deleted:" 'WARN'
-        foreach ($failure in $failures) { Write-LogEntry "  $failure" 'WARN' }
+        Write-LogList -Heading "'$($VM.Name)' was removed, but $($failures.Count) item(s) could not be deleted:" -Items $failures -Level WARN
         Write-LogEntry 'Delete them by hand, or run Remove-LazyVM again once whatever holds them has let go.' 'INFO'
-        return 'incomplete'
+        return [RemovalOutcome]::Incomplete
     }
 
-    Write-LogEntry "'$($CFG.VMName)' and everything created for it have been removed ($(Format-Size $total) freed)." 'OK'
+    Write-LogEntry "'$($VM.Name)' and everything created for it have been removed ($(Format-Size $Context.Total) freed)." 'OK'
 
-    # From here on nothing is logged, or the log would be written again.
-    foreach ($path in $logFiles) {
-        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-    }
+    # Nothing more goes to the log, or it would be written again.
+    Stop-Log
+    foreach ($path in $logFiles) { Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue }
 
     # A folder named after the VM that only held its files, such as
     # Backup\<Name>, goes too once it is empty.
-    $parents = @($files | ForEach-Object { Split-Path -Path $_ -Parent } | Sort-Object -Unique)
-    foreach ($parent in $parents) {
-        if ((Split-Path -Path $parent -Leaf) -ne $CFG.VMName) { continue }
+    foreach ($parent in @($files | ForEach-Object { Split-Path -Path $_ -Parent } | Sort-Object -Unique)) {
+        if ((Split-Path -Path $parent -Leaf) -ne $VM.Name) { continue }
         if (-not (Test-Path -LiteralPath $parent -PathType Container)) { continue }
         if (@(Get-ChildItem -LiteralPath $parent -Force).Count -gt 0) { continue }
         Remove-Item -LiteralPath $parent -Force -ErrorAction SilentlyContinue
     }
 
-    Write-Information "Log deleted: $($CFG.LogFile)" -InformationAction Continue
-    return 'removed'
+    Write-Information "Log deleted: $($VM.Settings.LogFile)" -InformationAction Continue
+    return [RemovalOutcome]::Removed
 }

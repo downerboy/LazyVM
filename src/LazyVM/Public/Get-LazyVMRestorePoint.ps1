@@ -1,4 +1,4 @@
-﻿function Get-LazyVMRestorePoint {
+function Get-LazyVMRestorePoint {
     <#
     .SYNOPSIS
     Lists the tooling versions a VM can be returned to.
@@ -25,17 +25,9 @@
     )
 
     process {
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Restore points' -Name $Name
-            Get-ToolingRestorePoint
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'Listing the restore points failed' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
+        Invoke-CommandRun -Title 'Restore points' -Name $Name -FailureMessage 'Listing the restore points failed' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            Get-ToolingRestorePoint -VM $VM
         }
     }
 }

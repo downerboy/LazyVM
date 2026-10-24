@@ -118,7 +118,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="345" y="120">-NoUnattend  (optional)</text>
 </g>
 <g class="bx-mod"><rect x="335" y="163" width="305" height="161" rx="3"/>
-<text class="st" x="487.5" y="177" text-anchor="middle">«Configuration»</text>
+<text class="st" x="487.5" y="177" text-anchor="middle">«Settings»</text>
 <text class="nm" x="487.5" y="193" text-anchor="middle">Initialize-BuildTarget()</text>
 <line class="div" x1="335" y1="200" x2="640" y2="200"/>
 <g class="sn"><circle cx="351" cy="184" r="10"/><text x="351" y="188" text-anchor="middle">1</text></g>
@@ -155,12 +155,12 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="487.5" y="378" text-anchor="middle">Initialize-CommandRun()</text>
 <line class="div" x1="335" y1="385" x2="640" y2="385"/>
 <g class="sn"><circle cx="351" cy="369" r="10"/><text x="351" y="373" text-anchor="middle">2</text></g>
-<text class="at" x="345" y="400">loads the settings into $CFG</text>
+<text class="at" x="345" y="400">builds the VM context</text>
 <text class="at" x="345" y="417">and opens the log</text>
 </g>
 <g class="bx-store"><rect x="20" y="348" width="255" height="118" rx="3"/>
 <text class="st" x="147.5" y="362" text-anchor="middle">«settings»</text>
-<text class="nm" x="147.5" y="378" text-anchor="middle">$CFG sources</text>
+<text class="nm" x="147.5" y="378" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="385" x2="275" y2="385"/>
 <text class="at" x="30" y="400">HKLM:\SOFTWARE\LazyVM  Root</text>
 <text class="at" x="30" y="417">Config\LazyVM.Settings.json</text>
@@ -248,11 +248,11 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-mod"><rect x="335" y="1124" width="305" height="178" rx="3"/>
 <text class="st" x="487.5" y="1138" text-anchor="middle">«Host, called by Invoke-VMBuild»</text>
-<text class="nm" x="487.5" y="1154" text-anchor="middle">Confirm-InstallMedia()</text>
+<text class="nm" x="487.5" y="1154" text-anchor="middle">Initialize-InstallationIso()</text>
 <line class="div" x1="335" y1="1161" x2="640" y2="1161"/>
 <g class="sn"><circle cx="351" cy="1145" r="10"/><text x="351" y="1149" text-anchor="middle">8</text></g>
-<text class="at" x="345" y="1176">phase 4: Resolve-InstallationIso</text>
-<text class="at" x="345" y="1193">and Resolve-SqlServerIso</text>
+<text class="at" x="345" y="1176">phase 4: Initialize-InstallationIso</text>
+<text class="at" x="345" y="1193">and Initialize-SqlServerIso</text>
 </g>
 <g class="bx-store"><rect x="20" y="1124" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="1138" text-anchor="middle">«folder»</text>

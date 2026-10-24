@@ -1,11 +1,12 @@
 ﻿# Tooling.Tests.ps1
-# The tooling list: normalizing names, comparing lists, and carrying
-# AwaitingReinstall items across a rebuild. Nothing here touches Hyper-V or a guest.
+# The tooling list: its record classes, normalizing names, comparing lists,
+# and carrying AwaitingReinstall items across a rebuild. Nothing here touches Hyper-V or a guest.
 #
 # Most of these functions are internal to the module, so each test runs its
-# body with InModuleScope. Test data is built out here and passed in with
-# -Parameters, because functions defined in this file are not visible inside
-# the module's scope.
+# body with InModuleScope. Test data is built out here, as the dictionaries
+# and objects a tooling list is read from, and passed in with -Parameters;
+# inside, [ToolingRecord]::FromObject turns it into a record, because the
+# module's classes are only visible inside the module.
 
 BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
@@ -105,27 +106,29 @@ Describe 'Get-SetChange' {
     }
 }
 
-Describe 'Get-RecordField' {
-    It 'reads a field from a list built in memory' {
-        InModuleScope $module { Get-RecordField -Item ([ordered]@{ Name = 'Git' }) -Name 'Name' } | Should -Be 'Git'
+Describe 'RecordReader' {
+    It 'reads a field from <Case>' -ForEach @(
+        @{ Case = 'a list built in memory'; Item = [ordered]@{ Name = 'Git' } }
+        @{ Case = 'a list read back from disk'; Item = [pscustomobject]@{ Name = 'Git' } }
+    ) {
+        InModuleScope $module -Parameters @{ Item = $Item } {
+            param($Item)
+            [RecordReader]::Field($Item, 'Name')
+            [RecordReader]::Field($Item, 'Publisher') | Should -BeNullOrEmpty
+            [RecordReader]::Text($Item, 'Publisher') | Should -BeExactly ''
+            [RecordReader]::Field($null, 'Name') | Should -BeNullOrEmpty
+        } | Should -Be 'Git'
     }
 
-    It 'reads a field from a list read back from disk' {
-        InModuleScope $module { Get-RecordField -Item ([pscustomobject]@{ Name = 'Git' }) -Name 'Name' } | Should -Be 'Git'
-    }
-
-    It 'returns $null for a missing field in either form' {
-        InModuleScope $module { Get-RecordField -Item ([ordered]@{ Name = 'Git' }) -Name 'Publisher' } | Should -BeNullOrEmpty
-        InModuleScope $module { Get-RecordField -Item ([pscustomobject]@{ Name = 'Git' }) -Name 'Publisher' } | Should -BeNullOrEmpty
-    }
-
-    It 'returns $null for no item' {
-        InModuleScope $module { Get-RecordField -Item $null -Name 'Name' } | Should -BeNullOrEmpty
+    It 'reads a list of text, leaving out empty entries' {
+        InModuleScope $module {
+            [RecordReader]::Strings([pscustomobject]@{ Items = @('a', '', $null, 'b') }, 'Items')
+        } | Should -Be @('a', 'b')
     }
 }
 
-Describe 'Get-ProductExtensionIdentity' {
-    It 'uses the marketplace link where known, and name and id otherwise' {
+Describe 'ToolingProduct' {
+    It 'identifies extensions by Marketplace link where known, and by name and id otherwise' {
         $product = New-TestProduct -Extensions @('https://marketplace.visualstudio.com/items?itemName=pub.exported') -UserExtensions @(
             [ordered]@{ Id = 'linked-id'; DisplayName = 'Linked'; MarketplaceItem = 'pub.linked' }
             [ordered]@{ Id = 'local-id'; DisplayName = 'Local Only'; MarketplaceItem = '' }
@@ -133,7 +136,7 @@ Describe 'Get-ProductExtensionIdentity' {
 
         $identities = InModuleScope $module -Parameters @{ Product = $product } {
             param($Product)
-            @(Get-ProductExtensionIdentity -Product $Product)
+            [ToolingProduct]::FromObject($Product).ExtensionIdentities()
         }
 
         $identities | Should -Be @(
@@ -142,17 +145,54 @@ Describe 'Get-ProductExtensionIdentity' {
             'Local Only [local-id]'
         )
     }
+
+    It 'keys a product by its id and channel' {
+        $product = New-TestProduct
+
+        InModuleScope $module -Parameters @{ Product = $product } {
+            param($Product)
+            [ToolingProduct]::FromObject($Product).Key()
+        } | Should -Be 'Microsoft.VisualStudio.Product.Community|VisualStudio.18.Release'
+    }
+}
+
+Describe 'ToolingRecord' {
+    It 'reads back what it writes, unchanged' {
+        $product = New-TestProduct -Components @('A', 'B') -Extensions @('https://marketplace.visualstudio.com/items?itemName=pub.ext') -UserExtensions @(
+            [ordered]@{ Id = 'local-id'; DisplayName = 'Local Only'; Publisher = 'P'; MoreInfo = ''; MarketplaceItem = '' }
+            [ordered]@{ Id = 'new-id'; DisplayName = 'Not looked up'; Publisher = 'P'; MoreInfo = '' }
+        )
+        $record = New-TestRecord -Products @($product) -WingetIds @('Git.Git') -ProgramNames @('LINQPad 9') -AwaitingReinstall ([ordered]@{
+                Programs   = @([ordered]@{ Name = 'Old Tool'; Publisher = 'P' })
+                Extensions = @()
+            })
+
+        InModuleScope $module -Parameters @{ Record = $record } {
+            param($Record)
+            $json = [ToolingRecord]::FromObject($Record).ToJson()
+            $again = [ToolingRecord]::FromJson($json)
+
+            $again.ToJson() | Should -Be $json
+            @(Compare-ToolingRecord -Old ([ToolingRecord]::FromObject($Record)) -New $again) | Should -BeNullOrEmpty
+            # Not looked up ($null) is kept apart from no Marketplace match ('').
+            $again.Products[0].FindUserExtension('local-id').MarketplaceItem | Should -BeExactly ''
+            $again.Products[0].FindUserExtension('new-id').MarketplaceItem | Should -BeNullOrEmpty
+            $null -eq $again.Products[0].FindUserExtension('new-id').MarketplaceItem | Should -BeTrue
+        }
+    }
+
+    It 'refuses a list written by a newer LazyVM' {
+        {
+            InModuleScope $module { [ToolingRecord]::FromJson('{ "Version": 99 }') }
+        } | Should -Throw -ExpectedMessage '*version 99, newer than this LazyVM understands*'
+    }
+
+    It 'has nothing awaiting reinstall when the list never had any' {
+        InModuleScope $module { [ToolingRecord]::FromJson('{ "Version": 1 }').Awaiting().Count() } | Should -Be 0
+    }
 }
 
 Describe 'Test-ToolingExcluded' {
-    BeforeAll {
-        InModuleScope $module { $script:Settings['ToolingWingetExclude'] = @('Microsoft.VisualStudio.*', 'Microsoft.Edge') }
-    }
-
-    AfterAll {
-        InModuleScope $module { $script:Settings.Clear() }
-    }
-
     It "returns <Expected> for '<PackageId>'" -ForEach @(
         @{ PackageId = 'Microsoft.VisualStudio.2026.Community'; Expected = $true }
         @{ PackageId = 'Microsoft.Edge'; Expected = $true }
@@ -161,15 +201,13 @@ Describe 'Test-ToolingExcluded' {
     ) {
         InModuleScope $module -Parameters @{ PackageId = $PackageId } {
             param($PackageId)
-            Test-ToolingExcluded -PackageId $PackageId
+            Test-ToolingExcluded -PackageId $PackageId -Patterns @('Microsoft.VisualStudio.*', 'Microsoft.Edge')
         } | Should -Be $Expected
     }
 }
 
 Describe 'ConvertTo-ToolingRecord' {
     BeforeAll {
-        InModuleScope $module { $script:Settings['ToolingWingetExclude'] = @('Microsoft.VisualStudio.*') }
-
         # Shaped like Get-GuestToolingInventory's result, which arrives from
         # the guest as objects rather than dictionaries.
         $inventory = [pscustomobject]@{
@@ -201,12 +239,8 @@ Describe 'ConvertTo-ToolingRecord' {
 
         $record = InModuleScope $module -Parameters @{ Inventory = $inventory } {
             param($Inventory)
-            ConvertTo-ToolingRecord -Inventory $Inventory
+            ConvertTo-ToolingRecord -Inventory $Inventory -WingetExclude @('Microsoft.VisualStudio.*')
         }
-    }
-
-    AfterAll {
-        InModuleScope $module { $script:Settings.Clear() }
     }
 
     It 'leaves out excluded winget packages and sorts the rest by id' {
@@ -229,7 +263,7 @@ Describe 'ConvertTo-ToolingRecord' {
         $userExtensions = @($record.Products[0].UserExtensions)
 
         @($userExtensions | ForEach-Object { $_.Id }) | Should -Be @('a-ext', 'z-ext')
-        $userExtensions[0].Keys | Should -Not -Contain 'Version'
+        $userExtensions[0].ToDictionary().Keys | Should -Not -Contain 'Version'
     }
 }
 
@@ -240,7 +274,7 @@ Describe 'Compare-ToolingRecord' {
 
         $changes = InModuleScope $module -Parameters @{ Old = $old; New = $new } {
             param($Old, $New)
-            @(Compare-ToolingRecord -Old $Old -New $New)
+            @(Compare-ToolingRecord -Old ([ToolingRecord]::FromObject($Old)) -New ([ToolingRecord]::FromObject($New)))
         }
 
         $changes | Should -BeNullOrEmpty
@@ -258,7 +292,7 @@ Describe 'Compare-ToolingRecord' {
 
         $changes = InModuleScope $module -Parameters @{ Old = $fromDisk; New = $inMemory } {
             param($Old, $New)
-            @(Compare-ToolingRecord -Old $Old -New $New)
+            @(Compare-ToolingRecord -Old ([ToolingRecord]::FromObject($Old)) -New ([ToolingRecord]::FromObject($New)))
         }
 
         $changes | Should -BeNullOrEmpty
@@ -270,7 +304,7 @@ Describe 'Compare-ToolingRecord' {
 
         $changes = InModuleScope $module -Parameters @{ Old = $old; New = $new } {
             param($Old, $New)
-            @(Compare-ToolingRecord -Old $Old -New $New)
+            @(Compare-ToolingRecord -Old ([ToolingRecord]::FromObject($Old)) -New ([ToolingRecord]::FromObject($New)))
         }
 
         $changes | Should -Be @('+ product: New Product [New.Product, C1]', '- product: Old Product [Old.Product, C1]')
@@ -282,7 +316,7 @@ Describe 'Compare-ToolingRecord' {
 
         $changes = InModuleScope $module -Parameters @{ Old = $old; New = $new } {
             param($Old, $New)
-            @(Compare-ToolingRecord -Old $Old -New $New)
+            @(Compare-ToolingRecord -Old ([ToolingRecord]::FromObject($Old)) -New ([ToolingRecord]::FromObject($New)))
         }
 
         $changes.Count | Should -Be 2
@@ -294,7 +328,7 @@ Describe 'Compare-ToolingRecord' {
 
         $changes = InModuleScope $module -Parameters @{ Old = $old; New = $new } {
             param($Old, $New)
-            @(Compare-ToolingRecord -Old $Old -New $New)
+            @(Compare-ToolingRecord -Old ([ToolingRecord]::FromObject($Old)) -New ([ToolingRecord]::FromObject($New)))
         }
 
         $changes | Should -Be @('+ VS component: Added', '- VS component: Gone')
@@ -308,7 +342,7 @@ Describe 'Compare-ToolingRecord' {
 
         $changes = InModuleScope $module -Parameters @{ Old = $old; New = $new } {
             param($Old, $New)
-            @(Compare-ToolingRecord -Old $Old -New $New)
+            @(Compare-ToolingRecord -Old ([ToolingRecord]::FromObject($Old)) -New ([ToolingRecord]::FromObject($New)))
         }
 
         $changes | Should -BeNullOrEmpty
@@ -320,7 +354,7 @@ Describe 'Compare-ToolingRecord' {
 
         $changes = InModuleScope $module -Parameters @{ Old = $old; New = $new } {
             param($Old, $New)
-            @(Compare-ToolingRecord -Old $Old -New $New)
+            @(Compare-ToolingRecord -Old ([ToolingRecord]::FromObject($Old)) -New ([ToolingRecord]::FromObject($New)))
         }
 
         $changes | Should -Be @(
@@ -337,7 +371,7 @@ Describe 'Compare-ToolingRecord' {
 
         $changes = InModuleScope $module -Parameters @{ Old = $old; New = $new } {
             param($Old, $New)
-            @(Compare-ToolingRecord -Old $Old -New $New)
+            @(Compare-ToolingRecord -Old ([ToolingRecord]::FromObject($Old)) -New ([ToolingRecord]::FromObject($New)))
         }
 
         $changes | Should -Be @('- awaiting reinstall: program Old Tool')
@@ -356,9 +390,11 @@ Describe 'Merge-AwaitingReinstall' {
                 }))
         $record = New-TestRecord -ProgramNames @('LINQPad 9')
 
-        InModuleScope $module -Parameters @{ Record = $record; Previous = $previous } {
+        $record = InModuleScope $module -Parameters @{ Record = $record; Previous = $previous } {
             param($Record, $Previous)
-            Merge-AwaitingReinstall -Record $Record -Previous $Previous
+            $merged = [ToolingRecord]::FromObject($Record)
+            Merge-AwaitingReinstall -Record $merged -Previous ([ToolingRecord]::FromObject($Previous))
+            $merged
         }
 
         @($record.Programs | ForEach-Object { $_.Name }) | Should -Be @('LINQPad 9', 'Old Tool')
@@ -373,9 +409,11 @@ Describe 'Merge-AwaitingReinstall' {
                 }))
         $record = New-TestRecord -ProgramNames @('Old Tool')
 
-        InModuleScope $module -Parameters @{ Record = $record; Previous = $previous } {
+        $record = InModuleScope $module -Parameters @{ Record = $record; Previous = $previous } {
             param($Record, $Previous)
-            Merge-AwaitingReinstall -Record $Record -Previous $Previous
+            $merged = [ToolingRecord]::FromObject($Record)
+            Merge-AwaitingReinstall -Record $merged -Previous ([ToolingRecord]::FromObject($Previous))
+            $merged
         }
 
         @($record.Programs | ForEach-Object { $_.Name }) | Should -Be @('Old Tool')
@@ -390,9 +428,11 @@ Describe 'Merge-AwaitingReinstall' {
                 }))
         $record = New-TestRecord -Products @(New-TestProduct)
 
-        InModuleScope $module -Parameters @{ Record = $record; Previous = $previous } {
+        $record = InModuleScope $module -Parameters @{ Record = $record; Previous = $previous } {
             param($Record, $Previous)
-            Merge-AwaitingReinstall -Record $Record -Previous $Previous
+            $merged = [ToolingRecord]::FromObject($Record)
+            Merge-AwaitingReinstall -Record $merged -Previous ([ToolingRecord]::FromObject($Previous))
+            $merged
         }
 
         @($record.Products[0].UserExtensions | ForEach-Object { $_.Id }) | Should -Be @('local-id')
@@ -409,9 +449,11 @@ Describe 'Merge-AwaitingReinstall' {
                 [ordered]@{ Id = 'local-id'; DisplayName = 'Local Only'; Publisher = 'P'; MoreInfo = '' }
             ))
 
-        InModuleScope $module -Parameters @{ Record = $record; Previous = $previous } {
+        $record = InModuleScope $module -Parameters @{ Record = $record; Previous = $previous } {
             param($Record, $Previous)
-            Merge-AwaitingReinstall -Record $Record -Previous $Previous
+            $merged = [ToolingRecord]::FromObject($Record)
+            Merge-AwaitingReinstall -Record $merged -Previous ([ToolingRecord]::FromObject($Previous))
+            $merged
         }
 
         @($record.Products[0].UserExtensions).Count | Should -Be 1
@@ -421,9 +463,11 @@ Describe 'Merge-AwaitingReinstall' {
     It 'records an empty awaiting list when there is no previous list' {
         $record = New-TestRecord -ProgramNames @('LINQPad 9')
 
-        InModuleScope $module -Parameters @{ Record = $record } {
+        $record = InModuleScope $module -Parameters @{ Record = $record } {
             param($Record)
-            Merge-AwaitingReinstall -Record $Record -Previous $null
+            $merged = [ToolingRecord]::FromObject($Record)
+            Merge-AwaitingReinstall -Record $merged -Previous $null
+            $merged
         }
 
         $record.AwaitingReinstall.Programs | Should -BeNullOrEmpty

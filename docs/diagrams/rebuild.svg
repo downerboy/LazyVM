@@ -126,12 +126,12 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="487.5" y="193" text-anchor="middle">Initialize-CommandRun()</text>
 <line class="div" x1="335" y1="200" x2="640" y2="200"/>
 <g class="sn"><circle cx="351" cy="184" r="10"/><text x="351" y="188" text-anchor="middle">1</text></g>
-<text class="at" x="345" y="215">loads the settings into $CFG</text>
+<text class="at" x="345" y="215">builds the VM context</text>
 <text class="at" x="345" y="232">and opens the log</text>
 </g>
 <g class="bx-store"><rect x="20" y="163" width="255" height="118" rx="3"/>
 <text class="st" x="147.5" y="177" text-anchor="middle">«settings»</text>
-<text class="nm" x="147.5" y="193" text-anchor="middle">$CFG sources</text>
+<text class="nm" x="147.5" y="193" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="200" x2="275" y2="200"/>
 <text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
 <text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>
@@ -223,11 +223,11 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-mod"><rect x="335" y="882" width="305" height="178" rx="3"/>
 <text class="st" x="487.5" y="896" text-anchor="middle">«Host, called by Invoke-Rebuild»</text>
-<text class="nm" x="487.5" y="912" text-anchor="middle">Confirm-InstallMedia()</text>
+<text class="nm" x="487.5" y="912" text-anchor="middle">Initialize-InstallationIso()</text>
 <line class="div" x1="335" y1="919" x2="640" y2="919"/>
 <g class="sn"><circle cx="351" cy="903" r="10"/><text x="351" y="907" text-anchor="middle">6</text></g>
-<text class="at" x="345" y="934">phase 4: Resolve-InstallationIso</text>
-<text class="at" x="345" y="951">and Resolve-SqlServerIso</text>
+<text class="at" x="345" y="934">phase 4: Initialize-InstallationIso</text>
+<text class="at" x="345" y="951">and Initialize-SqlServerIso</text>
 </g>
 <g class="bx-store"><rect x="20" y="882" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="896" text-anchor="middle">«folder»</text>

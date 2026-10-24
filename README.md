@@ -35,7 +35,7 @@ What it needs
 
 - **Builds a VM with no input from you.** It creates the VM, installs Windows from an answer file, then installs everything in the VM's tooling list: Visual Studio and SSMS with their workloads and Marketplace extensions, SQL Server, and winget packages.
 - **Keeps the VM's tooling list current.** Every day it records what you have added or removed in the VM, taking a Hyper-V checkpoint first, so any recorded version can be returned to.
-- **Makes the 90-day evaluation a non-event.** It watches the licence and rearms Windows while it can. When it can't, it captures your state, rebuilds the VM and puts everything back: databases, logins, Visual Studio settings, certificates, environment and application settings.
+- **Makes the 90-day evaluation a non-event.** It watches the license and rearms Windows while it can. When it can't, it captures your state, rebuilds the VM and puts everything back: databases, logins, Visual Studio settings, certificates, environment and application settings.
 - **Keeps your source safe across rebuilds.** Source lives on a Dev Drive whose disk a rebuild never touches.
 - **Runs several VMs on one host**, each with its own tools, disks, schedule and restore points.
 - **Never stops over a typo.** If a settings file breaks, the scheduled maintenance uses the last version that worked and says so in the log.
@@ -152,6 +152,6 @@ build/                             the steps both use
 
 `./Invoke-AnalyzerAndTest.ps1` assembles the module into `out\`, runs PSScriptAnalyzer (any finding fails) and runs the Pester tests. GitHub Actions runs the same on Windows for every push.
 
-## Licence
+## License
 
-LazyVM is free for personal and other noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Using it for a commercial purpose needs a separate commercial licence; contact the author through GitHub.
+LazyVM is free for personal and other noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Using it for a commercial purpose needs a separate commercial license; contact the author through GitHub.

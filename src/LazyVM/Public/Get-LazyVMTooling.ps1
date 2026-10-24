@@ -1,4 +1,4 @@
-﻿function Get-LazyVMTooling {
+function Get-LazyVMTooling {
     <#
     .SYNOPSIS
     Shows what is installed in a VM, and what the next maintenance run would record.
@@ -37,17 +37,9 @@
     )
 
     process {
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Tooling inventory' -Name $Name
-            Get-GuestToolingReport
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'The tooling inventory failed' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
+        Invoke-CommandRun -Title 'Tooling inventory' -Name $Name -FailureMessage 'The tooling inventory failed' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            Get-GuestToolingReport -VM $VM
         }
     }
 }

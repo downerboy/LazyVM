@@ -19,109 +19,86 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 function Get-GuestToolingInventory {
-    $inventory = Invoke-GuestScript -Activity 'tooling inventory' -TimeoutMinutes 30 `
-        -ArgumentList @($CFG.GuestSetupDir, @($CFG.ToolingWingetCheck)) -ScriptBlock {
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    return Invoke-GuestScript -VM $VM -Activity 'tooling inventory' -TimeoutMinutes 30 `
+        -ArgumentList @($VM.Settings.GuestSetupDir, @($VM.Settings.ToolingWingetCheck)) -ScriptBlock {
         param($setupDir, $wingetCheck)
         $ErrorActionPreference = 'Stop'
-        if (-not (Test-Path $setupDir)) { New-Item -ItemType Directory -Path $setupDir -Force | Out-Null }
+        New-GuestFolder -Path $setupDir
 
         $notes = [System.Collections.Generic.List[string]]::new()
 
         # ── products managed by the Visual Studio Installer ────────────────
         $products = @()
-        $installerDir = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
-        $vswhere = Join-Path $installerDir 'vswhere.exe'
-        $vsInstaller = Join-Path $installerDir 'vs_installer.exe'
-
-        if (Test-Path $vswhere) {
-            $raw = & $vswhere -all -prerelease -products * -format json -utf8 2>$null
-            # Windows PowerShell 5.1 hands a JSON array down the pipeline as ONE
-            # object, so @(... | ConvertFrom-Json) would be a one-item list whose
-            # item is the whole array. Enumerating it with foreach splits it.
-            $instances = @()
-            if ($raw) {
-                $parsed = ($raw -join "`n") | ConvertFrom-Json
-                foreach ($item in $parsed) { $instances += $item }
+        $vsInstaller = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vs_installer.exe'
+        $instances = @(Get-GuestInstallerInstance)
+        if ($instances.Count -eq 0) { $notes.Add('no Visual Studio Installer products are installed') }
+        foreach ($instance in $instances) {
+            $product = [ordered]@{
+                InstanceId     = $instance.instanceId
+                ProductId      = $instance.productId
+                ChannelId      = $instance.channelId
+                DisplayName    = $instance.displayName
+                Version        = $instance.installationVersion
+                ProductLine    = $instance.catalog.productLineVersion
+                InstallPath    = $instance.installationPath
+                IsComplete     = $instance.isComplete
+                Components     = @()
+                ExportedExtensions = @()
+                UserExtensions = @()
             }
 
-            foreach ($instance in $instances) {
-                $product = [ordered]@{
-                    InstanceId     = $instance.instanceId
-                    ProductId      = $instance.productId
-                    ChannelId      = $instance.channelId
-                    DisplayName    = $instance.displayName
-                    Version        = $instance.installationVersion
-                    ProductLine    = $instance.catalog.productLineVersion
-                    InstallPath    = $instance.installationPath
-                    IsComplete     = $instance.isComplete
-                    Components     = @()
-                    ExportedExtensions = @()
-                    UserExtensions = @()
-                }
-
-                # Workloads, components and instance-wide marketplace extensions,
-                # as the installer itself would reproduce them.
-                if (Test-Path $vsInstaller) {
-                    $configPath = Join-Path $setupDir "inventory-$($instance.instanceId).vsconfig"
+            # Workloads, components and instance-wide marketplace extensions,
+            # as the installer itself would reproduce them.
+            if (Test-Path $vsInstaller) {
+                $configPath = Join-Path $setupDir "inventory-$($instance.instanceId).vsconfig"
+                Remove-Item $configPath -Force -ErrorAction SilentlyContinue
+                $proc = Start-Process -FilePath $vsInstaller -Wait -PassThru -NoNewWindow -ArgumentList @(
+                    'export', '--installPath', "`"$($instance.installationPath)`"", '--config', "`"$configPath`"", '--quiet'
+                )
+                if (Test-Path $configPath) {
+                    try {
+                        $config = Get-Content $configPath -Raw | ConvertFrom-Json
+                        $product.Components = @($config.components)
+                        if ($config.PSObject.Properties['extensions']) { $product.ExportedExtensions = @($config.extensions) }
+                    }
+                    catch { $notes.Add("could not read the exported configuration for $($instance.displayName): $($_.Exception.Message)") }
                     Remove-Item $configPath -Force -ErrorAction SilentlyContinue
-                    $proc = Start-Process -FilePath $vsInstaller -Wait -PassThru -NoNewWindow -ArgumentList @(
-                        'export', '--installPath', "`"$($instance.installationPath)`"", '--config', "`"$configPath`"", '--quiet'
-                    )
-                    if (Test-Path $configPath) {
-                        try {
-                            $config = Get-Content $configPath -Raw | ConvertFrom-Json
-                            $product.Components = @($config.components)
-                            if ($config.PSObject.Properties['extensions']) { $product.ExportedExtensions = @($config.extensions) }
-                        }
-                        catch { $notes.Add("could not read the exported configuration for $($instance.displayName): $($_.Exception.Message)") }
-                        Remove-Item $configPath -Force -ErrorAction SilentlyContinue
-                    }
-                    else { $notes.Add("export produced no configuration for $($instance.displayName) (exit $($proc.ExitCode))") }
                 }
-
-                # Per-user extensions live in a folder named <version>_<instanceId>,
-                # which ties each one to its product instance.
-                $userRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\VisualStudio'
-                $instanceDirs = @(Get-ChildItem -Path $userRoot -Directory -ErrorAction SilentlyContinue |
-                        Where-Object { $_.Name -like "*_$($instance.instanceId)" })
-                foreach ($dir in $instanceDirs) {
-                    $extensionsDir = Join-Path $dir.FullName 'Extensions'
-                    foreach ($manifestFile in @(Get-ChildItem -Path $extensionsDir -Filter 'extension.vsixmanifest' -Recurse -File -ErrorAction SilentlyContinue)) {
-                        try {
-                            [xml]$manifest = Get-Content -Path $manifestFile.FullName -Raw
-                            $metadata = $manifest.PackageManifest.Metadata
-                            if (-not $metadata -or -not $metadata.Identity) { continue }
-                            $product.UserExtensions += [ordered]@{
-                                Id          = $metadata.Identity.Id
-                                Version     = $metadata.Identity.Version
-                                Publisher   = $metadata.Identity.Publisher
-                                DisplayName = "$($metadata.DisplayName)"
-                                MoreInfo    = "$($metadata.MoreInfo)"
-                                Folder      = $manifestFile.Directory.FullName.Substring($extensionsDir.Length).TrimStart('\')
-                            }
-                        }
-                        catch { $notes.Add("could not read $($manifestFile.FullName): $($_.Exception.Message)") }
-                    }
-                }
-
-                $products += $product
+                else { $notes.Add("export produced no configuration for $($instance.displayName) (exit $($proc.ExitCode))") }
             }
+
+            # Per-user extensions live in a folder named <version>_<instanceId>,
+            # which ties each one to its product instance.
+            $userRoot = Join-Path $env:LOCALAPPDATA 'Microsoft\VisualStudio'
+            $instanceDirs = @(Get-ChildItem -Path $userRoot -Directory -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -like "*_$($instance.instanceId)" })
+            foreach ($dir in $instanceDirs) {
+                $extensionsDir = Join-Path $dir.FullName 'Extensions'
+                foreach ($manifestFile in @(Get-ChildItem -Path $extensionsDir -Filter 'extension.vsixmanifest' -Recurse -File -ErrorAction SilentlyContinue)) {
+                    try {
+                        [xml]$manifest = Get-Content -Path $manifestFile.FullName -Raw
+                        $metadata = $manifest.PackageManifest.Metadata
+                        if (-not $metadata -or -not $metadata.Identity) { continue }
+                        $product.UserExtensions += [ordered]@{
+                            Id          = $metadata.Identity.Id
+                            Version     = $metadata.Identity.Version
+                            Publisher   = $metadata.Identity.Publisher
+                            DisplayName = "$($metadata.DisplayName)"
+                            MoreInfo    = "$($metadata.MoreInfo)"
+                            Folder      = $manifestFile.Directory.FullName.Substring($extensionsDir.Length).TrimStart('\')
+                        }
+                    }
+                    catch { $notes.Add("could not read $($manifestFile.FullName): $($_.Exception.Message)") }
+                }
+            }
+
+            $products += $product
         }
-        else { $notes.Add('vswhere.exe not found: no Visual Studio Installer products are installed') }
 
         # ── winget packages ─────────────────────────────────────────────────
-        $winget = $null
-        $cmd = Get-Command winget -ErrorAction SilentlyContinue
-        if ($cmd) { $winget = $cmd.Source }
-        else {
-            $candidate = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe'
-            if (Test-Path $candidate) { $winget = $candidate }
-            else {
-                $found = @(Get-ChildItem -Path "$env:ProgramFiles\WindowsApps" -Filter 'winget.exe' -Recurse -ErrorAction SilentlyContinue |
-                        Sort-Object LastWriteTime -Descending)
-                if ($found.Count -gt 0) { $winget = $found[0].FullName }
-            }
-        }
+        $winget = Find-GuestWinget
 
         $wingetPackages = @()
         if ($winget) {
@@ -195,8 +172,6 @@ function Get-GuestToolingInventory {
             Notes          = @($notes)
         }
     }
-
-    return $inventory
 }
 
 function Get-GuestToolingReport {
@@ -205,23 +180,24 @@ function Get-GuestToolingReport {
       next maintenance run would record. Saves the raw inventory on the host.
       Read-only in the guest; nothing is recorded.
     #>
-    Open-GuestSession -Purpose 'take the inventory' | Out-Null
+    param([Parameter(Mandatory)][VMContext]$VM)
 
-    $inventory = Get-GuestToolingInventory
+    $null = Open-GuestSession -VM $VM -Purpose 'take the inventory'
+    $inventory = Get-GuestToolingInventory -VM $VM
 
-    $toolingDir = Join-Path $CFG.StateDir 'tooling'
+    $toolingDir = Join-Path $VM.Settings.StateDir 'tooling'
     $path = Join-Path $toolingDir ('inventory-{0}.json' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
     Write-TextFileAtomic -Path $path -Text (ConvertTo-Json -InputObject $inventory -Depth 8)
 
-    $recorded = Read-ToolingRecord -Path (Get-ToolingPath).Record
-    $observed = ConvertTo-ToolingRecord -Inventory $inventory
+    $recorded = Read-ToolingRecord -Path (Get-ToolingPath -VM $VM).Record
+    $observed = ConvertTo-ToolingRecord -Inventory $inventory -WingetExclude $VM.Settings.ToolingWingetExclude
     Add-MarketplaceItem -Record $observed -Previous $recorded
 
     # Per-user extensions a rebuild cannot reinstall from the marketplace.
     $unmatched = @(
         foreach ($product in @($observed.Products)) {
             foreach ($extension in @($product.UserExtensions)) {
-                if (-not (Get-RecordField -Item $extension -Name 'MarketplaceItem')) {
+                if (-not $extension.MarketplaceItem) {
                     "$($extension.DisplayName) [$($extension.Id)] in $($product.DisplayName)"
                 }
             }
@@ -239,7 +215,7 @@ function Get-GuestToolingReport {
 
     return [pscustomobject]@{
         PSTypeName          = 'LazyVM.Tooling'
-        Name                = $CFG.VMName
+        Name                = $VM.Name
         Products            = @($observed.Products)
         WingetPackages      = @($observed.WingetPackages)
         Programs            = @($observed.Programs)

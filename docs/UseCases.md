@@ -32,7 +32,7 @@ Actors: Host user, Administrator (a Host user), Task Scheduler running as SYSTEM
 
 - Host user: List VMs (`Get-LazyVM`), View settings (`Get-LazyVMSetting`), Create a VM profile (`New-LazyVM`).
 - Administrator, also:
-  - Look up: Check the licence (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`).
+  - Look up: Check the license (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`).
   - Set up: Choose the LazyVM folder (`Set-LazyVMRoot`), Store the guest account (`Set-LazyVMCredential`).
   - Build and maintain: Build a VM (`Build-LazyVM`), Schedule daily maintenance (`Register-LazyVMMaintenance`), Run daily maintenance (`Invoke-LazyVMMaintenance`), Rebuild the VM (`Invoke-LazyVMRebuild`).
   - Tooling: View installed tooling (`Get-LazyVMTooling`), Record tooling changes (`Save-LazyVMTooling`), List tooling restore points (`Get-LazyVMRestorePoint`), Return to a tooling version (`Restore-LazyVMTooling`).
@@ -71,7 +71,7 @@ Run daily maintenance includes, every day:
 
 - Extend C: to the whole disk. It takes a checkpoint first and moves the recovery partition to the end of the disk, so it works with BitLocker on.
 - Record tooling changes. Extended by **Take a tooling checkpoint** when the tooling changed.
-- Check the evaluation licence.
+- Check the evaluation license.
 
 It is extended by:
 
@@ -126,10 +126,10 @@ Actor: Administrator. Systems: Guest Windows, Hyper-V.
 
 ![Set up use cases](use-cases/07-setup.svg)
 
-Actors: Host user, Administrator. System: Task Scheduler.
+Actors: Host user, Administrator.
 
 - Create a VM profile (`New-LazyVM`), by any Host user. Extended by **Copy another VM's settings and tooling** with `-From`.
-- Choose the LazyVM folder (`Set-LazyVMRoot`). Extended by **Import LazyVM 1.x settings** when a 1.x kit is in the folder, and by **Move 1.x maintenance tasks** when a 1.x task is still registered.
+- Choose the LazyVM folder (`Set-LazyVMRoot`).
 - Store the guest account (`Set-LazyVMCredential`). Extended by **Generate a password** when the password is left empty.
 
 ## 8. Look up and remove
@@ -140,7 +140,7 @@ Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Window
 
 - List VMs (`Get-LazyVM`) and View settings (`Get-LazyVMSetting`), by any Host user. List VMs reads VM state from Hyper-V and the task from Task Scheduler.
 - View the guest account (`Get-LazyVMCredential`).
-- Check the licence (`Get-LazyVMLicense`) reads the licence inside the guest. Extended by **Start the VM** when the VM is off.
+- Check the license (`Get-LazyVMLicense`) reads the license inside the guest. Extended by **Start the VM** when the VM is off.
 - Remove a VM (`Remove-LazyVM`) includes **List what will be deleted and kept**, then deletes the VM, its tasks, its registry key, its disks (Dev Drive included), checkpoints, state, profile and log. Anything another VM also uses is kept. It asks first unless `-Force`; `-WhatIf` only lists.
 
 ## 9. Install the module

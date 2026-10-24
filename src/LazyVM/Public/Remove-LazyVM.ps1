@@ -1,4 +1,4 @@
-﻿function Remove-LazyVM {
+function Remove-LazyVM {
     <#
     .SYNOPSIS
     Deletes a VM and everything LazyVM created for it.
@@ -43,33 +43,20 @@
     )
 
     process {
-        if ($Force -and -not $PSBoundParameters.ContainsKey('Confirm')) {
-            $ConfirmPreference = 'None'
-        }
-
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Remove' -Name $Name
-
-            $context = Get-VMRemovalContext -ScriptDir $MyInvocation.MyCommand.Module.ModuleBase
+        Set-ForceConfirmation -Force:$Force -BoundParameters $PSBoundParameters
+        $moduleDir = $MyInvocation.MyCommand.Module.ModuleBase
+        Invoke-CommandRun -Title 'Remove' -Name $Name -FailureMessage 'Remove stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            $context = Get-VMRemovalContext -VM $VM -ScriptDir $moduleDir
             if (-not $context) { return }
 
-            if (-not $PSCmdlet.ShouldProcess($CFG.VMName, 'Delete the VM and everything listed above, which cannot be undone')) {
+            if (-not $PSCmdlet.ShouldProcess($VM.Name, 'Delete the VM and everything listed above, which cannot be undone')) {
                 Write-LogEntry 'Removal cancelled - nothing has been changed.' 'INFO'
                 return
             }
-
-            $outcome = Invoke-VMRemoval -Context $context
-            if ($outcome -eq 'incomplete') {
-                throw "'$($CFG.VMName)' was only partly removed. The log lists what is left: $($CFG.LogFile)"
+            if ((Invoke-VMRemoval -VM $VM -Context $context) -eq [RemovalOutcome]::Incomplete) {
+                throw "'$($VM.Name)' was only partly removed. The log lists what is left: $($VM.Settings.LogFile)"
             }
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'Remove stopped' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿function Invoke-LazyVMMaintenance {
+function Invoke-LazyVMMaintenance {
     <#
     .SYNOPSIS
     Runs a VM's daily maintenance: the scheduled task's command.
@@ -33,46 +33,37 @@
     )
 
     process {
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Maintenance' -Name $Name
-
-            $action = @(Invoke-Maintenance)[-1]
-            switch ($action) {
-                'none' {
+        Invoke-CommandRun -Title 'Maintenance' -Name $Name -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            $step = [MaintenanceStep]@(Invoke-Maintenance -VM $VM)[-1]
+            switch ($step) {
+                ([MaintenanceStep]::None) {
                     Write-LogEntry 'Maintenance complete - nothing needed' 'OK'
                     return 'None'
                 }
-                'rearmed' {
+                ([MaintenanceStep]::Rearmed) {
                     Write-LogEntry 'Maintenance complete - evaluation rearmed, no rebuild needed' 'OK'
                     return 'Rearmed'
                 }
-                'rebuild' {
+                ([MaintenanceStep]::Rebuild) {
                     Write-LogEntry 'Maintenance is escalating to a full rebuild' 'WARN'
                     # The capture already ran inside Invoke-Maintenance.
-                    if (@(Invoke-Rebuild -SkipCapture)[-1] -ne $true) {
-                        throw "The rebuild of '$($CFG.VMName)' did not complete cleanly. The log says what happened and how to go back: $($CFG.LogFile)"
+                    if (@(Invoke-Rebuild -VM $VM -SkipCapture)[-1] -ne $true) {
+                        throw "The rebuild of '$($VM.Name)' did not complete cleanly. The log says what happened and how to go back: $($VM.Settings.LogFile)"
                     }
                     return 'Rebuilt'
                 }
-                'build' {
+                ([MaintenanceStep]::Build) {
                     Write-LogEntry 'Maintenance found no VM - building one' 'INFO'
-                    if (@(Invoke-Rebuild)[-1] -ne $true) {
-                        throw "Building '$($CFG.VMName)' did not complete cleanly. The log says what happened: $($CFG.LogFile)"
+                    if (@(Invoke-Rebuild -VM $VM)[-1] -ne $true) {
+                        throw "Building '$($VM.Name)' did not complete cleanly. The log says what happened: $($VM.Settings.LogFile)"
                     }
                     return 'Built'
                 }
                 default {
-                    throw "Maintenance of '$($CFG.VMName)' could not run. The log says why: $($CFG.LogFile)"
+                    throw "Maintenance of '$($VM.Name)' could not run. The log says why: $($VM.Settings.LogFile)"
                 }
             }
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'Maintenance stopped' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
         }
     }
 }

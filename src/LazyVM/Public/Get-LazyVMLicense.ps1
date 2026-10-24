@@ -1,10 +1,10 @@
-﻿function Get-LazyVMLicense {
+function Get-LazyVMLicense {
     <#
     .SYNOPSIS
     Shows how long a VM's Windows evaluation has left.
 
     .DESCRIPTION
-    Reads the Windows 11 Enterprise evaluation licence from inside the VM:
+    Reads the Windows 11 Enterprise evaluation license from inside the VM:
     days left, rearms left, and what the daily maintenance will do about it.
     Each rearm gives another 90 days for the price of a restart; only when
     none are left does maintenance rebuild the VM. Also shows when the VM's
@@ -29,17 +29,9 @@
     )
 
     process {
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Licence' -Name $Name
-            Get-LicenseReport
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'Reading the licence failed' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
+        Invoke-CommandRun -Title 'License' -Name $Name -FailureMessage 'Reading the license failed' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            Get-LicenseReport -VM $VM
         }
     }
 }

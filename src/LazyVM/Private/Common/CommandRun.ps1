@@ -21,44 +21,95 @@ function Test-Unattended {
 function Initialize-CommandRun {
     <#
       The start of every command that works on a VM: reads its settings,
-      opens its log, writes the run's header and any settings warnings, and
+      starts its log, writes the run's header and any settings warnings, and
       adopts the guest account name from the credential store. Returns the
-      configuration (see Read-VMSetting).
+      VM's context.
     #>
+    [OutputType([VMContext])]
     param(
         [Parameter(Mandatory)][string]$Title,
         [string]$Name
     )
 
-    $configuration = Import-LazyVMConfiguration -VMName $Name -Unattended:(Test-Unattended)
+    $root = Resolve-LazyVMRoot
+    Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $root.Path)
+    $configuration = Read-VMSetting -Root $root.Path -VMName $Name -Unattended:(Test-Unattended)
+    $vm = [VMContext]::new($configuration.Settings)
 
-    Initialize-Log
-    Write-LogEntry '========================================================' 'INFO'
-    Write-LogEntry "  LazyVM - $Title"                                        'INFO'
-    Write-LogEntry "  Started : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"    'INFO'
-    Write-LogEntry "  Host    : $env:COMPUTERNAME"                           'INFO'
-    Write-LogEntry "  User    : $env:USERDOMAIN\$env:USERNAME"               'INFO'
-    Write-LogEntry "  Module  : $($MyInvocation.MyCommand.Module.Version) on PowerShell $($PSVersionTable.PSVersion)" 'INFO'
-    Write-LogEntry "  VM      : $($configuration.VMName) ($($configuration.ProfilePath))" 'INFO'
-    Write-LogEntry "  Root    : $($configuration.Root) (from $($configuration.RootSource))" 'INFO'
+    Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
     $changed = @($configuration.ChangedKeys) + @($configuration.ProfileKeys | ForEach-Object { "$_ (VM)" })
+    $rule = '========================================================'
+    Write-LogEntry $rule 'INFO'
+    Write-LogEntry "  LazyVM - $Title" 'INFO'
+    Write-LogEntry "  Started : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" 'INFO'
+    Write-LogEntry "  Host    : $env:COMPUTERNAME" 'INFO'
+    Write-LogEntry "  User    : $env:USERDOMAIN\$env:USERNAME" 'INFO'
+    Write-LogEntry "  Module  : $($MyInvocation.MyCommand.Module.Version) on PowerShell $($PSVersionTable.PSVersion)" 'INFO'
+    Write-LogEntry "  VM      : $($vm.Name) ($($configuration.ProfilePath))" 'INFO'
+    Write-LogEntry "  Root    : $($root.Path) (from $($root.Source))" 'INFO'
     Write-LogEntry "  Changed : $(if ($changed.Count -gt 0) { $changed -join ', ' } else { 'nothing - all defaults' })" 'INFO'
-    Write-LogEntry '========================================================' 'INFO'
+    Write-LogEntry $rule 'INFO'
     foreach ($warning in $configuration.Warnings) { Write-LogEntry $warning 'WARN' }
 
-    Sync-GuestUserFromStore
-    return $configuration
+    Sync-GuestUserFromStore -VM $vm
+    return $vm
 }
 
 function Complete-CommandRun {
+    <# The end of every command that works on a VM, however it ended: closes the guest session and the log. #>
+    param([AllowNull()][VMContext]$VM)
+
+    if ($VM) { Remove-GuestSession -VM $VM }
+    Stop-Log
+}
+
+function Invoke-CommandRun {
     <#
-      The end of every command that works on a VM, however it ended. Nothing
-      of this VM's run is left behind for the next command in the session,
-      which may be for another VM.
+      Runs a public command's work: checks for an elevated session, starts
+      the run for the VM and passes its context to $ScriptBlock, logs a
+      failure before reporting it as the command's error, and always cleans
+      up. The script block's output is the command's output.
+
+      Deliberately a simple function: an advanced one would have its own
+      $PSCmdlet, hiding the command's from the script block, which needs it
+      for ShouldProcess.
     #>
-    Disconnect-Guest
-    $script:Settings.Clear()
-    $script:LogReady = $false
+    param(
+        [string]$Title,
+        [string]$Name,
+        [string]$FailureMessage,
+        [System.Management.Automation.PSCmdlet]$Cmdlet,
+        [scriptblock]$ScriptBlock
+    )
+
+    Assert-Administrator
+    $context = $null
+    try {
+        $context = Initialize-CommandRun -Title $Title -Name $Name
+        & $ScriptBlock $context
+    }
+    catch {
+        if (Test-LogStarted) { Write-LogError $FailureMessage $_ }
+        $Cmdlet.ThrowTerminatingError($_)
+    }
+    finally {
+        Complete-CommandRun -VM $context
+    }
+}
+
+function Set-ForceConfirmation {
+    <#
+      Makes -Force skip the confirmation in the calling command, unless
+      -Confirm was given as well. Sets the caller's own $ConfirmPreference.
+    #>
+    param(
+        [switch]$Force,
+        [Parameter(Mandatory)][hashtable]$BoundParameters
+    )
+
+    if ($Force -and -not $BoundParameters.ContainsKey('Confirm')) {
+        Set-Variable -Name ConfirmPreference -Value 'None' -Scope 1
+    }
 }
 
 function Get-ModuleImportCommand {
@@ -68,8 +119,7 @@ function Get-ModuleImportCommand {
       automatically; otherwise by the path it was loaded from.
     #>
     $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
-    $searchPaths = @($env:PSModulePath -split [IO.Path]::PathSeparator | Where-Object { $_ })
-    foreach ($searchPath in $searchPaths) {
+    foreach ($searchPath in @($env:PSModulePath -split [IO.Path]::PathSeparator | Where-Object { $_ })) {
         $folder = $searchPath.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
         if ($moduleBase.StartsWith($folder, [StringComparison]::OrdinalIgnoreCase)) {
             return "Import-Module -Name 'LazyVM'"
