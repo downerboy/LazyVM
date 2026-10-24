@@ -56,7 +56,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="487.5" y="48" text-anchor="middle">«script»</text>
 <text class="nm" x="487.5" y="64" text-anchor="middle">./build.ps1 -Task Install</text>
 <line class="div" x1="335" y1="71" x2="640" y2="71"/>
-<text class="at" x="345" y="86">-Bootstrap  (first time)</text>
+<text class="at" x="345" y="86">installs the pinned tools if missing</text>
 <text class="at" x="345" y="103">in the repo folder</text>
 <text class="at" x="345" y="120">PowerShell 7, as administrator</text>
 </g>
@@ -87,8 +87,8 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="487.5" y="318" text-anchor="middle">Import-BuildTool()</text>
 <line class="div" x1="335" y1="325" x2="640" y2="325"/>
 <g class="sn"><circle cx="351" cy="309" r="10"/><text x="351" y="313" text-anchor="middle">2</text></g>
-<text class="at" x="345" y="340">missing and no -Bootstrap:</text>
-<text class="at" x="345" y="357">stops with a message</text>
+<text class="at" x="345" y="340">missing: installs the pinned</text>
+<text class="at" x="345" y="357">version, others left alone</text>
 </g>
 <g class="bx-store"><rect x="20" y="288" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="302" text-anchor="middle">«web»</text>

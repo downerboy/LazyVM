@@ -149,7 +149,7 @@ Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Window
 
 Actor: Administrator. System: PowerShell Gallery. These are the repository's scripts, not module commands.
 
-- Install from the repository (`./build.ps1 -Task Install`) includes **Build the module**, **Analyze with PSScriptAnalyzer** and **Run the Pester tests**, and installs only if they pass. Extended by **Install the build tools** with `-Bootstrap` when Pester or PSScriptAnalyzer is missing.
+- Install from the repository (`./build.ps1 -Task Install`) includes **Build the module**, **Analyze with PSScriptAnalyzer** and **Run the Pester tests**, and installs only if they pass. Extended by **Install the build tools** when the pinned Pester or PSScriptAnalyzer is missing.
 - Install from a release (`.\LazyVM\Install.ps1`) copies the module from the release zip and unblocks it.
 
 ## Changing the diagrams

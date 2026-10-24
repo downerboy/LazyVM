@@ -22,7 +22,7 @@ Admin --> RelInstall
 RepoInstall ..> Build : <<include>>
 RepoInstall ..> Analyze : <<include>>
 RepoInstall ..> Test : <<include>>
-Tools ..> RepoInstall : <<extend>>\n[-Bootstrap and\ntools missing]
+Tools ..> RepoInstall : <<extend>>\n[pinned tools\nmissing]
 Tools --> Gallery
 
 @enduml
