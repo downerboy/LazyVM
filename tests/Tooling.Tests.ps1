@@ -481,7 +481,7 @@ Describe 'The copy of the tooling list a VM is built from (#71)' {
         $profileDir = Join-Path -Path $TestDrive -ChildPath 'LazyVM\Alpha\Config'
         $settings = @{ VMName = 'Alpha'; ProfileDir = $profileDir; ToolingWingetExclude = @(); ToolingHistoryDays = 30 }
         $templatePath = Join-Path -Path $profileDir -ChildPath 'Tooling.Template.json'
-        $buildList = New-TestRecord -WingetIds @('Git.Git') -ProgramNames @('Git')
+        $buildList = New-TestRecord -Products @(New-TestProduct) -WingetIds @('Git.Git') -ProgramNames @('Git')
     }
 
     It 'is kept as Config\Tooling.Template.json, written as Tooling.json is written' {
@@ -510,8 +510,16 @@ Describe 'The copy of the tooling list a VM is built from (#71)' {
 
     It 'is left untouched when maintenance records a tooling change' {
         Mock -ModuleName $module Get-GuestToolingInventory {
+            # The product New-TestProduct describes, as the guest reports it.
             [pscustomobject]@{
-                Products       = @()
+                Products       = @([pscustomobject]@{
+                        ProductId          = 'Microsoft.VisualStudio.Product.Community'
+                        ChannelId          = 'VisualStudio.18.Release'
+                        DisplayName        = 'Visual Studio Community 2026'
+                        Components         = @()
+                        ExportedExtensions = @()
+                        UserExtensions     = @()
+                    })
                 WingetPackages = @([pscustomobject]@{ Id = 'Git.Git'; Source = 'winget' }, [pscustomobject]@{ Id = 'Notepad++.Notepad++'; Source = 'winget' })
                 Programs       = @([pscustomobject]@{ Name = 'Git'; Publisher = 'Test Publisher' })
             }
