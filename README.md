@@ -1,23 +1,12 @@
 ### ALPHA - A masochistic exploration into Vibe Coding the wrong way.
 
-<br/>
-Motivation:
-<br/>
-<i>I lost my eyesight nine years ago and am finally at a point where I can regularly use a computer with almost the same ease as before the accident. I was a full-stack developer. My go-to tools were C#, Visual Studio, SQL Server, and other tooling capable of wreaking havoc to the only semi-accessible setup I have access to.
-
-*A lot has changed, and I have a lot of catching up to do. Installing Visual Studio, SQL Server, and other heavy tooling on the only machine I rely on seemed like a good way to end up blocked from dealing with life's obligations while troubleshooting development issues. It also increases the machine's attack surface.*
-
-*I decided to use Hyper-V and put Visual Studio and other tooling in VMs. An opportunity to try vibe coding with Copilot and Claude.*
-
 *Vibe coding is proving to be an exercise in herding cats. The code starts as spaghetti, gets refactored into gumbo, and eventually I realize some of the spaghetti never got served.*
 
 *Copilot was let go.  Both Copilot and Claude are a wee bit way too creative, but Claude's work output runs and tends to be aligned with the specs following the patterns and practices it has been provided.  Copilot's behavior and work output was discerning and I am concerned Copilot may have a substance use disorder.
 
 # LazyVM
 
-Currently this is a tool for setting up educational Visual Studio dev environment VMs on Windows using Hyper-V.  
-
-PowerShell has always been a weak point for me.  My history with PowerShell consists of me hacking a few lines into a script when needing tooling for soemting as ridiculous as a one-liners invoke-webrequest "IIS application" by a schedule task to prevent IIS from timing and recycling the worker processor.  Otherwise, there would be help request tickets every morning, after lunch, and after staff events reporting an app was down or an app was taking too long.  The joys of web froms back in the day.
+Currently this is a tool for setting up educational Visual Studio dev environment VMs on Windows using Hyper-V.  I have used it for myself.  Many of its behaviors are being addressed. 
 
 If I master herding cats this will be a tool for deploying, maintainin and destroying Hyper-V virtual machine in Windows. VM templated configuration will be provided with this tool, changes to made to harnessed VMs created by this tool will create matching config templates in a qausi-green manner, to migitage template prolferation only the latest VM changes will be written to the corresponding template.  The goal is persist all environment changes, including changes to the VM's UI eg. dark mode, text size, Explorer.exe settings, tooling settings and etc with the exception of sensitive information like credentials, on the VM's configuration file.  Hopefully, this will support VMs that are not educational dev environments coupled to Windows Enterprise evaluation, Visual Sttudio, MsSQL and other tooling.
 
@@ -25,7 +14,7 @@ Entities, like a independent contracdtors, will benefit having free reliable too
 
 What it needs
 
-` A cert for signing code
+` A cert for signing code and whole lot more.
 
 ## Currently What is it:
 
