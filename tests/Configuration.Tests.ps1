@@ -30,9 +30,9 @@ BeforeAll {
 
     function New-TestRoot {
         <#
-          A root folder with a Config folder holding one VM profile per entry
-          in $Profiles (VM name -> the JSON of its VM.json), and optionally a
-          host-wide settings file.
+          A root folder with one VM folder per entry in $Profiles (VM name ->
+          the JSON of its <Name>\Config\VM.json), and optionally a host-wide
+          settings file in Shared\Config.
         #>
         param(
             [hashtable]$Profiles = @{},
@@ -40,11 +40,11 @@ BeforeAll {
         )
 
         $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
-        $configDir = Join-Path -Path $root -ChildPath 'Config'
+        $configDir = Join-Path -Path $root -ChildPath 'Shared/Config'
         New-Item -ItemType Directory -Path $configDir -Force | Out-Null
 
         foreach ($name in $Profiles.Keys) {
-            $profileDir = Join-Path -Path (Join-Path -Path $configDir -ChildPath 'VMs') -ChildPath $name
+            $profileDir = Join-Path -Path (Join-Path -Path $root -ChildPath $name) -ChildPath 'Config'
             New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
             Set-Content -LiteralPath (Join-Path -Path $profileDir -ChildPath 'VM.json') -Value $Profiles[$name]
         }
@@ -160,7 +160,7 @@ Describe 'Read-SettingsFile' {
         @{ Case = 'text that does not fit its pattern'; Text = '{ "MaintenanceTime": "2am" }'; Message = "*'MaintenanceTime'*" }
         @{ Case = 'list items of the wrong kind'; Text = '{ "ProjectExcludeDirs": [ 1 ] }'; Message = "*'ProjectExcludeDirs, item 1' should be text, but is a whole number.*" }
         @{ Case = 'an unknown field inside a list item'; Text = '{ "AppSettings": [ { "Name": "A", "RegistryKey": "HKCU\\A", "Extra": 1 } ] }'; Message = "*'AppSettings, item 1, Extra' is not allowed here.*" }
-        @{ Case = 'a host path that is neither relative nor full'; Text = '{ "VHDXRoot": "D:VMs" }'; Message = "*'VHDXRoot'*" }
+        @{ Case = 'a host path that is neither relative nor full'; Text = '{ "DiskDir": "D:VMs" }'; Message = "*'DiskDir'*" }
         @{ Case = 'JSON that does not parse'; Text = '{ "vCPU": 4 "UseDevDrive": true }'; Message = '*is not valid JSON*' }
         @{ Case = 'a file that is not a table'; Text = '[ 1, 2 ]'; Message = '*must be a table of settings*' }
     ) {
@@ -286,7 +286,7 @@ Describe 'Resolve-HostPathSetting' {
             foreach ($name in $script:HostPathSettings) {
                 $settings[$name] = "Folder\$name"
             }
-            $settings['VHDXRoot'] = 'E:\VMs'
+            $settings['DiskDir'] = 'E:\VMs'
             $settings['ISOPath'] = '\\nas\iso\win11.iso'
             $settings['LogFile'] = '.\Logs\Alpha.log'
 
@@ -295,7 +295,7 @@ Describe 'Resolve-HostPathSetting' {
         }
 
         $settings.CheckpointDir | Should -Be 'D:\DevVM\Folder\CheckpointDir'
-        $settings.VHDXRoot | Should -Be 'E:\VMs'
+        $settings.DiskDir | Should -Be 'E:\VMs'
         $settings.ISOPath | Should -Be '\\nas\iso\win11.iso'
         $settings.LogFile | Should -Be 'D:\DevVM\Logs\Alpha.log'
     }
@@ -312,11 +312,11 @@ Describe 'Resolve-HostPathSetting' {
                 foreach ($name in $script:HostPathSettings) {
                     $settings[$name] = 'Folder'
                 }
-                $settings['VHDXRoot'] = $Value
+                $settings['DiskDir'] = $Value
 
                 Resolve-HostPathSetting -Settings $settings -Root 'D:\DevVM'
             }
-        } | Should -Throw -ExpectedMessage "*'VHDXRoot' must be a path inside the LazyVM folder*"
+        } | Should -Throw -ExpectedMessage "*'DiskDir' must be a path inside the LazyVM folder*"
     }
 }
 
@@ -324,18 +324,20 @@ Describe 'Add-DerivedSetting' {
     It 'works out the names and files LazyVM keeps for a VM' {
         $settings = @{
             VMName       = 'Alpha'
-            VHDXRoot     = 'D:\DevVM\VMs'
-            CredStoreDir = 'D:\DevVM\Backup'
+            Root         = 'D:\DevVM'
+            DiskDir      = 'D:\DevVM\Alpha\Disks'
+            CredStoreDir = 'D:\DevVM\Shared\Credentials'
         }
 
         InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Add-DerivedSetting -Settings $Settings }
 
-        $settings.OSDiskPath | Should -Be 'D:\DevVM\VMs\Alpha-OS.vhdx'
-        $settings.VMConfigDir | Should -Be 'D:\DevVM\VMs\Alpha'
-        $settings.SeedDiskPath | Should -Be 'D:\DevVM\VMs\Alpha-Seed.iso'
-        $settings.CredKeyFile | Should -Be 'D:\DevVM\Backup\.lazyvm.key'
-        $settings.GuestCredFile | Should -Be 'D:\DevVM\Backup\Alpha\guest.cred'
-        $settings.CertCredFile | Should -Be 'D:\DevVM\Backup\Alpha\certs.cred'
+        $settings.VMRoot | Should -Be 'D:\DevVM\Alpha'
+        $settings.OSDiskPath | Should -Be 'D:\DevVM\Alpha\Disks\Alpha-OS.vhdx'
+        $settings.VMConfigDir | Should -Be 'D:\DevVM\Alpha\Virtual Machines'
+        $settings.SeedDiskPath | Should -Be 'D:\DevVM\Alpha\Disks\Alpha-Seed.iso'
+        $settings.CredKeyFile | Should -Be 'D:\DevVM\Shared\Credentials\.lazyvm.key'
+        $settings.GuestCredFile | Should -Be 'D:\DevVM\Alpha\Credentials\guest.cred'
+        $settings.CertCredFile | Should -Be 'D:\DevVM\Alpha\Credentials\certs.cred'
         $settings.ResumeRegKey | Should -Be 'HKLM:\SOFTWARE\LazyVM\Alpha'
         $settings.ResumeTaskName | Should -Be 'LazyVM-ResumeAfterReboot-Alpha'
         $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
@@ -353,6 +355,8 @@ Describe 'Test-VMName' {
         @{ Name = 'Dev VM'; Expected = $false }
         @{ Name = 'Dev_VM'; Expected = $false }
         @{ Name = ''; Expected = $false }
+        @{ Name = 'Shared'; Expected = $false }
+        @{ Name = 'shared'; Expected = $false }
     ) {
         InModuleScope $module -Parameters @{ Name = $Name } {
             param($Name)
@@ -388,7 +392,7 @@ Describe 'Resolve-VMSelection' {
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            Resolve-VMSelection -ConfigDir (Get-ConfigDir -Root $Root)
+            Resolve-VMSelection -Root $Root
         } | Should -Be 'Alpha'
     }
 
@@ -397,17 +401,17 @@ Describe 'Resolve-VMSelection' {
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            Resolve-VMSelection -ConfigDir (Get-ConfigDir -Root $Root) -Requested 'msdevvm'
+            Resolve-VMSelection -Root $Root -Requested 'msdevvm'
         } | Should -BeExactly 'MsDevVM'
     }
 
     It 'ignores a folder with no VM.json' {
         $root = New-TestRoot -Profiles @{ Alpha = '{}' }
-        New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'Config/VMs/Stray') | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'Stray/Config') -Force | Out-Null
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            Resolve-VMSelection -ConfigDir (Get-ConfigDir -Root $Root)
+            Resolve-VMSelection -Root $Root
         } | Should -Be 'Alpha'
     }
 
@@ -421,7 +425,7 @@ Describe 'Resolve-VMSelection' {
         {
             InModuleScope $module -Parameters @{ Root = $root; Requested = $Requested } {
                 param($Root, $Requested)
-                Resolve-VMSelection -ConfigDir (Get-ConfigDir -Root $Root) -Requested $Requested
+                Resolve-VMSelection -Root $Root -Requested $Requested
             }
         } | Should -Throw -ExpectedMessage $Message
     }
@@ -457,13 +461,13 @@ Describe 'New-VMProfile' {
 
         $path = InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Alpha'
+            New-VMProfile -Root $Root -Name 'Alpha'
         }
 
         $path | Should -Exist
         $vmProfile = Read-TestJson -Path $path
         @($vmProfile.Keys) | Should -Be @('$schema')
-        $vmProfile['$schema'] | Should -Be '../../LazyVM.Settings.schema.json'
+        $vmProfile['$schema'] | Should -Be '../../Shared/Config/LazyVM.Settings.schema.json'
     }
 
     It 'sets the maintenance time an hour after the latest one in use, wrapping at midnight' {
@@ -474,7 +478,7 @@ Describe 'New-VMProfile' {
 
         $path = InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Gamma'
+            New-VMProfile -Root $Root -Name 'Gamma'
         }
 
         (Read-TestJson -Path $path).MaintenanceTime | Should -Be '00:30'
@@ -485,7 +489,7 @@ Describe 'New-VMProfile' {
 
         $path = InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Beta'
+            New-VMProfile -Root $Root -Name 'Beta'
         }
 
         $default = InModuleScope $module { (Get-DefaultSetting).MaintenanceTime }
@@ -497,11 +501,11 @@ Describe 'New-VMProfile' {
         $root = New-TestRoot -Profiles @{
             Alpha = '{ "MemMaxGB": 32, "LogFile": "Logs\\Alpha-Old.log", "GuestComputerName": "ALPHA" }'
         }
-        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Config/VMs/Alpha/Tooling.json') -Value '{ "Version": 1 }'
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value '{ "Version": 1 }'
 
         $path = InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name 'Beta' -From 'Alpha'
+            New-VMProfile -Root $Root -Name 'Beta' -From 'Alpha'
         }
         $vmProfile = Read-TestJson -Path $path
 
@@ -521,7 +525,7 @@ Describe 'New-VMProfile' {
         {
             InModuleScope $module -Parameters @{ Root = $root; Name = $Name; From = $From } {
                 param($Root, $Name, $From)
-                New-VMProfile -ConfigDir (Get-ConfigDir -Root $Root) -Name $Name -From $From
+                New-VMProfile -Root $Root -Name $Name -From $From
             }
         } | Should -Throw -ExpectedMessage $Message
     }
@@ -543,9 +547,15 @@ Describe 'Read-VMSetting' {
         $settings.vCPU | Should -Be 2
         $settings.GuestComputerName | Should -Be 'ALPHA-PC'
         $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
-        $settings.LogFile | Should -Be "$root\Logs\Alpha.log"
+        $settings.LogFile | Should -Be "$root\Alpha\Logs\Alpha.log"
+        $settings.VMRoot | Should -Be "$root\Alpha"
+        $settings.ProfileDir | Should -Be "$root\Alpha\Config"
+        $settings.ConfigDir | Should -Be "$root\Shared\Config"
+        $settings.ISOPath | Should -Be "$root\Shared\ISO\Win11Ent_Eval.iso"
+        $settings.SQLDiskPath | Should -Be "$root\Alpha\Disks\Alpha-SQL.vhdx"
+        $settings.DevDrivePath | Should -Be "$root\Alpha\Disks\Alpha-DevDrive.vhdx"
         $result.Sources.MemMaxGB | Should -Be 'LazyVM.Settings.json'
-        $result.Sources.vCPU | Should -Be 'VMs\Alpha\VM.json'
+        $result.Sources.vCPU | Should -Be 'Alpha\Config\VM.json'
         $result.Sources.UseDevDrive | Should -Be 'Default'
     }
 
@@ -559,7 +569,7 @@ Describe 'Read-VMSetting' {
     It 'passes on the warning when an unattended run falls back to a last good copy' {
         $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
         InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root } | Out-Null
-        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Config/VMs/Alpha/VM.json') -Value '{ "vCPU": "two" }'
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json') -Value '{ "vCPU": "two" }'
 
         $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root -Unattended }
 
@@ -665,7 +675,7 @@ Describe 'Initialize-CommandRun' {
             $alpha.Name | Should -Be 'Alpha'
             $alpha.Settings.vCPU | Should -Be 2
             $beta.Settings.vCPU | Should -Be 6
-            $alpha.Settings.LogFile | Should -Be "$Root\Logs\Alpha.log"
+            $alpha.Settings.LogFile | Should -Be "$Root\Alpha\Logs\Alpha.log"
             Should -Invoke Start-Log -Times 1 -ParameterFilter { $Path -like '*\Logs\Alpha.log' }
         }
     }

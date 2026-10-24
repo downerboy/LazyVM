@@ -115,8 +115,8 @@ Commands that change something support `-WhatIf` and `-Confirm`.
 
 Your settings are JSON files in the LazyVM folder. An update never touches them:
 
-- `Config\LazyVM.Settings.json` applies to every VM.
-- `Config\VMs\<Name>\VM.json` applies to one VM, and overrides the host-wide file.
+- `Shared\Config\LazyVM.Settings.json` applies to every VM.
+- `<Name>\Config\VM.json` applies to one VM, and overrides the host-wide file.
 
 List only what you want to change:
 

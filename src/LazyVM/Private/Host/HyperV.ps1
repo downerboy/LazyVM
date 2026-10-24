@@ -122,7 +122,7 @@ function Test-HostReadiness {
     # Free space on the volumes actually used, sized from the settings and
     # rolled up by volume so two needs on one drive are not checked apart.
     $requirements = @(
-        [pscustomobject]@{ Path = $settings.VHDXRoot; NeedGB = $settings.OSDiskSizeGB; What = 'OS VHDX' }
+        [pscustomobject]@{ Path = $settings.DiskDir; NeedGB = $settings.OSDiskSizeGB; What = 'OS VHDX' }
         [pscustomobject]@{ Path = (Split-Path $settings.SQLDiskPath -Parent); NeedGB = 20; What = 'SQL data disk (initial allocation)' }
         [pscustomobject]@{ Path = $settings.ISOSearchRoot; NeedGB = $settings.ISOMinSizeGB + 2; What = 'ISO + installers' }
     )

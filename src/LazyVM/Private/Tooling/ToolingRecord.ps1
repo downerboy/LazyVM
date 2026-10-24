@@ -1,7 +1,7 @@
 ﻿# ToolingRecord.ps1 - Each VM's tooling list: building it, comparing it, recording changes.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# Each VM's tooling list is Config\VMs\<Name>\Tooling.json. The daily
+# Each VM's tooling list is <Name>\Config\Tooling.json. The daily
 # maintenance run compares the guest with it and adopts any change, after
 # first taking a Hyper-V checkpoint (see Checkpoint.ps1), so every recorded
 # version of the list has a checkpoint of the VM as it was then:

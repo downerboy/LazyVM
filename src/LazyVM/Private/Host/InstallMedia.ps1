@@ -15,7 +15,8 @@ function Initialize-HostFolder {
         $settings.Root
         $settings.ISOSearchRoot
         (Split-Path $settings.SQLIsoPath -Parent)
-        $settings.VHDXRoot
+        $settings.VMRoot
+        $settings.DiskDir
         (Split-Path $settings.SQLDiskPath -Parent)
         $settings.CredStoreDir
         (Split-Path $settings.GuestCredFile -Parent)

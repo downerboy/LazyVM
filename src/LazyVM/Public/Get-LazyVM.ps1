@@ -32,11 +32,10 @@ function Get-LazyVM {
 
     process {
         $root = (Resolve-LazyVMRoot).Path
-        $configDir = Get-ConfigDir -Root $root
         $hyperV = [bool](Get-Command -Name Get-VM -ErrorAction SilentlyContinue)
         $scheduledTasks = [bool](Get-Command -Name Get-ScheduledTask -ErrorAction SilentlyContinue)
 
-        foreach ($vmName in @(Get-VMProfileName -ConfigDir $configDir | Where-Object { $_ -like $Name })) {
+        foreach ($vmName in @(Get-VMProfileName -Root $root | Where-Object { $_ -like $Name })) {
             $state = 'Not built'
             if ($hyperV) {
                 $lookupErrors = $null
@@ -69,7 +68,7 @@ function Get-LazyVM {
                 MaintenanceTime = $maintenanceTime
                 MaintenanceTask = $(if ($task) { 'Registered' } else { 'Not registered' })
                 Settings        = $settingsStatus
-                ProfilePath     = Get-VMProfilePath -ConfigDir $configDir -Name $vmName
+                ProfilePath     = Get-VMProfilePath -Root $root -Name $vmName
             }
         }
     }
