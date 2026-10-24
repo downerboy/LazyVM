@@ -1,6 +1,6 @@
-﻿# Compile.ps1 - Merges the module source into one .psm1. Dot-sourced by build.ps1.
+﻿# Assemble.ps1 - Merges the module source into one .psm1. Dot-sourced by the scripts at the repository root.
 
-function Invoke-Compile
+function Invoke-Assemble
 {
     <# Builds src\<ModuleName> into out\<ModuleName>\<version>, then checks it exports exactly the public commands. #>
     param(
@@ -41,7 +41,7 @@ function Invoke-Compile
     $builder = [System.Text.StringBuilder]::new()
     [void]$builder.Append($rootModule.Substring(0, $start))
     [void]$builder.AppendLine("# ── Functions ────────────────────────────────────────────────────────────────")
-    [void]$builder.AppendLine("# Merged from src\$ModuleName by build.ps1 on $(Get-Date -Format 'yyyy-MM-dd').")
+    [void]$builder.AppendLine("# Merged from src\$ModuleName by Invoke-Assemble on $(Get-Date -Format 'yyyy-MM-dd').")
     foreach ($folder in 'Private', 'Public')
     {
         $files = Get-ChildItem -LiteralPath (Join-Path -Path $sourceDir -ChildPath $folder) -Filter '*.ps1' -File -Recurse | Sort-Object -Property FullName

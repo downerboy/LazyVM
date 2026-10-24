@@ -1,4 +1,4 @@
-﻿# Analyze.ps1 - Runs PSScriptAnalyzer. Dot-sourced by build.ps1.
+﻿# Analyze.ps1 - Runs PSScriptAnalyzer. Dot-sourced by the scripts at the repository root.
 
 function Invoke-Analyze
 {

@@ -27,7 +27,7 @@ jobs:
         run: $PSVersionTable
 
       - name: Build, analyze and test
-        run: ./build.ps1
+        run: ./Invoke-AnalyzerAndTest.ps1
 
       - name: Upload the test results
         if: always()

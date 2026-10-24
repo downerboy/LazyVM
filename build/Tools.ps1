@@ -1,5 +1,5 @@
 ﻿# Tools.ps1 - The build tools, pinned so the build behaves the same everywhere
-# until these are changed on purpose. Dot-sourced by build.ps1.
+# until these are changed on purpose. Dot-sourced by the scripts at the repository root.
 
 $PinnedTools = @{
     Pester           = '5.7.1'

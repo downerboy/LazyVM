@@ -2,7 +2,7 @@
 # The module's root. Loads every function from Private (internal) and
 # Public (exported) and sets up the module's own state.
 #
-# In the published module, build.ps1 replaces this file with one that
+# In the published module, Invoke-Assemble replaces this file with one that
 # holds all the functions, so nothing is dot-sourced at import time.
 
 # Pinned rather than 'Latest' so a future PowerShell release cannot

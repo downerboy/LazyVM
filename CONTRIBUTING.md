@@ -11,7 +11,7 @@ LazyVM uses [GitHub Flow](https://docs.github.com/en/get-started/using-github/gi
 2. Before pushing, run the same checks CI runs:
 
    ```powershell
-   ./build.ps1
+   ./Invoke-AnalyzerAndTest.ps1
    ```
 
 3. Push the branch and open a pull request into `main`, with a title in the form described under [Versioning](#versioning). Put `Fixes #42` in the description to close the issue when it merges.

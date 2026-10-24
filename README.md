@@ -64,7 +64,7 @@ Expand-Archive .\LazyVM-*.zip -DestinationPath .\LazyVM -Force
 ```powershell
 git clone https://github.com/downerboy/LazyVM S:\Source\LazyVM
 cd S:\Source\LazyVM
-./build.ps1 -Task Install
+./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out
 ```
 
 This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, installs it for all users, which the scheduled maintenance needs because it runs as SYSTEM. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Open a new PowerShell 7 window afterwards.
@@ -145,10 +145,12 @@ src/LazyVM/
   Private/<Area>/                  everything else, by area
   Data/                            the settings schema and the default tooling list
 tests/                             Pester tests
-build.ps1                          build, analyze and test
+Invoke-AnalyzerAndTest.ps1         check a change: assemble, analyze, test
+New-ReleasePackage.ps1             make the release zip
+build/                             the steps both use
 ```
 
-`./build.ps1` merges the module into `out\`, runs PSScriptAnalyzer (any finding fails the build) and runs the Pester tests. GitHub Actions runs the same on Windows for every push.
+`./Invoke-AnalyzerAndTest.ps1` assembles the module into `out\`, runs PSScriptAnalyzer (any finding fails) and runs the Pester tests. GitHub Actions runs the same on Windows for every push.
 
 ## Licence
 

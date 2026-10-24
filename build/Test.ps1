@@ -1,4 +1,4 @@
-﻿# Test.ps1 - Runs the Pester tests. Dot-sourced by build.ps1.
+﻿# Test.ps1 - Runs the Pester tests. Dot-sourced by the scripts at the repository root.
 
 function Invoke-Test
 {

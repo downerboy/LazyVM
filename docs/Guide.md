@@ -80,12 +80,12 @@ Or build it from the repository, in an elevated PowerShell 7:
 ```powershell
 git clone https://github.com/downerboy/LazyVM S:\Source\LazyVM
 cd S:\Source\LazyVM
-./build.ps1 -Task Install
+./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out
 ```
 
-`-Task Install` builds the module, checks it with PSScriptAnalyzer and runs the Pester tests, then, only if they all pass, installs it for all users: the scheduled maintenance runs as SYSTEM and has to be able to find it. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Once installed, PowerShell loads it by itself the first time you use one of its commands.
+`Invoke-AnalyzerAndTest.ps1` assembles the module, checks it with PSScriptAnalyzer and runs the Pester tests; only if they all pass does `Install.ps1` install it for all users: the scheduled maintenance runs as SYSTEM and has to be able to find it. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Once installed, PowerShell loads it by itself the first time you use one of its commands.
 
-Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the module, and reports its commands as not recognized. To update, pull the repository and run the same `build.ps1` command again. The scheduled tasks pick up the new version on their next run.
+Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the module, and reports its commands as not recognized. To update, pull the repository and run the same commands again. The scheduled tasks pick up the new version on their next run.
 
 ### Choosing the LazyVM folder
 
@@ -638,7 +638,7 @@ The log is the first place to look: `D:\DevVM\Logs\DevBox.log`. Every line is pr
 | Symptom | Cause and fix |
 |---|---|
 | "LazyVM does not know which folder to keep its VMs in yet" | Run `Build-LazyVM -Name DevBox`, which chooses one, or `Set-LazyVMRoot -Path D:\DevVM`. |
-| "The term 'Build-LazyVM' is not recognized" | You are in Windows PowerShell 5.1, or the module is not installed. Open PowerShell 7 (`pwsh`) as administrator; if it persists, run `./build.ps1 -Task Install` again. |
+| "The term 'Build-LazyVM' is not recognized" | You are in Windows PowerShell 5.1, or the module is not installed. Open PowerShell 7 (`pwsh`) as administrator; if it persists, run `./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out` again. |
 | "LazyVM needs an elevated PowerShell" | Start PowerShell 7 with Run as administrator. |
 | "No stored guest credential" | Store one with `Set-LazyVMCredential`, for an account that is a local administrator inside the VM. |
 | The VM never becomes reachable | Open the VM's console. Windows Setup may be waiting on something, or the stored password may not match the account. Check by signing in at the console with the password `Get-LazyVMCredential -AsPlainText` shows. |

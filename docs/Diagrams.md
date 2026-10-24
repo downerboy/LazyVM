@@ -25,13 +25,13 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 
 ## Install from the repository
 
-`./build.ps1 -Task Install`
+`./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out`
 
 Builds the module, checks it and runs the tests, then installs it for all users only if every check passes. Any failure stops the script before step 5.
 
 ![Install from the repository: call order and data flow](diagrams/install-from-repo.svg)
 
-1. `Invoke-Compile` (build\Compile.ps1): merges Public\ and Private\ into one .psm1, then imports it to check the exports
+1. `Invoke-Assemble` (build\Assemble.ps1): merges Public\ and Private\ into one .psm1, then imports it to check the exports
    - Reads D1, module source: src\LazyVM\ (Public\  Private\  Data\, LazyVM.psd1)
    - Writes D2, built module: out\LazyVM\ (<version>\)
 2. `Install-BuildTool` (build\Tools.ps1): installs the pinned version when it is missing; other versions are left alone
@@ -42,7 +42,7 @@ Builds the module, checks it and runs the tests, then installs it for all users 
 4. `Invoke-Test` (build\Test.ps1): any failure stops here
    - Reads D6, Pester tests: Repo (tests\*.Tests.ps1)
    - Writes D7, test results: out\ (testResults.xml)
-5. `Install-BuiltModule` (build.ps1): replaces the same version, leaves other versions
+5. `Install.ps1 -Path out`: replaces the same version, leaves other versions, unblocks the files
    - Reads D8, built module: out\LazyVM\ (<version>\)
    - Writes D9, module installed for all users, SYSTEM included: $env:ProgramFiles\PowerShell\ (Modules\LazyVM\, <version>\)
 

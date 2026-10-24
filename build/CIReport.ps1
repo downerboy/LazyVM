@@ -1,4 +1,4 @@
-﻿# CIReport.ps1 - Errors shown on GitHub Actions. Dot-sourced by build.ps1.
+﻿# CIReport.ps1 - Errors shown on GitHub Actions. Dot-sourced by the scripts at the repository root.
 
 function Write-CIError
 {

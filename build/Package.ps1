@@ -1,4 +1,4 @@
-﻿# Package.ps1 - Zips the built module for a GitHub release. Dot-sourced by build.ps1.
+﻿# Package.ps1 - Zips the built module for a GitHub release. Dot-sourced by the scripts at the repository root.
 
 function New-ReleasePackage
 {
