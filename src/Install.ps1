@@ -15,20 +15,33 @@ not load a marked module, so the copies are unblocked as they are installed.
 
 Run it in PowerShell 7 (pwsh), as administrator.
 
+.PARAMETER Path
+The folder that holds the LazyVM module folder. By default, this script's
+own folder, as in a release download.
+
 .EXAMPLE
 .\Install.ps1
+
+Installs from a release download.
+
+.EXAMPLE
+./src/Install.ps1 -Path out
+
+Installs the module Invoke-AnalyzerAndTest.ps1 assembled from the repository.
 #>
 [CmdletBinding()]
-param()
+param(
+    [string]$Path = $PSScriptRoot
+)
 
 $ErrorActionPreference = 'Stop'
 $moduleName = 'LazyVM'
 
-$versionDir = Get-ChildItem -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath $moduleName) -Directory |
+$versionDir = Get-ChildItem -LiteralPath (Join-Path -Path $Path -ChildPath $moduleName) -Directory -ErrorAction SilentlyContinue |
     Sort-Object -Property { [version]$_.Name } -Descending |
     Select-Object -First 1
 if (-not $versionDir) {
-    throw "The $moduleName folder is not beside this script. Extract the whole download, then run Install.ps1 from it."
+    throw "There is no $moduleName module folder in $Path. Extract the whole download and run Install.ps1 from it, or, in the repository, run ./Invoke-AnalyzerAndTest.ps1 first."
 }
 
 $target = Join-Path -Path $env:ProgramFiles -ChildPath "PowerShell\Modules\$moduleName\$($versionDir.Name)"

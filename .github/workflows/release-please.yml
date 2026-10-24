@@ -87,10 +87,10 @@ jobs:
           ref: ${{ steps.commit.outputs.sha }}
 
       - name: Build, analyze and test
-        run: ./build.ps1
+        run: ./Invoke-AnalyzerAndTest.ps1
 
       - name: Package
-        run: ./build.ps1 -Task Package
+        run: ./New-ReleasePackage.ps1
 
       - name: Attach the zip and install notes, and publish
         run: |
