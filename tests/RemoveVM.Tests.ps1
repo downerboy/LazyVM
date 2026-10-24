@@ -94,7 +94,7 @@ Describe 'Test-PathWithin' {
 }
 
 Describe 'Assert-VMRootFolder' {
-    It 'returns the VM folder, <Root>\<Name>' {
+    It 'returns the VM folder, its name inside the LazyVM folder' {
         InModuleScope $module -Parameters @{ Settings = (New-TestVMSetting -Name 'Alpha') } {
             param($Settings)
             Assert-VMRootFolder -Settings $Settings
