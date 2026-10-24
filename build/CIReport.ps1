@@ -19,3 +19,18 @@ function Write-CIError {
     $text = $Message -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A'
     Write-Host "::error$location::$text"
 }
+
+function Write-CIFailureSummary {
+    <#
+      On GitHub Actions, every failure in one notice. GitHub shows only the
+      first 10 errors of a step, so a long list of failures would otherwise
+      be cut off before the messages that explain them.
+    #>
+    param([AllowEmptyCollection()][string[]]$Failures = @())
+
+    if (-not $env:GITHUB_ACTIONS -or $Failures.Count -eq 0) {
+        return
+    }
+    $text = ($Failures -join "`n") -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A'
+    Write-Host "::notice title=$($Failures.Count) failure(s)::$text"
+}
