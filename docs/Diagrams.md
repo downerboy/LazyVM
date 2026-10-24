@@ -42,7 +42,7 @@ Builds the module, checks it and runs the tests, then installs it for all users 
 4. `Invoke-Test` (build\Test.ps1): any failure stops here
    - Reads D6, Pester tests: Repo (tests\*.Tests.ps1)
    - Writes D7, test results: out\ (testResults.xml)
-5. `Install.ps1 -Path out`: replaces the same version, leaves other versions, unblocks the files
+5. `Install.ps1 -Path out`: replaces the installed versions, unblocks the files
    - Reads D8, built module: out\LazyVM\ (<version>\)
    - Writes D9, module installed for all users, SYSTEM included: $env:ProgramFiles\PowerShell\ (Modules\LazyVM\, <version>\)
 

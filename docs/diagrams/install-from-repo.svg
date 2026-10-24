@@ -142,8 +142,8 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="487.5" y="625" text-anchor="middle">Install.ps1 -Path out</text>
 <line class="div" x1="335" y1="632" x2="640" y2="632"/>
 <g class="sn"><circle cx="351" cy="616" r="10"/><text x="351" y="620" text-anchor="middle">5</text></g>
-<text class="at" x="345" y="647">replaces the same version,</text>
-<text class="at" x="345" y="664">leaves other versions</text>
+<text class="at" x="345" y="647">replaces the installed</text>
+<text class="at" x="345" y="664">versions</text>
 </g>
 <g class="bx-store"><rect x="20" y="595" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="609" text-anchor="middle">«folder»</text>

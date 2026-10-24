@@ -7,8 +7,8 @@ Installs LazyVM from a release download.
 .DESCRIPTION
 Copies the LazyVM module beside this script to
 $env:ProgramFiles\PowerShell\Modules, where PowerShell 7 and LazyVM's
-scheduled tasks (which run as SYSTEM) find it. An earlier copy of the same
-version is replaced; other versions are left alone.
+scheduled tasks (which run as SYSTEM) find it. Any LazyVM versions already
+installed there are removed first, so only this one is left.
 
 Files downloaded from the internet are marked as such, and PowerShell will
 not load a marked module, so the copies are unblocked as they are installed.
@@ -44,8 +44,9 @@ if (-not $versionDir) {
     throw "There is no $moduleName module folder in $Path. Extract the whole download and run Install.ps1 from it, or, in the repository, run ./Invoke-AnalyzerAndTest.ps1 first."
 }
 
-$target = Join-Path -Path $env:ProgramFiles -ChildPath "PowerShell\Modules\$moduleName\$($versionDir.Name)"
-if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+$installDir = Join-Path -Path $env:ProgramFiles -ChildPath "PowerShell\Modules\$moduleName"
+$target = Join-Path -Path $installDir -ChildPath $versionDir.Name
+if (Test-Path -LiteralPath $installDir) { Remove-Item -LiteralPath $installDir -Recurse -Force }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
 Copy-Item -Path (Join-Path -Path $versionDir.FullName -ChildPath '*') -Destination $target -Recurse -Force
 Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File
