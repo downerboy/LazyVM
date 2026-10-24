@@ -25,6 +25,8 @@ Entities, like a independent contracdtors, will benefit having free reliable too
 
 What it needs
 
+` An intuitive UX
+` Code review...a lot of code reviewing e.g. This is an exercise in mastering the art of herding cats.  
 ` A cert for signing code
 
 ## Currently What is it:
