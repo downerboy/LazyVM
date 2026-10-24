@@ -1,4 +1,4 @@
-﻿function Restore-LazyVMState {
+function Restore-LazyVMState {
     <#
     .SYNOPSIS
     Puts a VM's captured state back into it.
@@ -25,23 +25,16 @@
     )
 
     process {
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Restore' -Name $Name
-            if (-not $PSCmdlet.ShouldProcess($CFG.VMName, "Apply the capture in $($CFG.StateDir) to the VM")) {
+        Invoke-CommandRun -Title 'Restore' -Name $Name -FailureMessage 'The restore failed' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            if (-not $PSCmdlet.ShouldProcess($VM.Name, "Apply the capture in $($VM.Settings.StateDir) to the VM")) {
                 return
             }
-            $restoreOk = @(Restore-GuestState)[-1]
-            if ($restoreOk -eq $false) {
-                throw "The restore into '$($CFG.VMName)' did not complete. The log says what failed: $($CFG.LogFile)"
+            $restored = @(Restore-GuestState -VM $VM)[-1]
+            Restore-GuestVisualStudioSetting -VM $VM
+            if ($restored -eq $false) {
+                throw "The restore into '$($VM.Name)' did not complete. The log says what failed: $($VM.Settings.LogFile)"
             }
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'The restore failed' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
         }
     }
 }

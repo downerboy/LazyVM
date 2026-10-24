@@ -1,4 +1,4 @@
-﻿function Get-LazyVMCredential {
+function Get-LazyVMCredential {
     <#
     .SYNOPSIS
     Gets the administrator account LazyVM uses inside a VM.
@@ -39,17 +39,7 @@
     process {
         Assert-Administrator
         $configuration = Read-VMSetting -Root (Resolve-LazyVMRoot).Path -VMName $Name
-
-        # The key that decrypts the store lives in the settings just read, so the
-        # module's current settings are pointed at them for the read.
-        $script:Settings.Clear()
-        foreach ($key in $configuration.Settings.Keys) { $script:Settings[$key] = $configuration.Settings[$key] }
-        try {
-            $credential = Get-StoredCredential -Path $CFG.GuestCredFile
-        }
-        finally {
-            $script:Settings.Clear()
-        }
+        $credential = Get-StoredCredential -KeyPath $configuration.Settings.CredKeyFile -Path $configuration.Settings.GuestCredFile
 
         if (-not $credential) {
             throw "No credential is stored for '$($configuration.VMName)' yet. Build-LazyVM creates one, or store one with: Set-LazyVMCredential -Name $($configuration.VMName)"

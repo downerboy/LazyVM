@@ -1,4 +1,4 @@
-﻿function Get-LazyVM {
+function Get-LazyVM {
     <#
     .SYNOPSIS
     Lists the VMs LazyVM looks after on this host.
@@ -60,7 +60,7 @@
             }
 
             $task = $null
-            if ($scheduledTasks) { $task = Get-ScheduledTask -TaskName "LazyVM-Maintain-$vmName" -ErrorAction SilentlyContinue }
+            if ($scheduledTasks) { $task = Get-ScheduledTask -TaskName (Get-MaintenanceTaskName -VMName $vmName) -ErrorAction SilentlyContinue }
 
             [pscustomobject]@{
                 PSTypeName      = 'LazyVM.VM'

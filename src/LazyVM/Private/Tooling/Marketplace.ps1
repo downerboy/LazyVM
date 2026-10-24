@@ -55,20 +55,19 @@ function Resolve-MarketplaceItem {
         return $null
     }
 
-    # Not every result carries every field, so each is read with
-    # Get-RecordField rather than assumed.
+    # Not every result carries every field, so none is assumed.
     $candidates = @()
-    foreach ($result in @(Get-RecordField -Item $response -Name 'results')) {
-        foreach ($extension in @(Get-RecordField -Item $result -Name 'extensions')) {
+    foreach ($result in @([RecordReader]::Field($response, 'results'))) {
+        foreach ($extension in @([RecordReader]::Field($result, 'extensions'))) {
             if (-not $extension) { continue }
-            if ("$(Get-RecordField -Item $extension -Name 'displayName')".Trim() -ne $DisplayName.Trim()) { continue }
+            if ([RecordReader]::Text($extension, 'displayName').Trim() -ne $DisplayName.Trim()) { continue }
 
-            $publisherInfo = Get-RecordField -Item $extension -Name 'publisher'
-            $publisherName = "$(Get-RecordField -Item $publisherInfo -Name 'publisherName')"
-            $publisherDisplay = "$(Get-RecordField -Item $publisherInfo -Name 'displayName')"
+            $publisherInfo = [RecordReader]::Field($extension, 'publisher')
+            $publisherName = [RecordReader]::Text($publisherInfo, 'publisherName')
+            $publisherDisplay = [RecordReader]::Text($publisherInfo, 'displayName')
             if ($Publisher.Trim() -ne $publisherDisplay.Trim() -and $Publisher.Trim() -ne $publisherName.Trim()) { continue }
 
-            $candidates += "$publisherName.$(Get-RecordField -Item $extension -Name 'extensionName')"
+            $candidates += "$publisherName.$([RecordReader]::Text($extension, 'extensionName'))"
         }
     }
 
@@ -80,35 +79,31 @@ function Resolve-MarketplaceItem {
 function Add-MarketplaceItem {
     <# Gives each per-user extension in $Record its MarketplaceItem, reusing $Previous's answers. Updates $Record in place. #>
     param(
-        [Parameter(Mandatory)]$Record,
-        $Previous
+        [Parameter(Mandatory)][ToolingRecord]$Record,
+        [AllowNull()][ToolingRecord]$Previous
     )
 
     $known = @{}
     if ($Previous) {
-        foreach ($product in @($Previous.Products)) {
-            foreach ($extension in @($product.UserExtensions)) {
-                $item = Get-RecordField -Item $extension -Name 'MarketplaceItem'
-                if ($null -ne $item) { $known["$($extension.Id)"] = "$item" }
-            }
+        foreach ($extension in @($Previous.Products | ForEach-Object { $_.UserExtensions })) {
+            if ($extension -and $null -ne $extension.MarketplaceItem) { $known[$extension.Id] = "$($extension.MarketplaceItem)" }
         }
     }
 
-    foreach ($product in @($Record.Products)) {
-        foreach ($extension in @($product.UserExtensions)) {
-            if ($known.ContainsKey("$($extension.Id)")) {
-                $extension['MarketplaceItem'] = $known["$($extension.Id)"]
-                continue
-            }
-            # A lookup that fails for any reason leaves this extension without a
-            # link for now; it is retried on the next run, and never stops one.
-            try {
-                $item = Resolve-MarketplaceItem -DisplayName "$($extension.DisplayName)" -Publisher "$($extension.Publisher)"
-                if ($null -ne $item) { $extension['MarketplaceItem'] = $item }
-            }
-            catch {
-                Write-LogEntry "  marketplace lookup failed for '$($extension.DisplayName)': $($_.Exception.Message)" 'WARN'
-            }
+    foreach ($extension in @($Record.Products | ForEach-Object { $_.UserExtensions })) {
+        if (-not $extension) { continue }
+        if ($known.ContainsKey($extension.Id)) {
+            $extension.MarketplaceItem = $known[$extension.Id]
+            continue
+        }
+        # A lookup that fails leaves this extension without a link for now;
+        # it is tried again on the next run, and never stops one.
+        try {
+            $item = Resolve-MarketplaceItem -DisplayName $extension.DisplayName -Publisher $extension.Publisher
+            if ($null -ne $item) { $extension.MarketplaceItem = $item }
+        }
+        catch {
+            Write-LogEntry "  marketplace lookup failed for '$($extension.DisplayName)': $($_.Exception.Message)" 'WARN'
         }
     }
 }

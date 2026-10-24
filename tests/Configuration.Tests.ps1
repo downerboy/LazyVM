@@ -1,7 +1,8 @@
 ﻿# Configuration.Tests.ps1
 # Settings: the schema and its defaults, reading and checking JSON settings
 # files, the last-good safety net, choosing the root folder, resolving host
-# paths, creating and selecting VM profiles, and bringing 1.x settings across.
+# paths, creating and selecting VM profiles, the VM context and the
+# credential store.
 #
 # Most of these functions are internal to the module, so each test runs its
 # body with InModuleScope, with test data passed in through -Parameters.
@@ -322,18 +323,15 @@ Describe 'Resolve-HostPathSetting' {
 Describe 'Add-DerivedSetting' {
     It 'works out the names and files LazyVM keeps for a VM' {
         $settings = @{
-            VMName               = 'Alpha'
-            VHDXRoot             = 'D:\DevVM\VMs'
-            CredStoreDir         = 'D:\DevVM\Backup'
-            GuestDataDriveLetter = 'e'
-            SqlDataFolder        = 'Data'
-            SqlLogFolder         = 'Log'
-            SqlTempFolder        = 'Temp'
-            SqlBackupFolder      = 'Backup'
+            VMName       = 'Alpha'
+            VHDXRoot     = 'D:\DevVM\VMs'
+            CredStoreDir = 'D:\DevVM\Backup'
         }
 
         InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Add-DerivedSetting -Settings $Settings }
 
+        $settings.OSDiskPath | Should -Be 'D:\DevVM\VMs\Alpha-OS.vhdx'
+        $settings.VMConfigDir | Should -Be 'D:\DevVM\VMs\Alpha'
         $settings.SeedDiskPath | Should -Be 'D:\DevVM\VMs\Alpha-Seed.iso'
         $settings.CredKeyFile | Should -Be 'D:\DevVM\Backup\.lazyvm.key'
         $settings.GuestCredFile | Should -Be 'D:\DevVM\Backup\Alpha\guest.cred'
@@ -341,8 +339,6 @@ Describe 'Add-DerivedSetting' {
         $settings.ResumeRegKey | Should -Be 'HKLM:\SOFTWARE\LazyVM\Alpha'
         $settings.ResumeTaskName | Should -Be 'LazyVM-ResumeAfterReboot-Alpha'
         $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
-        $settings.GuestSqlDataDir | Should -Be 'E:\Data'
-        $settings.GuestSqlBackupDir | Should -Be 'E:\Backup'
     }
 }
 
@@ -572,120 +568,110 @@ Describe 'Read-VMSetting' {
     }
 }
 
-Describe 'Import-LazyVMConfiguration' {
-    AfterAll {
-        InModuleScope $module { $script:Settings.Clear() }
+Describe 'VMContext' {
+    BeforeAll {
+        $settings = @{
+            VMName               = 'Alpha'
+            SwitchName           = 'Default Switch'
+            ISOPath              = 'D:\DevVM\ISO\win.iso'
+            DevDriveLetter       = 'W'
+            GuestAdminUser       = 'sean'
+            GuestDataDriveLetter = 'e'
+            SqlDataFolder        = 'Data'
+            SqlLogFolder         = 'Log'
+            SqlTempFolder        = 'Temp'
+            SqlBackupFolder      = 'Backup'
+        }
     }
 
-    It 'fills the module''s current settings in place and leaves them alone when reading another VM' {
-        $root = New-TestRoot -Profiles @{ Alpha = '{}'; Beta = '{}' }
+    It 'starts the run-time values from the settings' {
+        $runtime = InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            [VMContext]::new($Settings).Runtime
+        }
+
+        $runtime.SwitchName | Should -Be 'Default Switch'
+        $runtime.ISOPath | Should -Be 'D:\DevVM\ISO\win.iso'
+        $runtime.GuestAdminUser | Should -Be 'sean'
+        $runtime.GuestDataDriveLetter | Should -Be 'E'
+        $runtime.GuestSqlDataDir | Should -Be 'E:\Data'
+        $runtime.GuestSqlBackupDir | Should -Be 'E:\Backup'
+        $runtime.SqlServer | Should -Be 'localhost'
+    }
+
+    It 'keeps its own read-only copy of the settings' {
+        InModuleScope $module -Parameters @{ Settings = $settings.Clone() } {
+            param($Settings)
+            $vm = [VMContext]::new($Settings)
+            $Settings.VMName = 'Changed'
+
+            $vm.Name | Should -Be 'Alpha'
+            $vm.Settings.VMName | Should -Be 'Alpha'
+            $vm.Settings['vmname'] | Should -Be 'Alpha'
+            { $vm.Settings['VMName'] = 'Beta' } | Should -Throw
+        }
+    }
+
+    It 'refuses a setting that does not exist, rather than giving nothing' {
+        InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            $vm = [VMContext]::new($Settings)
+            { $vm.Settings.NoSuchSetting } | Should -Throw
+        }
+    }
+
+    It 'moves the SQL folders to the letter the data disk actually got' {
+        $runtime = InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            $vm = [VMContext]::new($Settings)
+            $vm.SetDataDriveLetter('f')
+            $vm.Runtime
+        }
+
+        $runtime.GuestDataDriveLetter | Should -Be 'F'
+        $runtime.GuestSqlDataDir | Should -Be 'F:\Data'
+        $runtime.GuestSqlLogDir | Should -Be 'F:\Log'
+        $runtime.GuestSqlTempDir | Should -Be 'F:\Temp'
+    }
+
+    It "connects SQL work to '<Server>' for the instance '<Instance>'" -ForEach @(
+        @{ Instance = 'MSSQLSERVER'; Server = 'localhost' }
+        @{ Instance = 'DEV'; Server = 'localhost\DEV' }
+    ) {
+        InModuleScope $module -Parameters @{ Settings = $settings; Instance = $Instance } {
+            param($Settings, $Instance)
+            $vm = [VMContext]::new($Settings)
+            $vm.SetSqlInstance($Instance)
+            $vm.Runtime.SqlServer
+        } | Should -Be $Server
+    }
+}
+
+Describe 'Initialize-CommandRun' {
+    It 'returns the context of the VM named, and leaves another VM''s settings alone' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }'; Beta = '{ "vCPU": 6 }' }
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
             Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $Root; Source = 'a test' } }.GetNewClosure()
-            $current = $script:Settings
+            Mock Start-Log {}
+            Mock Write-LogEntry {}
+            Mock Sync-GuestUserFromStore {}
 
-            $result = Import-LazyVMConfiguration -VMName 'Alpha'
-            $beta = Read-VMSetting -Root $Root -VMName 'Beta'
+            $alpha = Initialize-CommandRun -Title 'A test' -Name 'Alpha'
+            $beta = Initialize-CommandRun -Title 'A test' -Name 'Beta'
 
-            [object]::ReferenceEquals($result.Settings, $current) | Should -BeTrue
-            [object]::ReferenceEquals($CFG, $current) | Should -BeTrue
-            $CFG.VMName | Should -Be 'Alpha'
-            $beta.Settings.VMName | Should -Be 'Beta'
-            $result.RootSource | Should -Be 'a test'
+            $alpha | Should -BeOfType ([VMContext])
+            $alpha.Name | Should -Be 'Alpha'
+            $alpha.Settings.vCPU | Should -Be 2
+            $beta.Settings.vCPU | Should -Be 6
+            $alpha.Settings.LogFile | Should -Be "$Root\Logs\Alpha.log"
+            Should -Invoke Start-Log -Times 1 -ParameterFilter { $Path -like '*\Logs\Alpha.log' }
         }
     }
 }
 
-Describe 'Bringing 1.x settings across' {
-    BeforeAll {
-        function New-LegacyKit {
-            <# A 1.x Config folder: a user settings file and one VM with a tooling list and history. #>
-            $legacy = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
-            $vmDir = Join-Path -Path $legacy -ChildPath 'VMs/DevBox'
-            New-Item -ItemType Directory -Path (Join-Path -Path $vmDir -ChildPath 'History/Daily') -Force | Out-Null
-            Set-Content -LiteralPath (Join-Path -Path $legacy -ChildPath 'LazyVM.Config.psd1') -Value "@{ Root = 'S:\Old'; MemMaxGB = 24; ScheduleTaskName = 'Mine' }"
-            Set-Content -LiteralPath (Join-Path -Path $vmDir -ChildPath 'VM.psd1') -Value "@{ MaintenanceTime = '03:00'; vCPU = 6; SQLInstallerPath = 'Installers\old.exe' }"
-            Set-Content -LiteralPath (Join-Path -Path $vmDir -ChildPath 'Tooling.json') -Value '{ "Version": 1 }'
-            Set-Content -LiteralPath (Join-Path -Path $vmDir -ChildPath 'History/Daily/20261001.json') -Value '{}'
-            return $legacy
-        }
-    }
-
-    It 'converts the settings and profiles to JSON, and copies tooling lists and history' {
-        $legacy = New-LegacyKit
-        $root = New-TestRoot
-
-        $done = InModuleScope $module -Parameters @{ Legacy = $legacy; Root = $root } {
-            param($Legacy, $Root)
-            Import-LegacyConfiguration -LegacyConfigDir $Legacy -ConfigDir (Get-ConfigDir -Root $Root)
-        }
-
-        $hostSettings = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Config/LazyVM.Settings.json')
-        $hostSettings.MemMaxGB | Should -Be 24
-        $hostSettings.Keys | Should -Not -Contain 'Root'
-        $hostSettings.Keys | Should -Not -Contain 'ScheduleTaskName'
-        $vmProfile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json')
-        $vmProfile.vCPU | Should -Be 6
-        $vmProfile.MaintenanceTime | Should -Be '03:00'
-        $vmProfile.Keys | Should -Not -Contain 'SQLInstallerPath'
-        Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/Tooling.json' | Should -Exist
-        Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/History/Daily/20261001.json' | Should -Exist
-        ($done.Messages -join "`n") | Should -BeLike "*'Root' is now chosen once with Set-LazyVMRoot*"
-        ($done.Messages -join "`n") | Should -BeLike "*'SQLInstallerPath' is no longer a setting*"
-    }
-
-    It 'produces files that load cleanly' {
-        $legacy = New-LegacyKit
-        $root = New-TestRoot
-
-        InModuleScope $module -Parameters @{ Legacy = $legacy; Root = $root } {
-            param($Legacy, $Root)
-            Import-LegacyConfiguration -LegacyConfigDir $Legacy -ConfigDir (Get-ConfigDir -Root $Root) | Out-Null
-            { Read-VMSetting -Root $Root } | Should -Not -Throw
-        }
-    }
-
-    It 'never overwrites a VM profile that already exists' {
-        $legacy = New-LegacyKit
-        $root = New-TestRoot -Profiles @{ DevBox = '{ "vCPU": 2 }' }
-
-        InModuleScope $module -Parameters @{ Legacy = $legacy; Root = $root } {
-            param($Legacy, $Root)
-            Import-LegacyConfiguration -LegacyConfigDir $Legacy -ConfigDir (Get-ConfigDir -Root $Root) | Out-Null
-        }
-
-        (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json')).vCPU | Should -Be 2
-    }
-
-    It 'does nothing when there is no 1.x Config folder' {
-        $root = New-TestRoot
-
-        $done = InModuleScope $module -Parameters @{ Root = $root } {
-            param($Root)
-            Import-LegacyConfiguration -LegacyConfigDir (Join-Path -Path $Root -ChildPath 'Scripts/Config') -ConfigDir (Get-ConfigDir -Root $Root)
-        }
-
-        @($done.Messages).Count | Should -Be 0
-        @($done.LegacyTasks).Count | Should -Be 0
-    }
-
-    It 'returns a maintenance task registered under a name LazyVM no longer uses' {
-        $legacy = New-LegacyKit
-        Set-Content -LiteralPath (Join-Path -Path $legacy -ChildPath 'VMs/DevBox/VM.psd1') -Value "@{ ScheduleTaskName = 'MsDevVM-90DayRebuild' }"
-        $root = New-TestRoot
-
-        $done = InModuleScope $module -Parameters @{ Legacy = $legacy; Root = $root } {
-            param($Legacy, $Root)
-            Import-LegacyConfiguration -LegacyConfigDir $Legacy -ConfigDir (Get-ConfigDir -Root $Root)
-        }
-
-        $done.LegacyTasks.TaskName | Should -Be 'MsDevVM-90DayRebuild'
-        $done.LegacyTasks.VMName | Should -Be 'DevBox'
-    }
-}
-
-Describe 'Copy-StoredCredential' {
+Describe 'The credential store' {
     BeforeAll {
         function New-TestKey {
             param([Parameter(Mandatory)][string]$Path)
@@ -693,64 +679,64 @@ Describe 'Copy-StoredCredential' {
             [Security.Cryptography.RandomNumberGenerator]::Fill($key)
             New-Item -ItemType Directory -Path (Split-Path -Path $Path -Parent) -Force | Out-Null
             [IO.File]::WriteAllBytes($Path, $key)
-            return $key
-        }
-        function New-TestCredentialFile {
-            [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'A made-up password for a test.')]
-            param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][byte[]]$Key)
-            $secure = ConvertTo-SecureString -String 'S3cret!' -AsPlainText -Force
-            $blob = [pscustomobject]@{ UserName = 'sean'; Password = ConvertFrom-SecureString -SecureString $secure -Key $Key }
-            New-Item -ItemType Directory -Path (Split-Path -Path $Path -Parent) -Force | Out-Null
-            Set-Content -LiteralPath $Path -Value (ConvertTo-Json -InputObject $blob)
-        }
-        function Read-TestCredential {
-            param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][byte[]]$Key)
-            $blob = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
-            $secure = ConvertTo-SecureString -String $blob.Password -Key $Key
-            return [pscredential]::new($blob.UserName, $secure).GetNetworkCredential().Password
         }
     }
 
-    It 'copies the credential and the key when the new key does not exist yet' {
+    It 'reads back what it stored' {
         $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
-        $oldKey = New-TestKey -Path "$folder/old.key"
-        New-TestCredentialFile -Path "$folder/old/guest.cred" -Key $oldKey
+        New-TestKey -Path "$folder/.lazyvm.key"
 
-        InModuleScope $module -Parameters @{ Folder = $folder } {
+        $password = InModuleScope $module -Parameters @{ Folder = $folder } {
             param($Folder)
-            Copy-StoredCredential -OldKeyPath "$Folder/old.key" -OldPath "$Folder/old/guest.cred" -NewKeyPath "$Folder/new.key" -NewPath "$Folder/new/guest.cred"
-        } | Should -BeLike 'Copied*'
+            Save-StoredCredential -KeyPath "$Folder/.lazyvm.key" -Path "$Folder/Alpha/guest.cred" -UserName 'sean' -Password (New-RandomPassword)
+            $stored = Get-StoredCredential -KeyPath "$Folder/.lazyvm.key" -Path "$Folder/Alpha/guest.cred"
+            $stored.UserName | Should -Be 'sean'
+            $stored.GetNetworkCredential().Password
+        }
 
-        Read-TestCredential -Path "$folder/new/guest.cred" -Key ([IO.File]::ReadAllBytes("$folder/new.key")) | Should -Be 'S3cret!'
+        $password.Length | Should -Be 24
     }
 
-    It 'encrypts it again when the new key already exists and differs' {
+    It 'returns nothing when no credential is stored' {
         $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
-        $oldKey = New-TestKey -Path "$folder/old.key"
-        $newKey = New-TestKey -Path "$folder/new.key"
-        New-TestCredentialFile -Path "$folder/old/guest.cred" -Key $oldKey
 
         InModuleScope $module -Parameters @{ Folder = $folder } {
             param($Folder)
-            Copy-StoredCredential -OldKeyPath "$Folder/old.key" -OldPath "$Folder/old/guest.cred" -NewKeyPath "$Folder/new.key" -NewPath "$Folder/new/guest.cred"
-        } | Should -BeLike '*encrypted with*'
-
-        Read-TestCredential -Path "$folder/new/guest.cred" -Key $newKey | Should -Be 'S3cret!'
-    }
-
-    It 'never overwrites an existing credential' {
-        $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
-        $oldKey = New-TestKey -Path "$folder/old.key"
-        New-TestCredentialFile -Path "$folder/old/guest.cred" -Key $oldKey
-        New-Item -ItemType Directory -Path "$folder/new" | Out-Null
-        Set-Content -LiteralPath "$folder/new/guest.cred" -Value 'existing'
-
-        InModuleScope $module -Parameters @{ Folder = $folder } {
-            param($Folder)
-            Copy-StoredCredential -OldKeyPath "$Folder/old.key" -OldPath "$Folder/old/guest.cred" -NewKeyPath "$Folder/new.key" -NewPath "$Folder/new/guest.cred"
+            Get-StoredCredential -KeyPath "$Folder/.lazyvm.key" -Path "$Folder/Alpha/guest.cred"
         } | Should -BeNullOrEmpty
+    }
 
-        (Get-Content -LiteralPath "$folder/new/guest.cred" -Raw).Trim() | Should -Be 'existing'
+    It 'refuses <Case>, rather than treating it as not stored' -ForEach @(
+        @{ Case = 'a credential whose key is missing'; KeyBytes = 0; Message = '*its key*is missing*' }
+        @{ Case = 'a damaged key'; KeyBytes = 5; Message = '*is damaged (5 bytes instead of 32)*' }
+    ) {
+        $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path "$folder/Alpha" -Force | Out-Null
+        Set-Content -LiteralPath "$folder/Alpha/guest.cred" -Value '{ "UserName": "sean", "Password": "x" }'
+        if ($KeyBytes) { [IO.File]::WriteAllBytes("$folder/.lazyvm.key", [byte[]]::new($KeyBytes)) }
+
+        {
+            InModuleScope $module -Parameters @{ Folder = $folder } {
+                param($Folder)
+                Get-StoredCredential -KeyPath "$Folder/.lazyvm.key" -Path "$Folder/Alpha/guest.cred"
+            }
+        } | Should -Throw -ExpectedMessage $Message
+    }
+}
+
+Describe 'New-RandomPassword' {
+    It 'always has an upper-case letter, a lower-case letter, a digit and a symbol' {
+        $passwords = InModuleScope $module {
+            1..50 | ForEach-Object { ConvertTo-PlainText -Secure (New-RandomPassword -Length 8) }
+        }
+
+        foreach ($password in $passwords) {
+            $password.Length | Should -Be 8
+            $password | Should -MatchExactly '[A-Z]'
+            $password | Should -MatchExactly '[a-z]'
+            $password | Should -Match '[0-9]'
+            $password | Should -Match '[^A-Za-z0-9]'
+        }
     }
 }
 

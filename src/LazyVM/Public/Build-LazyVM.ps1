@@ -1,4 +1,4 @@
-﻿function Build-LazyVM {
+function Build-LazyVM {
     <#
     .SYNOPSIS
     Builds a VM, unattended. One command does everything.
@@ -62,20 +62,18 @@
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
-        [ValidateRange(0, 8)]
+        [ValidateScript({ Test-BuildPhaseNumber -Number $_ }, ErrorMessage = "There is no build phase {0}. Get-Help Build-LazyVM lists the phases.")]
         [int]$FromPhase = 0,
 
         [switch]$NoUnattend
     )
 
     process {
-        Assert-Administrator
-        try {
-            Initialize-BuildTarget -Name $Name
-            $null = Initialize-CommandRun -Title 'Build' -Name $Name
-
-            $result = Invoke-VMBuild -FromPhase $FromPhase -NoUnattend:$NoUnattend
-            if ($result -eq 'RestartPending') {
+        Initialize-BuildTarget -Name $Name
+        Invoke-CommandRun -Title 'Build' -Name $Name -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            $outcome = Invoke-VMBuild -VM $VM -FromPhase $FromPhase -NoUnattend:$NoUnattend
+            if ($outcome -eq [BuildOutcome]::RestartPending) {
                 Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
                 return
             }
@@ -83,25 +81,18 @@
             # The daily maintenance, so nothing has to be remembered. A problem
             # here is reported but does not undo a good build.
             try {
-                Register-RebuildSchedule
+                Register-RebuildSchedule -VM $VM
             }
             catch {
                 Write-LogEntry "The daily maintenance could not be scheduled: $($_.Exception.Message)" 'WARN'
-                Write-LogEntry "  Schedule it with: Register-LazyVMMaintenance -Name $($CFG.VMName)" 'INFO'
+                Write-LogEntry "  Schedule it with: Register-LazyVMMaintenance -Name $($VM.Name)" 'INFO'
             }
 
             Write-LogEntry '' 'INFO'
             Write-LogEntry '========================================================' 'INFO'
-            Write-LogEntry "  All phases complete. $($CFG.VMName) is ready."          'OK'
-            Write-LogEntry "  Log : $($CFG.LogFile)"                                 'INFO'
+            Write-LogEntry "  All phases complete. $($VM.Name) is ready." 'OK'
+            Write-LogEntry "  Log : $($VM.Settings.LogFile)" 'INFO'
             Write-LogEntry '========================================================' 'INFO'
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'Build stopped' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
         }
     }
 }

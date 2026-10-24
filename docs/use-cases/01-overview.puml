@@ -11,7 +11,7 @@ rectangle "LazyVM" {
   package "Look up" {
     usecase "List VMs\n<size:10>Get-LazyVM</size>" as UC_List
     usecase "View settings\n<size:10>Get-LazyVMSetting</size>" as UC_Set
-    usecase "Check the licence\n<size:10>Get-LazyVMLicense</size>" as UC_Lic
+    usecase "Check the license\n<size:10>Get-LazyVMLicense</size>" as UC_Lic
     usecase "View the guest account\n<size:10>Get-LazyVMCredential</size>" as UC_CredV
   }
   package "Set up" {

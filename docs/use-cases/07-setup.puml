@@ -10,22 +10,15 @@ rectangle "LazyVM" {
   usecase "Create a VM profile\n<size:10>New-LazyVM</size>" as New
   usecase "Copy another VM's\nsettings and tooling" as Copy
   usecase "Choose the LazyVM folder\n<size:10>Set-LazyVMRoot</size>" as Root
-  usecase "Import LazyVM 1.x settings" as Legacy
-  usecase "Move 1.x maintenance tasks" as LegacyTasks
   usecase "Store the guest account\n<size:10>Set-LazyVMCredential</size>" as Cred
   usecase "Generate a password" as GenPwd
 }
-
-actor "Task Scheduler" as TS <<system>>
 
 User --> New
 Admin --> Root
 Admin --> Cred
 
 Copy ..> New : <<extend>>\n[-From]
-Legacy ..> Root : <<extend>>\n[1.x kit in the folder]
-LegacyTasks ..> Root : <<extend>>\n[1.x task still registered]
 GenPwd ..> Cred : <<extend>>\n[password left empty]
 
-LegacyTasks --> TS
 @enduml

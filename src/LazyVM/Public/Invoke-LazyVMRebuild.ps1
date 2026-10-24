@@ -1,4 +1,4 @@
-﻿function Invoke-LazyVMRebuild {
+function Invoke-LazyVMRebuild {
     <#
     .SYNOPSIS
     Rebuilds a VM from scratch, keeping its work.
@@ -45,30 +45,17 @@
     )
 
     process {
-        if ($Force -and -not $PSBoundParameters.ContainsKey('Confirm')) {
-            $ConfirmPreference = 'None'
-        }
-
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Rebuild' -Name $Name
+        Set-ForceConfirmation -Force:$Force -BoundParameters $PSBoundParameters
+        Invoke-CommandRun -Title 'Rebuild' -Name $Name -FailureMessage 'The rebuild stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
             $action = 'Rebuild from scratch. State is captured first and restored afterwards, and the old Windows disk is kept until the new VM is checked'
-            if (-not $PSCmdlet.ShouldProcess($CFG.VMName, $action)) {
+            if (-not $PSCmdlet.ShouldProcess($VM.Name, $action)) {
                 Write-LogEntry 'Rebuild cancelled' 'INFO'
                 return
             }
-
-            $ok = @(Invoke-Rebuild -SkipCapture:$SkipCapture -NoUnattend:$NoUnattend)[-1]
-            if ($ok -ne $true) {
-                throw "The rebuild of '$($CFG.VMName)' did not complete cleanly. The log says what happened and how to go back: $($CFG.LogFile)"
+            if (@(Invoke-Rebuild -VM $VM -SkipCapture:$SkipCapture -NoUnattend:$NoUnattend)[-1] -ne $true) {
+                throw "The rebuild of '$($VM.Name)' did not complete cleanly. The log says what happened and how to go back: $($VM.Settings.LogFile)"
             }
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'The rebuild stopped' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
         }
     }
 }

@@ -6,14 +6,12 @@ $PinnedTools = @{
     PSScriptAnalyzer = '1.24.0'
 }
 
-function Install-BuildTool
-{
+function Install-BuildTool {
     <# Installs the pinned version of a tool if it is missing, beside any others, and returns that version. #>
     param([Parameter(Mandatory)][string]$Name)
 
     $version = [version]$PinnedTools[$Name]
-    if (-not (Get-Module -ListAvailable -Name $Name | Where-Object { $_.Version -eq $version }))
-    {
+    if (-not (Get-Module -ListAvailable -Name $Name | Where-Object { $_.Version -eq $version })) {
         Write-Host "Installing $Name $version..."
         Install-Module -Name $Name -RequiredVersion $version -Scope CurrentUser -Force -SkipPublisherCheck
     }

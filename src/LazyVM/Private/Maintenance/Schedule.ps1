@@ -5,19 +5,20 @@
 #  DAILY MAINTENANCE SCHEDULED TASK  (Register-LazyVMMaintenance)
 # ─────────────────────────────────────────────────────────────────────────────
 function Register-RebuildSchedule {
-    Write-LogEntry "Daily Maintenance Schedule - $($CFG.VMName)" 'PHASE'
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $settings = $VM.Settings
+    Write-LogEntry "Daily Maintenance Schedule - $($VM.Name)" 'PHASE'
 
     # Refuse to schedule an unattended run that cannot possibly authenticate.
-    if (-not (Get-StoredCredential -Path $CFG.GuestCredFile)) {
-        throw "Cannot register the schedule: no guest credential is stored for '$($CFG.VMName)'. Store one first with: Set-LazyVMCredential -Name $($CFG.VMName)"
-    }
+    $null = Assert-GuestCredential -VM $VM
 
     # The time of day comes from the VM's MaintenanceTime, so each VM on the
     # host is maintained at its own time.
     [datetime]$time = [datetime]::MinValue
-    if (-not [datetime]::TryParseExact($CFG.MaintenanceTime, 'HH:mm', [Globalization.CultureInfo]::InvariantCulture,
+    if (-not [datetime]::TryParseExact($settings.MaintenanceTime, 'HH:mm', [Globalization.CultureInfo]::InvariantCulture,
             [Globalization.DateTimeStyles]::None, [ref]$time)) {
-        throw "Cannot register the schedule: MaintenanceTime '$($CFG.MaintenanceTime)' is not a 24-hour time such as 02:00."
+        throw "Cannot register the schedule: MaintenanceTime '$($settings.MaintenanceTime)' is not a 24-hour time such as 02:00."
     }
 
     # Runs DAILY rather than every 90 days, and does nothing until
@@ -30,8 +31,8 @@ function Register-RebuildSchedule {
     # Registering again replaces the task, which is how an existing one is
     # updated.
     $trigger = New-ScheduledTaskTrigger -Daily -DaysInterval 1 -At $nextRun
-    $action = New-LazyVMTaskAction -Command "Invoke-LazyVMMaintenance -Name '$($CFG.VMName)'"
-    $settings = New-ScheduledTaskSettingsSet `
+    $action = New-LazyVMTaskAction -Command "Invoke-LazyVMMaintenance -Name '$($VM.Name)'"
+    $taskSettings = New-ScheduledTaskSettingsSet `
         -WakeToRun `
         -StartWhenAvailable `
         -AllowStartIfOnBatteries `
@@ -41,11 +42,11 @@ function Register-RebuildSchedule {
         -RestartInterval (New-TimeSpan -Minutes 30)
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 
-    Register-ScheduledTask -TaskName $CFG.ScheduleTaskName -Trigger $trigger -Action $action `
-        -Settings $settings -Principal $principal -Force | Out-Null
+    Register-ScheduledTask -TaskName $settings.ScheduleTaskName -Trigger $trigger -Action $action `
+        -Settings $taskSettings -Principal $principal -Force | Out-Null
 
-    Write-LogEntry "Scheduled task '$($CFG.ScheduleTaskName)' registered for VM '$($CFG.VMName)' - daily at $($CFG.MaintenanceTime), first run $($nextRun.ToString('yyyy-MM-dd HH:mm'))" 'OK'
+    Write-LogEntry "Scheduled task '$($settings.ScheduleTaskName)' registered for VM '$($VM.Name)' - daily at $($settings.MaintenanceTime), first run $($nextRun.ToString('yyyy-MM-dd HH:mm'))" 'OK'
     Write-LogEntry '  Runs daily as SYSTEM and does nothing until the evaluation is within' 'INFO'
-    Write-LogEntry "  $($CFG.RebuildThresholdDays) days of expiry. It then captures state and rearms Windows;" 'INFO'
+    Write-LogEntry "  $($settings.RebuildThresholdDays) days of expiry. It then captures state and rearms Windows;" 'INFO'
     Write-LogEntry '  only when rearms are exhausted does it capture, rebuild and restore.' 'INFO'
 }

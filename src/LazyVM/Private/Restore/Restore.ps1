@@ -1,109 +1,168 @@
-﻿# Restore.ps1 - Phase 10: restore captured state into a guest.
+﻿# Restore.ps1 - Putting a capture back into a guest.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  PHASE 10 — RESTORE
 #
-#  Applies a capture manifest into a freshly built guest. Every step is
-#  isolated: a failure to re-add a firewall rule must not cost you your
-#  databases.
-# ─────────────────────────────────────────────────────────────────────────────
-function Restore-GuestState {
-    Write-LogEntry 'PHASE 10 - Restore Captured State' 'PHASE'
+# Every area is isolated: a firewall rule that cannot be added must not cost
+# the databases. Visual Studio's settings are applied by the build's
+# Restore-GuestVisualStudioSetting, from VSSettingsBackup, which the capture
+# refreshes.
 
-    $manifest = Get-CaptureManifest
+function Restore-GuestState {
+    <# Applies the VM's capture. Returns $false when an area failed; having no capture is not a failure. #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $manifest = Get-CaptureManifest -VM $VM
     if (-not $manifest) {
-        Write-LogEntry 'No capture manifest found - nothing to restore' 'WARN'
-        Write-LogEntry "  Expected at $(Join-Path $CFG.StateDir 'manifest.json')" 'INFO'
-        return
+        Write-LogEntry 'No usable capture found - nothing to restore' 'WARN'
+        Write-LogEntry "  Expected at $(Get-CaptureManifestPath -VM $VM)" 'INFO'
+        return $true
     }
     Write-LogEntry "Restoring the capture taken at $($manifest.CapturedAt)" 'INFO'
 
-    $vm = Get-VM -Name $CFG.VMName -ErrorAction SilentlyContinue
-    if (-not $vm) { Stop-WithError "VM '$($CFG.VMName)' does not exist." }
+    $null = Open-GuestSession -VM $VM -Purpose 'restore its state'
+    Initialize-GuestSqlDisk -VM $VM
 
-    $credential = Get-GuestCredential
-    if (-not $credential) { Stop-WithError 'No stored guest credential.' }
-
-    if ($vm.State -ne 'Running') {
-        Start-VM -Name $CFG.VMName | Out-Null
-        Wait-GuestReady -Credential $credential -TimeoutMinutes 30 | Out-Null
-    }
-    Connect-Guest -Credential $credential | Out-Null
-    Initialize-GuestSqlDisk
-
-    $steps = @(
-        [pscustomobject]@{ Name = '10a - Windows environment'; Action = { Restore-GuestWindowsState -Manifest $manifest } }
-        [pscustomobject]@{ Name = '10b - Visual Studio'; Action = { Restore-GuestVisualStudioState -Manifest $manifest } }
-        [pscustomobject]@{ Name = '10c - SQL Server'; Action = { Restore-GuestSqlState -Manifest $manifest } }
-        [pscustomobject]@{ Name = '10d - project files'; Action = { Restore-GuestProjectFolder -Manifest $manifest } }
-        [pscustomobject]@{ Name = '10e - application settings'; Action = { Restore-GuestAppSetting -Manifest $manifest } }
+    $run = Invoke-IsolatedStep -What 'restore' -Steps @(
+        [pscustomobject]@{ Name = '10a - Windows environment'; Action = { Restore-GuestWindowsState -VM $VM -Manifest $manifest } }
+        [pscustomobject]@{ Name = '10b - Visual Studio files'; Action = { Restore-GuestVisualStudioState -VM $VM -Manifest $manifest } }
+        [pscustomobject]@{ Name = '10c - SQL Server'; Action = { Restore-GuestSqlState -VM $VM -Manifest $manifest } }
+        [pscustomobject]@{ Name = '10d - project files'; Action = { Restore-GuestProjectFolder -VM $VM -Manifest $manifest } }
+        [pscustomobject]@{ Name = '10e - application settings'; Action = { Restore-GuestAppSetting -VM $VM -Manifest $manifest } }
     )
-
-    $failures = 0
-    foreach ($step in $steps) {
-        try { & $step.Action }
-        catch {
-            $failures++
-            Write-LogError "$($step.Name) failed" $_
-            Write-LogEntry '  Continuing with the remaining restore steps.' 'INFO'
-        }
-    }
-
-    if ($failures -gt 0) { Write-LogEntry "Restore finished with $failures of $($steps.Count) steps failing" 'WARN' }
-    else { Write-LogEntry 'Phase 10 complete' 'OK' }
-    return ($failures -eq 0)
+    if ($run.Failures.Count -eq 0) { Write-LogEntry 'Restore complete' 'OK' }
+    return ($run.Failures.Count -eq 0)
 }
 
-function Restore-GuestWindowsState {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'The certificate PFX password has to cross into the guest as text, where it becomes a SecureString again; PowerShell Direct cannot carry a SecureString encrypted with a key the guest does not have.')]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'The certificate PFX password has to cross into the guest as text, where it becomes a SecureString again; PowerShell Direct cannot carry a SecureString encrypted with a key the guest does not have.')]
-    param([Parameter(Mandatory)]$Manifest)
+function Send-CaptureArchive {
+    <# Copies a capture archive into the guest and returns its path there, or $null when the capture has none. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [AllowNull()][object]$Area,
+        [Parameter(Mandatory)][string]$What
+    )
 
-    if (-not $Manifest.Windows -or -not $Manifest.Windows.Archive) {
-        Write-LogEntry '  no Windows environment capture - skipping' 'INFO'
-        return
+    $archive = [RecordReader]::Text($Area, 'Archive')
+    if (-not $archive) {
+        Write-LogEntry "  no $What capture - skipping" 'INFO'
+        return $null
     }
-    $archive = $Manifest.Windows.Archive
     if (-not (Test-Path -LiteralPath $archive)) {
-        Write-LogEntry "  capture archive missing at $archive - skipping" 'WARN'
-        return
+        Write-LogEntry "  $What capture archive missing at $archive - skipping" 'WARN'
+        return $null
     }
+    $guestZip = Join-Path $VM.Settings.GuestSetupDir ([IO.Path]::GetFileName($archive))
+    Copy-ToGuest -VM $VM -HostPath $archive -GuestPath $guestZip
+    return $guestZip
+}
 
-    $certCred = Get-StoredCredential -Path $CFG.CertCredFile
-    $certPassword = if ($certCred) { ConvertTo-PlainText $certCred.Password } else { '' }
+# ── Windows environment ──────────────────────────────────────────────────────
 
-    $guestZip = Join-Path $CFG.GuestSetupDir 'winstate.zip'
-    Copy-ToGuest -HostPath $archive -GuestPath $guestZip
+function Restore-GuestWindowsState {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'The certificate PFX password has to cross into the guest as text, where it becomes a SecureString again.')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'The PFX password arrives in the guest as text and becomes a SecureString there.')]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][CaptureManifest]$Manifest
+    )
 
-    $report = Invoke-GuestScript -Activity 'Windows environment restore' -TimeoutMinutes 60 -ArgumentList @(
-        $guestZip, $CFG.GuestSetupDir, $certPassword
-    ) -ScriptBlock {
-        param($zip, $setupDir, $certPassword)
-        $ErrorActionPreference = 'Stop'
-        $log = @()
+    $guestZip = Send-CaptureArchive -VM $VM -Area $Manifest.Windows -What 'Windows environment'
+    if (-not $guestZip) { return }
 
+    $work = Invoke-GuestScript -VM $VM -Activity 'Windows restore staging' -TimeoutMinutes 10 -ArgumentList @($guestZip, $VM.Settings.GuestSetupDir) -ScriptBlock {
+        param($zip, $setupDir)
         $work = Join-Path $setupDir 'winstate-restore'
         Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [IO.Compression.ZipFile]::ExtractToDirectory($zip, $work)
+        Expand-GuestZip -Archive $zip -Destination $work
+        return $work
+    }
 
+    $certificate = Get-StoredCredential -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.CertCredFile
+    $certPassword = if ($certificate) { ConvertTo-PlainText -Secure $certificate.Password } else { '' }
+
+    $notes = @()
+    $notes += Restore-GuestEnvironment -VM $VM -Work $work
+    $notes += Invoke-GuestScript -VM $VM -Activity 'certificate restore' -TimeoutMinutes 10 -ArgumentList @($work, $certPassword) -ScriptBlock {
+        param($work, $certPassword)
         $state = Get-Content (Join-Path $work 'environment.json') -Raw | ConvertFrom-Json
+        $securePassword = if ($certPassword) { ConvertTo-SecureString -String $certPassword -AsPlainText -Force } else { $null }
+        $notes = @(); $restored = 0
+        foreach ($cert in @($state.Certificates)) {
+            $file = Join-Path $work "certs\$($cert.File)"
+            if (-not $cert -or -not (Test-Path $file)) { continue }
+            try {
+                if ($cert.HasKey -and $securePassword) { Import-PfxCertificate -FilePath $file -CertStoreLocation $cert.Store -Password $securePassword -Exportable | Out-Null }
+                else { Import-Certificate -FilePath $file -CertStoreLocation $cert.Store | Out-Null }
+                $restored++
+            }
+            catch { $notes += New-GuestNote -Level WARN -Text "certificate $($cert.Thumbprint) failed: $($_.Exception.Message)" }
+        }
+        if ($restored -gt 0) { $notes += New-GuestNote -Level OK -Text "restored $restored certificate(s)" }
+        return $notes
+    }
+    $notes += Invoke-GuestScript -VM $VM -Activity 'firewall restore' -TimeoutMinutes 10 -ArgumentList @($work) -ScriptBlock {
+        param($work)
+        $file = Join-Path $work 'firewall.json'
+        if (-not (Test-Path $file)) { return }
+        $notes = @(); $added = 0
+        foreach ($rule in @(Get-Content $file -Raw | ConvertFrom-Json)) {
+            if (-not $rule -or (Get-NetFirewallRule -DisplayName $rule.DisplayName -ErrorAction SilentlyContinue)) { continue }
+            try {
+                $parameters = @{ DisplayName = $rule.DisplayName; Direction = $rule.Direction; Action = $rule.Action; Profile = $rule.Profile }
+                if ($rule.Protocol -and $rule.Protocol -ne 'Any') { $parameters.Protocol = $rule.Protocol }
+                if ($rule.LocalPort -and @($rule.LocalPort)[0] -ne 'Any') { $parameters.LocalPort = @($rule.LocalPort) }
+                if ($rule.RemoteAddress -and @($rule.RemoteAddress)[0] -ne 'Any') { $parameters.RemoteAddress = @($rule.RemoteAddress) }
+                New-NetFirewallRule @parameters | Out-Null
+                $added++
+            }
+            catch { $notes += New-GuestNote -Level WARN -Text "firewall rule '$($rule.DisplayName)' failed: $($_.Exception.Message)" }
+        }
+        if ($added -gt 0) { $notes += New-GuestNote -Level OK -Text "recreated $added firewall rule(s)" }
+        return $notes
+    }
+    $notes += Invoke-GuestScript -VM $VM -Activity 'scheduled task restore' -TimeoutMinutes 10 -ArgumentList @($work) -ScriptBlock {
+        param($work)
+        $notes = @(); $added = 0
+        foreach ($file in @(Get-ChildItem (Join-Path $work 'tasks') -Filter '*.xml' -File -ErrorAction SilentlyContinue)) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($file.Name)
+            if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) { continue }
+            try {
+                Register-ScheduledTask -TaskName $name -Xml (Get-Content $file.FullName -Raw) -Force | Out-Null
+                $added++
+            }
+            catch { $notes += New-GuestNote -Level WARN -Text "scheduled task '$name' failed: $($_.Exception.Message)" }
+        }
+        if ($added -gt 0) { $notes += New-GuestNote -Level OK -Text "recreated $added scheduled task(s)" }
+        return $notes
+    }
+    Write-GuestNote -Notes $notes
+}
 
-        # -- environment variables --------------------------------------------
+function Restore-GuestEnvironment {
+    <#
+      Environment variables, then PATH, merged rather than replaced so the
+      fresh install's own entries survive, then the hosts file, keeping the
+      new one as hosts.lazyvm-original.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$Work
+    )
+
+    return Invoke-GuestScript -VM $VM -Activity 'environment restore' -TimeoutMinutes 10 -ArgumentList @($Work) -ScriptBlock {
+        param($work)
+        $state = Get-Content (Join-Path $work 'environment.json') -Raw | ConvertFrom-Json
+        $notes = @()
+
         $count = 0
         foreach ($scope in 'Machine', 'User') {
-            $table = if ($scope -eq 'Machine') { $state.EnvMachine } else { $state.EnvUser }
+            $table = $state."Env$scope"
             if (-not $table) { continue }
-            foreach ($prop in $table.PSObject.Properties) {
-                [Environment]::SetEnvironmentVariable($prop.Name, $prop.Value, $scope)
+            foreach ($property in $table.PSObject.Properties) {
+                [Environment]::SetEnvironmentVariable($property.Name, $property.Value, $scope)
                 $count++
             }
         }
-        $log += "restored $count environment variable(s)"
+        $notes += New-GuestNote -Level OK -Text "restored $count environment variable(s)"
 
-        # PATH is merged, never replaced: the fresh install's own entries
-        # (Visual Studio, SQL tools, Git) must survive.
         foreach ($scope in 'Machine', 'User') {
             $saved = @($state.PathEntries.$scope)
             if ($saved.Count -eq 0) { continue }
@@ -111,383 +170,239 @@ function Restore-GuestWindowsState {
             $added = @($saved | Where-Object { $current -notcontains $_ -and (Test-Path $_ -ErrorAction SilentlyContinue) })
             if ($added.Count -gt 0) {
                 [Environment]::SetEnvironmentVariable('Path', (($current + $added) -join ';'), $scope)
-                $log += "added $($added.Count) entr(ies) to the $scope PATH"
+                $notes += New-GuestNote -Level OK -Text "added $($added.Count) entr(ies) to the $scope PATH"
             }
         }
 
-        # -- hosts file ---------------------------------------------------------
-        $hostsSrc = Join-Path $work 'hosts'
-        if (Test-Path $hostsSrc) {
-            $hostsDest = "$env:SystemRoot\System32\drivers\etc\hosts"
-            Copy-Item $hostsDest "$hostsDest.lazyvm-original" -Force -ErrorAction SilentlyContinue
-            Copy-Item $hostsSrc $hostsDest -Force
-            $log += 'restored the hosts file (previous kept as hosts.lazyvm-original)'
+        $hostsSource = Join-Path $work 'hosts'
+        if (Test-Path $hostsSource) {
+            $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
+            Copy-Item $hostsFile "$hostsFile.lazyvm-original" -Force -ErrorAction SilentlyContinue
+            Copy-Item $hostsSource $hostsFile -Force
+            $notes += New-GuestNote -Level OK -Text 'restored the hosts file (the new one kept as hosts.lazyvm-original)'
         }
-
-        # -- certificates --------------------------------------------------------
-        $certDir = Join-Path $work 'certs'
-        $restored = 0
-        if ((Test-Path $certDir) -and $state.Certificates) {
-            $securePwd = if ($certPassword) { ConvertTo-SecureString -String $certPassword -AsPlainText -Force } else { $null }
-            foreach ($cert in $state.Certificates) {
-                $file = Join-Path $certDir $cert.File
-                if (-not (Test-Path $file)) { continue }
-                try {
-                    if ($cert.HasKey -and $securePwd) {
-                        Import-PfxCertificate -FilePath $file -CertStoreLocation $cert.Store -Password $securePwd -Exportable | Out-Null
-                    }
-                    else {
-                        Import-Certificate -FilePath $file -CertStoreLocation $cert.Store | Out-Null
-                    }
-                    $restored++
-                }
-                catch { $log += "certificate $($cert.Thumbprint) failed: $($_.Exception.Message)" }
-            }
-        }
-        if ($restored -gt 0) { $log += "restored $restored certificate(s)" }
-
-        # -- firewall rules --------------------------------------------------------
-        $firewallFile = Join-Path $work 'firewall.json'
-        if (Test-Path $firewallFile) {
-            $added = 0
-            foreach ($rule in @(Get-Content $firewallFile -Raw | ConvertFrom-Json)) {
-                if (Get-NetFirewallRule -DisplayName $rule.DisplayName -ErrorAction SilentlyContinue) { continue }
-                try {
-                    $params = @{
-                        DisplayName = $rule.DisplayName
-                        Direction   = $rule.Direction
-                        Action      = $rule.Action
-                        Profile     = $rule.Profile
-                    }
-                    if ($rule.Protocol -and $rule.Protocol -ne 'Any') { $params.Protocol = $rule.Protocol }
-                    if ($rule.LocalPort -and @($rule.LocalPort)[0] -ne 'Any') { $params.LocalPort = @($rule.LocalPort) }
-                    if ($rule.RemoteAddress -and @($rule.RemoteAddress)[0] -ne 'Any') { $params.RemoteAddress = @($rule.RemoteAddress) }
-                    New-NetFirewallRule @params | Out-Null
-                    $added++
-                }
-                catch { $log += "firewall rule '$($rule.DisplayName)' failed: $($_.Exception.Message)" }
-            }
-            if ($added -gt 0) { $log += "recreated $added firewall rule(s)" }
-        }
-
-        # -- scheduled tasks ---------------------------------------------------------
-        $taskDir = Join-Path $work 'tasks'
-        if (Test-Path $taskDir) {
-            $added = 0
-            foreach ($file in @(Get-ChildItem $taskDir -Filter '*.xml' -File)) {
-                $name = [IO.Path]::GetFileNameWithoutExtension($file.Name)
-                if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) { continue }
-                try {
-                    Register-ScheduledTask -TaskName $name -Xml (Get-Content $file.FullName -Raw) -Force | Out-Null
-                    $added++
-                }
-                catch { $log += "scheduled task '$name' failed: $($_.Exception.Message)" }
-            }
-            if ($added -gt 0) { $log += "recreated $added scheduled task(s)" }
-        }
-
-        return $log
-    }
-
-    foreach ($line in @($report)) {
-        if ($line -match 'failed') { Write-LogEntry "  $line" 'WARN' } else { Write-LogEntry "  $line" 'OK' }
+        return $notes
     }
 }
 
+# ── Visual Studio ────────────────────────────────────────────────────────────
+
 function Restore-GuestVisualStudioState {
-    param([Parameter(Mandatory)]$Manifest)
+    <# NuGet.Config, .gitconfig and the snippets and templates; the settings themselves come from Restore-GuestVisualStudioSetting. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][CaptureManifest]$Manifest
+    )
 
     if (-not $Manifest.VisualStudio) {
         Write-LogEntry '  no Visual Studio capture - skipping' 'INFO'
         return
     }
-
-    $vs = Get-GuestVisualStudio
+    $vs = Get-GuestVisualStudio -VM $VM
     if (-not $vs) {
         Write-LogEntry '  Visual Studio is not installed in the guest - skipping' 'WARN'
         return
     }
 
-    $files = $Manifest.VisualStudio.Files
+    $files = [RecordReader]::Field($Manifest.VisualStudio, 'Files')
     $pushed = @{}
-    foreach ($key in 'Settings', 'NuGetConfig', 'GitConfig', 'UserItems') {
-        if (-not $files.PSObject.Properties[$key]) { continue }
-        $hostPath = $files.$key
+    foreach ($key in 'NuGetConfig', 'GitConfig', 'UserItems') {
+        $hostPath = [RecordReader]::Text($files, $key)
         if (-not $hostPath -or -not (Test-Path -LiteralPath $hostPath)) { continue }
-        $guestPath = Join-Path $CFG.GuestSetupDir ([IO.Path]::GetFileName($hostPath))
+        $guestPath = Join-Path $VM.Settings.GuestSetupDir ([IO.Path]::GetFileName($hostPath))
         try {
-            Copy-ToGuest -HostPath $hostPath -GuestPath $guestPath
+            Copy-ToGuest -VM $VM -HostPath $hostPath -GuestPath $guestPath
             $pushed[$key] = $guestPath
         }
         catch { Write-LogEntry "  could not send $key to the guest: $($_.Exception.Message)" 'WARN' }
     }
 
-    $report = Invoke-GuestScript -Activity 'Visual Studio restore' -TimeoutMinutes 30 -ArgumentList @(
+    $notes = Invoke-GuestScript -VM $VM -Activity 'Visual Studio restore' -TimeoutMinutes 30 -ArgumentList @(
         $pushed['NuGetConfig'], $pushed['GitConfig'], $pushed['UserItems'], "$($vs.ProductLine)"
     ) -ScriptBlock {
         param($nuget, $gitconfig, $userItems, $productLine)
-        $ErrorActionPreference = 'Continue'
-        $log = @()
-
-        if ($nuget -and (Test-Path $nuget)) {
-            $dest = Join-Path $env:APPDATA 'NuGet\NuGet.Config'
-            $dir = Split-Path $dest -Parent
-            if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-            Copy-Item $nuget $dest -Force
-            $log += 'restored NuGet.Config'
+        $notes = @()
+        if ($nuget) {
+            $destination = Join-Path $env:APPDATA 'NuGet\NuGet.Config'
+            New-GuestFolder -Path (Split-Path $destination -Parent)
+            Copy-Item $nuget $destination -Force
+            $notes += New-GuestNote -Level OK -Text 'restored NuGet.Config'
         }
-        if ($gitconfig -and (Test-Path $gitconfig)) {
+        if ($gitconfig) {
             Copy-Item $gitconfig (Join-Path $env:USERPROFILE '.gitconfig') -Force
-            $log += 'restored .gitconfig'
+            $notes += New-GuestNote -Level OK -Text 'restored .gitconfig'
         }
-        if ($userItems -and (Test-Path $userItems)) {
-            $dest = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "Visual Studio $productLine"
-            if (-not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest -Force | Out-Null }
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            $tmp = Join-Path $env:TEMP 'vs-useritems'
-            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-            [IO.Compression.ZipFile]::ExtractToDirectory($userItems, $tmp)
-            Copy-Item (Join-Path $tmp '*') $dest -Recurse -Force
-            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-            $log += 'restored snippets and templates'
+        if ($userItems) {
+            $destination = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "Visual Studio $productLine"
+            New-GuestFolder -Path $destination
+            $temp = Join-Path $env:TEMP 'vs-useritems'
+            Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
+            Expand-GuestZip -Archive $userItems -Destination $temp
+            Copy-Item (Join-Path $temp '*') $destination -Recurse -Force
+            Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
+            $notes += New-GuestNote -Level OK -Text 'restored snippets and templates'
         }
-        return $log
+        return $notes
     }
-    foreach ($line in @($report)) { Write-LogEntry "  $line" 'OK' }
-
-    # Settings have to be applied in the desktop session: the settings store
-    # is per-user, and devenv needs a real session to write it.
-    if ($pushed.ContainsKey('Settings')) {
-        $settingsPath = $pushed['Settings']
-        $script = @"
-    `$devenv = '$($vs.DevEnvPath)'
-    if (-not (Test-Path `$devenv)) { throw "devenv.exe not found at `$devenv" }
-    `$proc = Start-Process -FilePath `$devenv -ArgumentList '/NoSplash','/ResetSettings','"$settingsPath"','/Command','Exit' -Wait -PassThru
-    if (`$proc.ExitCode -ne 0) { throw "devenv exited with `$(`$proc.ExitCode)" }
-"@
-        try {
-            Invoke-GuestScriptAsInteractiveUser -ScriptText $script -TaskName 'LazyVM-VSSettingsRestore' `
-                -Activity 'Visual Studio settings restore' -TimeoutMinutes 25
-            Write-LogEntry '  applied Visual Studio settings' 'OK'
-        }
-        catch { Write-LogEntry "  settings import failed: $($_.Exception.Message)" 'WARN' }
-    }
+    Write-GuestNote -Notes $notes
 }
 
-function Restore-GuestSqlState {
-    param([Parameter(Mandatory)]$Manifest)
+# ── SQL Server ───────────────────────────────────────────────────────────────
 
-    if (-not $Manifest.Sql) {
+function Restore-GuestSqlState {
+    <# Instance settings, then logins with their original SIDs, then each database from its backup on the data disk. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][CaptureManifest]$Manifest
+    )
+
+    $sql = $Manifest.Sql
+    if (-not $sql) {
         Write-LogEntry '  no SQL capture - skipping' 'INFO'
         return
     }
-
-    $instance = Get-GuestSqlInstance
-    if (-not $instance) {
+    if (-not (Connect-GuestSqlInstance -VM $VM)) {
         Write-LogEntry '  SQL Server is not installed in the guest - skipping' 'WARN'
         return
     }
-    Set-GuestSqlServer -Instance $instance.Instance
 
-    $logins = @($Manifest.Sql.Logins) | ForEach-Object {
-        @{
-            Name = $_.Name; TypeDesc = $_.TypeDesc; IsDisabled = $_.IsDisabled
-            DefaultDb = $_.DefaultDb; DefaultLang = $_.DefaultLang
-            SidHex = $_.SidHex; HashHex = $_.HashHex
-            PolicyChecked = $_.PolicyChecked; ExpirationChecked = $_.ExpirationChecked
-            ServerRoles = @($_.ServerRoles)
-        }
-    }
-    $databases = @($Manifest.Sql.Databases) | ForEach-Object {
-        @{ Name = $_.Name; BackupFile = $_.BackupFile; Recovery = $_.Recovery; CompatLevel = $_.CompatLevel }
-    }
-    $configs = @($Manifest.Sql.Configs) | ForEach-Object { @{ Name = $_.Name; Value = $_.Value } }
+    $runtime = $VM.Runtime
+    $notes = @()
+    $notes += Restore-GuestSqlLogin -VM $VM -Configs @($sql.Configs) -Logins @($sql.Logins)
+    foreach ($database in @($sql.Databases | Where-Object { $_ })) {
+        $notes += Invoke-GuestScript -VM $VM -Activity "restoring the database $($database.Name)" -TimeoutMinutes 180 `
+            -ArgumentList @($runtime.SqlServer, $database.Name, "$($database.BackupFile)", $runtime.GuestSqlBackupDir, $runtime.GuestSqlDataDir, $runtime.GuestSqlLogDir, "$($database.Recovery)", [int]$database.CompatLevel) -ScriptBlock {
+            param($server, $name, $backupFile, $backupDir, $dataDir, $logDir, $recovery, $compatLevel)
+            $ErrorActionPreference = 'Stop'
+            # The captured path, or the backup folder when the data disk came
+            # back on a different drive letter.
+            if (-not (Test-Path $backupFile)) {
+                $alternative = Join-Path $backupDir "$name.bak"
+                if (-not (Test-Path $alternative)) { return New-GuestNote -Level ERROR -Text "no backup of $name (looked in $backupFile and $alternative)" }
+                $backupFile = $alternative
+            }
 
-    $report = Invoke-GuestScript -Activity 'SQL restore' -TimeoutMinutes 180 -ArgumentList @(
-        (Get-GuestSqlServer), $CFG.GuestSqlDataDir, $CFG.GuestSqlLogDir, $CFG.GuestSqlBackupDir,
-        $logins, $databases, $configs
-    ) -ScriptBlock {
-        param($server, $dataDir, $logDir, $backupDir, $logins, $databases, $configs)
-        $ErrorActionPreference = 'Stop'
-        $log = @()
-
-        $cs = "Server=$server;Database=master;Integrated Security=True;TrustServerCertificate=True;Connect Timeout=30"
-        $conn = New-Object System.Data.SqlClient.SqlConnection($cs)
-        $conn.Open()
-
-        function Invoke-Sql($c, $sql, $timeout = 3600) {
-            $cmd = $c.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = $timeout
-            return $cmd.ExecuteNonQuery()
-        }
-        function Get-Scalar($c, $sql) {
-            $cmd = $c.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = 120
-            return $cmd.ExecuteScalar()
-        }
-        function Get-SqlRow($c, $sql) {
-            $cmd = $c.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = 300
-            $r = $cmd.ExecuteReader(); $rows = @()
+            $connection = Open-GuestSqlConnection -Server $server
             try {
-                while ($r.Read()) {
-                    $h = @{}
-                    for ($i = 0; $i -lt $r.FieldCount; $i++) { $h[$r.GetName($i)] = $r.GetValue($i) }
-                    $rows += [pscustomobject]$h
+                if (-not (Restore-GuestSqlBackup -Connection $connection -Name $name -BackupFile $backupFile -DataDir $dataDir -LogDir $logDir)) {
+                    return New-GuestNote -Level INFO -Text "skipped $name (already exists)"
                 }
+                $quoted = ConvertTo-SqlName -Name $name
+                if ($recovery) { $null = Invoke-GuestSql -Connection $connection -Sql "ALTER DATABASE $quoted SET RECOVERY $recovery" }
+                if ($compatLevel) { $null = Invoke-GuestSql -Connection $connection -Sql "ALTER DATABASE $quoted SET COMPATIBILITY_LEVEL = $compatLevel" }
+
+                # The SIDs kept with the logins should already prevent orphaned
+                # users; any that remain are linked to their login by name.
+                $notes = @(New-GuestNote -Level OK -Text "restored $name")
+                $orphans = @(Get-GuestSqlRow -Connection $connection -Sql "SELECT dp.name FROM $quoted.sys.database_principals dp LEFT JOIN sys.server_principals sp ON dp.sid = sp.sid WHERE dp.type IN ('S','U') AND dp.principal_id > 4 AND sp.sid IS NULL" | ForEach-Object { "$($_.name)" })
+                foreach ($user in $orphans) {
+                    try { $null = Invoke-GuestSql -Connection $connection -Sql "USE $quoted; ALTER USER $(ConvertTo-SqlName -Name $user) WITH LOGIN = $(ConvertTo-SqlName -Name $user)" }
+                    catch { $notes += New-GuestNote -Level WARN -Text "user '$user' in $name has no login: $($_.Exception.Message)" }
+                }
+                return $notes
             }
-            finally { $r.Close() }
-            return $rows
+            catch { return New-GuestNote -Level ERROR -Text "failed to restore $name - $($_.Exception.Message)" }
+            finally { $connection.Close() }
         }
+    }
+    Write-GuestNote -Notes $notes
+    foreach ($item in @($sql.NotMigrated)) { Write-LogEntry "  reminder - not migrated: $item" 'WARN' }
+}
 
+function Restore-GuestSqlLogin {
+    <# Instance settings, then each login not already there, with its original SID and server roles. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [AllowEmptyCollection()][object[]]$Configs = @(),
+        [AllowEmptyCollection()][object[]]$Logins = @()
+    )
+
+    $configList = @($Configs | Where-Object { $_ } | ForEach-Object { @{ Name = "$($_.Name)"; Value = "$($_.Value)" } })
+    $loginList = @($Logins | Where-Object { $_ } | ForEach-Object {
+            @{
+                Name = "$($_.Name)"; TypeDesc = "$($_.TypeDesc)"; IsDisabled = [bool]$_.IsDisabled
+                DefaultDb = "$($_.DefaultDb)"; SidHex = "$($_.SidHex)"; HashHex = "$($_.HashHex)"
+                PolicyChecked = [bool]$_.PolicyChecked; ExpirationChecked = [bool]$_.ExpirationChecked
+                ServerRoles = @($_.ServerRoles)
+            }
+        })
+
+    return Invoke-GuestScript -VM $VM -Activity 'SQL settings and logins restore' -TimeoutMinutes 15 -ArgumentList @($VM.Runtime.SqlServer, $configList, $loginList) -ScriptBlock {
+        param($server, $configs, $logins)
+        $ErrorActionPreference = 'Stop'
+        $notes = @()
+        $connection = Open-GuestSqlConnection -Server $server
         try {
-            # -- instance settings first ------------------------------------
-            foreach ($cfg in $configs) {
-                $name = "$($cfg.Name)".Replace("'", "''")
-                try {
-                    Invoke-Sql $conn "EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure N'$name', $($cfg.Value); RECONFIGURE;" | Out-Null
-                }
-                catch { $log += "sp_configure '$name' failed: $($_.Exception.Message)" }
+            foreach ($config in @($configs)) {
+                try { $null = Invoke-GuestSql -Connection $connection -Sql "EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure $(ConvertTo-SqlString -Text $config.Name), $([long]$config.Value); RECONFIGURE;" }
+                catch { $notes += New-GuestNote -Level WARN -Text "sp_configure '$($config.Name)' failed: $($_.Exception.Message)" }
             }
 
-            # -- logins, with original SIDs so users are not orphaned -------
             $added = 0
-            foreach ($login in $logins) {
-                $name = "$($login.Name)"
-                $quoted = '[' + $name.Replace(']', ']]') + ']'
-                $literal = "N'" + $name.Replace("'", "''") + "'"
-                if ([int](Get-Scalar $conn "SELECT COUNT(*) FROM sys.server_principals WHERE name = $literal") -gt 0) { continue }
+            foreach ($login in @($logins)) {
+                $quoted = ConvertTo-SqlName -Name $login.Name
+                if ([int](Get-GuestSqlScalar -Connection $connection -Sql "SELECT COUNT(*) FROM sys.server_principals WHERE name = $(ConvertTo-SqlString -Text $login.Name)") -gt 0) { continue }
                 try {
+                    $defaultDb = if ($login.DefaultDb) { "DEFAULT_DATABASE = $(ConvertTo-SqlName -Name $login.DefaultDb)" } else { '' }
                     if ($login.TypeDesc -eq 'SQL_LOGIN' -and $login.HashHex) {
-                        $sql = "CREATE LOGIN $quoted WITH PASSWORD = $($login.HashHex) HASHED, SID = $($login.SidHex)"
-                        $sql += ", CHECK_POLICY = " + $(if ($login.PolicyChecked) { 'ON' } else { 'OFF' })
-                        $sql += ", CHECK_EXPIRATION = " + $(if ($login.ExpirationChecked) { 'ON' } else { 'OFF' })
-                        if ($login.DefaultDb) { $sql += ", DEFAULT_DATABASE = [" + "$($login.DefaultDb)".Replace(']', ']]') + "]" }
+                        $options = @("PASSWORD = $($login.HashHex) HASHED", "SID = $($login.SidHex)",
+                            "CHECK_POLICY = $(if ($login.PolicyChecked) { 'ON' } else { 'OFF' })",
+                            "CHECK_EXPIRATION = $(if ($login.ExpirationChecked) { 'ON' } else { 'OFF' })") + @($defaultDb | Where-Object { $_ })
+                        $null = Invoke-GuestSql -Connection $connection -Sql "CREATE LOGIN $quoted WITH $($options -join ', ')"
                     }
                     else {
-                        $sql = "CREATE LOGIN $quoted FROM WINDOWS"
-                        if ($login.DefaultDb) { $sql += " WITH DEFAULT_DATABASE = [" + "$($login.DefaultDb)".Replace(']', ']]') + "]" }
+                        $with = if ($defaultDb) { " WITH $defaultDb" } else { '' }
+                        $null = Invoke-GuestSql -Connection $connection -Sql "CREATE LOGIN $quoted FROM WINDOWS$with"
                     }
-                    Invoke-Sql $conn $sql | Out-Null
-                    if ($login.IsDisabled) { Invoke-Sql $conn "ALTER LOGIN $quoted DISABLE" | Out-Null }
-                    foreach ($role in @($login.ServerRoles)) {
-                        $r = '[' + "$role".Replace(']', ']]') + ']'
-                        Invoke-Sql $conn "ALTER SERVER ROLE $r ADD MEMBER $quoted" | Out-Null
+                    if ($login.IsDisabled) { $null = Invoke-GuestSql -Connection $connection -Sql "ALTER LOGIN $quoted DISABLE" }
+                    foreach ($role in @($login.ServerRoles | Where-Object { $_ })) {
+                        $null = Invoke-GuestSql -Connection $connection -Sql "ALTER SERVER ROLE $(ConvertTo-SqlName -Name $role) ADD MEMBER $quoted"
                     }
                     $added++
                 }
-                catch { $log += "login '$name' failed: $($_.Exception.Message)" }
+                catch { $notes += New-GuestNote -Level WARN -Text "login '$($login.Name)' failed: $($_.Exception.Message)" }
             }
-            if ($added -gt 0) { $log += "created $added login(s) with their original SIDs" }
-
-            # -- databases ---------------------------------------------------
-            foreach ($db in $databases) {
-                $name = "$($db.Name)"
-                $quoted = '[' + $name.Replace(']', ']]') + ']'
-                $literal = "N'" + $name.Replace("'", "''") + "'"
-
-                if ([int](Get-Scalar $conn "SELECT COUNT(*) FROM sys.databases WHERE name = $literal") -gt 0) {
-                    $log += "skipped $name (already exists)"
-                    continue
-                }
-
-                # Prefer the captured path; fall back to the backup folder in
-                # case the data disk came back on a different drive letter.
-                $backup = "$($db.BackupFile)"
-                if (-not (Test-Path $backup)) {
-                    $alt = Join-Path $backupDir "$name.bak"
-                    if (Test-Path $alt) { $backup = $alt }
-                    else { $log += "MISSING backup for $name (looked in $backup and $alt)"; continue }
-                }
-                $backupEsc = "N'" + $backup.Replace("'", "''") + "'"
-
-                try {
-                    $files = @(Get-SqlRow $conn "RESTORE FILELISTONLY FROM DISK = $backupEsc")
-                    $moves = @()
-                    foreach ($f in $files) {
-                        $logical = "$($f.LogicalName)"
-                        $leaf = [IO.Path]::GetFileName("$($f.PhysicalName)")
-                        $targetDir = if ("$($f.Type)".ToUpperInvariant() -eq 'L') { $logDir } else { $dataDir }
-                        $target = Join-Path $targetDir $leaf
-                        $moves += "MOVE N'" + $logical.Replace("'", "''") + "' TO N'" + $target.Replace("'", "''") + "'"
-                    }
-                    if ($moves.Count -eq 0) { $log += "skipped $name (empty file list)"; continue }
-
-                    Invoke-Sql $conn "RESTORE DATABASE $quoted FROM DISK = $backupEsc WITH $($moves -join ', '), STATS = 10" | Out-Null
-
-                    if ($db.Recovery) {
-                        Invoke-Sql $conn "ALTER DATABASE $quoted SET RECOVERY $($db.Recovery)" | Out-Null
-                    }
-                    if ($db.CompatLevel) {
-                        Invoke-Sql $conn "ALTER DATABASE $quoted SET COMPATIBILITY_LEVEL = $([int]$db.CompatLevel)" | Out-Null
-                    }
-                    # Belt and braces: SIDs above should already prevent this.
-                    Invoke-Sql $conn "USE $quoted; DECLARE @u sysname; DECLARE c CURSOR FOR SELECT dp.name FROM sys.database_principals dp LEFT JOIN sys.server_principals sp ON dp.sid = sp.sid WHERE dp.type IN ('S','U') AND dp.principal_id > 4 AND sp.sid IS NULL; OPEN c; FETCH NEXT FROM c INTO @u; WHILE @@FETCH_STATUS = 0 BEGIN BEGIN TRY EXEC('ALTER USER [' + REPLACE(@u,']',']]') + '] WITH LOGIN = [' + REPLACE(@u,']',']]') + ']'); END TRY BEGIN CATCH END CATCH; FETCH NEXT FROM c INTO @u; END; CLOSE c; DEALLOCATE c;" | Out-Null
-
-                    $log += "restored $name"
-                }
-                catch { $log += "FAILED $name - $($_.Exception.Message)" }
-            }
+            if ($added -gt 0) { $notes += New-GuestNote -Level OK -Text "created $added login(s) with their original SIDs" }
         }
-        finally { $conn.Close() }
-
-        return $log
-    }
-
-    foreach ($line in @($report)) {
-        if ($line -like 'FAILED*' -or $line -like 'MISSING*') { Write-LogEntry "  $line" 'ERROR' }
-        elseif ($line -match 'failed') { Write-LogEntry "  $line" 'WARN' }
-        elseif ($line -like 'skipped*') { Write-LogEntry "  $line" 'INFO' }
-        else { Write-LogEntry "  $line" 'OK' }
-    }
-
-    foreach ($item in @($Manifest.Sql.NotMigrated)) {
-        Write-LogEntry "  reminder - not migrated: $item" 'WARN'
+        finally { $connection.Close() }
+        return $notes
     }
 }
 
+# ── Project files and application settings ───────────────────────────────────
+
 function Restore-GuestProjectFolder {
-    param([Parameter(Mandatory)]$Manifest)
+    <# Extracts the project capture into a dated folder, so nothing already in the new guest is overwritten. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][CaptureManifest]$Manifest
+    )
 
-    if (-not $Manifest.Projects -or -not $Manifest.Projects.Archive) {
-        Write-LogEntry '  no guest-side project capture - skipping' 'INFO'
-        return
-    }
-    $archive = $Manifest.Projects.Archive
-    if (-not (Test-Path -LiteralPath $archive)) {
-        Write-LogEntry "  project archive missing at $archive - skipping" 'WARN'
-        return
-    }
+    $guestZip = Send-CaptureArchive -VM $VM -Area $Manifest.Projects -What 'project'
+    if (-not $guestZip) { return }
 
-    $guestZip = Join-Path $CFG.GuestSetupDir 'projects.zip'
-    Copy-ToGuest -HostPath $archive -GuestPath $guestZip
-
-    $report = Invoke-GuestScript -Activity 'project restore' -TimeoutMinutes 60 -ArgumentList @(
-        $guestZip, $CFG.GuestRestoreRoot
-    ) -ScriptBlock {
+    $report = Invoke-GuestScript -VM $VM -Activity 'project restore' -TimeoutMinutes 60 -ArgumentList @($guestZip, $VM.Settings.GuestRestoreRoot) -ScriptBlock {
         param($zip, $restoreRoot)
         $ErrorActionPreference = 'Stop'
         $root = [Environment]::ExpandEnvironmentVariables($restoreRoot)
-        if (-not (Test-Path $root)) { New-Item -ItemType Directory -Path $root -Force | Out-Null }
-
-        # Extracted into a dated folder rather than over the top of anything,
-        # so a restore can never overwrite work already in the new guest.
-        $dest = Join-Path $root ('restored-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [IO.Compression.ZipFile]::ExtractToDirectory($zip, $dest)
-
-        $files = @(Get-ChildItem $dest -Recurse -File -ErrorAction SilentlyContinue)
-        $bytes = ($files | Measure-Object -Property Length -Sum).Sum
-        return [pscustomobject]@{ Path = $dest; Files = $files.Count; Bytes = $bytes }
+        New-GuestFolder -Path $root
+        $destination = Join-Path $root ('restored-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+        Expand-GuestZip -Archive $zip -Destination $destination
+        $files = @(Get-ChildItem $destination -Recurse -File -ErrorAction SilentlyContinue)
+        return [pscustomobject]@{ Path = $destination; Files = $files.Count; Bytes = [double]($files | Measure-Object -Property Length -Sum).Sum }
     }
-
     Write-LogEntry "  restored $($report.Files) file(s), $(Format-Size $report.Bytes) to $($report.Path)" 'OK'
     Write-LogEntry '  Extracted to a dated folder so nothing in the new guest is overwritten.' 'INFO'
 }
 
 function Restore-GuestAppSetting {
     <# Imports each captured application settings file into the guest's registry. #>
-    param([Parameter(Mandatory)]$Manifest)
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][CaptureManifest]$Manifest
+    )
 
-    $saved = @()
-    if ($Manifest.PSObject.Properties['AppSettings'] -and $Manifest.AppSettings) { $saved = @($Manifest.AppSettings) }
+    $saved = @($Manifest.AppSettings | Where-Object { $_ })
     if ($saved.Count -eq 0) {
         Write-LogEntry '  no application settings captured - skipping' 'INFO'
         return
@@ -498,10 +413,9 @@ function Restore-GuestAppSetting {
             Write-LogEntry "  $($entry.Name) - settings file missing at $($entry.File)" 'WARN'
             continue
         }
-        $guestFile = Join-Path $CFG.GuestSetupDir "app-$($entry.Name).reg"
-        Copy-ToGuest -HostPath $entry.File -GuestPath $guestFile
-        $imported = Invoke-GuestScript -Activity "$($entry.Name) settings import" -TimeoutMinutes 5 `
-            -ArgumentList @($guestFile) -ScriptBlock {
+        $guestFile = Join-Path $VM.Settings.GuestSetupDir "app-$($entry.Name).reg"
+        Copy-ToGuest -VM $VM -HostPath $entry.File -GuestPath $guestFile
+        $imported = Invoke-GuestScript -VM $VM -Activity "$($entry.Name) settings import" -TimeoutMinutes 5 -ArgumentList @($guestFile) -ScriptBlock {
             param($file)
             & reg.exe import $file 2>&1 | Out-Null
             return ($LASTEXITCODE -eq 0)

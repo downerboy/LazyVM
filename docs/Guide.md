@@ -17,21 +17,20 @@ Examples use `D:\DevVM` as the LazyVM folder and `DevBox` as the VM's name. Read
 9. [Tooling, and going back](#9-tooling-and-going-back)
 10. [Several VMs on one host](#10-several-vms-on-one-host)
 11. [Moving files between host and VM](#11-moving-files-between-host-and-vm)
-12. [Upgrading from LazyVM 1.x](#12-upgrading-from-lazyvm-1x)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Habits worth keeping](#14-habits-worth-keeping)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Habits worth keeping](#13-habits-worth-keeping)
 
 ## 1. What LazyVM does
 
 LazyVM builds and looks after Hyper-V development VMs: Windows 11 machines with Visual Studio, SQL Server 2025 Enterprise Developer and whatever other tools you install. One host can run several, each with its own tools.
 
-The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyVM exists to make that expiry a non-event. It watches the licence and extends it when Windows allows. When extensions run out, it captures everything you care about, rebuilds the VM from scratch and puts your state back.
+The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyVM exists to make that expiry a non-event. It watches the license and extends it when Windows allows. When extensions run out, it captures everything you care about, rebuilds the VM from scratch and puts your state back.
 
 ### The three jobs it does
 
 - **Build.** Create the VM and install Windows unattended. Then install everything in the VM's tooling list (Visual Studio, SSMS, SQL Server, winget packages) with no input from you.
 - **Configure.** Attach and prepare the SQL data disk and the Dev Drive, and relocate databases onto the data disk.
-- **Maintain.** Every day, record any tools you have added or removed in the VM, taking a checkpoint first so you can go back. Then check the licence. Extend it when possible, and rebuild and restore when it cannot be extended any further.
+- **Maintain.** Every day, record any tools you have added or removed in the VM, taking a checkpoint first so you can go back. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
 
 ### What survives a rebuild
 
@@ -142,7 +141,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 
 | Command | What it does |
 |---|---|
-| `Set-LazyVMRoot -Path D:\DevVM` | Chooses the LazyVM folder. Pointed at a 1.x kit's folder, brings it across ([section 12](#12-upgrading-from-lazyvm-1x)). |
+| `Set-LazyVMRoot -Path D:\DevVM` | Chooses the LazyVM folder. |
 | `New-LazyVM -Name DevBox` | Creates the VM's profile, ready to build. `-From OtherVM` starts from another VM's settings and tooling list. |
 | `Build-LazyVM` | Runs phases 0 to 8. Builds the VM if it does not exist. Otherwise it brings an existing VM up to spec: it installs anything missing from its tooling list, attaches and prepares the SQL data disk, and relocates databases. Safe to run again. |
 | `Build-LazyVM -FromPhase 7` | Starts at a phase, skipping earlier ones, after fixing what stopped a build. |
@@ -171,7 +170,7 @@ Get commands return objects, so they work with the rest of PowerShell:
 Get-LazyVMSetting | Where-Object Source -ne 'Default'       # only what you have changed
 (Get-LazyVMTooling).PendingChanges                          # what the next run would record
 Get-LazyVMRestorePoint | Select-Object -Last 1 | Restore-LazyVMTooling
-Get-LazyVM | Get-LazyVMLicense                              # every VM's licence at once
+Get-LazyVM | Get-LazyVMLicense                              # every VM's license at once
 'DevBox', 'TestBox' | Save-LazyVMState                       # VM names work too
 ```
 
@@ -185,7 +184,7 @@ Every command that works on a VM takes the VM from the pipeline: a name, or anyt
 Get-LazyVMLicense
 ```
 
-It starts the VM if it is off, reads the licence and returns something like:
+It starts the VM if it is off, reads the license and returns something like:
 
 ```
 Name              : DevBox
@@ -221,7 +220,7 @@ Expect it to take between five and thirty minutes, depending on database size. W
 
 `Build-LazyVM` schedules it when the build succeeds. If that step fails, the build still succeeds and warns you; fix the cause and run `Register-LazyVMMaintenance`. Running that again at any time is harmless.
 
-This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records any tooling change ([section 9](#9-tooling-and-going-back)), then reads the licence. On almost every day it finds plenty of time remaining and finishes within a minute or two.
+This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records any tooling change ([section 9](#9-tooling-and-going-back)), then reads the license. On almost every day it finds plenty of time remaining and finishes within a minute or two.
 
 A daily task is used rather than a 90-day one on purpose. A task that fires exactly every 90 days drifts past the expiry date, and misses it entirely if the host happens to be off that day.
 
@@ -263,7 +262,7 @@ Each night the maintenance run extends `C:` into any space added to the OS disk,
 
 | Situation | What happens |
 |---|---|
-| More than 10 days left | Nothing more. The run reads the licence, logs it and finishes. |
+| More than 10 days left | Nothing more. The run reads the license, logs it and finishes. |
 | Within 10 days, rearms available | Captures the VM's state, runs the Windows rearm and restarts the VM. The evaluation clock resets to another 90 days. No rebuild, nothing to migrate. |
 | Within 10 days, no rearms left | Captures the VM's state, retires the old VM, builds a new one unattended, restores the capture and verifies the result. |
 | No evaluation countdown | Nothing. A fully licensed Windows is never rebuilt. |
@@ -424,6 +423,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in a
 | `ToolingWingetExclude` | Windows built-ins | winget packages never recorded. Your list replaces the default, so copy it and add to it. |
 | `AppSettings` | WinMerge | Registry keys a capture exports and a restore imports, so an application's settings survive a rebuild. |
 | `InstallerBootstrappers` | 5 channels | The bootstrapper for each Visual Studio Installer channel. Add one if a tooling list uses a channel not listed. |
+| `UnsignedExtensions` | none | Marketplace extensions, by item name (`Publisher.Name`), that may be installed even though they are not signed. Any other unsigned extension is refused by the installer. |
 | `vCPU`, `MemStartGB`, `MemMaxGB` | 4, 8, 16 | VM sizing, applied when the VM is built. 8 GB to start is the Dev Drive minimum. |
 | `OSDiskSizeGB`, `SQLDiskSizeGB`, `DevDriveSizeGB` | 120, 100, 250 | Disk sizes, applied when each disk is created. All grow as needed up to this size. To give `C:` more room later, make the VM's OS disk bigger in Hyper-V Manager or with `Resize-VHD`; the next maintenance run extends `C:` into the new space, after taking a checkpoint it removes once all went well. If it fails, the checkpoint is kept, the log says how to go back to it, and `C:` is not extended again until you delete that checkpoint. |
 | `UseDevDrive` | true | Whether to create, attach and designate the Dev Drive. |
@@ -591,47 +591,7 @@ LazyVM sets this up: it turns on the host setting, sets the VM's transport to VM
 
 For scripted copies, `Copy-VMFile` copies files from the host into the VM, and `Copy-Item -FromSession` copies them out over PowerShell Direct. Both travel over the VMBus, which is how LazyVM itself moves files.
 
-## 12. Upgrading from LazyVM 1.x
-
-LazyVM 1.x was a script, `Build-LazyVM.ps1`, with its settings in `.psd1` files in a `Config` folder beside it. LazyVM 2 is a module with commands, and keeps your settings in JSON under the LazyVM folder.
-
-1. Install the module ([section 2](#installing-lazyvm)).
-2. Point `Set-LazyVMRoot` at the folder that held the 1.x kit, the one with `Scripts` in it:
-
-   ```powershell
-   Set-LazyVMRoot -Path D:\DevVM
-   ```
-
-It then:
-- converts your `LazyVM.Config.psd1` to `Config\LazyVM.Settings.json`;
-- converts each VM's profile to `Config\VMs\<Name>\VM.json`, and copies its tooling list and history;
-- re-registers each VM's maintenance task to run `Invoke-LazyVMMaintenance`, so the old script is never run again;
-- for a VM built by MsDevVM, the version before 1.x, carries its credentials and its task across from the names it used.
-
-What was done is returned, and listed:
-- Settings that no longer exist are left out and named. A few are now worked out automatically: task names, credential file names and the guest SQL folders. `Root` is now chosen with `Set-LazyVMRoot`.
-- Nothing that already exists in the new place is overwritten.
-- The old files are left exactly as they are.
-
-The VMs, their disks and their stored passwords carry on where they are. Once you are happy, the old `Scripts` folder can be deleted.
-
-Old commands and their replacements:
-
-| LazyVM 1.x | LazyVM 2 |
-|---|---|
-| `.\Build-LazyVM.ps1 -NewVM X -From Y` | `New-LazyVM -Name X -From Y` |
-| `.\Build-LazyVM.ps1 -VM X` | `Build-LazyVM -Name X` |
-| `-SetupCredentials -GuestUser u` | `Set-LazyVMCredential`, and `Get-LazyVMCredential -AsPlainText` to see the password |
-| `-CheckLicense` | `Get-LazyVMLicense` |
-| `-ShowTooling` / `-RecordTooling` | `Get-LazyVMTooling` / `Save-LazyVMTooling` |
-| `-ListRestorePoints` / `-Revert stamp` | `Get-LazyVMRestorePoint` / `Restore-LazyVMTooling -RestorePoint stamp` |
-| `-Capture` / `-Restore` | `Save-LazyVMState` / `Restore-LazyVMState` |
-| `-Rebuild` | `Invoke-LazyVMRebuild` |
-| `-Maintain` / `-RegisterSchedule` | `Invoke-LazyVMMaintenance` / `Register-LazyVMMaintenance` |
-| `-RemoveVM X` | `Remove-LazyVM -Name X` |
-| `-Root D:\DevVM` | `Set-LazyVMRoot -Path D:\DevVM`, once |
-
-## 13. Troubleshooting
+## 12. Troubleshooting
 
 The log is the first place to look: `D:\DevVM\Logs\DevBox.log`. Every line is prefixed: `[+]` success, `[!]` warning, `[X]` error, `[ ]` information. The start of each run records the module version, the VM, the LazyVM folder and which settings you have changed.
 
@@ -673,7 +633,7 @@ Get-PSDrive -PSProvider FileSystem | Select-Object Name, Root
 Get-Service MSSQLSERVER | Select-Object Name, Status
 ```
 
-## 14. Habits worth keeping
+## 13. Habits worth keeping
 
 - **Keep source on the Dev Drive (`W:`), and in source control.** The Dev Drive is fast, persists across rebuilds, and nothing in its path can break. Commit and push regularly, so that a clone, not a capture, is the backup for your code. This is the single most useful habit.
 - **Capture after meaningful changes**: new databases, settings you care about, certificates. Maintenance captures before it acts, but a recent capture of your own costs nothing.

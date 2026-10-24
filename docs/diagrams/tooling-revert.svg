@@ -65,12 +65,12 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="487.5" y="193" text-anchor="middle">Initialize-CommandRun()</text>
 <line class="div" x1="335" y1="200" x2="640" y2="200"/>
 <g class="sn"><circle cx="351" cy="184" r="10"/><text x="351" y="188" text-anchor="middle">1</text></g>
-<text class="at" x="345" y="215">loads the settings into $CFG</text>
+<text class="at" x="345" y="215">builds the VM context</text>
 <text class="at" x="345" y="232">and opens the log</text>
 </g>
 <g class="bx-store"><rect x="20" y="163" width="255" height="118" rx="3"/>
 <text class="st" x="147.5" y="177" text-anchor="middle">«settings»</text>
-<text class="nm" x="147.5" y="193" text-anchor="middle">$CFG sources</text>
+<text class="nm" x="147.5" y="193" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="200" x2="275" y2="200"/>
 <text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
 <text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>

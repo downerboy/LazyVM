@@ -1,4 +1,4 @@
-﻿function Save-LazyVMTooling {
+function Save-LazyVMTooling {
     <#
     .SYNOPSIS
     Records a VM's tooling now, as the daily maintenance does.
@@ -31,23 +31,14 @@
     )
 
     process {
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Record tooling' -Name $Name
-            if (-not $PSCmdlet.ShouldProcess($CFG.VMName, 'Record the tooling, with a checkpoint if it changed')) {
+        Invoke-CommandRun -Title 'Record tooling' -Name $Name -FailureMessage 'Recording the tooling failed' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            if (-not $PSCmdlet.ShouldProcess($VM.Name, 'Record the tooling, with a checkpoint if it changed')) {
                 return
             }
-
-            $startedHere = Open-GuestSession -Purpose 'record its tooling'
-            Update-ToolingRecord
-            if ($startedHere) { Stop-GuestGracefully }
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'Recording the tooling failed' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
+            $startedHere = Open-GuestSession -VM $VM -Purpose 'record its tooling'
+            Update-ToolingRecord -VM $VM
+            if ($startedHere) { Stop-GuestGracefully -VM $VM }
         }
     }
 }

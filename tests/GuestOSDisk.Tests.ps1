@@ -10,6 +10,9 @@ BeforeAll {
     Import-LazyVMModule
 
     $module = 'LazyVM'
+
+    # Classes defined in a module are only visible inside it.
+    $testVM = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha' }) }
 }
 
 Describe 'Expand-GuestSystemDrive' {
@@ -19,21 +22,13 @@ Describe 'Expand-GuestSystemDrive' {
         Mock -ModuleName $module Get-ExpansionCheckpoint { @() }
         Mock -ModuleName $module New-ToolingCheckpoint { }
         Mock -ModuleName $module Remove-ExpansionCheckpoint { }
-        InModuleScope $module {
-            $script:SavedCFG = $script:CFG
-            $script:CFG = @{ VMName = 'Alpha' }
-        }
-    }
-
-    AfterEach {
-        InModuleScope $module { $script:CFG = $script:SavedCFG }
     }
 
     It 'changes and logs nothing when C: already has the whole disk' {
         Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Action = 'None'; Reason = '' } } -ParameterFilter { $Activity -eq 'OS disk check' }
         Mock -ModuleName $module Invoke-GuestScript { throw 'must not run' } -ParameterFilter { $Activity -eq 'C: drive expansion' }
 
-        InModuleScope $module { Expand-GuestSystemDrive }
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Expand-GuestSystemDrive -VM $VM }
 
         Should -Invoke -ModuleName $module New-ToolingCheckpoint -Times 0 -Exactly
         Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly
@@ -41,9 +36,9 @@ Describe 'Expand-GuestSystemDrive' {
 
     It 'takes a checkpoint first, then removes it once everything worked' {
         Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Action = 'Expand'; Reason = '20480 MB of the OS disk is unused' } } -ParameterFilter { $Activity -eq 'OS disk check' }
-        Mock -ModuleName $module Invoke-GuestScript { @('OK|C: resized from 120 GB to 139 GB', 'OK|recovery partition moved') } -ParameterFilter { $Activity -eq 'C: drive expansion' }
+        Mock -ModuleName $module Invoke-GuestScript { @([pscustomobject]@{ Level = 'OK'; Text = 'C: resized from 120 GB to 139 GB' }, [pscustomobject]@{ Level = 'OK'; Text = 'recovery partition moved' }) } -ParameterFilter { $Activity -eq 'C: drive expansion' }
 
-        InModuleScope $module { Expand-GuestSystemDrive }
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Expand-GuestSystemDrive -VM $VM }
 
         Should -Invoke -ModuleName $module New-ToolingCheckpoint -Times 1 -Exactly -ParameterFilter { $Name -like 'C: expansion *' -and $SkipPrune }
         Should -Invoke -ModuleName $module Remove-ExpansionCheckpoint -Times 1 -Exactly
@@ -52,9 +47,9 @@ Describe 'Expand-GuestSystemDrive' {
 
     It 'keeps the checkpoint and says how to go back when something failed' {
         Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Action = 'Expand'; Reason = 'x' } } -ParameterFilter { $Activity -eq 'OS disk check' }
-        Mock -ModuleName $module Invoke-GuestScript { @('WARN|reagentc /enable failed') } -ParameterFilter { $Activity -eq 'C: drive expansion' }
+        Mock -ModuleName $module Invoke-GuestScript { @([pscustomobject]@{ Level = 'WARN'; Text = 'reagentc /enable failed' }) } -ParameterFilter { $Activity -eq 'C: drive expansion' }
 
-        InModuleScope $module { Expand-GuestSystemDrive }
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Expand-GuestSystemDrive -VM $VM }
 
         Should -Invoke -ModuleName $module Remove-ExpansionCheckpoint -Times 0 -Exactly
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -like '*Restore-VMSnapshot*' -and $Level -eq 'WARN' }
@@ -65,7 +60,7 @@ Describe 'Expand-GuestSystemDrive' {
         Mock -ModuleName $module Invoke-GuestScript { throw 'must not run' } -ParameterFilter { $Activity -eq 'C: drive expansion' }
         Mock -ModuleName $module New-ToolingCheckpoint { throw 'checkpoints are off' }
 
-        InModuleScope $module { Expand-GuestSystemDrive }
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Expand-GuestSystemDrive -VM $VM }
 
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 0 -Exactly -ParameterFilter { $Activity -eq 'C: drive expansion' }
     }
@@ -74,7 +69,7 @@ Describe 'Expand-GuestSystemDrive' {
         Mock -ModuleName $module Get-ExpansionCheckpoint { @('C: expansion 20261018-180159') }
         Mock -ModuleName $module Invoke-GuestScript { throw 'must not run' }
 
-        InModuleScope $module { Expand-GuestSystemDrive }
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Expand-GuestSystemDrive -VM $VM }
 
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 0 -Exactly
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*earlier attempt*' -and $Level -eq 'WARN' }
@@ -83,7 +78,7 @@ Describe 'Expand-GuestSystemDrive' {
     It 'logs a failure instead of throwing, so the run carries on' {
         Mock -ModuleName $module Invoke-GuestScript { throw 'the guest went away' }
 
-        { InModuleScope $module { Expand-GuestSystemDrive } } | Should -Not -Throw
+        { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Expand-GuestSystemDrive -VM $VM } } | Should -Not -Throw
 
         Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly
     }

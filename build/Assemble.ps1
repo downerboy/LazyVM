@@ -1,7 +1,6 @@
 ﻿# Assemble.ps1 - Merges the module source into one .psm1. Dot-sourced by the scripts at the repository root.
 
-function Invoke-Assemble
-{
+function Invoke-Assemble {
     <# Builds src\<ModuleName> into out\<ModuleName>\<version>, then checks it exports exactly the public commands. #>
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -17,13 +16,11 @@ function Invoke-Assemble
     $public = @(Get-ChildItem -LiteralPath (Join-Path -Path $sourceDir -ChildPath 'Public') -Filter '*.ps1' | ForEach-Object { $_.BaseName } | Sort-Object)
     $listed = @($manifest.FunctionsToExport | Sort-Object)
     $difference = Compare-Object -ReferenceObject $public -DifferenceObject $listed
-    if ($difference)
-    {
+    if ($difference) {
         throw "FunctionsToExport and the Public folder differ: $(($difference | ForEach-Object { "$($_.InputObject) ($($_.SideIndicator))" }) -join ', ')"
     }
 
-    if (Test-Path -LiteralPath $target)
-    {
+    if (Test-Path -LiteralPath $target) {
         Remove-Item -LiteralPath $target -Recurse -Force
     }
     New-Item -ItemType Directory -Path $target -Force | Out-Null
@@ -33,8 +30,7 @@ function Invoke-Assemble
     $rootModule = Get-Content -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$ModuleName.psm1") -Raw
     $start = $rootModule.IndexOf('# ── Functions')
     $end = $rootModule.IndexOf('# ── Tab completion')
-    if ($start -lt 0 -or $end -lt 0)
-    {
+    if ($start -lt 0 -or $end -lt 0) {
         throw "The markers that locate the function loader were not found in $ModuleName.psm1."
     }
 
@@ -42,11 +38,9 @@ function Invoke-Assemble
     [void]$builder.Append($rootModule.Substring(0, $start))
     [void]$builder.AppendLine("# ── Functions ────────────────────────────────────────────────────────────────")
     [void]$builder.AppendLine("# Merged from src\$ModuleName by Invoke-Assemble on $(Get-Date -Format 'yyyy-MM-dd').")
-    foreach ($folder in 'Private', 'Public')
-    {
+    foreach ($folder in 'Classes', 'Private', 'Public') {
         $files = Get-ChildItem -LiteralPath (Join-Path -Path $sourceDir -ChildPath $folder) -Filter '*.ps1' -File -Recurse | Sort-Object -Property FullName
-        foreach ($file in $files)
-        {
+        foreach ($file in $files) {
             $relative = [IO.Path]::GetRelativePath($sourceDir, $file.FullName)
             [void]$builder.AppendLine()
             [void]$builder.AppendLine("#region $relative")
@@ -73,8 +67,7 @@ function Invoke-Assemble
         @(Get-Command -Module $module.Name | ForEach-Object { $_.Name } | Sort-Object)
     } -ArgumentList $builtManifest
     $exported = @(Receive-Job -Job $check -Wait -AutoRemoveJob -ErrorAction Stop)
-    if (Compare-Object -ReferenceObject $public -DifferenceObject $exported)
-    {
+    if (Compare-Object -ReferenceObject $public -DifferenceObject $exported) {
         throw "The built module exports $($exported -join ', ') instead of $($public -join ', ')."
     }
 

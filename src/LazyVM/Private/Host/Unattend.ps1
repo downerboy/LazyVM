@@ -1,27 +1,24 @@
-﻿# Unattend.ps1 - Unattended Windows Setup answer-file disc.
+# Unattend.ps1 - Unattended Windows Setup answer-file disc.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
+#
+# Windows Setup and OOBE run without anyone at the console, so a build can
+# carry on into the guest by itself.
+#
+# Windows Setup looks for autounattend.xml only at the root of removable
+# media (USB drives, then CDs and DVDs), never on a fixed disk. A virtual hard
+# disk is a fixed disk, so the answer file goes on a small ISO image instead,
+# attached as a second DVD drive. The image is built with IMAPI2, which is
+# part of Windows: no Windows ADK or oscdimg needed, and the Windows ISO is
+# never modified.
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  UNATTENDED SETUP ANSWER-FILE DISC
-#
-#  This closes the structural gap in the previous design: Phase 6 built the VM
-#  but never started it, and Phase 7 immediately required a running guest that
-#  was through OOBE with a user logged in. No amount of credential plumbing
-#  fixes that — the OS install itself has to be automated.
-#
-#  Windows Setup looks for autounattend.xml only at the root of REMOVABLE media
-#  (USB drives, then CDs and DVDs), never on a fixed disk. A virtual hard disk
-#  is a fixed disk, so the answer file goes on a small ISO image instead,
-#  attached as a second DVD drive. The image is built with IMAPI2, which is
-#  part of Windows: no Windows ADK or oscdimg needed, and the Windows ISO is
-#  never modified.
-# ─────────────────────────────────────────────────────────────────────────────
 function New-UnattendXml {
     param(
         [Parameter(Mandatory)][string]$UserName,
         [Parameter(Mandatory)][securestring]$Password,
         [Parameter(Mandatory)][string]$ComputerName,
-        [Parameter(Mandatory)][string]$TimeZone
+        [Parameter(Mandatory)][string]$TimeZone,
+        # Where the first-logon command marks the guest as provisioned, in reg.exe's form (HKLM\...).
+        [Parameter(Mandatory)][string]$MarkerKey
     )
 
     # Literal here-string, tokens substituted afterwards, so nothing in the XML
@@ -129,13 +126,13 @@ function New-UnattendXml {
       <FirstLogonCommands>
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
-          <Description>Never expire the local account password</Description>
-          <CommandLine>cmd /c wmic useraccount where "name='@@USER@@'" set PasswordExpires=FALSE</CommandLine>
+          <Description>Never expire local account passwords</Description>
+          <CommandLine>net accounts /maxpwage:unlimited</CommandLine>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>2</Order>
           <Description>Signal provisioning complete</Description>
-          <CommandLine>reg add "HKLM\SOFTWARE\LazyVM" /v Provisioned /t REG_DWORD /d 1 /f</CommandLine>
+          <CommandLine>reg add "@@MARKERKEY@@" /v Provisioned /t REG_DWORD /d 1 /f</CommandLine>
         </SynchronousCommand>
       </FirstLogonCommands>
     </component>
@@ -151,11 +148,13 @@ function New-UnattendXml {
     $escPass = [Security.SecurityElement]::Escape((ConvertTo-PlainText $Password))
     $escComputer = [Security.SecurityElement]::Escape($ComputerName)
     $escTimeZone = [Security.SecurityElement]::Escape($TimeZone)
+    $escMarkerKey = [Security.SecurityElement]::Escape($MarkerKey)
 
     $xml = $template.Replace('@@USER@@', $escUser).
     Replace('@@PASSWORD@@', $escPass).
     Replace('@@COMPUTER@@', $escComputer).
-    Replace('@@TIMEZONE@@', $escTimeZone)
+    Replace('@@TIMEZONE@@', $escTimeZone).
+    Replace('@@MARKERKEY@@', $escMarkerKey)
 
     # Fail loudly here rather than letting Windows Setup silently ignore a
     # malformed answer file and drop to the interactive installer.
@@ -216,69 +215,74 @@ namespace LazyVM
 }
 
 function New-UnattendSeedDisk {
-    <# Builds the answer-file disc, $CFG.SeedDiskPath: an ISO holding autounattend.xml. #>
-    param([Parameter(Mandatory)][pscredential]$GuestCredential)
+    <# Builds the answer-file disc, SeedDiskPath: an ISO holding autounattend.xml. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][pscredential]$GuestCredential
+    )
 
+    $seedDisk = $VM.Settings.SeedDiskPath
     Write-LogEntry 'Building the answer-file disc...' 'INFO'
+    Remove-Item -LiteralPath $seedDisk -Force -ErrorAction SilentlyContinue
 
-    if (Test-Path -LiteralPath $CFG.SeedDiskPath) {
-        Remove-Item -LiteralPath $CFG.SeedDiskPath -Force
-    }
-
-    $xml = New-UnattendXml -UserName $CFG.GuestAdminUser `
-        -Password $GuestCredential.Password `
-        -ComputerName $CFG.GuestComputerName `
-        -TimeZone $CFG.GuestTimeZone
+    $xml = New-UnattendXml -UserName $VM.Runtime.GuestAdminUser -Password $GuestCredential.Password `
+        -ComputerName $VM.Settings.GuestComputerName -TimeZone $VM.Settings.GuestTimeZone `
+        -MarkerKey ($script:GuestMarkerKey -replace '^HKLM:', 'HKLM')
 
     # IMAPI2 builds an image from a folder, so the answer file is written to
     # a private folder first and deleted straight after: it holds the guest
     # password in clear text.
     $staging = Join-Path -Path ([IO.Path]::GetTempPath()) -ChildPath ("LazyVM-" + [guid]::NewGuid().ToString('N'))
     try {
-        New-Item -ItemType Directory -Path $staging -Force | Out-Null
-
-        # Windows Setup expects UTF-8; a BOM is tolerated but omitted for safety.
-        [IO.File]::WriteAllText((Join-Path -Path $staging -ChildPath 'autounattend.xml'), $xml, (New-Object Text.UTF8Encoding($false)))
+        New-Folder -Path $staging
+        [IO.File]::WriteAllText((Join-Path -Path $staging -ChildPath 'autounattend.xml'), $xml, [Text.UTF8Encoding]::new($false))
 
         $image = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
         $image.FileSystemsToCreate = 3      # ISO 9660 + Joliet, which keeps the long file name
         $image.VolumeName = 'UNATTEND'
         $image.Root.AddTree($staging, $false)
-        $result = $image.CreateResultImage()
-        Save-ImapiStream -Stream $result.ImageStream -Path $CFG.SeedDiskPath
+        Save-ImapiStream -Stream $image.CreateResultImage().ImageStream -Path $seedDisk
     }
     catch {
         Write-LogError 'Building the answer-file disc failed' $_
-        Remove-Item -LiteralPath $CFG.SeedDiskPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $seedDisk -Force -ErrorAction SilentlyContinue
         throw
     }
     finally {
         Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    Write-LogEntry "Answer-file disc ready: $($CFG.SeedDiskPath)" 'OK'
+    Write-LogEntry "Answer-file disc ready: $seedDisk" 'OK'
+}
+
+function Test-SeedDiskAttached {
+    <# True when the VM still has the answer-file disc in a DVD drive. #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    return @(Get-VMDvdDrive -VMName $VM.Name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $VM.Settings.SeedDiskPath }).Count -gt 0
 }
 
 function Remove-UnattendSeedDisk {
-    <# The answer file contains the guest password in plain text, so the
-       answer-file disc is ejected and deleted as soon as provisioning is
-       confirmed. #>
-    param([string]$VMName)
+    <#
+      The answer file holds the guest password in plain text, so the
+      answer-file disc is ejected and deleted as soon as provisioning is
+      confirmed.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
 
+    $seedDisk = $VM.Settings.SeedDiskPath
     try {
-        $attached = @(Get-VMDvdDrive -VMName $VMName -ErrorAction SilentlyContinue |
-                Where-Object { $_.Path -eq $CFG.SeedDiskPath })
-        foreach ($drive in $attached) {
+        foreach ($drive in @(Get-VMDvdDrive -VMName $VM.Name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $seedDisk })) {
             Remove-VMDvdDrive -VMDvdDrive $drive
             Write-LogEntry 'Answer-file disc removed from the VM' 'OK'
         }
-        if (Test-Path -LiteralPath $CFG.SeedDiskPath) {
-            Remove-Item -LiteralPath $CFG.SeedDiskPath -Force
+        if (Test-Path -LiteralPath $seedDisk) {
+            Remove-Item -LiteralPath $seedDisk -Force
             Write-LogEntry 'Answer-file disc deleted (it held the guest password in clear text)' 'OK'
         }
     }
     catch {
         Write-LogEntry "Could not remove the answer-file disc: $($_.Exception.Message)" 'WARN'
-        Write-LogEntry "  Delete $($CFG.SeedDiskPath) by hand - it contains the guest password." 'WARN'
+        Write-LogEntry "  Delete $seedDisk by hand - it contains the guest password." 'WARN'
     }
 }

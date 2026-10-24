@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 766" width="1030" height="766" role="img" aria-labelledby="t-license">
-<title id="t-license">Check the licence: calls in order, with data flowing in from the left and out to the right</title>
+<title id="t-license">Check the license: calls in order, with data flowing in from the left and out to the right</title>
 <style>
 svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
 @media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
@@ -60,12 +60,12 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="487.5" y="159" text-anchor="middle">Initialize-CommandRun()</text>
 <line class="div" x1="335" y1="166" x2="640" y2="166"/>
 <g class="sn"><circle cx="351" cy="150" r="10"/><text x="351" y="154" text-anchor="middle">1</text></g>
-<text class="at" x="345" y="181">loads the settings into $CFG</text>
+<text class="at" x="345" y="181">builds the VM context</text>
 <text class="at" x="345" y="198">and opens the log</text>
 </g>
 <g class="bx-store"><rect x="20" y="129" width="255" height="118" rx="3"/>
 <text class="st" x="147.5" y="143" text-anchor="middle">«settings»</text>
-<text class="nm" x="147.5" y="159" text-anchor="middle">$CFG sources</text>
+<text class="nm" x="147.5" y="159" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="166" x2="275" y2="166"/>
 <text class="at" x="30" y="181">HKLM:\SOFTWARE\LazyVM  Root</text>
 <text class="at" x="30" y="198">Config\LazyVM.Settings.json</text>

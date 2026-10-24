@@ -10,7 +10,7 @@ rectangle "LazyVM" {
   usecase "List VMs\n<size:10>Get-LazyVM</size>" as List
   usecase "View settings\n<size:10>Get-LazyVMSetting</size>" as Set
   usecase "View the guest account\n<size:10>Get-LazyVMCredential</size>" as CredV
-  usecase "Check the licence\n<size:10>Get-LazyVMLicense</size>" as Lic
+  usecase "Check the license\n<size:10>Get-LazyVMLicense</size>" as Lic
   usecase "Start the VM" as Start
   usecase "Remove a VM\n<size:10>Remove-LazyVM</size>" as Rem
   usecase "List what will be\ndeleted and kept" as Plan

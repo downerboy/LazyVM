@@ -18,18 +18,15 @@ param()
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 
-foreach ($step in 'CIReport', 'Assemble', 'Package')
-{
+foreach ($step in 'CIReport', 'Assemble', 'Package') {
     . (Join-Path -Path $PSScriptRoot -ChildPath "build/$step.ps1")
 }
 
-try
-{
+try {
     Invoke-Assemble -Root $PSScriptRoot -ModuleName 'LazyVM'
     New-ReleasePackage -Root $PSScriptRoot -ModuleName 'LazyVM'
 }
-catch
-{
+catch {
     Write-CIError -Message "$($_.Exception.Message)`n$($_.ScriptStackTrace)"
     throw
 }

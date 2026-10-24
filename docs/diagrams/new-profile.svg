@@ -50,7 +50,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="345" y="103">-From &lt;OtherVM&gt;  (optional)</text>
 </g>
 <g class="bx-mod"><rect x="335" y="146" width="305" height="67" rx="3"/>
-<text class="st" x="487.5" y="160" text-anchor="middle">«Configuration»</text>
+<text class="st" x="487.5" y="160" text-anchor="middle">«Settings»</text>
 <text class="nm" x="487.5" y="176" text-anchor="middle">Resolve-LazyVMRoot()</text>
 <line class="div" x1="335" y1="183" x2="640" y2="183"/>
 <g class="sn"><circle cx="351" cy="167" r="10"/><text x="351" y="171" text-anchor="middle">1</text></g>
@@ -62,7 +62,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="30" y="198">Root</text>
 </g>
 <g class="bx-mod"><rect x="335" y="237" width="305" height="161" rx="3"/>
-<text class="st" x="487.5" y="251" text-anchor="middle">«Configuration»</text>
+<text class="st" x="487.5" y="251" text-anchor="middle">«Settings»</text>
 <text class="nm" x="487.5" y="267" text-anchor="middle">New-VMProfile()</text>
 <line class="div" x1="335" y1="274" x2="640" y2="274"/>
 <g class="sn"><circle cx="351" cy="258" r="10"/><text x="351" y="262" text-anchor="middle">2</text></g>

@@ -12,7 +12,7 @@ rectangle "LazyVM" {
   usecase "Extend C: to the whole disk" as ExpandC
   usecase "Record tooling changes" as Record
   usecase "Take a tooling checkpoint" as Checkpoint
-  usecase "Check the evaluation licence" as Lic
+  usecase "Check the evaluation license" as Lic
   usecase "Capture state" as Capture
   usecase "Rearm the evaluation" as Rearm
   usecase "Rebuild the VM" as Rebuild

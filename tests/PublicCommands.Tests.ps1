@@ -9,8 +9,11 @@ BeforeAll {
 
     $module = 'LazyVM'
 
-    # Initialize-CommandRun is mocked in most tests; the settings it would
-    # load are set directly instead, in BeforeEach.
+    # Initialize-CommandRun is mocked in most tests, returning this context
+    # instead of reading settings files. Classes defined in a module are only
+    # visible inside it, so the context is made there.
+    $testVM = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; LogFile = 'Alpha.log' }) }
+
     function New-TestRoot {
         <# A root folder with one empty VM profile per name given. #>
         param([string[]]$VMs = @())
@@ -28,11 +31,10 @@ BeforeAll {
 Describe 'Remove-LazyVM' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }
-        Mock -ModuleName $module Initialize-CommandRun { }
-        InModuleScope $module { $script:Settings['VMName'] = 'Alpha'; $script:Settings['LogFile'] = 'Alpha.log' }
+        Mock -ModuleName $module Initialize-CommandRun { $testVM }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Get-VMRemovalContext { [pscustomobject]@{ Files = @('x') } }
-        Mock -ModuleName $module Invoke-VMRemoval { 'removed' }
+        Mock -ModuleName $module Invoke-VMRemoval { 'Removed' }
         Mock -ModuleName $module Write-LogEntry { }
     }
 
@@ -58,7 +60,7 @@ Describe 'Remove-LazyVM' {
     }
 
     It 'reports a removal that could not finish as an error' {
-        Mock -ModuleName $module Invoke-VMRemoval { 'incomplete' }
+        Mock -ModuleName $module Invoke-VMRemoval { 'Incomplete' }
 
         { Remove-LazyVM -Name Alpha -Force } | Should -Throw -ExpectedMessage '*only partly removed*'
     }
@@ -74,33 +76,32 @@ Describe 'Remove-LazyVM' {
 Describe 'Invoke-LazyVMMaintenance' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }
-        Mock -ModuleName $module Initialize-CommandRun { }
-        InModuleScope $module { $script:Settings['VMName'] = 'Alpha'; $script:Settings['LogFile'] = 'Alpha.log' }
+        Mock -ModuleName $module Initialize-CommandRun { $testVM }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Invoke-Rebuild { $true }
     }
 
-    It 'returns <Expected> when maintenance decides <Decision>' -ForEach @(
-        @{ Decision = 'none'; Expected = 'None'; Rebuilds = 0 }
-        @{ Decision = 'rearmed'; Expected = 'Rearmed'; Rebuilds = 0 }
-        @{ Decision = 'rebuild'; Expected = 'Rebuilt'; Rebuilds = 1 }
-        @{ Decision = 'build'; Expected = 'Built'; Rebuilds = 1 }
+    It 'returns <Expected> when maintenance leaves <Step>' -ForEach @(
+        @{ Step = 'None'; Expected = 'None'; Rebuilds = 0 }
+        @{ Step = 'Rearmed'; Expected = 'Rearmed'; Rebuilds = 0 }
+        @{ Step = 'Rebuild'; Expected = 'Rebuilt'; Rebuilds = 1 }
+        @{ Step = 'Build'; Expected = 'Built'; Rebuilds = 1 }
     ) {
-        Mock -ModuleName $module Invoke-Maintenance { $Decision }.GetNewClosure()
+        Mock -ModuleName $module Invoke-Maintenance { $Step }.GetNewClosure()
 
         Invoke-LazyVMMaintenance -Name Alpha | Should -Be $Expected
         Should -Invoke -ModuleName $module Invoke-Rebuild -Times $Rebuilds -Exactly
     }
 
     It 'fails, so the scheduled task shows it, when maintenance could not run' {
-        Mock -ModuleName $module Invoke-Maintenance { 'error' }
+        Mock -ModuleName $module Invoke-Maintenance { 'Error' }
 
         { Invoke-LazyVMMaintenance -Name Alpha } | Should -Throw -ExpectedMessage '*could not run*'
     }
 
     It 'fails when a rebuild does not complete' {
-        Mock -ModuleName $module Invoke-Maintenance { 'rebuild' }
+        Mock -ModuleName $module Invoke-Maintenance { 'Rebuild' }
         Mock -ModuleName $module Invoke-Rebuild { $false }
 
         { Invoke-LazyVMMaintenance -Name Alpha } | Should -Throw -ExpectedMessage '*did not complete cleanly*'
@@ -112,8 +113,7 @@ Describe 'Build-LazyVM' {
         Mock -ModuleName $module Initialize-BuildTarget { }
         Mock -ModuleName $module Register-RebuildSchedule { }
         Mock -ModuleName $module Assert-Administrator { }
-        Mock -ModuleName $module Initialize-CommandRun { }
-        InModuleScope $module { $script:Settings['VMName'] = 'Alpha'; $script:Settings['LogFile'] = 'Alpha.log' }
+        Mock -ModuleName $module Initialize-CommandRun { $testVM }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Write-LogEntry { }
     }
@@ -158,15 +158,14 @@ Describe 'Build-LazyVM' {
     }
 
     It 'refuses a phase that does not exist' {
-        { Build-LazyVM -Name Alpha -FromPhase 9 } | Should -Throw
+        { Build-LazyVM -Name Alpha -FromPhase 9 } | Should -Throw -ExpectedMessage '*There is no build phase 9*'
     }
 }
 
 Describe 'Restore-LazyVMTooling' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }
-        Mock -ModuleName $module Initialize-CommandRun { }
-        InModuleScope $module { $script:Settings['VMName'] = 'Alpha'; $script:Settings['LogFile'] = 'Alpha.log' }
+        Mock -ModuleName $module Initialize-CommandRun { $testVM }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Invoke-ToolingRevert { }
@@ -358,7 +357,10 @@ Describe 'Get-MissingProductExtension' {
     }
 
     It 'lists everything when the guest has none of them' {
-        $missing = InModuleScope $module -Parameters @{ Product = $product } { param($Product) Get-MissingProductExtension -Product $Product -Observed $null }
+        $missing = InModuleScope $module -Parameters @{ Product = $product } {
+            param($Product)
+            Get-MissingProductExtension -Product ([ToolingProduct]::FromObject($Product)) -Observed $null
+        }
         @($missing).Count | Should -Be 3
         @($missing | Where-Object { $_.Link }).Count | Should -Be 2
     }
@@ -368,29 +370,44 @@ Describe 'Get-MissingProductExtension' {
             Extensions     = @('https://marketplace.visualstudio.com/items?itemName=B.Two')
             UserExtensions = @(@{ Id = 'three' })
         }
-        $missing = InModuleScope $module -Parameters @{ Product = $product; Observed = $observed } { param($Product, $Observed) Get-MissingProductExtension -Product $Product -Observed $Observed }
+        $missing = InModuleScope $module -Parameters @{ Product = $product; Observed = $observed } {
+            param($Product, $Observed)
+            Get-MissingProductExtension -Product ([ToolingProduct]::FromObject($Product)) -Observed ([ToolingProduct]::FromObject($Observed))
+        }
         @($missing).ForEach({ $_.Link }) | Should -Be @('https://marketplace.visualstudio.com/items?itemName=A.One')
+    }
+}
+
+Describe 'Test-UnsignedExtensionAllowed' {
+    It 'returns <Expected> when <Case>' -ForEach @(
+        @{ Case = 'an extension is listed'; Allowed = @('Pub.Unsigned'); Expected = $true }
+        @{ Case = 'no extension is listed'; Allowed = @(); Expected = $false }
+        @{ Case = 'only another extension is listed'; Allowed = @('Pub.Other'); Expected = $false }
+    ) {
+        $links = @('https://marketplace.visualstudio.com/items?itemName=Pub.Signed', 'https://marketplace.visualstudio.com/items?itemName=Pub.Unsigned')
+
+        InModuleScope $module -Parameters @{ Links = $links; Allowed = $Allowed } {
+            param($Links, $Allowed)
+            Test-UnsignedExtensionAllowed -Links $Links -Allowed $Allowed
+        } | Should -Be $Expected
     }
 }
 
 Describe 'Get-GuestUserSetting' {
     It 'asks for only what is turned on' {
-        $values = InModuleScope $module {
-            $script:Settings.Clear()
-            $script:Settings['GuestDarkMode'] = $false
-            $script:Settings['GuestShowFileExtensions'] = $true
-            $script:Settings['GuestTaskbarLeft'] = $true
-            $script:Settings['GuestHideTaskbarSearch'] = $false
-            Get-GuestUserSetting
-        }
+        $settings = @{ GuestDarkMode = $false; GuestShowFileExtensions = $true; GuestTaskbarLeft = $true; GuestHideTaskbarSearch = $false }
+
+        $values = InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Get-GuestUserSetting -Settings $Settings }
+
         @($values).ForEach({ $_.Name }) | Should -Be @('HideFileExt', 'TaskbarAl')
     }
 
     It 'asks for nothing when everything is off' {
-        InModuleScope $module {
-            $script:Settings.Clear()
-            foreach ($name in 'GuestDarkMode', 'GuestShowFileExtensions', 'GuestTaskbarLeft', 'GuestHideTaskbarSearch') { $script:Settings[$name] = $false }
-            @(Get-GuestUserSetting).Count
+        $settings = @{ GuestDarkMode = $false; GuestShowFileExtensions = $false; GuestTaskbarLeft = $false; GuestHideTaskbarSearch = $false }
+
+        InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            @(Get-GuestUserSetting -Settings $Settings).Count
         } | Should -Be 0
     }
 }

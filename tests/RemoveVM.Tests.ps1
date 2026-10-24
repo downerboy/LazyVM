@@ -1,5 +1,5 @@
 ﻿# RemoveVM.Tests.ps1
-# Removing a VM (-RemoveVM): what it deletes, and what it keeps because every
+# Removing a VM (Remove-LazyVM): what it deletes, and what it keeps because every
 # VM, or another VM, still uses it. Only the planning is tested here; it reads
 # nothing from disk and touches neither Hyper-V nor the Task Scheduler.
 
@@ -22,6 +22,8 @@ BeforeAll {
             Root             = 'D:\DevVM'
             ProfileDir       = "D:\DevVM\Scripts\Config\VMs\$Name"
             VHDXRoot         = 'D:\DevVM\VMs'
+            OSDiskPath       = "D:\DevVM\VMs\$Name-OS.vhdx"
+            VMConfigDir      = "D:\DevVM\VMs\$Name"
             ISOPath          = 'D:\DevVM\ISO\Win11Ent_Eval.iso'
             ISOSearchRoot    = 'D:\DevVM\ISO'
             SQLIsoPath       = 'D:\DevVM\Installers\SQLServer2025-x64-ENU-EntDev.iso'

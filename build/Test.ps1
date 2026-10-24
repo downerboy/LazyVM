@@ -1,7 +1,6 @@
 ﻿# Test.ps1 - Runs the Pester tests. Dot-sourced by the scripts at the repository root.
 
-function Invoke-Test
-{
+function Invoke-Test {
     <# Runs tests\ with Pester and writes out\testResults.xml; any failure fails. #>
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -9,8 +8,7 @@ function Invoke-Test
     )
 
     # Not -Force: Pester cannot be loaded twice into one session.
-    if (-not (Get-Module -Name Pester | Where-Object { $_.Version -eq $PesterVersion }))
-    {
+    if (-not (Get-Module -Name Pester | Where-Object { $_.Version -eq $PesterVersion })) {
         Import-Module -Name Pester -RequiredVersion $PesterVersion
     }
 
@@ -25,18 +23,15 @@ function Invoke-Test
     $configuration.TestResult.OutputPath = Join-Path -Path $outDir -ChildPath 'testResults.xml'
 
     $result = Invoke-Pester -Configuration $configuration
-    foreach ($test in $result.Failed)
-    {
+    foreach ($test in $result.Failed) {
         Write-CIError -Message "$($test.ExpandedPath): $($test.ErrorRecord[0].Exception.Message)" -File $test.ScriptBlock.File -Line $test.StartLine
     }
     # A test file is also marked failed when only its tests failed; those are
     # reported above, so only a file that broke on its own is reported here.
-    foreach ($container in @($result.Containers | Where-Object { $_.Result -eq 'Failed' -and @($_.ErrorRecord).Count -gt 0 }))
-    {
+    foreach ($container in @($result.Containers | Where-Object { $_.Result -eq 'Failed' -and @($_.ErrorRecord).Count -gt 0 })) {
         Write-CIError -Message "$($container.Item): $(@($container.ErrorRecord)[0])"
     }
-    if ($result.FailedCount -gt 0 -or $result.FailedContainersCount -gt 0)
-    {
+    if ($result.FailedCount -gt 0 -or $result.FailedContainersCount -gt 0) {
         throw "$($result.FailedCount) test(s) and $($result.FailedContainersCount) test file(s) failed."
     }
 }

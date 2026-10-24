@@ -1,4 +1,4 @@
-﻿function Save-LazyVMState {
+function Save-LazyVMState {
     <#
     .SYNOPSIS
     Captures a VM's state to the host, ready for a rebuild.
@@ -29,19 +29,11 @@
     )
 
     process {
-        Assert-Administrator
-        try {
-            $null = Initialize-CommandRun -Title 'Capture' -Name $Name
-            if ($PSCmdlet.ShouldProcess($CFG.VMName, "Capture the VM's state to $($CFG.StateDir)")) {
-                $null = Save-GuestState
+        Invoke-CommandRun -Title 'Capture' -Name $Name -FailureMessage 'The capture failed' -Cmdlet $PSCmdlet -ScriptBlock {
+            param($VM)
+            if ($PSCmdlet.ShouldProcess($VM.Name, "Capture the VM's state to $($VM.Settings.StateDir)")) {
+                $null = Save-GuestState -VM $VM
             }
-        }
-        catch {
-            if ($script:LogReady) { Write-LogError 'The capture failed' $_ }
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-        finally {
-            Complete-CommandRun
         }
     }
 }

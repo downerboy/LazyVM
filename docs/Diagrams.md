@@ -7,7 +7,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKLM:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk and `W:` is the Dev Drive.
-- Every command except `Get-LazyVM`, `Get-LazyVMSetting`, `New-LazyVM` and `Get-LazyVMCredential` starts with `Initialize-CommandRun` and ends with `Complete-CommandRun`, which closes the guest session and clears `$CFG`.
+- Every command except `Get-LazyVM`, `Get-LazyVMSetting`, `New-LazyVM` and `Get-LazyVMCredential` starts with `Initialize-CommandRun` and ends with `Complete-CommandRun`, which closes the guest session and the log.
 - A call that happens only in some cases says so in its box.
 
 ## Contents
@@ -19,7 +19,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - Tooling: [Record tooling now](#tooling-record), [See installed tooling](#tooling-view), [List tooling restore points](#restore-points), [Return to an earlier tooling version](#tooling-revert)
 - State: [Capture state](#capture), [Restore state](#restore)
 - Remove: [Remove a VM](#remove)
-- Check: [List VMs](#status), [View settings](#settings), [Check the licence](#license), [See the guest account](#credential-view)
+- Check: [List VMs](#status), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view)
 
 <a id="install-from-repo"></a>
 
@@ -72,19 +72,14 @@ Optional. Without it, Build-LazyVM picks LazyVM on the NTFS drive with the most 
 
 ![Choose the LazyVM folder: call order and data flow](diagrams/set-root.svg)
 
-1. `Resolve-SettingsRoot` (Configuration): checks it is a full local path
-2. `Get-RegisteredRoot` (Configuration): warns if a different folder was in use
+1. `Resolve-SettingsRoot` (Settings): checks it is a full local path
+2. `Get-RegisteredRoot` (Settings): warns if a different folder was in use
    - Reads D1, previous folder: HKLM:\SOFTWARE\LazyVM (Root)
-3. `Set-RegisteredRoot` (Configuration)
+3. `Set-RegisteredRoot` (Settings)
    - Writes D2, new folder, read by every later run: HKLM:\SOFTWARE\LazyVM (Root = D:\DevVM)
-4. `Initialize-ConfigFolder` (Configuration): copies the schema for VS Code autocomplete
+4. `Initialize-ConfigFolder` (Settings): copies the schema for VS Code autocomplete
    - Reads D3, settings schema: Module Data\ (LazyVM.Settings.schema.json)
    - Writes D4, schema copy, empty settings file: D:\DevVM\Config\ (LazyVM.Settings.schema.json, LazyVM.Settings.json (if new))
-5. `Import-LegacyConfiguration` (Configuration): LazyVM 1.x kit only
-   - Reads D5, 1.x settings: D:\DevVM\Scripts\Config\ (1.x settings)
-   - Writes D6, settings carried across: D:\DevVM\Config\ (LazyVM.Settings.json, VMs\<VM>\VM.json)
-6. `Register-RebuildSchedule` (Maintenance): only for VMs whose task still runs a 1.x script
-   - Writes D7, task moved to LazyVM 2: Task Scheduler (LazyVM-Maintain-<VM>, old 1.x task removed)
 
 <a id="new-profile"></a>
 
@@ -96,9 +91,9 @@ Creates the profile only. Build-LazyVM does this by itself when the profile is m
 
 ![Create a VM profile without building: call order and data flow](diagrams/new-profile.svg)
 
-1. `Resolve-LazyVMRoot` (Configuration)
+1. `Resolve-LazyVMRoot` (Settings)
    - Reads D1, LazyVM folder: HKLM:\SOFTWARE\LazyVM (Root)
-2. `New-VMProfile` (Configuration): copies -From settings except paths, computer name and maintenance time; schedules maintenance an hour after the latest existing VM
+2. `New-VMProfile` (Settings): copies -From settings except paths, computer name and maintenance time; schedules maintenance an hour after the latest existing VM
    - Reads D2, settings and tooling to copy: Config\VMs\<OtherVM>\ (VM.json, Tooling.json  (with -From))
    - Reads D3, maintenance times in use: Config\VMs\*\ (VM.json)
    - Writes D4, new profile: Config\VMs\<VM>\ (VM.json)
@@ -115,8 +110,8 @@ Optional before a build: Build-LazyVM generates an account if none is stored. Th
 
 ![Store the guest account: call order and data flow](diagrams/set-credential.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Get-StoredCredential` (Credentials): asks before replacing unless -Force
    - Reads D3, guest credential: Backup\ (.lazyvm.key, <VM>\guest.cred)
@@ -135,13 +130,13 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
 
 ![Build a VM: call order and data flow](diagrams/build.svg)
 
-1. `Initialize-BuildTarget` (Configuration): first run: picks the root and creates the profile
+1. `Initialize-BuildTarget` (Settings): first run: picks the root and creates the profile
    - Reads D1, LazyVM folder: HKLM:\SOFTWARE\LazyVM (Root, if already set)
    - Reads D2, drive with most free space: Fixed drives (NTFS, free space)
    - Writes D3, LazyVM folder, first run: HKLM:\SOFTWARE\LazyVM (Root = X:\LazyVM)
    - Writes D4, settings file and profile, if new: Config\ (LazyVM.Settings.json, VMs\<VM>\VM.json)
-2. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D5, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+2. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D5, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D6, run log: Logs\ (<VM>.log  (appended))
 3. `Invoke-VMBuild` (Host): runs phases 0-8, starting at -FromPhase or the resume point; steps 4-15 are its calls
 4. `Get-ResumePhase` (Host, called by Invoke-VMBuild): picks up after a restart
@@ -153,7 +148,7 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
    - Writes D10, where to resume: HKLM:\SOFTWARE\LazyVM\<VM> (ResumePhase = 3)
 7. `Initialize-HostFolder` (Host, called by Invoke-VMBuild): phase 3
    - Writes D11, folders created if missing: <Root>\ (ISO, Installers, VMs, SQLDisk, DevDrive, Backup, Logs, Checkpoints\<VM>)
-8. `Confirm-InstallMedia` (Host, called by Invoke-VMBuild): phase 4: Resolve-InstallationIso and Resolve-SqlServerIso
+8. `Initialize-InstallationIso` and `Initialize-SqlServerIso` (Host, called by Invoke-BuildPhase): the Windows ISO first, then phase 4
    - Reads D12, Windows ISO: ISO\  or  Downloads\ (Windows 11 Enterprise, Evaluation ISO)
    - Reads D13, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
    - Writes D14, Windows ISO in place: ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
@@ -190,14 +185,14 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
 
 `Invoke-LazyVMMaintenance` `-Name <VM>`
 
-Extends C: into any space added to the OS disk and records tooling changes every day, then acts on the evaluation licence only when it is within RebuildThresholdDays (10) of expiry.
+Extends C: into any space added to the OS disk and records tooling changes every day, then acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry.
 
 Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
 
 ![Daily maintenance: call order and data flow](diagrams/maintenance.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Invoke-Maintenance` (Maintenance): steps 3-9 are its calls; no VM: returns "build" and Invoke-Rebuild runs instead
    - Reads D3, does the VM exist: Hyper-V (Get-VM <VM>)
@@ -212,9 +207,9 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
    - Writes D9, checkpoint, only on a change: Checkpoints\<VM>\ (checkpoint "Tooling <stamp>", oldest pruned past 3)
    - Writes D10, new tooling version, only on a change: Config\VMs\<VM>\ (Tooling.json, History\Tooling-<stamp>.json)
 5. `Get-GuestLicenseStatus` (Maintenance, called by Invoke-Maintenance): days left, rearms left
-   - Reads D11, licence status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
+   - Reads D11, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
 6. `Get-MaintenanceDecision` (Maintenance, called by Invoke-Maintenance): > threshold or no countdown: none; rearms left: rearm; otherwise: rebuild
-   - Reads D12, threshold: $CFG (RebuildThresholdDays = 10)
+   - Reads D12, threshold: VM settings (RebuildThresholdDays = 10)
 7. `Save-GuestState` (Capture, called by Invoke-Maintenance): only on rearm or rebuild (see Capture state)
    - Reads D13, state to keep: Running guest (VS settings, .vsconfig, SQL databases + logins, env, certs, tasks, apps)
    - Writes D14, captured state: State\<VM>\ (vs\  windows\  sql\, projects\  apps\, manifest.json, manifest-<stamp>.json)
@@ -234,8 +229,8 @@ Build-LazyVM already does this. Use it after changing MaintenanceTime, or if sch
 
 ![Schedule maintenance again: call order and data flow](diagrams/register-maintenance.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Register-RebuildSchedule` (Maintenance): refuses without a stored credential or a valid HH:mm MaintenanceTime
    - Reads D3, guest credential: Backup\ (.lazyvm.key, <VM>\guest.cred)
@@ -253,8 +248,8 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
 
 ![Rebuild a VM: call order and data flow](diagrams/rebuild.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Invoke-Rebuild` (Maintenance): steps 3-15 are its calls
 3. `Save-GuestState` (Capture, called by Invoke-Rebuild): skipped with -SkipCapture: the last manifest is used
@@ -266,7 +261,7 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
    - Writes D7, old Windows disk set aside: VMs\ (<VM>-OS.retired-<stamp>.vhdx, <VM>.retired-<stamp>\, <VM>-Seed.iso deleted)
 5. `Initialize-HostFolder` (Host, called by Invoke-Rebuild): phase 3
    - Writes D8, folders created if missing: <Root>\ (ISO, Installers, VMs, SQLDisk, DevDrive, Backup, Logs, Checkpoints\<VM>)
-6. `Confirm-InstallMedia` (Host, called by Invoke-Rebuild): phase 4: Resolve-InstallationIso and Resolve-SqlServerIso
+6. `Initialize-InstallationIso` and `Initialize-SqlServerIso` (Host, called by Invoke-BuildPhase): the Windows ISO first, then phase 4
    - Reads D9, Windows ISO: ISO\  or  Downloads\ (Windows 11 Enterprise, Evaluation ISO)
    - Reads D10, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
    - Writes D11, Windows ISO in place: ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
@@ -310,8 +305,8 @@ Does now what maintenance does every day. Get-LazyVMTooling shows the same compa
 
 ![Record tooling now: call order and data flow](diagrams/tooling-record.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Open-GuestSession` (Tooling): starts the VM if it is off, connects with PowerShell Direct
    - Reads D3, guest credential: Backup\ (.lazyvm.key, <VM>\guest.cred)
@@ -335,8 +330,8 @@ Lists what is installed and what the next maintenance run would record.
 
 ![See installed tooling: call order and data flow](diagrams/tooling-view.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Get-GuestToolingReport` (Tooling): inventory, then Compare-ToolingRecord against the recorded list
    - Reads D3, what is installed: Guest tooling (vswhere + vs_installer export, winget export, Marketplace extensions)
@@ -354,8 +349,8 @@ Lists the recorded tooling versions you can return to.
 
 ![List tooling restore points: call order and data flow](diagrams/restore-points.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Get-ToolingRestorePoint` (Tooling): one per "Tooling" checkpoint
    - Reads D3, checkpoints: Checkpoints\<VM>\ ("Tooling <stamp>")
@@ -372,8 +367,8 @@ Returns ALL the VM's disks to that checkpoint, Dev Drive and data disk included.
 
 ![Return to an earlier tooling version: call order and data flow](diagrams/tooling-revert.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Invoke-ToolingRevert` (Tooling): steps 3-5 are its calls; stops if the checkpoint or its list is missing
    - Reads D3, chosen checkpoint: Checkpoints\<VM>\ ("Tooling <stamp>")
@@ -397,8 +392,8 @@ Copies everything a rebuild must keep to the host. Maintenance and rebuilds run 
 
 ![Capture state: call order and data flow](diagrams/capture.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Save-GuestState` (Capture): steps 3-11 are its calls; a failed step is logged and the rest still run
 3. `Connect-Guest` (Guest, called by Save-GuestState): starts the VM first if off (Wait-GuestReady)
@@ -438,8 +433,8 @@ Applies the last capture to the VM. A rebuild runs this after installing.
 
 ![Restore state: call order and data flow](diagrams/restore.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Restore-GuestState` (Restore): steps 3-10 are its calls; a failed step is logged and the rest still run
 3. `Get-CaptureManifest` (Capture, called by Restore-GuestState): none: nothing to restore
@@ -475,8 +470,8 @@ Deletes the VM and everything created for it, Dev Drive included. Anything anoth
 
 ![Remove a VM: call order and data flow](diagrams/remove.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Get-VMRemovalContext` (Maintenance): Get-VMRemovalPlan decides what to delete and keep; lists it with sizes
    - Reads D3, other VMs' paths: Config\VMs\*\ (other VMs' VM.json)
@@ -500,11 +495,11 @@ No administrator rights needed.
 
 ![List VMs: call order and data flow](diagrams/status.svg)
 
-1. `Resolve-LazyVMRoot` (Configuration)
+1. `Resolve-LazyVMRoot` (Settings)
    - Reads D1, LazyVM folder: HKLM:\SOFTWARE\LazyVM (Root)
-2. `Get-VMProfileName` (Configuration)
+2. `Get-VMProfileName` (Settings)
    - Reads D2, profiles: Config\VMs\*\ (VM.json)
-3. `Read-VMSetting` (Configuration): per VM
+3. `Read-VMSetting` (Settings): per VM
    - Reads D3, MaintenanceTime, settings errors: Config\ (LazyVM.Settings.json, VMs\<VM>\VM.json)
 4. `Get-VM` (Hyper-V): per VM
    - Reads D4, state: Hyper-V (VM state)
@@ -522,37 +517,37 @@ Every setting as the VM uses it, where the value came from, and what it does. No
 
 ![View settings: call order and data flow](diagrams/settings.svg)
 
-1. `Resolve-LazyVMRoot` (Configuration)
+1. `Resolve-LazyVMRoot` (Settings)
    - Reads D1, LazyVM folder: HKLM:\SOFTWARE\LazyVM (Root)
-2. `Read-VMSetting` (Configuration): defaults, then host file, then VM profile; later wins
+2. `Read-VMSetting` (Settings): defaults, then host file, then VM profile; later wins
    - Reads D2, defaults: Module Data\ (LazyVM.Settings.schema.json)
    - Reads D3, your values: Config\ (LazyVM.Settings.json, VMs\<VM>\VM.json)
-3. `Get-SettingDescription` (Configuration): per setting, from the schema
+3. `Get-SettingDescription` (Settings): per setting, from the schema
    - Writes D4, effective settings: Pipeline (LazyVM.Setting: Value,, Source, Description)
 
 <a id="license"></a>
 
-## Check the licence
+## Check the license
 
 `Get-LazyVMLicense` `-Name <VM>`
 
 Evaluation days and rearms left, the last capture, and what the next maintenance run will do. Starts the VM if it is off.
 
-![Check the licence: call order and data flow](diagrams/license.svg)
+![Check the license: call order and data flow](diagrams/license.svg)
 
-1. `Initialize-CommandRun` (Common): loads the settings into $CFG and opens the log
-   - Reads D1, settings, VM profile, guest user name: $CFG sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Config\LazyVM.Settings.json, Config\VMs\<VM>\VM.json, Backup\<VM>\guest.cred)
    - Writes D2, run log: Logs\ (<VM>.log  (appended))
 2. `Get-LicenseReport` (Maintenance): steps 3-6 are its calls
 3. `Connect-Guest` (Guest, called by Get-LicenseReport): starts the VM first if off
    - Reads D3, guest credential: Backup\ (.lazyvm.key, <VM>\guest.cred)
    - Writes D4, PowerShell Direct session: VM <VM> (running, reachable)
 4. `Get-GuestLicenseStatus` (Maintenance, called by Get-LicenseReport)
-   - Reads D5, licence status: Running guest (SoftwareLicensingProduct)
+   - Reads D5, license status: Running guest (SoftwareLicensingProduct)
 5. `Get-CaptureManifest` (Capture, called by Get-LicenseReport)
    - Reads D6, last capture, databases: State\<VM>\ (manifest.json)
 6. `Get-MaintenanceDecision` (Maintenance, called by Get-LicenseReport): none, rearm or rebuild
-   - Writes D7, licence report: Pipeline (LazyVM.License: days, rearms,, last capture, next action)
+   - Writes D7, license report: Pipeline (LazyVM.License: days, rearms,, last capture, next action)
 
 <a id="credential-view"></a>
 
@@ -564,7 +559,7 @@ Returns the account LazyVM uses inside the VM. -AsPlainText shows the password.
 
 ![See the guest account: call order and data flow](diagrams/credential-view.svg)
 
-1. `Read-VMSetting` (Configuration): finds the key and the credential file
+1. `Read-VMSetting` (Settings): finds the key and the credential file
    - Reads D1, settings: Config\ (LazyVM.Settings.json, VMs\<VM>\VM.json)
 2. `Get-StoredCredential` (Credentials): decrypts with the key
    - Reads D2, guest credential: Backup\ (.lazyvm.key, <VM>\guest.cred)

@@ -353,6 +353,12 @@
       "minimum": 10,
       "maximum": 600
     },
+    "UnsignedExtensions": {
+      "type": "array",
+      "default": [],
+      "description": "Marketplace extensions, by item name (Publisher.Name, as in the extension's Marketplace link), that the Visual Studio Installer may install even though they are not signed. Unsigned extensions are refused unless listed here.",
+      "items": { "type": "string", "pattern": "^[^.\\s]+\\.[^\\s]+$" }
+    },
     "InstallerBootstrappers": {
       "type": "object",
       "default": {
