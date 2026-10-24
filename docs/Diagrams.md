@@ -31,15 +31,15 @@ Builds the module, checks it and runs the tests, then installs it for all users 
 
 ![Install from the repository: call order and data flow](diagrams/install-from-repo.svg)
 
-1. `Invoke-Build` (build.ps1): merges Public\ and Private\ into one .psm1, then imports it to check the exports
+1. `Invoke-Compile` (build\Compile.ps1): merges Public\ and Private\ into one .psm1, then imports it to check the exports
    - Reads D1, module source: src\LazyVM\ (Public\  Private\  Data\, LazyVM.psd1)
    - Writes D2, built module: out\LazyVM\ (<version>\)
-2. `Import-BuildTool` (build.ps1): installs the pinned version when it is missing; other versions are left alone
+2. `Install-BuildTool` (build\Tools.ps1): installs the pinned version when it is missing; other versions are left alone
    - Reads D3, pinned build tools: PowerShell Gallery (PSScriptAnalyzer 1.24.0, Pester 5.7.1)
    - Writes D4, build tools, if they were missing: CurrentUser modules (PSScriptAnalyzer, Pester)
-3. `Invoke-Analyze` (build.ps1): in a job of its own; any finding stops here
+3. `Invoke-Analyze` (build\Analyze.ps1): in a job of its own; any finding stops here
    - Reads D5, code and analyzer rules: Repo (src\  tests\, PSScriptAnalyzerSettings.psd1)
-4. `Invoke-Test` (build.ps1): any failure stops here
+4. `Invoke-Test` (build\Test.ps1): any failure stops here
    - Reads D6, Pester tests: Repo (tests\*.Tests.ps1)
    - Writes D7, test results: out\ (testResults.xml)
 5. `Install-BuiltModule` (build.ps1): replaces the same version, leaves other versions

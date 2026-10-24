@@ -48,108 +48,9 @@ $moduleName = 'LazyVM'
 $sourceDir = Join-Path -Path $PSScriptRoot -ChildPath "src/$moduleName"
 $outDir = Join-Path -Path $PSScriptRoot -ChildPath 'out'
 
-# Pinned, so the build behaves the same everywhere until these are changed on purpose.
-$tools = @(
-    @{ Name = 'Pester'; Version = '5.7.1' }
-    @{ Name = 'PSScriptAnalyzer'; Version = '1.24.0' }
-)
-
-function Import-BuildTool
+foreach ($step in 'CIReport', 'Tools', 'Compile', 'Analyze', 'Test', 'Package')
 {
-    param(
-        [Parameter(Mandatory)][hashtable]$Tool,
-        [switch]$InstallOnly
-    )
-
-    $installed = Get-Module -ListAvailable -Name $Tool.Name | Where-Object { $_.Version -eq [version]$Tool.Version }
-    if (-not $installed)
-    {
-        Write-Host "Installing $($Tool.Name) $($Tool.Version)..."
-        Install-Module -Name $Tool.Name -RequiredVersion $Tool.Version -Scope CurrentUser -Force -SkipPublisherCheck
-    }
-    if ($InstallOnly)
-    {
-        return 
-    }
-    # Not -Force: Pester cannot be loaded twice into one session.
-    if (-not (Get-Module -Name $Tool.Name | Where-Object { $_.Version -eq [version]$Tool.Version }))
-    {
-        Import-Module -Name $Tool.Name -RequiredVersion $Tool.Version
-    }
-}
-
-function Invoke-Build
-{
-    $manifest = Import-PowerShellDataFile -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$moduleName.psd1")
-    $version = $manifest.ModuleVersion
-    $target = Join-Path -Path $outDir -ChildPath "$moduleName/$version"
-
-    # The manifest's command list and the Public folder must agree.
-    $public = @(Get-ChildItem -LiteralPath (Join-Path -Path $sourceDir -ChildPath 'Public') -Filter '*.ps1' | ForEach-Object { $_.BaseName } | Sort-Object)
-    $listed = @($manifest.FunctionsToExport | Sort-Object)
-    $difference = Compare-Object -ReferenceObject $public -DifferenceObject $listed
-    if ($difference)
-    {
-        throw "FunctionsToExport and the Public folder differ: $(($difference | ForEach-Object { "$($_.InputObject) ($($_.SideIndicator))" }) -join ', ')"
-    }
-
-    if (Test-Path -LiteralPath $target)
-    {
-        Remove-Item -LiteralPath $target -Recurse -Force 
-    }
-    New-Item -ItemType Directory -Path $target -Force | Out-Null
-
-    # The source root module, with the loop that dot-sources the function
-    # files replaced by the functions themselves.
-    $rootModule = Get-Content -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$moduleName.psm1") -Raw
-    $start = $rootModule.IndexOf('# ── Functions')
-    $end = $rootModule.IndexOf('# ── Tab completion')
-    if ($start -lt 0 -or $end -lt 0)
-    {
-        throw "The markers that locate the function loader were not found in $moduleName.psm1." 
-    }
-
-    $builder = [System.Text.StringBuilder]::new()
-    [void]$builder.Append($rootModule.Substring(0, $start))
-    [void]$builder.AppendLine("# ── Functions ────────────────────────────────────────────────────────────────")
-    [void]$builder.AppendLine("# Merged from src\$moduleName by build.ps1 on $(Get-Date -Format 'yyyy-MM-dd').")
-    foreach ($folder in 'Private', 'Public')
-    {
-        $files = Get-ChildItem -LiteralPath (Join-Path -Path $sourceDir -ChildPath $folder) -Filter '*.ps1' -File -Recurse | Sort-Object -Property FullName
-        foreach ($file in $files)
-        {
-            $relative = [IO.Path]::GetRelativePath($sourceDir, $file.FullName)
-            [void]$builder.AppendLine()
-            [void]$builder.AppendLine("#region $relative")
-            [void]$builder.AppendLine((Get-Content -LiteralPath $file.FullName -Raw).TrimEnd())
-            [void]$builder.AppendLine("#endregion $relative")
-        }
-    }
-    [void]$builder.AppendLine()
-    [void]$builder.Append($rootModule.Substring($end))
-
-    $utf8Bom = [System.Text.UTF8Encoding]::new($true)
-    $text = $builder.ToString() -replace "`r?`n", "`r`n"
-    [IO.File]::WriteAllText((Join-Path -Path $target -ChildPath "$moduleName.psm1"), $text, $utf8Bom)
-    Copy-Item -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$moduleName.psd1") -Destination $target
-    Copy-Item -LiteralPath (Join-Path -Path $sourceDir -ChildPath 'Data') -Destination $target -Recurse
-    Copy-Item -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath 'LICENSE.md') -Destination $target
-
-    # The built module must load and export exactly the public commands.
-    $builtManifest = Join-Path -Path $target -ChildPath "$moduleName.psd1"
-    $null = Test-ModuleManifest -Path $builtManifest
-    $check = Start-Job -ScriptBlock {
-        param($Path)
-        $module = Import-Module -Name $Path -PassThru -Force
-        @(Get-Command -Module $module.Name | ForEach-Object { $_.Name } | Sort-Object)
-    } -ArgumentList $builtManifest
-    $exported = @(Receive-Job -Job $check -Wait -AutoRemoveJob -ErrorAction Stop)
-    if (Compare-Object -ReferenceObject $public -DifferenceObject $exported)
-    {
-        throw "The built module exports $($exported -join ', ') instead of $($public -join ', ')."
-    }
-
-    Write-Host "Built $moduleName $version in $target ($($exported.Count) commands)"
+    . (Join-Path -Path $PSScriptRoot -ChildPath "build/$step.ps1")
 }
 
 function Install-BuiltModule
@@ -169,144 +70,28 @@ function Install-BuiltModule
     Write-Host 'Open a new PowerShell 7 window as administrator, then run: Build-LazyVM -Name DevBox'
 }
 
-function Get-ReleaseVersion
-{
-    <# The release's version as the tag names it: 2.0.0, or 2.0.0-alpha1 for a prerelease. #>
-    $manifest = Import-PowerShellDataFile -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$moduleName.psd1")
-    $prerelease = "$($manifest.PrivateData.PSData['Prerelease'])"
-    if ($prerelease)
-    {
-        return "$($manifest.ModuleVersion)-$prerelease" 
-    }
-    return "$($manifest.ModuleVersion)"
-}
-
-function New-ReleasePackage
-{
-    $version = (Import-PowerShellDataFile -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$moduleName.psd1")).ModuleVersion
-    $releaseDir = Join-Path -Path $outDir -ChildPath 'release'
-    $staging = Join-Path -Path $releaseDir -ChildPath 'staging'
-    if (Test-Path -LiteralPath $releaseDir)
-    {
-        Remove-Item -LiteralPath $releaseDir -Recurse -Force 
-    }
-    New-Item -ItemType Directory -Path (Join-Path -Path $staging -ChildPath $moduleName) -Force | Out-Null
-
-    Copy-Item -LiteralPath (Join-Path -Path $outDir -ChildPath "$moduleName/$version") -Destination (Join-Path -Path $staging -ChildPath $moduleName) -Recurse
-    foreach ($file in 'src/Install.ps1', 'README.md', 'LICENSE.md')
-    {
-        Copy-Item -LiteralPath (Join-Path -Path $PSScriptRoot -ChildPath $file) -Destination $staging
-    }
-
-    $zip = Join-Path -Path $releaseDir -ChildPath "$moduleName-$(Get-ReleaseVersion).zip"
-    Compress-Archive -Path (Join-Path -Path $staging -ChildPath '*') -DestinationPath $zip
-    Remove-Item -LiteralPath $staging -Recurse -Force
-    Write-Host "Packaged $zip"
-}
-
-function Invoke-Analyze
-{
-    # In a process of its own: resolving the commands in the tests loads
-    # Pester's assembly into whichever process the analyzer runs in, and
-    # that would stop the tests loading Pester themselves.
-    $tool = $tools | Where-Object Name -EQ 'PSScriptAnalyzer'
-    $job = Start-Job -ScriptBlock {
-        param($Root, $Version)
-        Import-Module -Name PSScriptAnalyzer -RequiredVersion $Version
-        Invoke-ScriptAnalyzer -Path (Join-Path -Path $Root -ChildPath 'src') -Recurse -Settings (Join-Path -Path $Root -ChildPath 'PSScriptAnalyzerSettings.psd1')
-        Invoke-ScriptAnalyzer -Path (Join-Path -Path $Root -ChildPath 'tests') -Recurse -Settings (Join-Path -Path $Root -ChildPath 'tests/PSScriptAnalyzerSettings.psd1')
-    } -ArgumentList $PSScriptRoot, $tool.Version
-    $findings = @(Receive-Job -Job $job -Wait -AutoRemoveJob -ErrorAction Stop)
-
-    foreach ($finding in $findings)
-    {
-        Write-Host "$($finding.ScriptName):$($finding.Line)  $($finding.RuleName)  $($finding.Message)"
-        Write-CIError -Message "$($finding.RuleName): $($finding.Message)" -File $finding.ScriptPath -Line $finding.Line
-    }
-    if ($findings.Count -gt 0)
-    {
-        throw "PSScriptAnalyzer found $($findings.Count) problem(s)." 
-    }
-    Write-Host 'PSScriptAnalyzer: no findings'
-}
-
-function Invoke-Test
-{
-    New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-    $configuration = New-PesterConfiguration
-    $configuration.Run.Path = Join-Path -Path $PSScriptRoot -ChildPath 'tests'
-    $configuration.Run.PassThru = $true
-    $configuration.Output.Verbosity = 'Normal'
-    $configuration.TestResult.Enabled = $true
-    $configuration.TestResult.OutputFormat = 'JUnitXml'
-    $configuration.TestResult.OutputPath = Join-Path -Path $outDir -ChildPath 'testResults.xml'
-
-    $result = Invoke-Pester -Configuration $configuration
-    foreach ($test in $result.Failed)
-    {
-        Write-CIError -Message "$($test.ExpandedPath): $($test.ErrorRecord[0].Exception.Message)" -File $test.ScriptBlock.File -Line $test.StartLine
-    }
-    # A test file is also marked failed when only its tests failed; those are
-    # reported above, so only a file that broke on its own is reported here.
-    foreach ($container in @($result.Containers | Where-Object { $_.Result -eq 'Failed' -and @($_.ErrorRecord).Count -gt 0 }))
-    {
-        Write-CIError -Message "$($container.Item): $(@($container.ErrorRecord)[0])"
-    }
-    if ($result.FailedCount -gt 0 -or $result.FailedContainersCount -gt 0)
-    {
-        throw "$($result.FailedCount) test(s) and $($result.FailedContainersCount) test file(s) failed."
-    }
-}
-
-function Write-CIError
-{
-    <# On GitHub Actions, an error shown on the run and the pull request, at the file and line when known. #>
-    param(
-        [Parameter(Mandatory)][string]$Message,
-        [string]$File,
-        [int]$Line
-    )
-    if (-not $env:GITHUB_ACTIONS)
-    {
-        return 
-    }
-    $location = if ($File)
-    {
-        " file=$([IO.Path]::GetRelativePath($PSScriptRoot, $File)),line=$Line" 
-    }
-    else
-    {
-        '' 
-    }
-    $text = $Message -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A'
-    Write-Host "::error$location::$text"
-}
-
 try
 {
     if ($Task -in 'All', 'Build', 'Install', 'Package')
     {
-        Invoke-Build 
+        Invoke-Compile -Root $PSScriptRoot -ModuleName $moduleName
     }
     # Install checks first, so a module that fails them is never installed.
     if ($Task -in 'All', 'Analyze', 'Install')
     {
-        # Installed if missing; loaded only by the analyzer's own process.
-        Import-BuildTool -Tool ($tools | Where-Object Name -EQ 'PSScriptAnalyzer') -InstallOnly
-        Invoke-Analyze
+        Invoke-Analyze -Root $PSScriptRoot -Version (Install-BuildTool -Name PSScriptAnalyzer)
     }
     if ($Task -in 'All', 'Test', 'Install')
     {
-        Import-BuildTool -Tool ($tools | Where-Object Name -EQ 'Pester')
-        Invoke-Test
+        Invoke-Test -Root $PSScriptRoot -PesterVersion (Install-BuildTool -Name Pester)
     }
     if ($Task -eq 'Install')
     {
-        Install-BuiltModule 
+        Install-BuiltModule
     }
     if ($Task -eq 'Package')
     {
-        New-ReleasePackage 
+        New-ReleasePackage -Root $PSScriptRoot -ModuleName $moduleName
     }
 }
 catch

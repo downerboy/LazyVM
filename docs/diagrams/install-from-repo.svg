@@ -62,7 +62,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-mod"><rect x="335" y="163" width="305" height="101" rx="3"/>
 <text class="st" x="487.5" y="177" text-anchor="middle">«build.ps1»</text>
-<text class="nm" x="487.5" y="193" text-anchor="middle">Invoke-Build()</text>
+<text class="nm" x="487.5" y="193" text-anchor="middle">Invoke-Compile()</text>
 <line class="div" x1="335" y1="200" x2="640" y2="200"/>
 <g class="sn"><circle cx="351" cy="184" r="10"/><text x="351" y="188" text-anchor="middle">1</text></g>
 <text class="at" x="345" y="215">merges Public\ and Private\</text>
@@ -84,7 +84,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-mod"><rect x="335" y="288" width="305" height="84" rx="3"/>
 <text class="st" x="487.5" y="302" text-anchor="middle">«build.ps1»</text>
-<text class="nm" x="487.5" y="318" text-anchor="middle">Import-BuildTool()</text>
+<text class="nm" x="487.5" y="318" text-anchor="middle">Install-BuildTool()</text>
 <line class="div" x1="335" y1="325" x2="640" y2="325"/>
 <g class="sn"><circle cx="351" cy="309" r="10"/><text x="351" y="313" text-anchor="middle">2</text></g>
 <text class="at" x="345" y="340">missing: installs the pinned</text>
