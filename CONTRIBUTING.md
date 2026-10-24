@@ -16,7 +16,10 @@ LazyVM uses [GitHub Flow](https://docs.github.com/en/get-started/using-github/gi
 
 3. Push the branch and open a pull request into `main`, with a title in the form described under [Versioning](#versioning). Put `Fixes #42` in the description to close the issue when it merges.
 4. CI (**Build, analyze and test**) and the title check (**Conventional Commits title**) must pass before the pull request can merge. `main` does not accept direct pushes, from anyone.
-5. Squash-merge, so the pull request becomes one commit on `main` whose message is its title. The branch is then deleted.
+5. Squash-merge, so the pull request becomes one commit on `main` whose message is its title. GitHub then deletes the branch (**Automatically delete head branches** is on).
+6. Release: merge the release pull request that the merge opened or updated (see [Releasing](#releasing)). Only `feat`, `fix`, `perf` and `revert` changes make one; anything else waits for the next of those.
+
+Every issue goes through these steps on its own branch: one issue, one branch, one pull request.
 
 ## Versioning
 
