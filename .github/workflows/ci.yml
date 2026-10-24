@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   build:
@@ -40,3 +41,16 @@ jobs:
         with:
           name: LazyVM
           path: out/LazyVM
+
+      # A run started by hand, as release-please does for its release pull
+      # request, is not counted toward the checks main requires. Its result
+      # is reported again as a commit status of the same name, which is.
+      - name: Report the result as a commit status
+        if: always() && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $state = if ($env:RESULT -eq 'success') { 'success' } else { 'failure' }
+          gh api "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -f state=$state -f context='Build, analyze and test' -f target_url=$env:RUN_URL -f description="CI $env:RESULT" | Out-Null

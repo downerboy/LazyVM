@@ -6,20 +6,38 @@ name: PR title
 on:
   pull_request:
     types: [ opened, edited, synchronize, reopened ]
-  # Started by release-please on its own pull request, whose title it writes.
+  # Started by release-please on its own pull request's branch.
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  pull-requests: read
+  statuses: write
 
 jobs:
   title:
     name: Conventional Commits title
     runs-on: ubuntu-latest
     steps:
-      - name: Check the title
-        if: github.event_name == 'pull_request'
+      - name: Find the title
+        id: find
         env:
-          TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ github.token }}
+          EVENT_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == 'pull_request' ]]; then
+            title="$EVENT_TITLE"
+          else
+            title=$(gh pr view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json title --jq .title)
+          fi
+          {
+            echo 'title<<EOF'
+            echo "$title"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check the title
+        env:
+          TITLE: ${{ steps.find.outputs.title }}
         run: |
           pattern='^(feat|fix|perf|revert|docs|refactor|test|build|ci|chore|style)(\([a-zA-Z0-9 ._/-]+\))?!?: .+'
           if [[ "$TITLE" =~ $pattern ]]; then
@@ -28,3 +46,17 @@ jobs:
             echo "::error::The pull request title must start with a type, such as 'fix: ...' or 'feat: ...'. See CONTRIBUTING.md. Got: $TITLE"
             exit 1
           fi
+
+      # A run started by hand, as release-please does for its release pull
+      # request, is not counted toward the checks main requires. Its result
+      # is reported again as a commit status of the same name, which is.
+      - name: Report the result as a commit status
+        if: always() && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          state=$([[ "$RESULT" == 'success' ]] && echo success || echo failure)
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state="$state" \
+            -f context='Conventional Commits title' -f target_url="$RUN_URL" -f description="Title check $RESULT" > /dev/null
