@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.0.0](https://github.com/downerboy/LazyVM/compare/v3.1.1...v4.0.0) (2026-10-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* LazyVM no longer installs or imports on PowerShell 7.4 or 7.5. Upgrade with `winget upgrade Microsoft.PowerShell`.
+
+### Features
+
+* require PowerShell 7.6 LTS ([#78](https://github.com/downerboy/LazyVM/issues/78)) ([61ce9da](https://github.com/downerboy/LazyVM/commit/61ce9da2024ff1dce3e9f3dcdcbeb0d3c72b824d)), closes [#17](https://github.com/downerboy/LazyVM/issues/17)
+
 ## [3.1.1](https://github.com/downerboy/LazyVM/compare/v3.1.0...v3.1.1) (2026-10-25)
 
 
