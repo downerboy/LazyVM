@@ -1,4 +1,4 @@
-function Invoke-LazyVMMaintenance {
+﻿function Invoke-LazyVMMaintenance {
     <#
     .SYNOPSIS
     Runs a VM's daily maintenance: the scheduled task's command.
@@ -35,6 +35,7 @@ function Invoke-LazyVMMaintenance {
     process {
         Invoke-CommandRun -Title 'Maintenance' -Name $Name -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
+            Sync-VMProfile -VM $VM
             $step = [MaintenanceStep]@(Invoke-Maintenance -VM $VM)[-1]
             switch ($step) {
                 ([MaintenanceStep]::None) {

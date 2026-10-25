@@ -1,4 +1,4 @@
-# Constants.ps1 - Names LazyVM uses in more than one place, defined once.
+﻿# Constants.ps1 - Names LazyVM uses in more than one place, defined once.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 # Where the root folder is recorded for every later run, including the
@@ -11,11 +11,14 @@ $script:GuestMarkerKey = 'HKLM:\SOFTWARE\LazyVM'
 
 # The LazyVM folder holds one folder per VM, <Root>\<Name>, and one folder
 # for what every VM uses, <Root>\Shared. The host-wide settings are in
-# Shared\Config; each VM's profile and tooling list are in <Name>\Config.
+# Shared\Config are the shared template: they are only used to create a
+# VM. Each VM's profile, VM.json, and tooling list are in <Name>\Config.
 $script:SharedFolderName = 'Shared'
 $script:ConfigFolderName = 'Config'
 $script:SettingsFileName = 'LazyVM.Settings.json'
 $script:ProfileFileName = 'VM.json'
+# The VM.json a VM was first built from, kept beside it to diff against it.
+$script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'
 $script:ToolingFileName = 'Tooling.json'
 $script:DefaultToolingFileName = 'Tooling.Default.json'

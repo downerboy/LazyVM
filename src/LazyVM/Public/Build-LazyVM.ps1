@@ -1,4 +1,4 @@
-function Build-LazyVM {
+﻿function Build-LazyVM {
     <#
     .SYNOPSIS
     Builds a VM, unattended. One command does everything.
@@ -72,6 +72,7 @@ function Build-LazyVM {
         Initialize-BuildTarget -Name $Name
         Invoke-CommandRun -Title 'Build' -Name $Name -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
+            Sync-VMProfile -VM $VM
             $outcome = Invoke-VMBuild -VM $VM -FromPhase $FromPhase -NoUnattend:$NoUnattend
             if ($outcome -eq [BuildOutcome]::RestartPending) {
                 Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'

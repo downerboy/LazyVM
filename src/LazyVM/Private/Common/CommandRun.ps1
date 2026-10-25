@@ -37,7 +37,6 @@ function Initialize-CommandRun {
     $vm = [VMContext]::new($configuration.Settings)
 
     Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
-    $changed = @($configuration.ChangedKeys) + @($configuration.ProfileKeys | ForEach-Object { "$_ (VM)" })
     $rule = '========================================================'
     Write-LogEntry $rule 'INFO'
     Write-LogEntry "  LazyVM - $Title" 'INFO'
@@ -47,7 +46,8 @@ function Initialize-CommandRun {
     Write-LogEntry "  Module  : $($MyInvocation.MyCommand.Module.Version) on PowerShell $($PSVersionTable.PSVersion)" 'INFO'
     Write-LogEntry "  VM      : $($vm.Name) ($($configuration.ProfilePath))" 'INFO'
     Write-LogEntry "  Root    : $($root.Path) (from $($root.Source))" 'INFO'
-    Write-LogEntry "  Changed : $(if ($changed.Count -gt 0) { $changed -join ', ' } else { 'nothing - all defaults' })" 'INFO'
+    $missing = @($configuration.MissingKeys)
+    Write-LogEntry "  Profile : $(if ($missing.Count -gt 0) { "$($missing.Count) setting(s) not yet in VM.json, taken from the shared template" } else { 'complete' })" 'INFO'
     Write-LogEntry $rule 'INFO'
     foreach ($warning in $configuration.Warnings) { Write-LogEntry $warning 'WARN' }
 

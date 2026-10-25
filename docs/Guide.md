@@ -335,7 +335,7 @@ D:\DevVM\
     Installers\     the SQL Server ISO
     Credentials\    .lazyvm.key
   DevBox\
-    Config\         VM.json, Tooling.json, Tooling.Template.json, History\
+    Config\         VM.json, VM.Template.json, Tooling.json, Tooling.Template.json, History\
     Virtual Machines\
     Checkpoints\
     Disks\          DevBox-OS.vhdx, DevBox-SQL.vhdx, DevBox-DevDrive.vhdx, DevBox-Seed.iso
@@ -347,12 +347,12 @@ D:\DevVM\
 
 | Path | Purpose |
 |---|---|
-| `D:\DevVM\Shared\Config` | Your settings file `LazyVM.Settings.json`, and the schema beside it. |
+| `D:\DevVM\Shared\Config` | The shared template `LazyVM.Settings.json`, used to create new VMs, and the schema beside it. |
 | `D:\DevVM\Shared\ISO` | The Windows installation ISO. |
 | `D:\DevVM\Shared\Installers` | The SQL Server ISO. |
 | `D:\DevVM\Shared\Credentials` | `.lazyvm.key`, the key that encrypts every VM's stored passwords. |
 | `D:\DevVM\DevBox` | Everything that belongs to the VM DevBox. Removing the VM deletes this folder. |
-| `D:\DevVM\DevBox\Config` | The VM's profile (`VM.json`), its tooling list (`Tooling.json`), the list it was first built from (`Tooling.Template.json`), and `History`: every recorded version of the list, plus a daily copy kept for 30 days. |
+| `D:\DevVM\DevBox\Config` | The VM's configuration (`VM.json`) and the one it was first built from (`VM.Template.json`), its tooling list (`Tooling.json`) and the list it was first built from (`Tooling.Template.json`), and `History`: every earlier version of `VM.json`, every recorded version of the tooling list, plus a daily copy of that list kept for 30 days. |
 | `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
 | `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
 | `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk and the Dev Drive persist across rebuilds: one carries the database backups, the other your working source. |
@@ -382,12 +382,12 @@ A key file is used rather than Windows DPAPI on purpose. The scheduled task runs
 
 ## 8. Settings
 
-Every setting has a default. You list only the ones you want to change, in a JSON file:
+Settings live in two kinds of JSON file:
 
-- `Shared\Config\LazyVM.Settings.json` applies to every VM on the host.
-- `<Name>\Config\VM.json` applies to one VM, and overrides the host-wide file.
+- **The shared template**, `Shared\Config\LazyVM.Settings.json`. Every setting has a default; list here only the ones you want to change. It is used only to create a VM: changing it never affects a VM that already exists.
+- **Each VM's configuration**, `<Name>\Config\VM.json`. It holds every setting for that one VM, filled in from the shared template when the VM is created, and is the VM's one source of truth from then on. A rebuild uses it, and `New-LazyVM -From` copies it. To change a setting for an existing VM, change it here.
 
-A file changing two settings looks like this:
+A shared template changing two settings looks like this:
 
 ```json
 {
@@ -397,7 +397,23 @@ A file changing two settings looks like this:
 }
 ```
 
-In a VM's `VM.json`, the first line is `"$schema": "../../LazyVM.Settings.schema.json"`. Leave the `$schema` line as it is: it points your editor at the schema.
+In a VM's `VM.json`, the first line is `"$schema": "../../Shared/Config/LazyVM.Settings.schema.json"`. Leave the `$schema` line as it is: it points your editor at the schema.
+
+### A VM's configuration is kept up to date
+
+LazyVM keeps `VM.json` describing the VM as it is, so you never have to:
+
+- Before every build, maintenance run and rebuild, any setting `VM.json` lacks is filled in from the shared template. That covers a VM created before `VM.json` held every setting, and a setting added by a newer LazyVM. The log says which.
+- Every time LazyVM changes `VM.json`, the version it replaces is kept in `<Name>\Config\History\VM-<date>-<time>.json`, so you can see what changed and go back.
+- A `VM.json` that cannot be read is never written over. The run uses the last copy that loaded cleanly and logs the problem.
+
+### What the VM was built from
+
+The first time a VM is built (or, for a VM made before this existed, its next build, maintenance or rebuild), its `VM.json` is copied to `VM.Template.json` beside it. That copy is never changed, so you can compare it with the living file to see everything that has changed since:
+
+```powershell
+code --diff D:\DevVM\DevBox\Config\VM.Template.json D:\DevVM\DevBox\Config\VM.json
+```
 
 ### Editing settings
 
@@ -407,14 +423,14 @@ Open the files in VS Code (or any editor that understands JSON Schema). The sche
 - **Descriptions.** Hover over a setting's name to see what it does and its default.
 - **Checking.** A misspelled name, a value of the wrong kind or out of range, is underlined as you type.
 
-LazyVM keeps that schema up to date whenever it runs, and never changes your settings files.
+LazyVM keeps that schema up to date whenever it runs. It never changes the shared template; it changes a VM's `VM.json` only as described below, keeping the earlier version.
 
 To see every setting as a VM uses it, with where each value came from:
 
 ```powershell
 Get-LazyVMSetting -Name DevBox
 Get-LazyVMSetting -Name DevBox -Setting Dev*
-Get-LazyVMSetting -Name DevBox | Where-Object Source -ne 'Default'
+Get-LazyVMSetting -Name DevBox | Where-Object Source -ne 'DevBox\Config\VM.json'
 ```
 
 ### Forgiving by design
@@ -426,7 +442,7 @@ Get-LazyVMSetting -Name DevBox | Where-Object Source -ne 'Default'
 
 ### Settings that change after a VM is built
 
-Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in a file does nothing to an existing VM until it is rebuilt. Equally, a change made in Hyper-V Manager is not written back to the file, so a rebuild returns the VM to what the files say. Tooling is the exception: changes you make inside the VM are recorded automatically ([section 9](#9-tooling-and-going-back)).
+Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in its `VM.json` does nothing to the running VM until it is rebuilt. Equally, a change made in Hyper-V Manager is not written back to the file, so a rebuild returns the VM to what the files say. Tooling is the exception: changes you make inside the VM are recorded automatically ([section 9](#9-tooling-and-going-back)).
 
 ### The settings most worth knowing
 
@@ -557,7 +573,7 @@ The three most recent tooling checkpoints are kept (`ToolingCheckpointsToKeep`);
 
 ## 10. Several VMs on one host
 
-Each VM has its own profile, `<Name>\Config\VM.json`, in its own folder. With it come its own disks, captured state, log, credentials, tooling list, checkpoints and maintenance task. Settings apply in layers: the defaults, then `LazyVM.Settings.json` for the whole host, then the VM's `VM.json`.
+Each VM has its own profile, `<Name>\Config\VM.json`, in its own folder. With it come its own disks, captured state, log, credentials, tooling list, checkpoints and maintenance task. A new VM's `VM.json` starts from the shared template (the defaults, then `LazyVM.Settings.json`); from then on it holds all of that VM's settings.
 
 ### Adding a VM
 
@@ -566,7 +582,7 @@ New-LazyVM -Name WebDev -From DevBox
 Build-LazyVM -Name WebDev
 ```
 
-`-From` copies the existing VM's settings and its tooling list, so the new VM is built with the same tools. From then on, each list follows its own VM. Leave out `New-LazyVM` and just run `Build-LazyVM -Name WebDev` to start from the defaults and the default tooling list.
+`-From` copies the existing VM's `VM.json` and its tooling list, so the new VM is built the same way with the same tools. The settings that must differ between VMs (file locations, the computer name and the maintenance time) come from the shared template instead. From then on, each list follows its own VM. Leave out `New-LazyVM` and just run `Build-LazyVM -Name WebDev` to start from the defaults and the default tooling list.
 
 Once there is more than one VM, every command needs `-Name`. LazyVM will not guess, because a wrong guess would maintain or rebuild the wrong machine.
 
