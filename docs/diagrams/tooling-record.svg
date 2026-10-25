@@ -72,13 +72,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="159" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="166" x2="275" y2="166"/>
 <text class="at" x="30" y="181">HKLM:\SOFTWARE\LazyVM  Root</text>
-<text class="at" x="30" y="198">Config\LazyVM.Settings.json</text>
-<text class="at" x="30" y="215">Config\VMs\&lt;VM&gt;\VM.json</text>
-<text class="at" x="30" y="232">Backup\&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="198">Shared\Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="215">&lt;VM&gt;\Config\VM.json</text>
+<text class="at" x="30" y="232">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="129" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="143" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="159" text-anchor="middle">Logs\</text>
+<text class="nm" x="875.0" y="159" text-anchor="middle">&lt;VM&gt;\Logs\</text>
 <line class="div" x1="740" y1="166" x2="1010" y2="166"/>
 <text class="at" x="750" y="181">&lt;VM&gt;.log  (appended)</text>
 </g>
@@ -92,10 +92,10 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="271" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="285" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="301" text-anchor="middle">Backup\</text>
+<text class="nm" x="147.5" y="301" text-anchor="middle">Credential store</text>
 <line class="div" x1="20" y1="308" x2="275" y2="308"/>
-<text class="at" x="30" y="323">.lazyvm.key</text>
-<text class="at" x="30" y="340">&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="323">Shared\Credentials\.lazyvm.key</text>
+<text class="at" x="30" y="340">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="271" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="285" text-anchor="middle">«Hyper-V»</text>
@@ -121,26 +121,26 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="490" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="504" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="520" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="520" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="20" y1="527" x2="275" y2="527"/>
 <text class="at" x="30" y="542">Tooling.json</text>
 </g>
 <g class="bx-store"><rect x="740" y="379" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="393" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="409" text-anchor="middle">Config\VMs\&lt;VM&gt;\History\</text>
+<text class="nm" x="875.0" y="409" text-anchor="middle">&lt;VM&gt;\Config\History\</text>
 <line class="div" x1="740" y1="416" x2="1010" y2="416"/>
 <text class="at" x="750" y="431">Daily\Tooling-&lt;date&gt;.json</text>
 </g>
 <g class="bx-store"><rect x="740" y="456" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="470" text-anchor="middle">«Hyper-V»</text>
-<text class="nm" x="875.0" y="486" text-anchor="middle">Checkpoints\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="486" text-anchor="middle">&lt;VM&gt;\Checkpoints\</text>
 <line class="div" x1="740" y1="493" x2="1010" y2="493"/>
-<text class="at" x="750" y="508">checkpoint &quot;Tooling &lt;stamp&gt;&quot;</text>
+<text class="at" x="750" y="508">checkpoint "Tooling &lt;stamp&gt;"</text>
 <text class="at" x="750" y="525">oldest pruned past 3</text>
 </g>
 <g class="bx-store"><rect x="740" y="550" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="564" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="580" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="580" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="740" y1="587" x2="1010" y2="587"/>
 <text class="at" x="750" y="602">Tooling.json</text>
 <text class="at" x="750" y="619">History\Tooling-&lt;stamp&gt;.json</text>

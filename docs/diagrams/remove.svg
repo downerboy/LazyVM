@@ -74,13 +74,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="193" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="200" x2="275" y2="200"/>
 <text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
-<text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>
-<text class="at" x="30" y="249">Config\VMs\&lt;VM&gt;\VM.json</text>
-<text class="at" x="30" y="266">Backup\&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="232">Shared\Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="249">&lt;VM&gt;\Config\VM.json</text>
+<text class="at" x="30" y="266">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="163" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="177" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="193" text-anchor="middle">Logs\</text>
+<text class="nm" x="875.0" y="193" text-anchor="middle">&lt;VM&gt;\Logs\</text>
 <line class="div" x1="740" y1="200" x2="1010" y2="200"/>
 <text class="at" x="750" y="215">&lt;VM&gt;.log  (appended)</text>
 </g>
@@ -95,9 +95,9 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="305" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="319" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="335" text-anchor="middle">Config\VMs\*\</text>
+<text class="nm" x="147.5" y="335" text-anchor="middle">*\Config\</text>
 <line class="div" x1="20" y1="342" x2="275" y2="342"/>
-<text class="at" x="30" y="357">other VMs&#x27; VM.json</text>
+<text class="at" x="30" y="357">other VMs' VM.json</text>
 </g>
 <g class="bx-store"><rect x="20" y="382" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="396" text-anchor="middle">«Hyper-V»</text>
@@ -146,27 +146,27 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="487.5" y="782" text-anchor="middle">Remove-PathWithRetry()</text>
 <line class="div" x1="335" y1="789" x2="640" y2="789"/>
 <g class="sn"><circle cx="351" cy="773" r="10"/><text x="351" y="777" text-anchor="middle">4</text></g>
-<text class="at" x="345" y="804">files, then folders;</text>
-<text class="at" x="345" y="821">the log goes last</text>
+<text class="at" x="345" y="804">outside the VM folder first,</text>
+<text class="at" x="345" y="821">then the folder; the log last</text>
 </g>
 <g class="bx-store"><rect x="740" y="752" width="270" height="152" rx="3"/>
 <text class="st" x="875.0" y="766" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="782" text-anchor="middle">Files</text>
+<text class="nm" x="875.0" y="782" text-anchor="middle">Files outside the VM folder</text>
 <line class="div" x1="740" y1="789" x2="1010" y2="789"/>
-<text class="at" x="750" y="804">SQLDisk\&lt;VM&gt;.vhdx</text>
-<text class="at" x="750" y="821">DevDrive\&lt;VM&gt;.vhdx</text>
-<text class="at" x="750" y="838">VMs\&lt;VM&gt;-OS.vhdx, -Seed.iso</text>
-<text class="at" x="750" y="855">Backup\&lt;VM&gt;\*.cred, .vssettings</text>
-<text class="at" x="750" y="872">.lazyvm.key if no other VM</text>
-<text class="at" x="750" y="889">Logs\&lt;VM&gt;.log</text>
+<text class="at" x="750" y="804">Shared\Credentials\.lazyvm.key</text>
+<text class="at" x="750" y="821">  (if no other VM uses it)</text>
+<text class="at" x="750" y="838">disks, state or backups that</text>
+<text class="at" x="750" y="855">  a setting put elsewhere</text>
+<text class="at" x="750" y="872">(anything another VM uses</text>
+<text class="at" x="750" y="889">  is kept)</text>
 </g>
 <g class="bx-store"><rect x="740" y="914" width="270" height="118" rx="3"/>
 <text class="st" x="875.0" y="928" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="944" text-anchor="middle">Folders</text>
+<text class="nm" x="875.0" y="944" text-anchor="middle">VM folder</text>
 <line class="div" x1="740" y1="951" x2="1010" y2="951"/>
-<text class="at" x="750" y="966">Checkpoints\&lt;VM&gt;</text>
-<text class="at" x="750" y="983">State\&lt;VM&gt;</text>
-<text class="at" x="750" y="1000">VMs\&lt;VM&gt;</text>
-<text class="at" x="750" y="1017">Config\VMs\&lt;VM&gt;</text>
+<text class="at" x="750" y="966">&lt;VM&gt;\, everything in it:</text>
+<text class="at" x="750" y="983">Config, Disks, Checkpoints, State</text>
+<text class="at" x="750" y="1000">Backups, Credentials, Logs</text>
+<text class="at" x="750" y="1017">Virtual Machines; the log last</text>
 </g>
 </svg>
