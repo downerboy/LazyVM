@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1](https://github.com/downerboy/LazyVM/compare/v3.1.0...v3.1.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* save a tooling list that has no Visual Studio products ([#83](https://github.com/downerboy/LazyVM/issues/83)) ([d4508a3](https://github.com/downerboy/LazyVM/commit/d4508a36e71a5d965b09c6a1800b1f66ba0bab6c)), closes [#82](https://github.com/downerboy/LazyVM/issues/82)
+
 ## [3.1.0](https://github.com/downerboy/LazyVM/compare/v3.0.0...v3.1.0) (2026-10-24)
 
 
