@@ -322,22 +322,24 @@ Describe 'Resolve-HostPathSetting' {
 
 Describe 'Add-DerivedSetting' {
     It 'works out the names and files LazyVM keeps for a VM' {
+        # Under TestDrive, not D:\DevVM: Join-Path needs the drive to exist (#93).
+        $root = Join-Path -Path $TestDrive -ChildPath 'DevVM'
         $settings = @{
             VMName       = 'Alpha'
-            Root         = 'D:\DevVM'
-            DiskDir      = 'D:\DevVM\Alpha\Disks'
-            CredStoreDir = 'D:\DevVM\Shared\Credentials'
+            Root         = $root
+            DiskDir      = "$root\Alpha\Disks"
+            CredStoreDir = "$root\Shared\Credentials"
         }
 
         InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Add-DerivedSetting -Settings $Settings }
 
-        $settings.VMRoot | Should -Be 'D:\DevVM\Alpha'
-        $settings.OSDiskPath | Should -Be 'D:\DevVM\Alpha\Disks\Alpha-OS.vhdx'
-        $settings.VMConfigDir | Should -Be 'D:\DevVM\Alpha\Virtual Machines'
-        $settings.SeedDiskPath | Should -Be 'D:\DevVM\Alpha\Disks\Alpha-Seed.iso'
-        $settings.CredKeyFile | Should -Be 'D:\DevVM\Shared\Credentials\.lazyvm.key'
-        $settings.GuestCredFile | Should -Be 'D:\DevVM\Alpha\Credentials\guest.cred'
-        $settings.CertCredFile | Should -Be 'D:\DevVM\Alpha\Credentials\certs.cred'
+        $settings.VMRoot | Should -Be "$root\Alpha"
+        $settings.OSDiskPath | Should -Be "$root\Alpha\Disks\Alpha-OS.vhdx"
+        $settings.VMConfigDir | Should -Be "$root\Alpha\Virtual Machines"
+        $settings.SeedDiskPath | Should -Be "$root\Alpha\Disks\Alpha-Seed.iso"
+        $settings.CredKeyFile | Should -Be "$root\Shared\Credentials\.lazyvm.key"
+        $settings.GuestCredFile | Should -Be "$root\Alpha\Credentials\guest.cred"
+        $settings.CertCredFile | Should -Be "$root\Alpha\Credentials\certs.cred"
         $settings.ResumeRegKey | Should -Be 'HKLM:\SOFTWARE\LazyVM\Alpha'
         $settings.ResumeTaskName | Should -Be 'LazyVM-ResumeAfterReboot-Alpha'
         $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
