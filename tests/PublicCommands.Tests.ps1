@@ -20,7 +20,7 @@ BeforeAll {
 
         $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
         foreach ($vm in $VMs) {
-            $folder = Join-Path -Path $root -ChildPath "Config/VMs/$vm"
+            $folder = Join-Path -Path $root -ChildPath "$vm/Config"
             New-Item -ItemType Directory -Path $folder -Force | Out-Null
             Set-Content -LiteralPath (Join-Path -Path $folder -ChildPath 'VM.json') -Value '{ "vCPU": 6 }'
         }
@@ -210,7 +210,7 @@ Describe 'Get-LazyVMSetting' {
         $settings.Name | Select-Object -Unique | Should -Be 'Alpha'
         $vcpu = $settings | Where-Object Setting -eq 'vCPU'
         $vcpu.Value | Should -Be 6
-        $vcpu.Source | Should -Be 'VMs\Alpha\VM.json'
+        $vcpu.Source | Should -Be 'Alpha\Config\VM.json'
         $vcpu.Description | Should -Not -BeNullOrEmpty
         ($settings | Where-Object Setting -eq 'MemMaxGB').Source | Should -Be 'Default'
     }
@@ -266,7 +266,7 @@ Describe 'New-LazyVM' {
     It 'creates nothing with -WhatIf' {
         New-LazyVM -Name Beta -WhatIf
 
-        Join-Path -Path $root -ChildPath 'Config/VMs/Beta' | Should -Not -Exist
+        Join-Path -Path $root -ChildPath 'Beta' | Should -Not -Exist
     }
 
     It 'refuses a name Windows cannot use' {
@@ -312,19 +312,19 @@ Describe 'Initialize-BuildTarget' {
         InModuleScope $module { Initialize-BuildTarget -Name 'DevBox' } 6> $null
 
         Should -Invoke -ModuleName $module Set-RegisteredRoot -Times 1 -ParameterFilter { $Path -eq $root }
-        Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json' | Should -Exist
-        Join-Path -Path $root -ChildPath 'Config/LazyVM.Settings.json' | Should -Exist
+        Join-Path -Path $root -ChildPath 'DevBox/Config/VM.json' | Should -Exist
+        Join-Path -Path $root -ChildPath 'Shared/Config/LazyVM.Settings.json' | Should -Exist
     }
 
     It 'leaves a chosen folder and an existing profile alone' {
         Mock -ModuleName $module Get-RegisteredRoot { $root }.GetNewClosure()
-        New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json') -Value '{ "vCPU": 6 }'
+        New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'DevBox/Config') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'DevBox/Config/VM.json') -Value '{ "vCPU": 6 }'
 
         InModuleScope $module { Initialize-BuildTarget -Name 'DevBox' } 6> $null
 
         Should -Invoke -ModuleName $module Set-RegisteredRoot -Times 0
-        (Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Config/VMs/DevBox/VM.json') -Raw).Trim() | Should -Be '{ "vCPU": 6 }'
+        (Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'DevBox/Config/VM.json') -Raw).Trim() | Should -Be '{ "vCPU": 6 }'
     }
 
     It 'asks for a name when there are no VMs yet' {

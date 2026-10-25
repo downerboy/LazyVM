@@ -1,7 +1,7 @@
 ﻿# ToolingRecord.ps1 - Each VM's tooling list: building it, comparing it, recording changes.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# Each VM's tooling list is Config\VMs\<Name>\Tooling.json. The daily
+# Each VM's tooling list is <Name>\Config\Tooling.json. The daily
 # maintenance run compares the guest with it and adopts any change, after
 # first taking a Hyper-V checkpoint (see Checkpoint.ps1), so every recorded
 # version of the list has a checkpoint of the VM as it was then:
@@ -53,7 +53,7 @@ function ConvertTo-ToolingRecord {
     $record = [ToolingRecord]::new()
     $record.RecordedAt = (Get-Date).ToString('o')
 
-    $record.Products = [ToolingProduct[]]@(foreach ($item in @($Inventory.Products | Where-Object { $_ })) {
+    $products = @(foreach ($item in @($Inventory.Products | Where-Object { $_ })) {
             $product = [ToolingProduct]::new()
             $product.ProductId = $item.ProductId
             $product.ChannelId = $item.ChannelId
@@ -63,7 +63,9 @@ function ConvertTo-ToolingRecord {
             # Marketplace links are looked up afterwards, by Add-MarketplaceItem.
             $product.UserExtensions = [ToolingExtension[]]@(@($item.UserExtensions) | Where-Object { $_ } | ForEach-Object { [ToolingExtension]::FromObject($_) } | Sort-Object Id)
             $product
-        }) | Sort-Object { $_.Key() }
+        })
+    # Sorted inside @(), so a guest with no products gives an empty list, not $null (#82).
+    $record.Products = [ToolingProduct[]]@($products | Sort-Object { $_.Key() })
 
     $record.WingetPackages = [WingetPackage[]]@(@($Inventory.WingetPackages) | Where-Object { $_ -and -not (Test-ToolingExcluded -PackageId $_.Id -Patterns $WingetExclude) } |
             ForEach-Object { [WingetPackage]::FromObject($_) } | Sort-Object Id)
@@ -123,12 +125,13 @@ function Compare-ToolingRecord {
 }
 
 function Get-ToolingPath {
-    <# The VM's tooling list and its history folders. #>
+    <# The VM's tooling list, the copy of the list it was first built from, and its history folders. #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $historyDir = Join-Path $VM.Settings.ProfileDir 'History'
     return [pscustomobject]@{
         Record     = Join-Path $VM.Settings.ProfileDir $script:ToolingFileName
+        Template   = Join-Path $VM.Settings.ProfileDir $script:ToolingTemplateFileName
         HistoryDir = $historyDir
         DailyDir   = Join-Path $historyDir 'Daily'
     }

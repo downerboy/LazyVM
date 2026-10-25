@@ -4,7 +4,7 @@
     Creates a new VM's profile, ready to build.
 
     .DESCRIPTION
-    Creates Config\VMs\<Name>\VM.json in the LazyVM folder. The profile lists
+    Creates <Name>\Config\VM.json in the LazyVM folder. The profile lists
     only the settings this VM changes; everything else comes from your
     LazyVM.Settings.json and the defaults. Nothing is built yet: build the VM
     with Build-LazyVM.
@@ -44,13 +44,12 @@
     )
 
     $root = (Resolve-LazyVMRoot).Path
-    $configDir = Get-ConfigDir -Root $root
 
     if (-not $PSCmdlet.ShouldProcess($Name, 'Create a LazyVM profile')) {
         return
     }
 
-    $null = New-VMProfile -ConfigDir $configDir -Name $Name -From $From
+    $null = New-VMProfile -Root $root -Name $Name -From $From
     Get-LazyVM -Name $Name
     Write-Information "Next: Set-LazyVMCredential -Name $Name (optional), then Build-LazyVM -Name $Name" -InformationAction Continue
 }
