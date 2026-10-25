@@ -53,8 +53,7 @@ function ConvertTo-ToolingRecord {
     $record = [ToolingRecord]::new()
     $record.RecordedAt = (Get-Date).ToString('o')
 
-    # The sort is inside @(), so a guest with no products gives an empty list, not $null (#82).
-    $record.Products = [ToolingProduct[]]@(@(foreach ($item in @($Inventory.Products | Where-Object { $_ })) {
+    $products = @(foreach ($item in @($Inventory.Products | Where-Object { $_ })) {
             $product = [ToolingProduct]::new()
             $product.ProductId = $item.ProductId
             $product.ChannelId = $item.ChannelId
@@ -64,7 +63,9 @@ function ConvertTo-ToolingRecord {
             # Marketplace links are looked up afterwards, by Add-MarketplaceItem.
             $product.UserExtensions = [ToolingExtension[]]@(@($item.UserExtensions) | Where-Object { $_ } | ForEach-Object { [ToolingExtension]::FromObject($_) } | Sort-Object Id)
             $product
-        }) | Sort-Object { $_.Key() })
+        })
+    # Sorted inside @(), so a guest with no products gives an empty list, not $null (#82).
+    $record.Products = [ToolingProduct[]]@($products | Sort-Object { $_.Key() })
 
     $record.WingetPackages = [WingetPackage[]]@(@($Inventory.WingetPackages) | Where-Object { $_ -and -not (Test-ToolingExcluded -PackageId $_.Id -Patterns $WingetExclude) } |
             ForEach-Object { [WingetPackage]::FromObject($_) } | Sort-Object Id)
