@@ -265,6 +265,33 @@ Describe 'ConvertTo-ToolingRecord' {
         @($userExtensions | ForEach-Object { $_.Id }) | Should -Be @('a-ext', 'z-ext')
         $userExtensions[0].ToDictionary().Keys | Should -Not -Contain 'Version'
     }
+
+    It 'gives an empty product list, which saves and reads back, for a guest with no Visual Studio or SSMS (#82)' {
+        $path = Join-Path -Path $TestDrive -ChildPath 'Tooling.json'
+        $noProducts = [pscustomobject]@{
+            Products       = @()
+            WingetPackages = @([pscustomobject]@{ Id = 'Git.Git'; Source = 'winget' })
+            Programs       = @([pscustomobject]@{ Name = 'Git'; Publisher = 'The Git Development Community' })
+        }
+
+        $result = InModuleScope $module -Parameters @{ Inventory = $noProducts; Path = $path } {
+            param($Inventory, $Path)
+            $converted = ConvertTo-ToolingRecord -Inventory $Inventory
+            Save-ToolingRecord -Record $converted -Path $Path
+            $readBack = Read-ToolingRecord -Path $Path
+            [pscustomobject]@{
+                ProductsIsNull = $null -eq $converted.Products
+                ProductCount   = @($converted.Products).Count
+                Changes        = @(Compare-ToolingRecord -Old $converted -New $readBack)
+                WingetIds      = @($readBack.WingetPackages | ForEach-Object { $_.Id })
+            }
+        }
+
+        $result.ProductsIsNull | Should -BeFalse
+        $result.ProductCount | Should -Be 0
+        $result.Changes | Should -BeNullOrEmpty
+        $result.WingetIds | Should -Be @('Git.Git')
+    }
 }
 
 Describe 'Compare-ToolingRecord' {
