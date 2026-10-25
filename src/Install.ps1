@@ -37,11 +37,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $moduleName = 'LazyVM'
 
+# Only version folders, as a release download and the assembled module have
+# them: in the repository, src\LazyVM holds the module's source instead (#90).
 $versionDir = Get-ChildItem -LiteralPath (Join-Path -Path $Path -ChildPath $moduleName) -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -as [version] } |
     Sort-Object -Property { [version]$_.Name } -Descending |
     Select-Object -First 1
 if (-not $versionDir) {
-    throw "There is no $moduleName module folder in $Path. Extract the whole download and run Install.ps1 from it, or, in the repository, run ./Invoke-AnalyzerAndTest.ps1 first."
+    throw "There is no $moduleName module folder in $Path. Extract the whole download and run Install.ps1 from it, or, from the repository's root folder, run: ./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out"
 }
 
 $target = Join-Path -Path $env:ProgramFiles -ChildPath "PowerShell\Modules\$moduleName\$($versionDir.Name)"
