@@ -134,13 +134,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="193" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="200" x2="275" y2="200"/>
 <text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
-<text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>
-<text class="at" x="30" y="249">Config\VMs\&lt;VM&gt;\VM.json</text>
-<text class="at" x="30" y="266">Backup\&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="232">Shared\Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="249">&lt;VM&gt;\Config\VM.json</text>
+<text class="at" x="30" y="266">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="163" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="177" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="193" text-anchor="middle">Logs\</text>
+<text class="nm" x="875.0" y="193" text-anchor="middle">&lt;VM&gt;\Logs\</text>
 <line class="div" x1="740" y1="200" x2="1010" y2="200"/>
 <text class="at" x="750" y="215">&lt;VM&gt;.log  (appended)</text>
 </g>
@@ -169,7 +169,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="396" width="270" height="118" rx="3"/>
 <text class="st" x="875.0" y="410" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="426" text-anchor="middle">State\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="426" text-anchor="middle">&lt;VM&gt;\State\</text>
 <line class="div" x1="740" y1="433" x2="1010" y2="433"/>
 <text class="at" x="750" y="448">vs\  windows\  sql\</text>
 <text class="at" x="750" y="465">projects\  apps\</text>
@@ -200,11 +200,11 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="615" width="270" height="101" rx="3"/>
 <text class="st" x="875.0" y="629" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="645" text-anchor="middle">VMs\</text>
+<text class="nm" x="875.0" y="645" text-anchor="middle">&lt;VM&gt;\</text>
 <line class="div" x1="740" y1="652" x2="1010" y2="652"/>
-<text class="at" x="750" y="667">&lt;VM&gt;-OS.retired-&lt;stamp&gt;.vhdx</text>
-<text class="at" x="750" y="684">&lt;VM&gt;.retired-&lt;stamp&gt;\</text>
-<text class="at" x="750" y="701">&lt;VM&gt;-Seed.iso deleted</text>
+<text class="at" x="750" y="667">Disks\&lt;VM&gt;-OS.retired-&lt;stamp&gt;.vhdx</text>
+<text class="at" x="750" y="684">Virtual Machines.retired-&lt;stamp&gt;\</text>
+<text class="at" x="750" y="701">Disks\&lt;VM&gt;-Seed.iso deleted</text>
 </g>
 <g class="bx-mod"><rect x="335" y="757" width="305" height="101" rx="3"/>
 <text class="st" x="487.5" y="771" text-anchor="middle">«Host, called by Invoke-Rebuild»</text>
@@ -217,9 +217,9 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="875.0" y="771" text-anchor="middle">«folder»</text>
 <text class="nm" x="875.0" y="787" text-anchor="middle">&lt;Root&gt;\</text>
 <line class="div" x1="740" y1="794" x2="1010" y2="794"/>
-<text class="at" x="750" y="809">ISO, Installers, VMs, SQLDisk</text>
-<text class="at" x="750" y="826">DevDrive, Backup, Logs</text>
-<text class="at" x="750" y="843">Checkpoints\&lt;VM&gt;</text>
+<text class="at" x="750" y="809">Shared\ ISO, Installers, Credentials</text>
+<text class="at" x="750" y="826">&lt;VM&gt;\ Disks, Credentials, Backups</text>
+<text class="at" x="750" y="843">&lt;VM&gt;\ Logs, Checkpoints</text>
 </g>
 <g class="bx-mod"><rect x="335" y="882" width="305" height="178" rx="3"/>
 <text class="st" x="487.5" y="896" text-anchor="middle">«Host, called by Invoke-Rebuild»</text>
@@ -231,7 +231,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="882" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="896" text-anchor="middle">«folder»</text>
-<text class="nm" x="147.5" y="912" text-anchor="middle">ISO\  or  Downloads\</text>
+<text class="nm" x="147.5" y="912" text-anchor="middle">Shared\ISO\  or  Downloads\</text>
 <line class="div" x1="20" y1="919" x2="275" y2="919"/>
 <text class="at" x="30" y="934">Windows 11 Enterprise</text>
 <text class="at" x="30" y="951">Evaluation ISO</text>
@@ -245,14 +245,14 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="882" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="896" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="912" text-anchor="middle">ISO\</text>
+<text class="nm" x="875.0" y="912" text-anchor="middle">Shared\ISO\</text>
 <line class="div" x1="740" y1="919" x2="1010" y2="919"/>
 <text class="at" x="750" y="934">Win11Ent_Eval.iso</text>
 <text class="at" x="750" y="951">(moved from Downloads)</text>
 </g>
 <g class="bx-store"><rect x="740" y="976" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="990" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="1006" text-anchor="middle">Installers\</text>
+<text class="nm" x="875.0" y="1006" text-anchor="middle">Shared\Installers\</text>
 <line class="div" x1="740" y1="1013" x2="1010" y2="1013"/>
 <text class="at" x="750" y="1028">SQLServer2025-x64-ENU-</text>
 <text class="at" x="750" y="1045">  EntDev.iso</text>
@@ -268,10 +268,10 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="1084" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="1098" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="1114" text-anchor="middle">SQLDisk\  DevDrive\</text>
+<text class="nm" x="875.0" y="1114" text-anchor="middle">&lt;VM&gt;\Disks\</text>
 <line class="div" x1="740" y1="1121" x2="1010" y2="1121"/>
-<text class="at" x="750" y="1136">&lt;VM&gt;.vhdx  (100 GB)</text>
-<text class="at" x="750" y="1153">&lt;VM&gt;.vhdx  (250 GB)</text>
+<text class="at" x="750" y="1136">&lt;VM&gt;-SQL.vhdx  (100 GB)</text>
+<text class="at" x="750" y="1153">&lt;VM&gt;-DevDrive.vhdx  (250 GB)</text>
 </g>
 <g class="bx-mod"><rect x="335" y="1209" width="305" height="84" rx="3"/>
 <text class="st" x="487.5" y="1223" text-anchor="middle">«Credentials, called by Invoke-Rebuild»</text>
@@ -283,17 +283,17 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="1209" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="1223" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="1239" text-anchor="middle">Backup\</text>
+<text class="nm" x="147.5" y="1239" text-anchor="middle">Credential store</text>
 <line class="div" x1="20" y1="1246" x2="275" y2="1246"/>
-<text class="at" x="30" y="1261">.lazyvm.key</text>
-<text class="at" x="30" y="1278">&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="1261">Shared\Credentials\.lazyvm.key</text>
+<text class="at" x="30" y="1278">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="1209" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="1223" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="1239" text-anchor="middle">Backup\</text>
+<text class="nm" x="875.0" y="1239" text-anchor="middle">Credential store</text>
 <line class="div" x1="740" y1="1246" x2="1010" y2="1246"/>
-<text class="at" x="750" y="1261">.lazyvm.key</text>
-<text class="at" x="750" y="1278">&lt;VM&gt;\guest.cred</text>
+<text class="at" x="750" y="1261">Shared\Credentials\.lazyvm.key</text>
+<text class="at" x="750" y="1278">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-mod"><rect x="335" y="1317" width="305" height="84" rx="3"/>
 <text class="st" x="487.5" y="1331" text-anchor="middle">«Host, called by Invoke-Rebuild»</text>
@@ -305,7 +305,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="1317" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="1331" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="1347" text-anchor="middle">VMs\</text>
+<text class="nm" x="875.0" y="1347" text-anchor="middle">&lt;VM&gt;\Disks\</text>
 <line class="div" x1="740" y1="1354" x2="1010" y2="1354"/>
 <text class="at" x="750" y="1369">&lt;VM&gt;-Seed.iso</text>
 </g>
@@ -319,17 +319,17 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="1425" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="1439" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="1455" text-anchor="middle">ISO\  VMs\</text>
+<text class="nm" x="147.5" y="1455" text-anchor="middle">Shared\ISO\  &lt;VM&gt;\Disks\</text>
 <line class="div" x1="20" y1="1462" x2="275" y2="1462"/>
 <text class="at" x="30" y="1477">Win11Ent_Eval.iso</text>
 <text class="at" x="30" y="1494">&lt;VM&gt;-Seed.iso</text>
 </g>
 <g class="bx-store"><rect x="740" y="1425" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="1439" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="1455" text-anchor="middle">VMs\</text>
+<text class="nm" x="875.0" y="1455" text-anchor="middle">&lt;VM&gt;\</text>
 <line class="div" x1="740" y1="1462" x2="1010" y2="1462"/>
-<text class="at" x="750" y="1477">&lt;VM&gt;-OS.vhdx</text>
-<text class="at" x="750" y="1494">&lt;VM&gt;\  (VM configuration)</text>
+<text class="at" x="750" y="1477">Disks\&lt;VM&gt;-OS.vhdx</text>
+<text class="at" x="750" y="1494">Virtual Machines\  (configuration)</text>
 </g>
 <g class="bx-store"><rect x="740" y="1519" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="1533" text-anchor="middle">«Hyper-V»</text>
@@ -350,14 +350,14 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="1627" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="1641" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="1657" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="1657" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="20" y1="1664" x2="275" y2="1664"/>
-<text class="at" x="30" y="1679">Tooling.json, or the module&#x27;s</text>
+<text class="at" x="30" y="1679">Tooling.json, or the module's</text>
 <text class="at" x="30" y="1696">Data\Tooling.Default.json</text>
 </g>
 <g class="bx-store"><rect x="20" y="1721" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="1735" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="1751" text-anchor="middle">Installers\</text>
+<text class="nm" x="147.5" y="1751" text-anchor="middle">Shared\Installers\</text>
 <line class="div" x1="20" y1="1758" x2="275" y2="1758"/>
 <text class="at" x="30" y="1773">SQLServer2025 ISO</text>
 </g>
@@ -371,7 +371,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="1738" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="1752" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="1768" text-anchor="middle">State\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="1768" text-anchor="middle">&lt;VM&gt;\State\</text>
 <line class="div" x1="740" y1="1775" x2="1010" y2="1775"/>
 <text class="at" x="750" y="1790">reinstall-by-hand.txt</text>
 </g>
@@ -385,7 +385,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="1829" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="1843" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="1859" text-anchor="middle">Backup\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="1859" text-anchor="middle">&lt;VM&gt;\Backups\</text>
 <line class="div" x1="20" y1="1866" x2="275" y2="1866"/>
 <text class="at" x="30" y="1881">VisualStudio.vssettings</text>
 </g>
@@ -414,7 +414,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="1997" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="2011" text-anchor="middle">«folder»</text>
-<text class="nm" x="147.5" y="2027" text-anchor="middle">State\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="2027" text-anchor="middle">&lt;VM&gt;\State\</text>
 <line class="div" x1="20" y1="2034" x2="275" y2="2034"/>
 <text class="at" x="30" y="2049">manifest.json and</text>
 <text class="at" x="30" y="2066">captured files</text>
@@ -436,13 +436,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="2122" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="2136" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="2152" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="2152" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="20" y1="2159" x2="275" y2="2159"/>
 <text class="at" x="30" y="2174">Tooling.json</text>
 </g>
 <g class="bx-store"><rect x="20" y="2199" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="2213" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="2229" text-anchor="middle">State\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="2229" text-anchor="middle">&lt;VM&gt;\State\</text>
 <line class="div" x1="20" y1="2236" x2="275" y2="2236"/>
 <text class="at" x="30" y="2251">manifest.json  Databases</text>
 </g>
@@ -458,10 +458,10 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="2290" width="270" height="101" rx="3"/>
 <text class="st" x="875.0" y="2304" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="2320" text-anchor="middle">VMs\</text>
+<text class="nm" x="875.0" y="2320" text-anchor="middle">&lt;VM&gt;\</text>
 <line class="div" x1="740" y1="2327" x2="1010" y2="2327"/>
-<text class="at" x="750" y="2342">&lt;VM&gt;-OS.retired-&lt;stamp&gt;.vhdx</text>
-<text class="at" x="750" y="2359">&lt;VM&gt;.retired-&lt;stamp&gt;\</text>
+<text class="at" x="750" y="2342">Disks\&lt;VM&gt;-OS.retired-&lt;stamp&gt;.vhdx</text>
+<text class="at" x="750" y="2359">Virtual Machines.retired-&lt;stamp&gt;\</text>
 <text class="at" x="750" y="2376">deleted</text>
 </g>
 </svg>

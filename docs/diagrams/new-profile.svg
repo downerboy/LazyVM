@@ -74,26 +74,26 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="237" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="251" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="267" text-anchor="middle">Config\VMs\&lt;OtherVM&gt;\</text>
+<text class="nm" x="147.5" y="267" text-anchor="middle">&lt;OtherVM&gt;\Config\</text>
 <line class="div" x1="20" y1="274" x2="275" y2="274"/>
 <text class="at" x="30" y="289">VM.json</text>
 <text class="at" x="30" y="306">Tooling.json  (with -From)</text>
 </g>
 <g class="bx-store"><rect x="20" y="331" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="345" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="361" text-anchor="middle">Config\VMs\*\</text>
+<text class="nm" x="147.5" y="361" text-anchor="middle">*\Config\</text>
 <line class="div" x1="20" y1="368" x2="275" y2="368"/>
 <text class="at" x="30" y="383">VM.json</text>
 </g>
 <g class="bx-store"><rect x="740" y="237" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="251" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="267" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="267" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="740" y1="274" x2="1010" y2="274"/>
 <text class="at" x="750" y="289">VM.json</text>
 </g>
 <g class="bx-store"><rect x="740" y="314" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="328" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="344" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="344" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="740" y1="351" x2="1010" y2="351"/>
 <text class="at" x="750" y="366">Tooling.json  (with -From)</text>
 </g>

@@ -63,13 +63,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="176" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="183" x2="275" y2="183"/>
 <text class="at" x="30" y="198">HKLM:\SOFTWARE\LazyVM  Root</text>
-<text class="at" x="30" y="215">Config\LazyVM.Settings.json</text>
-<text class="at" x="30" y="232">Config\VMs\&lt;VM&gt;\VM.json</text>
-<text class="at" x="30" y="249">Backup\&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="215">Shared\Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="232">&lt;VM&gt;\Config\VM.json</text>
+<text class="at" x="30" y="249">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="146" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="160" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="176" text-anchor="middle">Logs\</text>
+<text class="nm" x="875.0" y="176" text-anchor="middle">&lt;VM&gt;\Logs\</text>
 <line class="div" x1="740" y1="183" x2="1010" y2="183"/>
 <text class="at" x="750" y="198">&lt;VM&gt;.log  (appended)</text>
 </g>
@@ -92,13 +92,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="399" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="413" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="429" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="429" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="20" y1="436" x2="275" y2="436"/>
 <text class="at" x="30" y="451">Tooling.json</text>
 </g>
 <g class="bx-store"><rect x="740" y="288" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="302" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="318" text-anchor="middle">State\&lt;VM&gt;\tooling\</text>
+<text class="nm" x="875.0" y="318" text-anchor="middle">&lt;VM&gt;\State\tooling\</text>
 <line class="div" x1="740" y1="325" x2="1010" y2="325"/>
 <text class="at" x="750" y="340">inventory-&lt;stamp&gt;.json</text>
 </g>
