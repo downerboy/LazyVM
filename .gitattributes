@@ -6,6 +6,7 @@
 *.psm1 text eol=crlf
 *.psd1 text eol=crlf
 *.json text eol=crlf
+*.cmd  text eol=crlf
 
 # Binary: never merged or converted.
 *.docx binary

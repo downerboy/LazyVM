@@ -56,6 +56,8 @@ cd S:\Source\LazyVM
 ./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out
 ```
 
+Or double-click `Install-FromRepository.cmd` in the repository folder: it asks for administrator rights and runs the same two commands.
+
 This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, installs it for all users, which the scheduled maintenance needs because it runs as SYSTEM. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Open a new PowerShell 7 window afterwards.
 
 ## Quick start
@@ -135,6 +137,7 @@ src/LazyVM/
   Data/                            the settings schema and the default tooling list
 tests/                             Pester tests
 Invoke-AnalyzerAndTest.ps1         check a change: assemble, analyze, test
+Install-FromRepository.cmd         double-click: check, then install if all passed
 New-ReleasePackage.ps1             make the release zip
 build/                             the steps both use
 ```

@@ -82,6 +82,8 @@ cd S:\Source\LazyVM
 ./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out
 ```
 
+Instead of typing those, you can double-click `Install-FromRepository.cmd` in the repository folder. It asks for administrator rights, runs the same two commands in PowerShell 7, and keeps its window open so you can read the result.
+
 `Invoke-AnalyzerAndTest.ps1` assembles the module, checks it with PSScriptAnalyzer and runs the Pester tests; only if they all pass does `Install.ps1` install it for all users: the scheduled maintenance runs as SYSTEM and has to be able to find it. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Once installed, PowerShell loads it by itself the first time you use one of its commands.
 
 Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the module, and reports its commands as not recognized. To update, pull the repository and run the same commands again. The scheduled tasks pick up the new version on their next run.
