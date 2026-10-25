@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.1](https://github.com/downerboy/LazyVM/compare/v4.0.0...v4.0.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* say how to install when Install.ps1 is run from src ([#91](https://github.com/downerboy/LazyVM/issues/91)) ([3c55adf](https://github.com/downerboy/LazyVM/commit/3c55adfaf4930be2f6ca93d7d0d7885347e72eef)), closes [#90](https://github.com/downerboy/LazyVM/issues/90)
+
 ## [4.0.0](https://github.com/downerboy/LazyVM/compare/v3.1.1...v4.0.0) (2026-10-25)
 
 
