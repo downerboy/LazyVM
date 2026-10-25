@@ -75,10 +75,10 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="314" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="328" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="344" text-anchor="middle">Config\</text>
+<text class="nm" x="147.5" y="344" text-anchor="middle">Settings files</text>
 <line class="div" x1="20" y1="351" x2="275" y2="351"/>
-<text class="at" x="30" y="366">LazyVM.Settings.json</text>
-<text class="at" x="30" y="383">VMs\&lt;VM&gt;\VM.json</text>
+<text class="at" x="30" y="366">Shared\Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="383">&lt;VM&gt;\Config\VM.json</text>
 </g>
 <g class="bx-mod"><rect x="335" y="422" width="305" height="84" rx="3"/>
 <text class="st" x="487.5" y="436" text-anchor="middle">«Settings»</text>

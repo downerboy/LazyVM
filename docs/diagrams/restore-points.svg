@@ -60,13 +60,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="159" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="166" x2="275" y2="166"/>
 <text class="at" x="30" y="181">HKLM:\SOFTWARE\LazyVM  Root</text>
-<text class="at" x="30" y="198">Config\LazyVM.Settings.json</text>
-<text class="at" x="30" y="215">Config\VMs\&lt;VM&gt;\VM.json</text>
-<text class="at" x="30" y="232">Backup\&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="198">Shared\Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="215">&lt;VM&gt;\Config\VM.json</text>
+<text class="at" x="30" y="232">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="129" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="143" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="159" text-anchor="middle">Logs\</text>
+<text class="nm" x="875.0" y="159" text-anchor="middle">&lt;VM&gt;\Logs\</text>
 <line class="div" x1="740" y1="166" x2="1010" y2="166"/>
 <text class="at" x="750" y="181">&lt;VM&gt;.log  (appended)</text>
 </g>
@@ -79,13 +79,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="271" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="285" text-anchor="middle">«Hyper-V»</text>
-<text class="nm" x="147.5" y="301" text-anchor="middle">Checkpoints\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="301" text-anchor="middle">&lt;VM&gt;\Checkpoints\</text>
 <line class="div" x1="20" y1="308" x2="275" y2="308"/>
-<text class="at" x="30" y="323">&quot;Tooling &lt;stamp&gt;&quot;</text>
+<text class="at" x="30" y="323">"Tooling &lt;stamp&gt;"</text>
 </g>
 <g class="bx-store"><rect x="20" y="348" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="362" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="378" text-anchor="middle">Config\VMs\&lt;VM&gt;\History\</text>
+<text class="nm" x="147.5" y="378" text-anchor="middle">&lt;VM&gt;\Config\History\</text>
 <line class="div" x1="20" y1="385" x2="275" y2="385"/>
 <text class="at" x="30" y="400">Tooling-&lt;stamp&gt;.json</text>
 </g>

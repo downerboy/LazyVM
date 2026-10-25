@@ -100,13 +100,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="193" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="200" x2="275" y2="200"/>
 <text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
-<text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>
-<text class="at" x="30" y="249">Config\VMs\&lt;VM&gt;\VM.json</text>
-<text class="at" x="30" y="266">Backup\&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="232">Shared\Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="249">&lt;VM&gt;\Config\VM.json</text>
+<text class="at" x="30" y="266">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="163" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="177" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="193" text-anchor="middle">Logs\</text>
+<text class="nm" x="875.0" y="193" text-anchor="middle">&lt;VM&gt;\Logs\</text>
 <line class="div" x1="740" y1="200" x2="1010" y2="200"/>
 <text class="at" x="750" y="215">&lt;VM&gt;.log  (appended)</text>
 </g>
@@ -135,10 +135,10 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="430" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="444" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="460" text-anchor="middle">Backup\</text>
+<text class="nm" x="147.5" y="460" text-anchor="middle">Credential store</text>
 <line class="div" x1="20" y1="467" x2="275" y2="467"/>
-<text class="at" x="30" y="482">.lazyvm.key</text>
-<text class="at" x="30" y="499">&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="482">Shared\Credentials\.lazyvm.key</text>
+<text class="at" x="30" y="499">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="430" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="444" text-anchor="middle">«Hyper-V»</text>
@@ -165,26 +165,26 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="649" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="663" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="679" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="679" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="20" y1="686" x2="275" y2="686"/>
 <text class="at" x="30" y="701">Tooling.json</text>
 </g>
 <g class="bx-store"><rect x="740" y="538" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="552" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="568" text-anchor="middle">Config\VMs\&lt;VM&gt;\History\</text>
+<text class="nm" x="875.0" y="568" text-anchor="middle">&lt;VM&gt;\Config\History\</text>
 <line class="div" x1="740" y1="575" x2="1010" y2="575"/>
 <text class="at" x="750" y="590">Daily\Tooling-&lt;date&gt;.json</text>
 </g>
 <g class="bx-store"><rect x="740" y="615" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="629" text-anchor="middle">«Hyper-V»</text>
-<text class="nm" x="875.0" y="645" text-anchor="middle">Checkpoints\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="645" text-anchor="middle">&lt;VM&gt;\Checkpoints\</text>
 <line class="div" x1="740" y1="652" x2="1010" y2="652"/>
-<text class="at" x="750" y="667">checkpoint &quot;Tooling &lt;stamp&gt;&quot;</text>
+<text class="at" x="750" y="667">checkpoint "Tooling &lt;stamp&gt;"</text>
 <text class="at" x="750" y="684">oldest pruned past 3</text>
 </g>
 <g class="bx-store"><rect x="740" y="709" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="723" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="739" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="739" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="740" y1="746" x2="1010" y2="746"/>
 <text class="at" x="750" y="761">Tooling.json</text>
 <text class="at" x="750" y="778">History\Tooling-&lt;stamp&gt;.json</text>
@@ -236,7 +236,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="1050" width="270" height="118" rx="3"/>
 <text class="st" x="875.0" y="1064" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="1080" text-anchor="middle">State\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="1080" text-anchor="middle">&lt;VM&gt;\State\</text>
 <line class="div" x1="740" y1="1087" x2="1010" y2="1087"/>
 <text class="at" x="750" y="1102">vs\  windows\  sql\</text>
 <text class="at" x="750" y="1119">projects\  apps\</text>

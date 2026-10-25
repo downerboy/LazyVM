@@ -97,13 +97,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="159" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="166" x2="275" y2="166"/>
 <text class="at" x="30" y="181">HKLM:\SOFTWARE\LazyVM  Root</text>
-<text class="at" x="30" y="198">Config\LazyVM.Settings.json</text>
-<text class="at" x="30" y="215">Config\VMs\&lt;VM&gt;\VM.json</text>
-<text class="at" x="30" y="232">Backup\&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="198">Shared\Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="215">&lt;VM&gt;\Config\VM.json</text>
+<text class="at" x="30" y="232">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="129" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="143" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="159" text-anchor="middle">Logs\</text>
+<text class="nm" x="875.0" y="159" text-anchor="middle">&lt;VM&gt;\Logs\</text>
 <line class="div" x1="740" y1="166" x2="1010" y2="166"/>
 <text class="at" x="750" y="181">&lt;VM&gt;.log  (appended)</text>
 </g>
@@ -126,10 +126,10 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="396" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="410" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="426" text-anchor="middle">Backup\</text>
+<text class="nm" x="147.5" y="426" text-anchor="middle">Credential store</text>
 <line class="div" x1="20" y1="433" x2="275" y2="433"/>
-<text class="at" x="30" y="448">.lazyvm.key</text>
-<text class="at" x="30" y="465">&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="448">Shared\Credentials\.lazyvm.key</text>
+<text class="at" x="30" y="465">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="396" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="410" text-anchor="middle">«Hyper-V»</text>
@@ -172,13 +172,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="686" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="700" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="716" text-anchor="middle">State\&lt;VM&gt;\vs\</text>
+<text class="nm" x="875.0" y="716" text-anchor="middle">&lt;VM&gt;\State\vs\</text>
 <line class="div" x1="740" y1="723" x2="1010" y2="723"/>
 <text class="at" x="750" y="738">settings, vs.vsconfig</text>
 </g>
 <g class="bx-store"><rect x="740" y="763" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="777" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="793" text-anchor="middle">Backup\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="793" text-anchor="middle">&lt;VM&gt;\Backups\</text>
 <line class="div" x1="740" y1="800" x2="1010" y2="800"/>
 <text class="at" x="750" y="815">VisualStudio.vssettings</text>
 </g>
@@ -204,7 +204,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="931" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="945" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="961" text-anchor="middle">State\&lt;VM&gt;\sql\</text>
+<text class="nm" x="875.0" y="961" text-anchor="middle">&lt;VM&gt;\State\sql\</text>
 <line class="div" x1="740" y1="968" x2="1010" y2="968"/>
 <text class="at" x="750" y="983">logins, database list</text>
 </g>
@@ -225,13 +225,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="1022" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="1036" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="1052" text-anchor="middle">State\&lt;VM&gt;\windows\</text>
+<text class="nm" x="875.0" y="1052" text-anchor="middle">&lt;VM&gt;\State\windows\</text>
 <line class="div" x1="740" y1="1059" x2="1010" y2="1059"/>
 <text class="at" x="750" y="1074">zip of the export</text>
 </g>
 <g class="bx-store"><rect x="740" y="1099" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="1113" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="1129" text-anchor="middle">Backup\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="1129" text-anchor="middle">&lt;VM&gt;\Credentials\</text>
 <line class="div" x1="740" y1="1136" x2="1010" y2="1136"/>
 <text class="at" x="750" y="1151">certs.cred</text>
 </g>
@@ -251,7 +251,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="1190" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="1204" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="1220" text-anchor="middle">State\&lt;VM&gt;\projects\</text>
+<text class="nm" x="875.0" y="1220" text-anchor="middle">&lt;VM&gt;\State\projects\</text>
 <line class="div" x1="740" y1="1227" x2="1010" y2="1227"/>
 <text class="at" x="750" y="1242">zip</text>
 </g>
@@ -269,7 +269,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="1298" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="1312" text-anchor="middle">«folder»</text>
-<text class="nm" x="875.0" y="1328" text-anchor="middle">State\&lt;VM&gt;\apps\</text>
+<text class="nm" x="875.0" y="1328" text-anchor="middle">&lt;VM&gt;\State\apps\</text>
 <line class="div" x1="740" y1="1335" x2="1010" y2="1335"/>
 <text class="at" x="750" y="1350">&lt;Name&gt;.reg</text>
 </g>
@@ -283,7 +283,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="1389" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="1403" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="1419" text-anchor="middle">State\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="1419" text-anchor="middle">&lt;VM&gt;\State\</text>
 <line class="div" x1="740" y1="1426" x2="1010" y2="1426"/>
 <text class="at" x="750" y="1441">manifest.json</text>
 <text class="at" x="750" y="1458">manifest-&lt;stamp&gt;.json</text>

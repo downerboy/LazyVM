@@ -73,13 +73,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="193" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="200" x2="275" y2="200"/>
 <text class="at" x="30" y="215">HKLM:\SOFTWARE\LazyVM  Root</text>
-<text class="at" x="30" y="232">Config\LazyVM.Settings.json</text>
-<text class="at" x="30" y="249">Config\VMs\&lt;VM&gt;\VM.json</text>
-<text class="at" x="30" y="266">Backup\&lt;VM&gt;\guest.cred</text>
+<text class="at" x="30" y="232">Shared\Config\LazyVM.Settings.json</text>
+<text class="at" x="30" y="249">&lt;VM&gt;\Config\VM.json</text>
+<text class="at" x="30" y="266">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="163" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="177" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="193" text-anchor="middle">Logs\</text>
+<text class="nm" x="875.0" y="193" text-anchor="middle">&lt;VM&gt;\Logs\</text>
 <line class="div" x1="740" y1="200" x2="1010" y2="200"/>
 <text class="at" x="750" y="215">&lt;VM&gt;.log  (appended)</text>
 </g>
@@ -94,13 +94,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="305" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="319" text-anchor="middle">«Hyper-V»</text>
-<text class="nm" x="147.5" y="335" text-anchor="middle">Checkpoints\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="335" text-anchor="middle">&lt;VM&gt;\Checkpoints\</text>
 <line class="div" x1="20" y1="342" x2="275" y2="342"/>
-<text class="at" x="30" y="357">&quot;Tooling &lt;stamp&gt;&quot;</text>
+<text class="at" x="30" y="357">"Tooling &lt;stamp&gt;"</text>
 </g>
 <g class="bx-store"><rect x="20" y="382" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="396" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="412" text-anchor="middle">Config\VMs\&lt;VM&gt;\History\</text>
+<text class="nm" x="147.5" y="412" text-anchor="middle">&lt;VM&gt;\Config\History\</text>
 <line class="div" x1="20" y1="419" x2="275" y2="419"/>
 <text class="at" x="30" y="434">Tooling-&lt;stamp&gt;.json</text>
 </g>
@@ -115,19 +115,19 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="473" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="487" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="503" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="147.5" y="503" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="20" y1="510" x2="275" y2="510"/>
 <text class="at" x="30" y="525">Tooling.json</text>
 </g>
 <g class="bx-store"><rect x="740" y="473" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="487" text-anchor="middle">«Hyper-V»</text>
-<text class="nm" x="875.0" y="503" text-anchor="middle">Checkpoints\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="503" text-anchor="middle">&lt;VM&gt;\Checkpoints\</text>
 <line class="div" x1="740" y1="510" x2="1010" y2="510"/>
-<text class="at" x="750" y="525">&quot;Tooling &lt;now&gt; before revert&quot;</text>
+<text class="at" x="750" y="525">"Tooling &lt;now&gt; before revert"</text>
 </g>
 <g class="bx-store"><rect x="740" y="550" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="564" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="580" text-anchor="middle">Config\VMs\&lt;VM&gt;\History\</text>
+<text class="nm" x="875.0" y="580" text-anchor="middle">&lt;VM&gt;\Config\History\</text>
 <line class="div" x1="740" y1="587" x2="1010" y2="587"/>
 <text class="at" x="750" y="602">Tooling-&lt;now&gt;.json</text>
 </g>
@@ -153,7 +153,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="749" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="763" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="779" text-anchor="middle">Config\VMs\&lt;VM&gt;\</text>
+<text class="nm" x="875.0" y="779" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="740" y1="786" x2="1010" y2="786"/>
 <text class="at" x="750" y="801">Tooling.json</text>
 </g>
