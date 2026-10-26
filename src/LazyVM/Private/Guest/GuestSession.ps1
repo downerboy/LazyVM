@@ -14,7 +14,11 @@ function Import-GuestHelper {
     }
     Invoke-Command -Session $VM.Runtime.Session -ArgumentList $script:GuestHelperText -ScriptBlock {
         param($text)
-        New-Module -Name 'LazyVM.Guest' -ScriptBlock ([scriptblock]::Create($text)) | Import-Module -Global -Force
+        # Two statements on purpose. PowerShell 7 turns a block that is one
+        # pipeline into a command, working out its arguments on the host, and
+        # a script block made there reaches the guest as plain text (#106).
+        $helpers = [scriptblock]::Create($text)
+        New-Module -Name 'LazyVM.Guest' -ScriptBlock $helpers | Import-Module -Global -Force
     } | Out-Null
 }
 

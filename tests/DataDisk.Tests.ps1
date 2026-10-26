@@ -132,6 +132,22 @@ Describe 'Find-GuestDataDisk' {
     }
 }
 
+Describe 'Import-GuestHelper' {
+    It 'loads the helpers with a block the guest runs itself, so the script block is made in the guest (#106)' {
+        Mock -ModuleName $module Invoke-Command { } -RemoveParameterType Session -RemoveParameterValidation Session
+
+        InModuleScope $module { Import-GuestHelper -VM ([VMContext]::new(@{ VMName = 'Alpha' })) }
+
+        Should -Invoke -ModuleName $module Invoke-Command -Times 1 -Exactly -ParameterFilter {
+            # A block PowerShell 7 can turn into a command would be worked out
+            # on the host, sending the guest a string instead of a script block.
+            $converted = $true
+            try { $null = $ScriptBlock.GetPowerShell($true, @('function Test-Me { 1 }')) } catch { $converted = $false }
+            -not $converted -and $ArgumentList[0] -like '*function Find-GuestDataDisk*'
+        }
+    }
+}
+
 Describe 'Add-VMScsiHardDisk' {
     BeforeEach {
         # NewBox after setup (#103): the OS disk at 0 and the Windows ISO at 1;
