@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.1](https://github.com/downerboy/LazyVM/compare/v4.2.0...v4.2.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* go on when Hyper-V attaches a data disk but reports a DvdDrive cast error ([#104](https://github.com/downerboy/LazyVM/issues/104)) ([4b8e2eb](https://github.com/downerboy/LazyVM/commit/4b8e2ebcc07c89ffea9cec42ae615cdd277d5adc))
+
 ## [4.2.0](https://github.com/downerboy/LazyVM/compare/v4.1.0...v4.2.0) (2026-10-26)
 
 
