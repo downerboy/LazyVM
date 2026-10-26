@@ -494,7 +494,7 @@ A VM with no tooling list of its own is built from the default list that ships w
 
 - Visual Studio Community 2026, with the ASP.NET and web, .NET desktop, .NET MAUI, Azure, data storage and processing, data science, Python and Windows application workloads.
 - SQL Server Management Studio 22.
-- Visual Studio extensions: EF Core Power Tools, SQLite and SQL Server Compact Toolbox, Template Studio for WinUI, XAML Styler and four colour themes.
+- Visual Studio extensions: EF Core Power Tools, SQLite and SQL Server Compact Toolbox, Template Studio for WinUI and the Visual Studio Theme Pack. All are signed, so the Visual Studio Installer takes them without `UnsignedExtensions`.
 - Tools from winget: Git, GitHub CLI, GitHub Desktop, Visual Studio Code, Windows Terminal, PowerShell 7, WSL, LINQPad 9, Notepad++, WinMerge and 7-Zip.
 - SDKs and runtimes from winget: the Windows SDK, the SQL Server ODBC and OLE DB drivers, System CLR Types, the Visual C++ redistributables and Web Deploy.
 

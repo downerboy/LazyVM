@@ -132,6 +132,20 @@ Describe 'Add-ProductExtension' {
     }
 }
 
+Describe 'The default tooling list' {
+    It 'loads, and holds none of the extensions the installer refused as unsigned (#112)' {
+        $links = InModuleScope $module {
+            $record = Read-ToolingRecord -Path (Join-Path -Path $script:DataDir -ChildPath $script:DefaultToolingFileName)
+            @($record.Products | ForEach-Object { $_.ExtensionLinks() })
+        }
+
+        $links.Count | Should -BeGreaterThan 0
+        foreach ($unsigned in 'TeamXavalon.XAMLStyler2022', 'SergiyEgoshyn.HiberbeeTheme', 'AustinStanding.vsthememidnightdeep', 'AgitoReiKen.zerovstheme') {
+            $links | Should -Not -Contain "https://marketplace.visualstudio.com/items?itemName=$unsigned"
+        }
+    }
+}
+
 Describe 'Test-InstallSucceeded' {
     It 'returns <Expected> for exit code <Code>' -ForEach @(
         @{ Code = 0; Expected = $true }
