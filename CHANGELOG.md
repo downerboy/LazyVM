@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.0](https://github.com/downerboy/LazyVM/compare/v4.1.0...v4.2.0) (2026-10-26)
+
+
+### Features
+
+* find the SQL data disk and Dev Drive by recorded identity, never by size ([#101](https://github.com/downerboy/LazyVM/issues/101)) ([6365242](https://github.com/downerboy/LazyVM/commit/636524215d69a43ec88819ca805bd2a34145181d))
+
 ## [4.1.0](https://github.com/downerboy/LazyVM/compare/v4.0.1...v4.1.0) (2026-10-26)
 
 
