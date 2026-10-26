@@ -1,4 +1,4 @@
-﻿@{
+@{
     RootModule           = 'LazyVM.psm1'
     # Set by release-please from the merged pull request titles; see CONTRIBUTING.md.
     ModuleVersion        = '4.2.4' # x-release-please-version
@@ -29,10 +29,11 @@
         'Save-LazyVMTooling'
         'Set-LazyVMCredential'
         'Set-LazyVMRoot'
+        'Show-LazyVM'
     )
     CmdletsToExport      = @()
     VariablesToExport    = @()
-    AliasesToExport      = @()
+    AliasesToExport      = @('LazyVM')
 
     PrivateData          = @{
         PSData = @{

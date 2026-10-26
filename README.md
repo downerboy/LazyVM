@@ -81,10 +81,11 @@ To sign in to the VM yourself, `Get-LazyVMCredential -Name DevBox -AsPlainText` 
 
 ## Commands
 
-Every command has full help: `Get-Help Build-LazyVM -Full`. `-Name` can be left out while the host has only one VM, and it tab-completes.
+Type `LazyVM` on its own to see the installed version, the LazyVM folder and the VMs in it, where the module is installed, and every command with a one-line summary. Every command has full help: `Get-Help Build-LazyVM -Full`. `-Name` can be left out while the host has only one VM, and it tab-completes.
 
 | Command                                                       | What it does                                                                                           |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `LazyVM` (`Show-LazyVM`)                                    | The version, the LazyVM folder and its VMs, where the module is installed, and the command list.      |
 | `Set-LazyVMRoot`                                            | Chooses your own folder for LazyVM instead of the automatic one.                                       |
 | `New-LazyVM`                                                | Creates a VM's profile without building it. `-From` starts from another VM's settings and tools.     |
 | `Build-LazyVM`                                              | Builds the VM, setting up whatever is missing first, and schedules its maintenance. Safe to run again. |

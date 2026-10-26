@@ -142,6 +142,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 
 | Command | What it does |
 |---|---|
+| `LazyVM` | Shows the installed version, the LazyVM folder and each VM in it, the folder the module is installed in, and every command with its synopsis. The same as `Show-LazyVM`. |
 | `Set-LazyVMRoot -Path D:\DevVM` | Chooses the LazyVM folder. |
 | `New-LazyVM -Name DevBox` | Creates the VM's profile, ready to build. `-From OtherVM` starts from another VM's settings and tooling list. |
 | `Build-LazyVM` | Runs phases 0 to 8. Builds the VM if it does not exist. Otherwise it brings an existing VM up to spec: it installs anything missing from its tooling list, attaches and prepares the SQL data disk, and relocates databases. Safe to run again. |
