@@ -35,15 +35,16 @@ function Add-DevDriveDisk {
         Write-LogEntry "Dev Drive disk not found at $($VM.Settings.DevDrivePath) - skipping attach" 'WARN'
         return
     }
-    Add-VMDataDisk -VM $VM -Path $VM.Settings.DevDrivePath -Label 'Dev Drive disk'
+    Add-VMDataDisk -VM $VM -Path $VM.Settings.DevDrivePath -Label 'Dev Drive disk' -LocationSetting 'DevDriveScsiLocation'
 }
 
 function Initialize-GuestDevDrive {
     <#
       Prepares the volume in the guest and designates it a trusted Dev Drive.
-      On a re-run it finds the existing volume by its label and only applies
-      the trust again, which is what a rebuilt guest needs. Records the
-      letter the volume got.
+      The disk is found by the identity VM.json records for it (see
+      VMDisk.ps1), and its GPT disk GUID is recorded once it has one. When
+      the disk already holds the volume, as after a rebuild, only the trust
+      is applied again. Records the letter the volume got.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -51,11 +52,12 @@ function Initialize-GuestDevDrive {
     if (-not $settings.UseDevDrive) { return }
 
     Write-LogEntry 'Preparing the Dev Drive inside the guest...' 'INFO'
+    $identity = Get-DataDiskIdentity -VM $VM -GuidSetting 'DevDriveGuid' -LocationSetting 'DevDriveScsiLocation' -Path $settings.DevDrivePath
 
     $result = Invoke-GuestScript -VM $VM -Activity 'Dev Drive preparation' -TimeoutMinutes 30 -ArgumentList @(
-        $settings.DevDriveLetter, $settings.DevDriveSizeGB, $settings.DevDriveLabel, (@($settings.DevDriveFilters) -join ', ')
+        $settings.DevDriveLetter, $identity.Guid, $identity.Location, $identity.FileLocation, $settings.DevDriveLabel, (@($settings.DevDriveFilters) -join ', ')
     ) -ScriptBlock {
-        param($desiredLetter, $expectedSizeGB, $label, $filters)
+        param($desiredLetter, $guid, $location, $fileLocation, $label, $filters)
         $ErrorActionPreference = 'Stop'
         $notes = @()
 
@@ -65,45 +67,41 @@ function Initialize-GuestDevDrive {
             $notes += New-GuestNote -Level WARN -Text "fsutil devdrv enable returned $LASTEXITCODE ($($enableOut -join ' '))"
         }
 
-        # Already prepared? Found by label: that survives a rebuild, where the
-        # volume is intact but no longer trusted.
-        $existing = @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.FileSystemLabel -eq $label -and $_.DriveLetter })
+        $found = Find-GuestDataDisk -Label 'Dev Drive disk' -Guid $guid -Location $location -FileLocation $fileLocation
+        $disk = $found.Disk
+        $notes += New-GuestNote -Level INFO -Text "found the Dev Drive disk (disk $($disk.Number)) by $($found.FoundBy)"
+        if ($disk.IsOffline) { Set-Disk -Number $disk.Number -IsOffline $false; $notes += New-GuestNote -Level INFO -Text 'brought the disk online' }
+        if ($disk.IsReadOnly) { Set-Disk -Number $disk.Number -IsReadOnly $false; $notes += New-GuestNote -Level INFO -Text 'cleared the read-only flag' }
+        $disk = Get-Disk -Number $disk.Number
+
+        # Already prepared? Then the disk holds the volume: after a rebuild it
+        # is intact but no longer trusted.
+        $existing = @(Get-Partition -DiskNumber $disk.Number -ErrorAction SilentlyContinue |
+                Where-Object { $_.Type -ne 'Reserved' -and $_.Size -gt 100MB })
         $letter = $null
         $formatted = $false
         $fileSystem = ''
 
         if ($existing.Count -gt 0) {
-            $letter = "$($existing[0].DriveLetter)"
-            $fileSystem = "$($existing[0].FileSystem)"
-            $notes += New-GuestNote -Level INFO -Text "found an existing '$label' volume at ${letter}:"
+            $part = $existing[0]
+            $letter = "$($part.DriveLetter)".Trim()
+            $fileSystem = "$((Get-Volume -Partition $part -ErrorAction SilentlyContinue).FileSystem)"
+            $notes += New-GuestNote -Level INFO -Text "the disk already holds a $fileSystem volume$(if ($letter) { " at ${letter}:" })"
 
             if ($letter -ne $desiredLetter -and -not (Get-GuestVolumeByLetter -Letter $desiredLetter)) {
-                $part = Get-Partition -DriveLetter $letter -ErrorAction SilentlyContinue
-                if ($part) {
-                    Set-Partition -DiskNumber $part.DiskNumber -PartitionNumber $part.PartitionNumber -NewDriveLetter $desiredLetter
-                    $letter = $desiredLetter
-                    $notes += New-GuestNote -Level INFO -Text "moved it to ${desiredLetter}:"
+                Set-Partition -DiskNumber $disk.Number -PartitionNumber $part.PartitionNumber -NewDriveLetter $desiredLetter
+                $letter = $desiredLetter
+                $notes += New-GuestNote -Level INFO -Text "moved it to ${desiredLetter}:"
+            }
+            elseif (-not $letter) {
+                $free = Get-GuestFreeLetter
+                if ($free) {
+                    Set-Partition -DiskNumber $disk.Number -PartitionNumber $part.PartitionNumber -NewDriveLetter $free
+                    $letter = $free
                 }
             }
         }
         else {
-            # The unused disk closest to the configured size. The SQL data
-            # disk is a different size, so this does not pick it.
-            $expectedBytes = [int64]$expectedSizeGB * 1GB
-            $candidates = @(Get-Disk | Where-Object {
-                    $lettered = @(Get-Partition -DiskNumber $_.Number -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter })
-                    -not $_.IsBoot -and -not $_.IsSystem -and ($_.PartitionStyle -eq 'RAW' -or $lettered.Count -eq 0)
-                })
-            if ($candidates.Count -eq 0) { throw 'no unused disk found in the guest for the Dev Drive' }
-
-            $disk = $candidates | Sort-Object { [math]::Abs($_.Size - $expectedBytes) } | Select-Object -First 1
-            if ([math]::Abs($disk.Size - $expectedBytes) -gt 20GB) {
-                $notes += New-GuestNote -Level WARN -Text "closest unused disk is $([math]::Round($disk.Size/1GB)) GB, expected about $expectedSizeGB GB - check the disk layout"
-            }
-
-            if ($disk.IsOffline) { Set-Disk -Number $disk.Number -IsOffline $false }
-            if ($disk.IsReadOnly) { Set-Disk -Number $disk.Number -IsReadOnly $false }
-            $disk = Get-Disk -Number $disk.Number
             if ($disk.PartitionStyle -eq 'RAW') {
                 Initialize-Disk -Number $disk.Number -PartitionStyle GPT | Out-Null
             }
@@ -157,6 +155,7 @@ function Initialize-GuestDevDrive {
             FileSystem = $fileSystem
             Trusted    = $trusted
             Formatted  = $formatted
+            Guid       = "$((Get-Disk -Number $disk.Number).Guid)"
             SizeGB     = if ($volume) { [math]::Round($volume.Size / 1GB, 1) } else { 0 }
             FreeGB     = if ($volume) { [math]::Round($volume.SizeRemaining / 1GB, 1) } else { 0 }
             Notes      = $notes
@@ -164,6 +163,7 @@ function Initialize-GuestDevDrive {
     }
 
     Write-GuestNote -Notes $result.Notes
+    Save-DataDiskGuid -VM $VM -GuidSetting 'DevDriveGuid' -Guid $result.Guid -Label 'Dev Drive disk'
     $VM.Runtime.DevDriveLetter = $result.Letter
 
     if ($result.Trusted) {

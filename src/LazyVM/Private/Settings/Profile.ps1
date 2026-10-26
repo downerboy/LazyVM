@@ -212,11 +212,12 @@ function Get-SharedTemplateSetting {
 function Get-PerVMSettingName {
     <#
       Settings that must differ between VMs: file locations, the guest
-      computer name and the maintenance time. A VM copied with -From takes
-      these from the shared template, which names everything after the VM,
-      rather than from the VM it copies.
+      computer name, the maintenance time and the recorded identity of its
+      disks. A VM copied with -From takes these from the shared template,
+      which names everything after the VM and records no disk, rather than
+      from the VM it copies.
     #>
-    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime')
+    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime') + @($script:DataDiskIdentitySettings)
 }
 
 function New-VMProfile {

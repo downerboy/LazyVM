@@ -515,7 +515,9 @@ Describe 'New-VMProfile' {
 
     It 'with -From, copies the source VM''s settings and tooling list, and takes the per-VM ones from the shared template' {
         $root = New-TestRoot -Profiles @{
-            Alpha = '{ "MemMaxGB": 32, "LogFile": "Logs\\Alpha-Old.log", "GuestComputerName": "ALPHA" }'
+            Alpha = '{ "MemMaxGB": 32, "LogFile": "Logs\\Alpha-Old.log", "GuestComputerName": "ALPHA",
+                       "SQLDiskGuid": "{11111111-2222-3333-4444-555555555555}", "SQLDiskScsiLocation": 1,
+                       "DevDriveGuid": "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}", "DevDriveScsiLocation": 2 }'
         }
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value '{ "Version": 1 }'
 
@@ -528,6 +530,11 @@ Describe 'New-VMProfile' {
         $vmProfile.MemMaxGB | Should -Be 32
         $vmProfile.LogFile | Should -Be '{VM}\Logs\{VM}.log'
         $vmProfile.GuestComputerName | Should -Be '{VM}'
+        # The source VM's disks are not the new VM's: it records its own.
+        foreach ($identity in 'SQLDiskGuid', 'SQLDiskScsiLocation', 'DevDriveGuid', 'DevDriveScsiLocation') {
+            $vmProfile.Keys | Should -Contain $identity
+            $vmProfile[$identity] | Should -BeNullOrEmpty -Because "-From must not copy $identity"
+        }
         Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'Tooling.json' | Should -Exist
     }
 

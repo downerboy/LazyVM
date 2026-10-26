@@ -171,6 +171,76 @@ function Get-GuestFreeLetter {
     return $null
 }
 
+# ── Data disks ───────────────────────────────────────────────────────────────
+
+function Get-GuestDiskLun {
+    <#
+      The SCSI LUN Windows reports for a disk, which on Hyper-V is the
+      location the host attached it at; $null when it reports none. Both
+      Get-Disk and Get-PhysicalDisk give it as
+      "Integrated : Adapter 0 : Port 0 : Target 0 : LUN 2".
+    #>
+    param([Parameter(Mandatory)]$Disk)
+
+    if ("$($Disk.Location)" -match 'LUN (\d+)') { return [int]$Matches[1] }
+    $physical = Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { "$($_.DeviceId)" -eq "$($Disk.Number)" } | Select-Object -First 1
+    if ($physical -and "$($physical.PhysicalLocation)" -match 'LUN (\d+)') { return [int]$Matches[1] }
+    return $null
+}
+
+function Find-GuestDataDisk {
+    <#
+      The disk that a data disk's recorded identity names, never chosen by
+      size. Tried in order: its GPT disk GUID, the SCSI location the host
+      recorded when it attached the disk, then the location of its VHDX file
+      now. Boot and system disks never match. Returns the disk and how it was
+      found. Throws when nothing matches, when two disks match, or when the
+      disk at the location has a different GPT disk GUID from the one
+      recorded: the caller initialises and formats what this returns.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [AllowNull()][AllowEmptyString()][string]$Guid,
+        [AllowNull()]$Location,
+        [AllowNull()]$FileLocation,
+        [object[]]$Disks
+    )
+
+    if (-not $PSBoundParameters.ContainsKey('Disks')) { $Disks = @(Get-Disk) }
+    $candidates = @($Disks | Where-Object { -not $_.IsBoot -and -not $_.IsSystem })
+
+    if ($Guid) {
+        $byGuid = @($candidates | Where-Object { "$($_.Guid)" -eq $Guid })
+        if ($byGuid.Count -gt 1) { throw "$($byGuid.Count) disks in the guest have the $Label's GPT disk GUID $Guid, so LazyVM cannot tell which is the $Label. Nothing was changed." }
+        if ($byGuid.Count -eq 1) { return [pscustomobject]@{ Disk = $byGuid[0]; FoundBy = "its GPT disk GUID $Guid" } }
+    }
+
+    $tries = @(
+        @{ Lun = $Location; FoundBy = 'the SCSI location recorded when it was attached' }
+        @{ Lun = $FileLocation; FoundBy = 'the SCSI location of its VHDX file' }
+    )
+    foreach ($try in $tries) {
+        if ($null -eq $try.Lun -or "$($try.Lun)" -eq '') { continue }
+        $lun = [int]$try.Lun
+        $atLun = @($candidates | Where-Object { (Get-GuestDiskLun -Disk $_) -eq $lun })
+        if ($atLun.Count -gt 1) { throw "$($atLun.Count) disks in the guest are at SCSI LUN $lun, so LazyVM cannot tell which is the $Label. Nothing was changed." }
+        if ($atLun.Count -eq 0) { continue }
+
+        $disk = $atLun[0]
+        if ($Guid -and "$($disk.Guid)" -and "$($disk.Guid)" -ne $Guid) {
+            throw "The disk at SCSI LUN $lun has the GPT disk GUID $($disk.Guid), but the $Label's is recorded as $Guid, so it is not the $Label. Nothing was changed."
+        }
+        return [pscustomobject]@{ Disk = $disk; FoundBy = "$($try.FoundBy) (LUN $lun)" }
+    }
+
+    $recorded = @()
+    if ($Guid) { $recorded += "GPT disk GUID $Guid" }
+    if ($null -ne $Location -and "$Location" -ne '') { $recorded += "SCSI location $Location" }
+    if ($null -ne $FileLocation -and "$FileLocation" -ne '') { $recorded += "VHDX file at SCSI location $FileLocation" }
+    $what = if ($recorded.Count -gt 0) { $recorded -join ', ' } else { 'nothing recorded, and its VHDX file is not attached to SCSI controller 0' }
+    throw "The $Label was not found in the guest ($what). Nothing was initialised or formatted. Check that the disk is attached to the VM."
+}
+
 # ── Installed software ───────────────────────────────────────────────────────
 
 function Find-GuestWinget {

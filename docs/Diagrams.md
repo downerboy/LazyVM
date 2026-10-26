@@ -93,7 +93,7 @@ Creates the profile only. Build-LazyVM does this by itself when the profile is m
 
 1. `Resolve-LazyVMRoot` (Settings)
    - Reads D1, LazyVM folder: HKLM:\SOFTWARE\LazyVM (Root)
-2. `New-VMProfile` (Settings): copies -From settings except paths, computer name and maintenance time; schedules maintenance an hour after the latest existing VM
+2. `New-VMProfile` (Settings): copies -From settings except paths, computer name, maintenance time and disk identity; schedules maintenance an hour after the latest existing VM
    - Reads D2, settings and tooling to copy: <OtherVM>\Config\ (VM.json, Tooling.json  (with -From))
    - Reads D3, maintenance times in use: *\Config\ (VM.json)
    - Writes D4, new profile: <VM>\Config\ (VM.json)
