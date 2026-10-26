@@ -1,7 +1,7 @@
 ﻿@{
     RootModule           = 'LazyVM.psm1'
     # Set by release-please from the merged pull request titles; see CONTRIBUTING.md.
-    ModuleVersion        = '4.0.1' # x-release-please-version
+    ModuleVersion        = '4.1.0' # x-release-please-version
     GUID                 = '08c1f0fc-8b41-4102-a4a7-847ac770437b'
     Author               = 'Massokissed'
     CompanyName          = 'Massokissed'
