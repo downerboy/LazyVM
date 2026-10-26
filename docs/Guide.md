@@ -475,7 +475,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `ToolingWingetExclude` | Windows built-ins | winget packages never recorded. Your list replaces the default, so copy it and add to it. |
 | `AppSettings` | WinMerge | Registry keys a capture exports and a restore imports, so an application's settings survive a rebuild. |
 | `InstallerBootstrappers` | 5 channels | The bootstrapper for each Visual Studio Installer channel. Add one if a tooling list uses a channel not listed. |
-| `UnsignedExtensions` | none | Marketplace extensions, by item name (`Publisher.Name`), that may be installed even though they are not signed. Any other unsigned extension is refused by the installer. |
+| `UnsignedExtensions` | none | Marketplace extensions, by item name (`Publisher.Name`), that may be installed even though they are not signed. Any other unsigned extension is refused by the installer and named in the log; Visual Studio and its other extensions install anyway. |
 | `vCPU`, `MemStartGB`, `MemMaxGB` | 4, 8, 16 | VM sizing, applied when the VM is built. 8 GB to start is the Dev Drive minimum. |
 | `OSDiskSizeGB`, `SQLDiskSizeGB`, `DevDriveSizeGB` | 120, 100, 250 | Disk sizes, applied when each disk is created. All grow as needed up to this size. To give `C:` more room later, make the VM's OS disk bigger in Hyper-V Manager or with `Resize-VHD`; the next maintenance run extends `C:` into the new space, after taking a checkpoint it removes once all went well. If it fails, the checkpoint is kept, the log says how to go back to it, and `C:` is not extended again until you delete that checkpoint. |
 | `UseDevDrive` | true | Whether to create, attach and designate the Dev Drive. |
@@ -537,13 +537,15 @@ Save-LazyVMTooling
 ### What a build installs, and what it cannot
 
 Phase 7 installs the whole list, in this order:
-1. Each Visual Studio Installer product from its channel's bootstrapper (`InstallerBootstrappers`), with its workloads, components and Marketplace extensions.
+1. Each Visual Studio Installer product from its channel's bootstrapper (`InstallerBootstrappers`), with its workloads and components. Then its Marketplace extensions are added, as a separate step, so an extension the installer refuses never stops the product itself from installing.
 2. SQL Server.
 3. Every winget package.
 
 Anything already present is skipped.
 
 The first build also keeps a copy of the list it installs as `DevBox\Config\Tooling.Template.json`. See [What the VM started with](#what-the-vm-started-with).
+
+The Visual Studio Installer refuses an unsigned extension unless its item name is in `UnsignedExtensions`. When it refuses some of a product's extensions, the rest are still added, one at a time, and the log names each refused one.
 
 Programs winget does not provide, and extensions with no Marketplace match, cannot be installed automatically. After a build they are logged and written to `DevBox\State\reinstall-by-hand.txt`. The list marks them as awaiting reinstall, so they are not mistaken for removals. Each one leaves that list once you install it.
 
@@ -684,6 +686,7 @@ The log is the first place to look: `D:\DevVM\DevBox\Logs\DevBox.log`. Every lin
 | The Dev Drive came back as NTFS | The designation was refused on this disk. The volume still works and still persists; only the ReFS speed-ups are missing. The log records the exact refusal. |
 | "This host has several VMs" | Add `-Name` and the VM's name. |
 | "Could not take the checkpoint, so the changes were NOT recorded" | Hyper-V refused the checkpoint, most often over access to a disk's folder. The log carries Hyper-V's own message. Run `Save-LazyVMTooling` to try again; nothing is lost. |
+| "extension(s) refused by the Visual Studio Installer" | The extension is not signed. To let LazyVM install it, add its item name (shown in the log, `Publisher.Name`) to `UnsignedExtensions` in the VM's `VM.json`; otherwise install it by hand from Extensions > Manage Extensions. The installer's own logs are in the VM's `C:\Windows\SystemTemp\dd_*.log` (`C:\Windows\Temp` before Windows 11 24H2). |
 | An extension is listed in `reinstall-by-hand.txt` | No Visual Studio Marketplace entry matched its name and publisher exactly, usually because the vendor distributes it elsewhere. Install it from the vendor; the next daily run takes it off the list. |
 
 ### Useful checks

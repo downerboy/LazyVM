@@ -194,8 +194,15 @@ function Copy-ToGuest {
     Copy-Item -Path $HostPath -Destination $GuestPath -ToSession $VM.Runtime.Session -Force -ErrorAction Stop
 }
 
+function Test-InstallSucceeded {
+    <# Whether an installer exit code means success: 0, or 3010/1641 (restart needed or started). Logs nothing. #>
+    param($ExitCode)
+
+    return ($null -ne $ExitCode -and [int]$ExitCode -in 0, 3010, 1641)
+}
+
 function Test-InstallExitCode {
-    <# Logs an installer's exit code and returns whether it succeeded: 0, or 3010/1641 (restart needed or started). #>
+    <# Logs an installer's exit code and returns whether it succeeded (see Test-InstallSucceeded). #>
     param(
         [Parameter(Mandatory)][string]$Product,
         $ExitCode
