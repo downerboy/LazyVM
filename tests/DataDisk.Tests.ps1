@@ -132,6 +132,45 @@ Describe 'Find-GuestDataDisk' {
     }
 }
 
+Describe 'Add-VMScsiHardDisk' {
+    BeforeEach {
+        # NewBox after setup (#103): the OS disk at 0 and the Windows ISO at 1;
+        # the answer-file disc's drive at 2 has been removed.
+        Mock -ModuleName $module Get-VMDvdDrive { [pscustomobject]@{ ControllerType = 'SCSI'; ControllerNumber = 0; ControllerLocation = 1; Path = 'C:\ISO\win.iso' } }
+        Mock -ModuleName $module Get-VMHardDiskDrive {
+            [pscustomobject]@{ ControllerType = 'SCSI'; ControllerNumber = 0; ControllerLocation = 0; Path = 'C:\VM\OS.vhdx' }
+        } -ParameterFilter { $null -eq $ControllerLocation }
+    }
+
+    It 'goes on when Hyper-V attaches the disk but then fails to describe it' {
+        Mock -ModuleName $module Add-VMHardDiskDrive { throw "Unable to cast object of type 'Microsoft.HyperV.PowerShell.DvdDrive' to type 'Microsoft.HyperV.PowerShell.HardDiskDrive'." }
+        Mock -ModuleName $module Get-VMHardDiskDrive {
+            [pscustomobject]@{ ControllerType = 'SCSI'; ControllerNumber = 0; ControllerLocation = 2; Path = 'C:\VM\SQL.vhdx' }
+        } -ParameterFilter { $ControllerLocation -eq 2 }
+
+        $location = InModuleScope $module { Add-VMScsiHardDisk -VMName 'NewBox' -Path 'C:\VM\SQL.vhdx' }
+
+        $location | Should -Be 2
+        Should -Invoke -ModuleName $module Add-VMHardDiskDrive -Times 1 -Exactly -ParameterFilter { $ControllerLocation -eq 2 }
+    }
+
+    It 'stops when the disk is not attached after all' {
+        Mock -ModuleName $module Add-VMHardDiskDrive { throw 'Hyper-V said no' }
+        Mock -ModuleName $module Get-VMHardDiskDrive { } -ParameterFilter { $ControllerLocation -eq 2 }
+
+        { InModuleScope $module { Add-VMScsiHardDisk -VMName 'NewBox' -Path 'C:\VM\SQL.vhdx' } } | Should -Throw -ExpectedMessage 'Hyper-V said no'
+    }
+
+    It 'stops when another disk is at that location' {
+        Mock -ModuleName $module Add-VMHardDiskDrive { throw 'Hyper-V said no' }
+        Mock -ModuleName $module Get-VMHardDiskDrive {
+            [pscustomobject]@{ ControllerType = 'SCSI'; ControllerNumber = 0; ControllerLocation = 2; Path = 'C:\VM\Other.vhdx' }
+        } -ParameterFilter { $ControllerLocation -eq 2 }
+
+        { InModuleScope $module { Add-VMScsiHardDisk -VMName 'NewBox' -Path 'C:\VM\SQL.vhdx' } } | Should -Throw -ExpectedMessage 'Hyper-V said no'
+    }
+}
+
 Describe 'Recording a data disk''s identity' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
