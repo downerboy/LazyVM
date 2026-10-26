@@ -3,8 +3,14 @@
 #
 # The Visual Studio Installer manages Visual Studio of any edition and
 # version, and also SSMS 21 and later. Each product in the tooling list is
-# installed from its own channel's bootstrapper with its recorded workloads,
-# components and extensions.
+# installed from its own channel's bootstrapper with its recorded workloads
+# and components. Its extensions are added afterwards, in a step of their
+# own: the installer refuses a whole install when any one extension in it is
+# unsigned, and one theme must never cost the product itself (#109).
+
+# Where the installer's own logs are. It runs as SYSTEM, whose temporary
+# folder is C:\Windows\SystemTemp from Windows 11 24H2.
+$script:GuestInstallerLogHint = 'Guest log: C:\Windows\SystemTemp\dd_*.log (C:\Windows\Temp before Windows 11 24H2)'
 
 function Get-GuestInstallerProduct {
     <# Every product the Visual Studio Installer manages in the guest. Throws when the guest cannot be asked. #>
@@ -83,12 +89,17 @@ function Get-MissingProductExtension {
     return $missing
 }
 
+function Get-ExtensionItemName {
+    <# A Marketplace link's item name, Publisher.Name: the part after itemName=. #>
+    param([Parameter(Mandatory)][string]$Link)
+
+    return ($Link -split 'itemName=', 2)[-1]
+}
+
 function Test-UnsignedExtensionAllowed {
     <#
       True when one of these Marketplace links is for an extension the
-      UnsignedExtensions setting lets the installer take unsigned. Only then
-      is --allowUnsignedExtensions passed, so an unsigned extension never
-      gets in without someone having decided it may.
+      UnsignedExtensions setting lets the installer take unsigned.
     #>
     param(
         [AllowEmptyCollection()][string[]]$Links = @(),
@@ -96,14 +107,13 @@ function Test-UnsignedExtensionAllowed {
     )
 
     foreach ($link in $Links) {
-        $item = ($link -split 'itemName=', 2)[-1]
-        if ($Allowed -contains $item) { return $true }
+        if ($Allowed -contains (Get-ExtensionItemName -Link $link)) { return $true }
     }
     return $false
 }
 
 function ConvertTo-VsConfig {
-    <# The .vsconfig the Visual Studio Installer takes: the product's components and these extension links. #>
+    <# The .vsconfig the Visual Studio Installer takes: the product's components and, for a modify, these extension links. #>
     param(
         [Parameter(Mandatory)][ToolingProduct]$Product,
         [AllowEmptyCollection()][string[]]$Links = @()
@@ -117,9 +127,9 @@ function ConvertTo-VsConfig {
 function Install-ToolingProduct {
     <#
       Installs each Visual Studio Installer product in the tooling list that
-      the guest does not have yet. A product already there gets any of its
-      Marketplace extensions it is missing. Extensions go in the .vsconfig as
-      Marketplace links, which the installer installs for all users. Per-user
+      the guest does not have yet, with its workloads and components, then
+      adds its Marketplace extensions (Add-ProductExtension). A product
+      already there gets any of its extensions it is missing. Per-user
       extensions with no Marketplace link are reported afterwards by
       Write-ToolingReinstallReport.
     #>
@@ -143,7 +153,7 @@ function Install-ToolingProduct {
             if ($product.ExtensionLinks().Count -gt 0) {
                 if (-not $observed) { $observed = ConvertTo-ToolingRecord -Inventory (Get-GuestToolingInventory -VM $VM) -WingetExclude $VM.Settings.ToolingWingetExclude }
                 $links = @(Get-MissingProductExtension -Product $product -Observed $observed.FindProduct($product.Key()) | Where-Object { $_.Link } | ForEach-Object { $_.Link })
-                if ($links.Count -gt 0) { Add-ProductExtension -VM $VM -Product $product -InstallPath $present.InstallPath -Links $links }
+                if ($links.Count -gt 0) { $null = Add-ProductExtension -VM $VM -Product $product -InstallPath $present.InstallPath -Links $links }
             }
             continue
         }
@@ -156,11 +166,11 @@ function Install-ToolingProduct {
 
         $extensions = $product.ExtensionLinks()
         $edition = $product.Edition()
-        Write-LogEntry "Installing $label from $url ($(@($product.Components).Count) workload/component id(s), $($extensions.Count) extension(s); up to $($VM.Settings.VSInstallMinutes) minutes)..." 'INFO'
+        Write-LogEntry "Installing $label from $url ($(@($product.Components).Count) workload/component id(s); up to $($VM.Settings.VSInstallMinutes) minutes)..." 'INFO'
         try {
             $prepared = Invoke-GuestScript -VM $VM -Activity "$label download" -TimeoutMinutes 15 `
-                -ArgumentList @($url, "bootstrap-$edition.exe", $VM.Settings.GuestSetupDir, (ConvertTo-VsConfig -Product $product -Links $extensions), $product.IncludeRecommended, (Test-UnsignedExtensionAllowed -Links $extensions -Allowed $VM.Settings.UnsignedExtensions)) -ScriptBlock {
-                param($url, $bootstrapperName, $setupDir, $configJson, $includeRecommended, $allowUnsigned)
+                -ArgumentList @($url, "bootstrap-$edition.exe", $VM.Settings.GuestSetupDir, (ConvertTo-VsConfig -Product $product), $product.IncludeRecommended) -ScriptBlock {
+                param($url, $bootstrapperName, $setupDir, $configJson, $includeRecommended)
                 $ErrorActionPreference = 'Stop'
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
                 New-GuestFolder -Path $setupDir
@@ -174,29 +184,50 @@ function Install-ToolingProduct {
 
                 $arguments = @('--quiet', '--wait', '--norestart', '--config', "`"$configPath`"")
                 if ($includeRecommended) { $arguments += '--includeRecommended' }
-                # Only for extensions listed in UnsignedExtensions.
-                if ($allowUnsigned) { $arguments += '--allowUnsignedExtensions' }
                 return [pscustomobject]@{ FilePath = $bootstrapper; Arguments = $arguments }
             }
             $exitCode = Invoke-GuestInstaller -VM $VM -FilePath $prepared.FilePath -ArgumentList $prepared.Arguments `
                 -Name "install-$edition" -TimeoutMinutes $VM.Settings.VSInstallMinutes -Activity "the $label install"
             if (-not (Test-InstallExitCode -Product $label -ExitCode $exitCode)) {
-                Write-LogEntry '  Guest log: C:\Windows\Temp\dd_bootstrapper_*.log and dd_setup_*.log' 'INFO'
+                Write-LogEntry "  $script:GuestInstallerLogHint" 'INFO'
+                continue
             }
         }
         catch {
             Write-LogError "$label install failed" $_
+            continue
         }
+
+        if ($extensions.Count -eq 0) { continue }
+        try {
+            $added = Get-GuestInstallerProduct -VM $VM | Where-Object { [ToolingProduct]::KeyFor($_.ProductId, $_.ChannelId) -eq $product.Key() } | Select-Object -First 1
+        }
+        catch {
+            Write-LogError "Could not find $label after its install, so its extensions were not added" $_
+            continue
+        }
+        if (-not $added) {
+            Write-LogEntry "$label is not listed by the installer after its install, so its extensions were not added" 'WARN'
+            continue
+        }
+        $null = Add-ProductExtension -VM $VM -Product $product -InstallPath $added.InstallPath -Links $extensions
     }
 }
 
 function Add-ProductExtension {
     <#
       Adds Marketplace extensions to a product that is already installed, for
-      all users, with the Visual Studio Installer's modify command: for a
-      product installed before its extensions were in the tooling list, or
-      whose first install stopped before they went in.
+      all users, with the Visual Studio Installer's modify command. Returns
+      the links of the extensions the installer refused, and logs them.
+
+      The installer refuses a whole batch when one extension in it is
+      unsigned, and --allowUnsignedExtensions lets every unsigned extension in
+      a batch in. So the extensions listed in UnsignedExtensions go in a batch
+      of their own, the only one given that switch, and a refused batch is
+      tried again one extension at a time: the rest still go in, and each
+      refused extension is named.
     #>
+    [OutputType([string[]])]
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][ToolingProduct]$Product,
@@ -206,9 +237,55 @@ function Add-ProductExtension {
 
     $label = $Product.DisplayName
     Write-LogEntry "Adding $($Links.Count) extension(s) to $label..." 'INFO'
+
+    $allowed = @($VM.Settings.UnsignedExtensions)
+    $batches = @(
+        @{ AllowUnsigned = $true; Links = @($Links | Where-Object { Test-UnsignedExtensionAllowed -Links @($_) -Allowed $allowed }) }
+        @{ AllowUnsigned = $false; Links = @($Links | Where-Object { -not (Test-UnsignedExtensionAllowed -Links @($_) -Allowed $allowed) }) }
+    )
+    $refused = [System.Collections.Generic.List[string]]::new()
+    foreach ($batch in $batches) {
+        if ($batch.Links.Count -eq 0) { continue }
+        if (Invoke-ProductModify -VM $VM -Product $Product -InstallPath $InstallPath -Links $batch.Links -AllowUnsigned:$batch.AllowUnsigned) { continue }
+        if ($batch.Links.Count -eq 1) { $refused.Add($batch.Links[0]); continue }
+
+        Write-LogEntry "  The installer refused $($batch.Links.Count) extension(s) together; adding them one at a time..." 'INFO'
+        foreach ($link in $batch.Links) {
+            if (-not (Invoke-ProductModify -VM $VM -Product $Product -InstallPath $InstallPath -Links @($link) -AllowUnsigned:$batch.AllowUnsigned)) { $refused.Add($link) }
+        }
+    }
+
+    $count = $Links.Count - $refused.Count
+    if ($refused.Count -eq 0) {
+        Write-LogEntry "$label - $count extension(s) added" 'OK'
+        return @()
+    }
+    if ($count -gt 0) { Write-LogEntry "$label - $count extension(s) added" 'OK' }
+    Write-LogList -Heading "$label - $($refused.Count) extension(s) refused by the Visual Studio Installer:" -Items @($refused | ForEach-Object { Get-ExtensionItemName -Link $_ }) -Level WARN
+    Write-LogEntry '  An unsigned extension is installed only when its item name is in the UnsignedExtensions setting; otherwise install it by hand from Extensions > Manage Extensions.' 'INFO'
+    Write-LogEntry "  $script:GuestInstallerLogHint" 'INFO'
+    return @($refused)
+}
+
+function Invoke-ProductModify {
+    <#
+      One modify of an installed product, adding these extension links, with
+      --allowUnsignedExtensions only when -AllowUnsigned is given. Returns
+      whether the installer succeeded; a failure is the caller's to report.
+    #>
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][ToolingProduct]$Product,
+        [Parameter(Mandatory)][string]$InstallPath,
+        [Parameter(Mandatory)][string[]]$Links,
+        [switch]$AllowUnsigned
+    )
+
+    $label = $Product.DisplayName
     try {
         $prepared = Invoke-GuestScript -VM $VM -Activity "$label extension list" -TimeoutMinutes 5 `
-            -ArgumentList @($VM.Settings.GuestSetupDir, (ConvertTo-VsConfig -Product $Product -Links $Links), $InstallPath, (Test-UnsignedExtensionAllowed -Links $Links -Allowed $VM.Settings.UnsignedExtensions)) -ScriptBlock {
+            -ArgumentList @($VM.Settings.GuestSetupDir, (ConvertTo-VsConfig -Product $Product -Links $Links), $InstallPath, [bool]$AllowUnsigned) -ScriptBlock {
             param($setupDir, $configJson, $installPath, $allowUnsigned)
             $ErrorActionPreference = 'Stop'
             New-GuestFolder -Path $setupDir
@@ -217,16 +294,16 @@ function Add-ProductExtension {
             $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
             if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
             $arguments = @('modify', '--installPath', "`"$installPath`"", '--config', "`"$configPath`"", '--quiet', '--norestart')
-            # Only for extensions listed in UnsignedExtensions.
             if ($allowUnsigned) { $arguments += '--allowUnsignedExtensions' }
             return [pscustomobject]@{ FilePath = $installer; Arguments = $arguments }
         }
         $exitCode = Invoke-GuestInstaller -VM $VM -FilePath $prepared.FilePath -ArgumentList $prepared.Arguments `
             -Name 'add-extensions' -TimeoutMinutes 60 -Activity "adding extensions to $label"
-        $null = Test-InstallExitCode -Product "$label extensions" -ExitCode $exitCode
+        return (Test-InstallSucceeded -ExitCode $exitCode)
     }
     catch {
         Write-LogError "Adding extensions to $label failed" $_
+        return $false
     }
 }
 
