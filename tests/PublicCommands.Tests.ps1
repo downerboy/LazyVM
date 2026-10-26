@@ -1,4 +1,4 @@
-﻿# PublicCommands.Tests.ps1
+# PublicCommands.Tests.ps1
 # What the public commands decide for themselves: confirmations, outcomes
 # and output. The work they hand to the private functions is mocked, so
 # nothing here needs Hyper-V, the registry or a guest.
@@ -455,5 +455,37 @@ Describe 'Test-WindowsIsoName' {
         @{ Name = 'Win11Ent_Eval.zip'; Expected = $false }
     ) {
         InModuleScope $module -Parameters @{ Name = $Name } { param($Name) Test-WindowsIsoName -Name $Name } | Should -Be $Expected
+    }
+}
+
+Describe 'Show-LazyVM' {
+    It 'writes the version, the LazyVM folder, each VM and the module''s folder, then the command list' {
+        $root = New-TestRoot -VMs 'Alpha', 'Beta'
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $root; Source = 'a test' } }
+
+        $output = @(Show-LazyVM)
+
+        $loaded = Get-Module -Name $module
+        $output[0] | Should -Be "LazyVM $($loaded.Version)"
+        $output[1] | Should -Be "Folder  : $root"
+        $output[2] | Should -Be 'VMs     : Alpha'
+        $output[3] | Should -Be '          Beta'
+        $output[4] | Should -Be "Module  : $($loaded.ModuleBase)"
+
+        # Then what Get-Help lists for the module: every exported command
+        # with its synopsis, and none of the internal ones.
+        $listed = @($output | Select-Object -Skip 5)
+        $listed.Name | Sort-Object | Should -Be @($loaded.ExportedFunctions.Keys | Sort-Object)
+        ($listed | Where-Object { $_.Name -eq 'Build-LazyVM' }).Synopsis | Should -Not -BeNullOrEmpty
+    }
+
+    It 'says what to do when no folder has been chosen or there are no VMs yet' {
+        Mock -ModuleName $module Resolve-LazyVMRoot { throw 'LazyVM does not know which folder to keep its VMs in yet.' }
+
+        $output = @(Show-LazyVM)
+
+        $output[1] | Should -Be 'Folder  : LazyVM does not know which folder to keep its VMs in yet.'
+        $output[2] | Should -BeLike 'VMs     : none yet*Build-LazyVM*'
+        $output[3] | Should -BeLike 'Module  : *'
     }
 }

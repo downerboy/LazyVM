@@ -15,14 +15,21 @@ BeforeAll {
 Describe 'The module' {
     It 'exports exactly the commands in Public, each from a file of the same name' {
         $public = @(Get-ChildItem -LiteralPath (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Public') -Filter '*.ps1' | ForEach-Object { $_.BaseName } | Sort-Object)
-        $exported = @(Get-Command -Module 'LazyVM' | ForEach-Object { $_.Name } | Sort-Object)
+        $exported = @(Get-Command -Module 'LazyVM' -CommandType Function | ForEach-Object { $_.Name } | Sort-Object)
 
         $exported | Should -Be $public
     }
 
+    It 'exports one alias, LazyVM, for Show-LazyVM' {
+        $aliases = @(Get-Command -Module 'LazyVM' -CommandType Alias)
+
+        $aliases.Name | Should -Be @('LazyVM')
+        $aliases[0].ResolvedCommandName | Should -Be 'Show-LazyVM'
+    }
+
     It 'uses only approved verbs' {
         $approved = @(Get-Verb | ForEach-Object { $_.Verb })
-        foreach ($command in Get-Command -Module 'LazyVM') {
+        foreach ($command in Get-Command -Module 'LazyVM' -CommandType Function) {
             $approved | Should -Contain $command.Verb -Because "$($command.Name) should use an approved verb"
         }
     }
