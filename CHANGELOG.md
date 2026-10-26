@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.2](https://github.com/downerboy/LazyVM/compare/v4.2.1...v4.2.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* build the guest helpers' script block in the guest ([#107](https://github.com/downerboy/LazyVM/issues/107)) ([ed29e39](https://github.com/downerboy/LazyVM/commit/ed29e391ae4a1c37f49da31aaaeacd37f60ac52a))
+
 ## [4.2.1](https://github.com/downerboy/LazyVM/compare/v4.2.0...v4.2.1) (2026-10-26)
 
 
