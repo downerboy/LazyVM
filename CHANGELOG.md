@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.3.1](https://github.com/downerboy/LazyVM/compare/v4.3.0...v4.3.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* complete -Name with the VMs in the LazyVM folder ([#120](https://github.com/downerboy/LazyVM/issues/120)) ([18f2e96](https://github.com/downerboy/LazyVM/commit/18f2e96dadf3a6883dcc882c63c26e19058f74d0))
+* pull latest changes before install ([#121](https://github.com/downerboy/LazyVM/issues/121)) ([c56b87a](https://github.com/downerboy/LazyVM/commit/c56b87a932d9d2201e71874584962215a2236838))
+
 ## [4.3.0](https://github.com/downerboy/LazyVM/compare/v4.2.4...v4.3.0) (2026-10-26)
 
 
