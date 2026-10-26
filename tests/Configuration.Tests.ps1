@@ -628,7 +628,7 @@ Describe 'Update-VMProfile' {
         $vmProfile.vCPU | Should -Be 8
         $vmProfile.MemMaxGB | Should -Be 16
         $vmProfile['$schema'] | Should -Be '../../Shared/Config/LazyVM.Settings.schema.json'
-        $history = Get-HistoryFile -Root $root
+        $history = @(Get-HistoryFile -Root $root)
         $history.Count | Should -Be 1
         (Read-TestJson -Path $history[0].FullName).vCPU | Should -Be 4
     }
@@ -692,7 +692,7 @@ Describe 'Sync-VMProfile' {
         $vmProfile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
         $vmProfile.vCPU | Should -Be 2
         $vmProfile.MemMaxGB | Should -Be 24
-        $vmProfile.LogFile | Should -Be '{VM}\\Logs\\{VM}.log'
+        $vmProfile.LogFile | Should -Be '{VM}\Logs\{VM}.log'
         $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root }
         $result.MissingKeys | Should -BeNullOrEmpty
     }
