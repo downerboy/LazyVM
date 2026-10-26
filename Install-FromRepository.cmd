@@ -29,6 +29,8 @@ if errorlevel 1 (
 )
 
 rem -ExecutionPolicy Bypass applies to this one run only.
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "git pull --ff-only"
+
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out"
 set "RESULT=%ERRORLEVEL%"
 
