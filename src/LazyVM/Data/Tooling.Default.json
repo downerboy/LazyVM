@@ -139,9 +139,7 @@
         "runtimes.maccatalyst.net9",
         "wasm.tools"
       ],
-      "Extensions": [
-        "https://marketplace.visualstudio.com/items?itemName=TeamXavalon.XAMLStyler2022"
-      ],
+      "Extensions": [],
       "UserExtensions": [
         {
           "Id": "41521019-e4c7-480c-8ea8-fc4a2c6f50aa",
@@ -158,20 +156,6 @@
           "MarketplaceItem": "ErikEJ.EFCorePowerTools"
         },
         {
-          "Id": "HiberbeeTheme.5b8ec20c-e115-4646-a8f4-4710b4eee183",
-          "DisplayName": "Hiberbee Theme",
-          "Publisher": "Sergiy Egoshyn",
-          "MoreInfo": "https://github.com/sergiye/hiberbeeTheme",
-          "MarketplaceItem": "SergiyEgoshyn.HiberbeeTheme"
-        },
-        {
-          "Id": "MidnightDeep.e1e706e2-05d3-4da9-8754-652cd8ab65f4",
-          "DisplayName": "Midnight Deep Theme",
-          "Publisher": "Austin Standing",
-          "MoreInfo": "https://github.com/austinstanding/midnight-deep-vstheme",
-          "MarketplaceItem": "AustinStanding.vsthememidnightdeep"
-        },
-        {
           "Id": "TemplateStudioForWinUICs.843dd154-7a62-4aab-8482-1ce4c73cb580",
           "DisplayName": "Template Studio for WinUI (C#)",
           "Publisher": "Microsoft",
@@ -184,13 +168,6 @@
           "Publisher": "Microsoft DevLabs",
           "MoreInfo": "",
           "MarketplaceItem": "idex.vsthemepack"
-        },
-        {
-          "Id": "ZeroVSTheme.e2e706e2-05d3-4da9-8754-652cd8ab60f4",
-          "DisplayName": "Zero (Dark Theme)",
-          "Publisher": "AgitoReiKen",
-          "MoreInfo": "",
-          "MarketplaceItem": "AgitoReiKen.zerovstheme"
         }
       ]
     },
