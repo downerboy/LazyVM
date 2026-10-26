@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.3.0](https://github.com/downerboy/LazyVM/compare/v4.2.4...v4.3.0) (2026-10-26)
+
+
+### Features
+
+* show the version, folder, VMs, install path and commands when LazyVM is typed alone ([#115](https://github.com/downerboy/LazyVM/issues/115)) ([c52eb56](https://github.com/downerboy/LazyVM/commit/c52eb561d9473f46c363d6c53ddd4a8ddf6aed09))
+
 ## [4.2.4](https://github.com/downerboy/LazyVM/compare/v4.2.3...v4.2.4) (2026-10-26)
 
 
