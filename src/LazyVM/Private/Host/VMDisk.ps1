@@ -72,6 +72,11 @@ function Add-VMScsiHardDisk {
       "Unable to cast DvdDrive to HardDiskDrive" once a DVD drive has been
       removed and left a gap, which is exactly what the build does when it
       ejects the answer-file disc.
+
+      Given the location of the removed DVD drive, it throws that same error,
+      but only after the disk is attached: it fails while describing the
+      result. So when it throws, what Hyper-V actually did decides: a disk
+      attached where it was asked for is a success.
     #>
     param(
         [Parameter(Mandatory)][string]$VMName,
@@ -88,7 +93,15 @@ function Add-VMScsiHardDisk {
         throw "The VM's SCSI controller has no free location for $Path."
     }
 
-    Add-VMHardDiskDrive -VMName $VMName -ControllerType SCSI -ControllerNumber 0 -ControllerLocation $location -Path $Path
+    try {
+        Add-VMHardDiskDrive -VMName $VMName -ControllerType SCSI -ControllerNumber 0 -ControllerLocation $location -Path $Path -ErrorAction Stop
+    }
+    catch {
+        $attached = @(Get-VMHardDiskDrive -VMName $VMName -ControllerType SCSI -ControllerNumber 0 -ControllerLocation $location -ErrorAction SilentlyContinue |
+                Where-Object { $_.Path -eq $Path })
+        if ($attached.Count -eq 0) { throw }
+        Write-Verbose "Add-VMHardDiskDrive reported '$($_.Exception.Message)', but $Path is attached at SCSI 0:$location."
+    }
     return $location
 }
 
