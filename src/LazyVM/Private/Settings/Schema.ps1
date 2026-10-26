@@ -114,8 +114,10 @@ function Format-SchemaProblem {
             else { "'$where' is not allowed here." }
             break
         }
-        '^Value is "(?<is>\w+)" but should be "(?<want>\w+)"$' {
-            "'$where' should be $($kinds[$Matches.want]), but is $($kinds[$Matches.is])."
+        '^Value is "(?<is>\w+)" but should be "(?<want>\w+(, \w+)*)"$' {
+            # A setting that may be left empty allows two types: "integer, null".
+            $want = ($Matches.want -split ', ' | ForEach-Object { $kinds[$_] }) -join ' or '
+            "'$where' should be $want, but is $($kinds[$Matches.is])."
             break
         }
         default { if ($where) { "'$where': $message" } else { $message } }

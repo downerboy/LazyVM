@@ -134,6 +134,19 @@
       "minimum": 10,
       "maximum": 65536
     },
+    "SQLDiskGuid": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Recorded by LazyVM: the SQL data disk's GPT disk GUID inside the VM, written the first time the VM prepares the disk. It is the first thing LazyVM looks for to find the disk. Leave it as it is; a VM copied with -From starts without it.",
+      "pattern": "^\\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\}$"
+    },
+    "SQLDiskScsiLocation": {
+      "type": ["integer", "null"],
+      "default": null,
+      "description": "Recorded by LazyVM: the location on the VM's SCSI controller 0 where the SQL data disk was attached. It is how a new, empty disk is found. Leave it as it is; a VM copied with -From starts without it.",
+      "minimum": 0,
+      "maximum": 63
+    },
     "MoveSqlDataToDataDisk": {
       "type": "boolean",
       "default": true,
@@ -187,6 +200,19 @@
         "minLength": 1
       },
       "uniqueItems": true
+    },
+    "DevDriveGuid": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Recorded by LazyVM: the Dev Drive disk's GPT disk GUID inside the VM, written the first time the VM prepares the disk. It is the first thing LazyVM looks for to find the disk. Leave it as it is; a VM copied with -From starts without it.",
+      "pattern": "^\\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\}$"
+    },
+    "DevDriveScsiLocation": {
+      "type": ["integer", "null"],
+      "default": null,
+      "description": "Recorded by LazyVM: the location on the VM's SCSI controller 0 where the Dev Drive disk was attached. It is how a new, empty disk is found. Leave it as it is; a VM copied with -From starts without it.",
+      "minimum": 0,
+      "maximum": 63
     },
     "CheckpointDir": {
       "type": "string",

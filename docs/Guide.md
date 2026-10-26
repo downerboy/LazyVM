@@ -406,6 +406,19 @@ LazyVM keeps `VM.json` describing the VM as it is, so you never have to:
 - Before every build, maintenance run and rebuild, any setting `VM.json` lacks is filled in from the shared template. That covers a VM created before `VM.json` held every setting, and a setting added by a newer LazyVM. The log says which.
 - Every time LazyVM changes `VM.json`, the version it replaces is kept in `<Name>\Config\History\VM-<date>-<time>.json`, so you can see what changed and go back.
 - A `VM.json` that cannot be read is never written over. The run uses the last copy that loaded cleanly and logs the problem.
+- It records which disk inside the VM is the SQL data disk and which is the Dev Drive (see below).
+
+### How LazyVM finds the SQL data disk and the Dev Drive
+
+Preparing these disks can initialise and format them, so LazyVM finds each one by what `VM.json` records about it, never by its size:
+
+1. **Its GPT disk GUID** (`SQLDiskGuid`, `DevDriveGuid`), recorded the first time the VM prepares the disk.
+2. **Its SCSI location** (`SQLDiskScsiLocation`, `DevDriveScsiLocation`), recorded when LazyVM attaches the disk to the VM. This is how a new, empty disk is found. Windows in the VM reports it as the disk's LUN.
+3. **Only as a last resort, its `.vhdx` file**: where Hyper-V shows that file attached right now. This is how a VM built before LazyVM recorded disks finds them once; from then on it has a GPT disk GUID.
+
+If no disk matches, or the disk at the recorded location has a different GPT disk GUID, the run stops and says so. It initialises or formats nothing. Check in Hyper-V Manager that the disk is attached to the VM's SCSI controller.
+
+Leave these four settings as they are. `New-LazyVM -From` never copies them, because the new VM's disks are its own.
 
 ### What the VM was built from
 
@@ -582,7 +595,7 @@ New-LazyVM -Name WebDev -From DevBox
 Build-LazyVM -Name WebDev
 ```
 
-`-From` copies the existing VM's `VM.json` and its tooling list, so the new VM is built the same way with the same tools. The settings that must differ between VMs (file locations, the computer name and the maintenance time) come from the shared template instead. From then on, each list follows its own VM. Leave out `New-LazyVM` and just run `Build-LazyVM -Name WebDev` to start from the defaults and the default tooling list.
+`-From` copies the existing VM's `VM.json` and its tooling list, so the new VM is built the same way with the same tools. The settings that must differ between VMs (file locations, the computer name, the maintenance time and the recorded identity of its disks) come from the shared template instead. From then on, each list follows its own VM. Leave out `New-LazyVM` and just run `Build-LazyVM -Name WebDev` to start from the defaults and the default tooling list.
 
 Once there is more than one VM, every command needs `-Name`. LazyVM will not guess, because a wrong guess would maintain or rebuild the wrong machine.
 
@@ -667,6 +680,7 @@ The log is the first place to look: `D:\DevVM\DevBox\Logs\DevBox.log`. Every lin
 | Databases did not come back | Check that the capture recorded them: `Get-LazyVMLicense` shows how many were captured. An empty capture restores nothing. Backups live on `D:\SQLBackup` inside the VM. |
 | The scheduled task never runs, or `LastTaskResult` is 1 | Check `Get-LazyVM` shows it registered, and read the log. It runs as SYSTEM, so it needs a stored credential and the module installed for all users. |
 | The Dev Drive is not trusted | Run `fsutil devdrv enable` then `fsutil devdrv trust W:` in the VM as administrator. Trust does not survive a rebuild by design, and phase 7 normally reapplies it. |
+| "The SQL data disk was not found in the guest" (or the Dev Drive disk) | No disk in the VM matches what `VM.json` records for it, so nothing was formatted. Check in Hyper-V Manager that the `.vhdx` file is attached to the VM's SCSI controller 0. If you replaced the disk on purpose, clear its `...Guid` and `...ScsiLocation` settings in `VM.json` and run the build again. |
 | The Dev Drive came back as NTFS | The designation was refused on this disk. The volume still works and still persists; only the ReFS speed-ups are missing. The log records the exact refusal. |
 | "This host has several VMs" | Add `-Name` and the VM's name. |
 | "Could not take the checkpoint, so the changes were NOT recorded" | Hyper-V refused the checkpoint, most often over access to a disk's folder. The log carries Hyper-V's own message. Run `Save-LazyVMTooling` to try again; nothing is lost. |

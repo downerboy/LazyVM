@@ -13,13 +13,15 @@ function Initialize-SqlDataVhd {
 function Add-SqlDataDisk {
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    Add-VMDataDisk -VM $VM -Path $VM.Settings.SQLDiskPath -Label 'SQL data disk'
+    Add-VMDataDisk -VM $VM -Path $VM.Settings.SQLDiskPath -Label 'SQL data disk' -LocationSetting 'SQLDiskScsiLocation'
 }
 
 function Initialize-GuestSqlDisk {
     <#
       Prepares the SQL data disk in the guest and records the drive letter it
-      actually got, which every later SQL step uses.
+      actually got, which every later SQL step uses. The disk is found by the
+      identity VM.json records for it (see VMDisk.ps1), and its GPT disk GUID
+      is recorded once it has one.
 
       The preferred letter is often taken in a guest built by hand: on a
       Generation 2 VM the DVD drive usually claims D: once Windows is
@@ -31,24 +33,18 @@ function Initialize-GuestSqlDisk {
 
     Write-LogEntry 'Preparing the SQL data disk inside the guest...' 'INFO'
     $settings = $VM.Settings
+    $identity = Get-DataDiskIdentity -VM $VM -GuidSetting 'SQLDiskGuid' -LocationSetting 'SQLDiskScsiLocation' -Path $settings.SQLDiskPath
     $result = Invoke-GuestScript -VM $VM -Activity 'SQL data disk preparation' -TimeoutMinutes 15 -ArgumentList @(
-        $settings.GuestDataDriveLetter, $settings.SQLDiskSizeGB,
+        $settings.GuestDataDriveLetter, $identity.Guid, $identity.Location, $identity.FileLocation,
         @($settings.SqlDataFolder, $settings.SqlLogFolder, $settings.SqlTempFolder, $settings.SqlBackupFolder)
     ) -ScriptBlock {
-        param($desiredLetter, $expectedSizeGB, $folders)
+        param($desiredLetter, $guid, $location, $fileLocation, $folders)
         $ErrorActionPreference = 'Stop'
         $notes = @()
 
-        # Optical drives never appear in Get-Disk. Boot and system disks are
-        # left out rather than assuming the OS is disk 0.
-        $candidates = @(Get-Disk | Where-Object { -not $_.IsBoot -and -not $_.IsSystem })
-        if ($candidates.Count -eq 0) { throw 'no data disk found in the guest' }
-
-        $expectedBytes = [int64]$expectedSizeGB * 1GB
-        $disk = $candidates | Sort-Object { [math]::Abs($_.Size - $expectedBytes) } | Select-Object -First 1
-        if ($candidates.Count -gt 1) {
-            $notes += New-GuestNote -Level INFO -Text "guest has $($candidates.Count) data disks; chose disk $($disk.Number) ($([math]::Round($disk.Size/1GB)) GB) as the closest match to $expectedSizeGB GB"
-        }
+        $found = Find-GuestDataDisk -Label 'SQL data disk' -Guid $guid -Location $location -FileLocation $fileLocation
+        $disk = $found.Disk
+        $notes += New-GuestNote -Level INFO -Text "found the SQL data disk (disk $($disk.Number)) by $($found.FoundBy)"
 
         if ($disk.IsOffline) { Set-Disk -Number $disk.Number -IsOffline $false; $notes += New-GuestNote -Level INFO -Text 'brought the disk online' }
         if ($disk.IsReadOnly) { Set-Disk -Number $disk.Number -IsReadOnly $false; $notes += New-GuestNote -Level INFO -Text 'cleared the read-only flag' }
@@ -121,6 +117,7 @@ function Initialize-GuestSqlDisk {
         return [pscustomobject]@{
             Letter    = $letter
             Formatted = $formatted
+            Guid      = "$((Get-Disk -Number $disk.Number).Guid)"
             SizeGB    = [math]::Round($disk.Size / 1GB, 1)
             FreeGB    = [math]::Round((Get-PSDrive -Name $letter).Free / 1GB, 1)
             Notes     = $notes
@@ -128,6 +125,7 @@ function Initialize-GuestSqlDisk {
     }
 
     Write-GuestNote -Notes $result.Notes
+    Save-DataDiskGuid -VM $VM -GuidSetting 'SQLDiskGuid' -Guid $result.Guid -Label 'SQL data disk'
     $VM.SetDataDriveLetter($result.Letter)
 
     $state = if ($result.Formatted) { 'formatted as' } else { 'already prepared, mounted as' }
