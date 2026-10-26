@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.3](https://github.com/downerboy/LazyVM/compare/v4.2.2...v4.2.3) (2026-10-26)
+
+
+### Bug Fixes
+
+* install Visual Studio before its extensions, so a refused extension cannot stop it ([#110](https://github.com/downerboy/LazyVM/issues/110)) ([bda8718](https://github.com/downerboy/LazyVM/commit/bda8718ccba0b6588d10ce0194a70022a0741721))
+
 ## [4.2.2](https://github.com/downerboy/LazyVM/compare/v4.2.1...v4.2.2) (2026-10-26)
 
 
