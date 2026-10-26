@@ -43,7 +43,7 @@ $vmNameCompleter = {
     $wordToComplete = $args[2]
     $root = Get-RegisteredRoot
     if (-not $root) { return }
-    Get-VMProfileName -ConfigDir (Get-ConfigDir -Root $root) |
+    Get-VMProfileName -Root $root |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
 }

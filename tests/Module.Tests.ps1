@@ -46,6 +46,20 @@ Describe 'The module' {
     It 'has a valid manifest' {
         { Test-ModuleManifest -Path (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'LazyVM.psd1') -ErrorAction Stop } | Should -Not -Throw
     }
+
+    It 'completes -Name with the VMs in the LazyVM folder' {
+        $root = Join-Path -Path $TestDrive -ChildPath 'Root'
+        foreach ($name in 'Alpha', 'Beta') {
+            $configDir = New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath "$name\Config") -Force
+            Set-Content -LiteralPath (Join-Path -Path $configDir.FullName -ChildPath 'VM.json') -Value '{}'
+        }
+        Mock -ModuleName 'LazyVM' Get-RegisteredRoot { $root }.GetNewClosure()
+
+        $line = 'Get-LazyVM -Name '
+        $completions = (TabExpansion2 -inputScript $line -cursorColumn $line.Length).CompletionMatches
+
+        $completions.CompletionText | Should -Be @('Alpha', 'Beta')
+    }
 }
 
 Describe '<Command>' -ForEach $commands {
