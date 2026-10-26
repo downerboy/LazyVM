@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.1.0](https://github.com/downerboy/LazyVM/compare/v4.0.1...v4.1.0) (2026-10-26)
+
+
+### Features
+
+* make VM.json the VM's complete, living configuration ([#98](https://github.com/downerboy/LazyVM/issues/98)) ([559fdcc](https://github.com/downerboy/LazyVM/commit/559fdcc1d0b56db1eb9721be81b3f9637de741a9))
+
 ## [4.0.1](https://github.com/downerboy/LazyVM/compare/v4.0.0...v4.0.1) (2026-10-25)
 
 
