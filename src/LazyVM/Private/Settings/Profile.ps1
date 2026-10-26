@@ -1,10 +1,16 @@
 ﻿# Profile.ps1 - The settings files and the VM profiles.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-#   <Root>\Shared\Config\LazyVM.Settings.json   for every VM on this host
-#   <Root>\<Name>\Config\VM.json                for one VM, applied last
+#   <Root>\Shared\Config\LazyVM.Settings.json   the shared template
+#   <Root>\<Name>\Config\VM.json                one VM's living configuration
+#   <Root>\<Name>\Config\VM.Template.json       the VM.json it was built from
 #
-# Each file lists only the settings it changes. A copy of the schema is kept
+# The shared template (the defaults, then LazyVM.Settings.json, which lists
+# only the settings it changes) is used only to create a VM. From then on
+# the VM's VM.json is its one source of truth: it holds every setting, so
+# it can rebuild the VM or be copied for another one, and LazyVM keeps it
+# up to date as the VM changes (Update-VMProfile), keeping every earlier
+# version in <Name>\Config\History. A copy of the schema is kept
 # beside the host-wide file, so an editor such as VS Code offers
 # autocomplete, shows each setting's description and default on hover, and
 # underlines mistakes.
@@ -168,13 +174,56 @@ function Get-NextMaintenanceTime {
     return $latest.AddHours(1).ToString('HH:mm', [Globalization.CultureInfo]::InvariantCulture)
 }
 
+function Get-SharedTemplateSetting {
+    <#
+      The shared template: every setting at its default, then
+      LazyVM.Settings.json applied over them. Values are as written, with
+      {VM} and relative paths left in, so they suit any VM. Returns the
+      values, where each came from, and any warning from the settings file.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [switch]$Unattended
+    )
+
+    $values = Get-DefaultSetting
+    $sources = @{}
+    foreach ($key in $values.Keys) { $sources[$key] = 'Default' }
+    $warning = $null
+
+    $hostFile = Join-Path -Path (Get-ConfigDir -Root $Root) -ChildPath $script:SettingsFileName
+    if (Test-Path -LiteralPath $hostFile -PathType Leaf) {
+        $loaded = Import-SettingsFile -Path $hostFile -Unattended:$Unattended
+        $warning = $loaded.Warning
+        foreach ($key in $loaded.Values.Keys) {
+            $values[$key] = $loaded.Values[$key]
+            $sources[$key] = $script:SettingsFileName
+        }
+    }
+
+    return [pscustomobject]@{
+        Values   = $values
+        Sources  = $sources
+        HostFile = $hostFile
+        Warning  = $warning
+    }
+}
+
+function Get-PerVMSettingName {
+    <#
+      Settings that must differ between VMs: file locations, the guest
+      computer name and the maintenance time. A VM copied with -From takes
+      these from the shared template, which names everything after the VM,
+      rather than from the VM it copies.
+    #>
+    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime')
+}
+
 function New-VMProfile {
     <#
-      Creates <Name>\Config\VM.json. With -From, the new VM takes the
-      source VM's settings and tooling list, except the settings that must
-      differ between VMs: file locations, the guest computer name and the
-      maintenance time. Those come from the defaults, which name everything
-      after the VM.
+      Creates <Name>\Config\VM.json holding every setting: the shared
+      template's values, or with -From the source VM's, except the settings
+      that must differ between VMs, which come from the shared template.
     #>
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -193,12 +242,12 @@ function New-VMProfile {
 
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $Root)
 
-    $settings = @{}
+    $settings = (Get-SharedTemplateSetting -Root $Root).Values
     $source = $null
     if ($From) {
         $source = $existing | Where-Object { $_ -eq $From } | Select-Object -First 1
         if (-not $source) { throw "There is no VM named '$From' to copy." }
-        $perVM = @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime')
+        $perVM = Get-PerVMSettingName
         $sourceSettings = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $source)
         foreach ($key in $sourceSettings.Keys) {
             if ($perVM -notcontains $key) { $settings[$key] = $sourceSettings[$key] }
@@ -220,6 +269,116 @@ function New-VMProfile {
         }
     }
     return $path
+}
+
+function ConvertTo-ComparableJson {
+    <# A value as compact JSON with every table's keys sorted, so two values compare equal whatever their key order. #>
+    param([AllowNull()]$Value)
+
+    $sorted = {
+        param($Item)
+        if ($Item -is [System.Collections.IDictionary]) {
+            $table = [ordered]@{}
+            foreach ($key in @($Item.Keys | Sort-Object)) { $table[$key] = & $sorted $Item[$key] }
+            return $table
+        }
+        if ($Item -is [System.Collections.IList]) {
+            return , @(foreach ($element in $Item) { & $sorted $element })
+        }
+        return $Item
+    }
+    return ConvertTo-Json -InputObject (& $sorted $Value) -Depth 20 -Compress
+}
+
+function Update-VMProfile {
+    <#
+      The one way VM.json changes after it is created. Applies $Change (setting
+      name -> new value), checks the result against the schema, keeps the
+      file as it was in <Name>\Config\History\VM-<stamp>.json, and writes the
+      new one in a single step. Logs each setting that changed and returns
+      their names; returns nothing, and writes nothing, when no value differs.
+    #>
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][hashtable]$Change,
+        [Parameter(Mandatory)][string]$Reason
+    )
+
+    $path = Get-VMProfilePath -Root $Root -Name $Name
+    $current = Read-SettingsFile -Path $path
+
+    $updated = @{}
+    foreach ($key in $current.Keys) { $updated[$key] = $current[$key] }
+    $changed = [System.Collections.Generic.List[string]]::new()
+    foreach ($key in @($Change.Keys | Sort-Object)) {
+        $name = Find-SettingName -Name $key
+        if (-not $name) { throw "'$key' is not a setting, so it cannot be recorded in $path." }
+        if ($current.ContainsKey($name) -and (ConvertTo-ComparableJson $current[$name]) -eq (ConvertTo-ComparableJson $Change[$key])) { continue }
+        $updated[$name] = $Change[$key]
+        $changed.Add($name)
+    }
+    if ($changed.Count -eq 0) { return @() }
+
+    $problems = @(Get-SchemaProblem -Values $updated)
+    if ($problems.Count -gt 0) {
+        throw (Format-ProblemList -Heading "VM.json was left as it was: the change has {0} problem(s):`n  $path" -Problems $problems)
+    }
+
+    $historyDir = Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'History'
+    New-Folder -Path $historyDir
+    # Two changes in the same second each keep their own copy.
+    $stamp = Get-Stamp
+    $copy = Join-Path -Path $historyDir -ChildPath "VM-$stamp.json"
+    for ($n = 2; Test-Path -LiteralPath $copy; $n++) { $copy = Join-Path -Path $historyDir -ChildPath "VM-$stamp-$n.json" }
+    Copy-Item -LiteralPath $path -Destination $copy
+    Write-TextFileAtomic -Path $path -Text (ConvertTo-SettingsJson -Settings $updated -ForProfile)
+
+    $what = if ($changed.Count -le 10) { $changed -join ', ' } else { "$($changed.Count) settings" }
+    Write-LogEntry "Updated $path ($Reason): $what" 'INFO'
+    return @($changed)
+}
+
+function Sync-VMProfile {
+    <#
+      Brings a VM's VM.json up to date before a build, maintenance or a
+      rebuild uses it:
+        * fills in every setting it lacks from the shared template: all of
+          them for a profile made before VM.json held every setting, or a
+          setting added by a newer LazyVM;
+        * keeps a copy of it as VM.Template.json the first time, written once
+          and never changed afterwards.
+      A VM.json that cannot be read is never written over: the run goes on
+      with the settings it already has and the problem is logged.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $root = $VM.Settings.Root
+    $name = $VM.Name
+    $path = Get-VMProfilePath -Root $root -Name $name
+    try {
+        $current = Read-SettingsFile -Path $path
+    }
+    catch {
+        Write-LogEntry "VM.json was not brought up to date because it cannot be read: $($_.Exception.Message)" 'WARN'
+        return
+    }
+
+    $template = (Get-SharedTemplateSetting -Root $root -Unattended:(Test-Unattended)).Values
+    $missing = @{}
+    foreach ($key in $template.Keys) {
+        if (-not $current.ContainsKey($key)) { $missing[$key] = $template[$key] }
+    }
+    if ($missing.Count -gt 0) {
+        $null = Update-VMProfile -Root $root -Name $name -Change $missing -Reason 'filled in from the shared template'
+    }
+
+    $templatePath = Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath $script:ProfileTemplateFileName
+    if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) {
+        Copy-Item -LiteralPath $path -Destination $templatePath
+        Write-LogEntry "Kept a copy of the configuration this VM is built from: $templatePath" 'INFO'
+    }
 }
 
 function Initialize-BuildTarget {

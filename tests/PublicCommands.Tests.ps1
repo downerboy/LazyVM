@@ -82,6 +82,7 @@ Describe 'Invoke-LazyVMMaintenance' {
         $vm = $testVM
         Mock -ModuleName $module Initialize-CommandRun { $vm }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
+        Mock -ModuleName $module Sync-VMProfile { }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Invoke-Rebuild { $true }
     }
@@ -121,6 +122,7 @@ Describe 'Build-LazyVM' {
         $vm = $testVM
         Mock -ModuleName $module Initialize-CommandRun { $vm }.GetNewClosure()
         Mock -ModuleName $module Complete-CommandRun { }
+        Mock -ModuleName $module Sync-VMProfile { }
         Mock -ModuleName $module Write-LogEntry { }
     }
 
@@ -129,6 +131,14 @@ Describe 'Build-LazyVM' {
 
         { Build-LazyVM -Name Alpha } | Should -Not -Throw
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*restarting*' }
+    }
+
+    It 'brings the VM''s configuration up to date before building' {
+        Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
+
+        Build-LazyVM -Name Alpha
+
+        Should -Invoke -ModuleName $module Sync-VMProfile -Times 1
     }
 
     It 'passes -FromPhase and -NoUnattend on' {

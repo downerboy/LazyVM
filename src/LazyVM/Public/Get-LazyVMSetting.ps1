@@ -4,14 +4,16 @@
     Shows a VM's settings: each value, where it came from, and what it does.
 
     .DESCRIPTION
-    Lists every setting as the VM will use it, after your
-    LazyVM.Settings.json and the VM's own VM.json have been applied over the
-    defaults. Source says which of those set the value. Paths are shown in
-    full, as LazyVM will use them.
+    Lists every setting as the VM will use it. Each VM's VM.json holds all
+    of its settings; Source names it, or, for a setting VM.json does not
+    have yet, the shared template (LazyVM.Settings.json or Default) the value
+    comes from until the next build, maintenance or rebuild writes it in.
+    Paths are shown in full, as LazyVM will use them.
 
-    To change a setting, add it to Shared\Config\LazyVM.Settings.json in the
-    LazyVM folder (every VM) or to <Name>\Config\VM.json (one VM). Opened in VS
-    Code, both files offer autocomplete and check your values as you type.
+    To change a setting for a VM, change it in <Name>\Config\VM.json. The
+    shared template, Shared\Config\LazyVM.Settings.json, applies only to VMs
+    created afterwards. Opened in VS Code, both files offer autocomplete and
+    check your values as you type.
 
     .PARAMETER Name
     The VM. May be left out while there is only one.
@@ -26,9 +28,9 @@
     Get-LazyVMSetting -Name DevBox -Setting Mem*
 
     .EXAMPLE
-    Get-LazyVMSetting | Where-Object Source -ne 'Default'
+    Get-LazyVMSetting -Name DevBox | Where-Object Source -ne 'DevBox\Config\VM.json'
 
-    Only the settings you have changed.
+    The settings DevBox's VM.json does not have yet.
 
     .OUTPUTS
     LazyVM.Setting

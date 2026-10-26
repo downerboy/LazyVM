@@ -106,10 +106,10 @@ Commands that change something support `-WhatIf` and `-Confirm`.
 
 Your settings are JSON files in the LazyVM folder. An update never touches them:
 
-- `Shared\Config\LazyVM.Settings.json` applies to every VM.
-- `<Name>\Config\VM.json` applies to one VM, and overrides the host-wide file.
+- `Shared\Config\LazyVM.Settings.json` is the shared template for new VMs. List only what you want to change from the defaults.
+- `<Name>\Config\VM.json` is one VM's complete, living configuration: created from the shared template, kept up to date by LazyVM, and used to rebuild the VM or copy it with `New-LazyVM -From`.
 
-List only what you want to change:
+A shared template looks like this:
 
 ```json
 {

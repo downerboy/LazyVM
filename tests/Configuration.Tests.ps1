@@ -458,8 +458,8 @@ Describe 'Initialize-ConfigFolder' {
 }
 
 Describe 'New-VMProfile' {
-    It 'creates a profile that points at the schema and sets nothing else' {
-        $root = New-TestRoot
+    It 'creates a profile that points at the schema and holds every setting from the shared template, as written' {
+        $root = New-TestRoot -HostSettings '{ "MemMaxGB": 24 }'
 
         $path = InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
@@ -468,8 +468,22 @@ Describe 'New-VMProfile' {
 
         $path | Should -Exist
         $vmProfile = Read-TestJson -Path $path
-        @($vmProfile.Keys) | Should -Be @('$schema')
         $vmProfile['$schema'] | Should -Be '../../Shared/Config/LazyVM.Settings.schema.json'
+        $settingNames = InModuleScope $module { @((Get-DefaultSetting).Keys) }
+        foreach ($name in $settingNames) { $vmProfile.Keys | Should -Contain $name }
+        $vmProfile.MemMaxGB | Should -Be 24
+        $vmProfile.LogFile | Should -Be '{VM}\Logs\{VM}.log'
+    }
+
+    It 'never writes a password or other secret into the profile' {
+        $root = New-TestRoot
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -Root $Root -Name 'Alpha'
+        }
+
+        @((Read-TestJson -Path $path).Keys | Where-Object { $_ -match 'Password|Secret|Token' }) | Should -BeNullOrEmpty
     }
 
     It 'sets the maintenance time an hour after the latest one in use, wrapping at midnight' {
@@ -499,7 +513,7 @@ Describe 'New-VMProfile' {
         (Read-TestJson -Path $path).MaintenanceTime | Should -Be $expected
     }
 
-    It 'with -From, copies the shared settings and the tooling list, but not the per-VM ones' {
+    It 'with -From, copies the source VM''s settings and tooling list, and takes the per-VM ones from the shared template' {
         $root = New-TestRoot -Profiles @{
             Alpha = '{ "MemMaxGB": 32, "LogFile": "Logs\\Alpha-Old.log", "GuestComputerName": "ALPHA" }'
         }
@@ -512,8 +526,8 @@ Describe 'New-VMProfile' {
         $vmProfile = Read-TestJson -Path $path
 
         $vmProfile.MemMaxGB | Should -Be 32
-        $vmProfile.Keys | Should -Not -Contain 'LogFile'
-        $vmProfile.Keys | Should -Not -Contain 'GuestComputerName'
+        $vmProfile.LogFile | Should -Be '{VM}\Logs\{VM}.log'
+        $vmProfile.GuestComputerName | Should -Be '{VM}'
         Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'Tooling.json' | Should -Exist
     }
 
@@ -534,7 +548,7 @@ Describe 'New-VMProfile' {
 }
 
 Describe 'Read-VMSetting' {
-    It 'layers the defaults, the host settings and the VM profile, then names, roots and derives everything' {
+    It 'takes what the VM profile lacks from the shared template, then names, roots and derives everything' {
         $root = New-TestRoot -HostSettings '{ "MemMaxGB": 12, "vCPU": 6 }' -Profiles @{
             Alpha = '{ "GuestComputerName": "ALPHA-PC", "vCPU": 2 }'
         }
@@ -543,8 +557,9 @@ Describe 'Read-VMSetting' {
         $settings = $result.Settings
 
         $result.VMName | Should -Be 'Alpha'
-        $result.ChangedKeys | Should -Be @('MemMaxGB', 'vCPU')
-        $result.ProfileKeys | Should -Be @('GuestComputerName', 'vCPU')
+        $result.MissingKeys | Should -Contain 'MemMaxGB'
+        $result.MissingKeys | Should -Not -Contain 'vCPU'
+        $result.MissingKeys | Should -Not -Contain 'GuestComputerName'
         $settings.MemMaxGB | Should -Be 12
         $settings.vCPU | Should -Be 2
         $settings.GuestComputerName | Should -Be 'ALPHA-PC'
@@ -577,6 +592,155 @@ Describe 'Read-VMSetting' {
 
         $result.Settings.vCPU | Should -Be 2
         $result.Warnings.Count | Should -Be 1
+    }
+}
+
+Describe 'ConvertTo-ComparableJson' {
+    It 'gives the same text for tables whatever their key order' {
+        InModuleScope $module {
+            $first = @{ Name = 'WinMerge'; RegistryKey = 'HKCU\Software\Thingamahiggins\WinMerge' }
+            $second = [ordered]@{ RegistryKey = 'HKCU\Software\Thingamahiggins\WinMerge'; Name = 'WinMerge' }
+            ConvertTo-ComparableJson @($first) | Should -Be (ConvertTo-ComparableJson @($second))
+            ConvertTo-ComparableJson 4 | Should -Not -Be (ConvertTo-ComparableJson 8)
+        }
+    }
+}
+
+Describe 'Update-VMProfile' {
+    BeforeAll {
+        function Get-HistoryFile {
+            param([string]$Root)
+            @(Get-ChildItem -LiteralPath (Join-Path -Path $Root -ChildPath 'Alpha/Config/History') -Filter 'VM-*.json' -ErrorAction SilentlyContinue)
+        }
+    }
+
+    It 'writes the change, keeps the earlier version in History and returns what changed' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4, "MemMaxGB": 16 }' }
+
+        $changed = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ vcpu = 8; MemMaxGB = 16 } -Reason 'a test'
+        }
+
+        $changed | Should -Be @('vCPU')
+        $vmProfile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
+        $vmProfile.vCPU | Should -Be 8
+        $vmProfile.MemMaxGB | Should -Be 16
+        $vmProfile['$schema'] | Should -Be '../../Shared/Config/LazyVM.Settings.schema.json'
+        $history = @(Get-HistoryFile -Root $root)
+        $history.Count | Should -Be 1
+        (Read-TestJson -Path $history[0].FullName).vCPU | Should -Be 4
+    }
+
+    It 'writes nothing when no value differs' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $path = Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json'
+        $before = Get-Content -LiteralPath $path -Raw
+
+        $changed = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ vCPU = 4 } -Reason 'a test'
+        }
+
+        $changed | Should -BeNullOrEmpty
+        Get-Content -LiteralPath $path -Raw | Should -Be $before
+        Get-HistoryFile -Root $root | Should -BeNullOrEmpty
+    }
+
+    It 'refuses <Case> and leaves the file as it was' -ForEach @(
+        @{ Case = 'a setting that does not exist'; Change = @{ Bogus = 1 }; Message = "*'Bogus' is not a setting*" }
+        @{ Case = 'a value the schema rejects'; Change = @{ vCPU = 'eight' }; Message = '*left as it was*' }
+    ) {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $path = Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json'
+        $before = Get-Content -LiteralPath $path -Raw
+
+        {
+            InModuleScope $module -Parameters @{ Root = $root; Change = $Change } {
+                param($Root, $Change)
+                Mock Write-LogEntry {}
+                Update-VMProfile -Root $Root -Name 'Alpha' -Change $Change -Reason 'a test'
+            }
+        } | Should -Throw -ExpectedMessage $Message
+
+        Get-Content -LiteralPath $path -Raw | Should -Be $before
+        Get-HistoryFile -Root $root | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Sync-VMProfile' {
+    BeforeAll {
+        function Invoke-Sync {
+            param([string]$Root)
+            InModuleScope $module -Parameters @{ Root = $Root } {
+                param($Root)
+                Mock Write-LogEntry {}
+                Mock Test-Unattended { $false }
+                $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+                Sync-VMProfile -VM $vm
+            }
+        }
+    }
+
+    It 'fills in every setting a profile lacks from the shared template, keeping its own values' {
+        $root = New-TestRoot -HostSettings '{ "MemMaxGB": 24 }' -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+
+        Invoke-Sync -Root $root
+
+        $vmProfile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
+        $vmProfile.vCPU | Should -Be 2
+        $vmProfile.MemMaxGB | Should -Be 24
+        $vmProfile.LogFile | Should -Be '{VM}\Logs\{VM}.log'
+        $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root }
+        $result.MissingKeys | Should -BeNullOrEmpty
+    }
+
+    It 'is no longer affected by the shared template once complete' {
+        $root = New-TestRoot -HostSettings '{ "MemMaxGB": 24 }' -Profiles @{ Alpha = '{}' }
+        Invoke-Sync -Root $root
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Shared/Config/LazyVM.Settings.json') -Value '{ "MemMaxGB": 48 }'
+
+        $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root }
+
+        $result.Settings.MemMaxGB | Should -Be 24
+    }
+
+    It 'keeps a copy of the profile as VM.Template.json once, and never changes it afterwards' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+        $template = Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json'
+
+        Invoke-Sync -Root $root
+        (Read-TestJson -Path $template).vCPU | Should -Be 2
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ vCPU = 8 } -Reason 'a test'
+        }
+        Invoke-Sync -Root $root
+
+        (Read-TestJson -Path $template).vCPU | Should -Be 2
+        (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).vCPU | Should -Be 8
+    }
+
+    It 'never writes over a profile that cannot be read' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+        $path = Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json'
+        InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root } | Out-Null
+        Set-Content -LiteralPath $path -Value '{ "vCPU": "two" }'
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Mock Test-Unattended { $true }
+            $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha' -Unattended).Settings)
+            Sync-VMProfile -VM $vm
+            Should -Invoke Write-LogEntry -ParameterFilter { $Level -eq 'WARN' -and $Message -like '*cannot be read*' }
+        }
+
+        (Get-Content -LiteralPath $path -Raw).Trim() | Should -Be '{ "vCPU": "two" }'
     }
 }
 

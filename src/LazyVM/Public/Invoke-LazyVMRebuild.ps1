@@ -1,4 +1,4 @@
-function Invoke-LazyVMRebuild {
+﻿function Invoke-LazyVMRebuild {
     <#
     .SYNOPSIS
     Rebuilds a VM from scratch, keeping its work.
@@ -53,6 +53,7 @@ function Invoke-LazyVMRebuild {
                 Write-LogEntry 'Rebuild cancelled' 'INFO'
                 return
             }
+            Sync-VMProfile -VM $VM
             if (@(Invoke-Rebuild -VM $VM -SkipCapture:$SkipCapture -NoUnattend:$NoUnattend)[-1] -ne $true) {
                 throw "The rebuild of '$($VM.Name)' did not complete cleanly. The log says what happened and how to go back: $($VM.Settings.LogFile)"
             }
