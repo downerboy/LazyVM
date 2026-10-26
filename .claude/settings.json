@@ -35,5 +35,20 @@
       "Edit(/src/LazyVM/Data/LazyVM.Config.psd1)",
       "Edit(/src/LazyVM/Data/VMs/**)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$CLAUDE_PROJECT_DIR/.claude/hooks/Invoke-AnalyzerOnEdit.ps1\"",
+            "timeout": 60,
+            "statusMessage": "Running PSScriptAnalyzer..."
+          }
+        ]
+      }
+    ]
   }
 }
