@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.4](https://github.com/downerboy/LazyVM/compare/v4.2.3...v4.2.4) (2026-10-26)
+
+
+### Bug Fixes
+
+* drop the unsigned extensions from the default tooling list ([#113](https://github.com/downerboy/LazyVM/issues/113)) ([3ee1f4c](https://github.com/downerboy/LazyVM/commit/3ee1f4c3ebf4cccfd2178e77d4fe8ff892e4f5e3))
+
 ## [4.2.3](https://github.com/downerboy/LazyVM/compare/v4.2.2...v4.2.3) (2026-10-26)
 
 
