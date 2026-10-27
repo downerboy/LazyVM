@@ -19,14 +19,16 @@ function Get-GuestInstallerProduct {
     return @(Invoke-GuestScript -VM $VM -Activity 'Visual Studio Installer product detection' -TimeoutMinutes 5 -ScriptBlock {
             foreach ($instance in @(Get-GuestInstallerInstance)) {
                 [pscustomobject]@{
-                    InstanceId  = $instance.instanceId
-                    ProductId   = $instance.productId
-                    ChannelId   = $instance.channelId
-                    DisplayName = $instance.displayName
-                    Version     = $instance.installationVersion
-                    ProductLine = $instance.catalog.productLineVersion
-                    InstallPath = $instance.installationPath
-                    DevEnvPath  = $instance.productPath
+                    InstanceId   = $instance.instanceId
+                    ProductId    = $instance.productId
+                    ChannelId    = $instance.channelId
+                    DisplayName  = $instance.displayName
+                    Version      = $instance.installationVersion
+                    ProductLine  = $instance.catalog.productLineVersion
+                    InstallPath  = $instance.installationPath
+                    DevEnvPath   = $instance.productPath
+                    IsComplete   = $instance.isComplete
+                    IsLaunchable = $instance.isLaunchable
                 }
             }
         })
@@ -129,7 +131,8 @@ function Install-ToolingProduct {
       Installs each Visual Studio Installer product in the tooling list that
       the guest does not have yet, with its workloads and components, then
       adds its Marketplace extensions (Add-ProductExtension). A product
-      already there gets any of its extensions it is missing. Per-user
+      already there gets any of its extensions it is missing, after a repair
+      when an interrupted install left it incomplete. Per-user
       extensions with no Marketplace link are reported afterwards by
       Write-ToolingReinstallReport.
     #>
@@ -148,8 +151,11 @@ function Install-ToolingProduct {
     foreach ($product in @($Tooling.Products)) {
         $label = $product.DisplayName
         $present = $installed | Where-Object { [ToolingProduct]::KeyFor($_.ProductId, $_.ChannelId) -eq $product.Key() } | Select-Object -First 1
+        if ($present -and -not (Test-InstallerProductComplete -Product $present)) {
+            if (-not (Repair-ToolingProduct -VM $VM -Product $product -InstallPath $present.InstallPath)) { continue }
+        }
+        elseif ($present) { Write-LogEntry "$label already installed" 'OK' }
         if ($present) {
-            Write-LogEntry "$label already installed" 'OK'
             if ($product.ExtensionLinks().Count -gt 0) {
                 if (-not $observed) { $observed = ConvertTo-ToolingRecord -Inventory (Get-GuestToolingInventory -VM $VM) -WingetExclude $VM.Settings.ToolingWingetExclude }
                 $links = @(Get-MissingProductExtension -Product $product -Observed $observed.FindProduct($product.Key()) | Where-Object { $_.Link } | ForEach-Object { $_.Link })
@@ -211,6 +217,52 @@ function Install-ToolingProduct {
             continue
         }
         $null = Add-ProductExtension -VM $VM -Product $product -InstallPath $added.InstallPath -Links $extensions
+    }
+}
+
+function Test-InstallerProductComplete {
+    <#
+      Whether a product the installer lists is fully installed. An
+      interrupted install leaves an instance vswhere still lists, with
+      isComplete or isLaunchable false (#26); a flag vswhere did not report
+      counts as true.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)]$Product)
+
+    return ($Product.IsComplete -ne $false -and $Product.IsLaunchable -ne $false)
+}
+
+function Repair-ToolingProduct {
+    <#
+      Repairs an incomplete product in place with the Visual Studio
+      Installer's repair command, which finishes an interrupted install.
+      Returns whether the installer succeeded, and logs the result.
+    #>
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][ToolingProduct]$Product,
+        [Parameter(Mandatory)][string]$InstallPath
+    )
+
+    $label = $Product.DisplayName
+    Write-LogEntry "$label is incomplete at $InstallPath, so it is being repaired (up to $($VM.Settings.VSInstallMinutes) minutes)..." 'WARN'
+    try {
+        $installer = Invoke-GuestScript -VM $VM -Activity "$label repair" -TimeoutMinutes 5 -ScriptBlock {
+            $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+            if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
+            return $installer
+        }
+        $exitCode = Invoke-GuestInstaller -VM $VM -FilePath $installer -ArgumentList @('repair', '--installPath', "`"$InstallPath`"", '--quiet', '--norestart') `
+            -Name "repair-$($Product.Edition())" -TimeoutMinutes $VM.Settings.VSInstallMinutes -Activity "the $label repair"
+        if (Test-InstallExitCode -Product $label -ExitCode $exitCode) { return $true }
+        Write-LogEntry "  $script:GuestInstallerLogHint" 'INFO'
+        return $false
+    }
+    catch {
+        Write-LogError "$label repair failed" $_
+        return $false
     }
 }
 

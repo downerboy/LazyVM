@@ -76,6 +76,51 @@ Describe 'Install-ToolingProduct' {
         Should -Invoke -ModuleName $module Add-ProductExtension -Times 0 -Exactly
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*C:\Windows\SystemTemp\dd_*.log*' }
     }
+
+    # An interrupted install leaves an instance vswhere still lists, so it
+    # must be repaired rather than taken as installed for good (#26).
+    It 'repairs an instance that is <Case> instead of skipping it' -ForEach @(
+        @{ Case = 'incomplete'; IsComplete = $false; IsLaunchable = $true }
+        @{ Case = 'not launchable'; IsComplete = $true; IsLaunchable = $false }
+    ) {
+        Mock -ModuleName $module Invoke-GuestScript { 'C:\Installer\setup.exe' }
+        Mock -ModuleName $module Invoke-GuestInstaller { 0 }
+        $instance = [pscustomobject]@{
+            ProductId = 'Microsoft.VisualStudio.Product.Community'; ChannelId = 'VisualStudio.18.Release'
+            InstallPath = 'C:\VS'; IsComplete = $IsComplete; IsLaunchable = $IsLaunchable
+        }
+        Mock -ModuleName $module Get-GuestInstallerProduct { $instance }.GetNewClosure()
+        $bare = $product.Clone()
+        $bare.Extensions = @()
+
+        InModuleScope $module -Parameters @{ Product = $bare; Settings = $settings } {
+            param($Product, $Settings)
+            Install-ToolingProduct -VM ([VMContext]::new($Settings)) -Tooling ([ToolingRecord]::FromObject(@{ Products = @($Product) }))
+        }
+
+        Should -Invoke -ModuleName $module Invoke-GuestInstaller -Times 1 -Exactly -ParameterFilter {
+            $FilePath -eq 'C:\Installer\setup.exe' -and $ArgumentList[0] -eq 'repair' -and $ArgumentList -contains '"C:\VS"' -and $ArgumentList -contains '--quiet'
+        }
+    }
+
+    It 'adds no extensions to an incomplete instance whose repair failed, and points at the installer''s logs' {
+        Mock -ModuleName $module Invoke-GuestScript { 'C:\Installer\setup.exe' }
+        Mock -ModuleName $module Invoke-GuestInstaller { 1 }
+        Mock -ModuleName $module Get-GuestInstallerProduct {
+            [pscustomobject]@{
+                ProductId = 'Microsoft.VisualStudio.Product.Community'; ChannelId = 'VisualStudio.18.Release'
+                InstallPath = 'C:\VS'; IsComplete = $false; IsLaunchable = $false
+            }
+        }
+
+        InModuleScope $module -Parameters @{ Product = $product; Settings = $settings } {
+            param($Product, $Settings)
+            Install-ToolingProduct -VM ([VMContext]::new($Settings)) -Tooling ([ToolingRecord]::FromObject(@{ Products = @($Product) }))
+        }
+
+        Should -Invoke -ModuleName $module Add-ProductExtension -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*C:\Windows\SystemTemp\dd_*.log*' }
+    }
 }
 
 Describe 'Add-ProductExtension' {
