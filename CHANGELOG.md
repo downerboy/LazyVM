@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.3.2](https://github.com/downerboy/LazyVM/compare/v4.3.1...v4.3.2) (2026-10-27)
+
+
+### Bug Fixes
+
+* repair an incomplete Visual Studio instance instead of skipping it ([#127](https://github.com/downerboy/LazyVM/issues/127)) ([7feabb3](https://github.com/downerboy/LazyVM/commit/7feabb3b6613a6c56d85f54a823d3f12d6fa841d))
+
 ## [4.3.1](https://github.com/downerboy/LazyVM/compare/v4.3.0...v4.3.1) (2026-10-26)
 
 
