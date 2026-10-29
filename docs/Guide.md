@@ -222,7 +222,7 @@ Expect it to take between five and thirty minutes, depending on database size. W
 
 `Build-LazyVM` schedules it when the build succeeds. If that step fails, the build still succeeds and warns you; fix the cause and run `Register-LazyVMMaintenance`. Running that again at any time is harmless.
 
-This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records any tooling change ([section 9](#9-tooling-and-going-back)), then reads the license. On almost every day it finds plenty of time remaining and finishes within a minute or two.
+This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records in `VM.json` any change made to the VM's hardware in Hyper-V (processors, memory, disk sizes, switch) and any tooling change ([section 9](#9-tooling-and-going-back)), then reads the license. On almost every day it finds plenty of time remaining and finishes within a minute or two.
 
 A daily task is used rather than a 90-day one on purpose. A task that fires exactly every 90 days drifts past the expiry date, and misses it entirely if the host happens to be off that day.
 
@@ -260,7 +260,7 @@ Build-LazyVM
 
 ## 5. The 90-day cycle
 
-Each night the maintenance run extends `C:` into any space added to the OS disk, records any tooling change, then does this:
+Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, then does this:
 
 | Situation | What happens |
 |---|---|

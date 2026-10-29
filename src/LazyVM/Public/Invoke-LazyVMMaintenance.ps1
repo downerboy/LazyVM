@@ -4,8 +4,9 @@
     Runs a VM's daily maintenance: the scheduled task's command.
 
     .DESCRIPTION
-    Records any tooling change in the VM (see Save-LazyVMTooling), then
-    checks the Windows evaluation. Until it is within RebuildThresholdDays of
+    Records in VM.json any hardware change made to the VM in Hyper-V and
+    any tooling change in the VM (see Save-LazyVMTooling), then checks the
+    Windows evaluation. Until it is within RebuildThresholdDays of
     expiring, nothing more happens. Then the VM's state is captured and
     Windows rearmed, which gives another 90 days for the price of a restart.
     Only when no rearms are left is the VM rebuilt (see
@@ -33,7 +34,7 @@
     )
 
     process {
-        Invoke-CommandRun -Title 'Maintenance' -Name $Name -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+        Invoke-CommandRun -Title 'Maintenance' -Name $Name -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware -ScriptBlock {
             param($VM)
             Sync-VMProfile -VM $VM
             $step = [MaintenanceStep]@(Invoke-Maintenance -VM $VM)[-1]
