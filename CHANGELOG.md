@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.6.0](https://github.com/downerboy/LazyVM/compare/v4.5.0...v4.6.0) (2026-10-29)
+
+
+### Features
+
+* record the guest's firewall rules in VM.json ([#148](https://github.com/downerboy/LazyVM/issues/148)) ([690ce6d](https://github.com/downerboy/LazyVM/commit/690ce6dc6f8ee7636444a00189082554321b3a66))
+
 ## [4.5.0](https://github.com/downerboy/LazyVM/compare/v4.4.0...v4.5.0) (2026-10-29)
 
 
