@@ -68,6 +68,7 @@ function Add-DerivedSetting {
     $Settings.CredKeyFile = "$($Settings.CredStoreDir)\.lazyvm.key"
     $Settings.GuestCredFile = "$vmRoot\Credentials\guest.cred"
     $Settings.CertCredFile = "$vmRoot\Credentials\certs.cred"
+    $Settings.EnvironmentCredFile = "$vmRoot\Credentials\environment.cred"
     $Settings.ResumeRegKey = "$script:RootRegistryKey\$vm"
     $Settings.ResumeTaskName = "${script:TaskPrefix}ResumeAfterReboot-$vm"
     $Settings.ScheduleTaskName = Get-MaintenanceTaskName -VMName $vm

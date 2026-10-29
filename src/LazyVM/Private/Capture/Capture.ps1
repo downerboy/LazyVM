@@ -304,7 +304,8 @@ function Backup-GuestDatabase {
 # ── Windows environment ──────────────────────────────────────────────────────
 #
 # Each part is saved into a staging folder in the guest by a call of its
-# own, then the folder is zipped and pulled out as winstate.zip.
+# own, then the folder is zipped and pulled out as winstate.zip. The
+# environment itself is recorded in VM.json instead (GuestEnvironment.ps1).
 
 function Save-GuestWindowsState {
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -316,19 +317,18 @@ function Save-GuestWindowsState {
         foreach ($folder in $staging, (Join-Path $staging 'certs'), (Join-Path $staging 'tasks')) { New-GuestFolder -Path $folder }
     }
 
-    $environment = Save-GuestEnvironment -VM $VM -Staging $staging
+    # The environment is plain data, so it is recorded in VM.json (#131), not the archive.
+    try { $null = Update-GuestEnvironmentRecord -VM $VM }
+    catch { Write-LogError '  The guest environment could not be recorded; VM.json keeps what it had' $_ }
+
     $certificates = Save-GuestCertificate -VM $VM -Staging $staging
     $firewall = Save-GuestFirewallRule -VM $VM -Staging $staging
     $tasks = Save-GuestScheduledTask -VM $VM -Staging $staging
 
     $summary = [pscustomobject]@{
-        EnvMachine     = $environment.EnvMachine
-        EnvUser        = $environment.EnvUser
-        PathEntries    = $environment.PathEntries
         Certificates   = @($certificates.Certificates)
         FirewallRules  = $firewall
         ScheduledTasks = @($tasks.Tasks)
-        MappedDrives   = @($environment.MappedDrives)
     }
     $zip = Invoke-GuestScript -VM $VM -Activity 'Windows capture archive' -TimeoutMinutes 15 -ArgumentList @($staging, ($summary | ConvertTo-Json -Depth 8), $VM.Settings.GuestSetupDir) -ScriptBlock {
         param($staging, $summaryJson, $setupDir)
@@ -341,54 +341,14 @@ function Save-GuestWindowsState {
     $archive = Join-Path (Join-Path $VM.Settings.StateDir 'windows') 'winstate.zip'
     Copy-FromGuest -VM $VM -GuestPath $zip -HostPath $archive
 
-    Write-LogEntry ("  environment: {0} machine + {1} user variable(s), {2} certificate(s), {3} firewall rule(s), {4} task(s)" -f `
-        @($environment.EnvMachine.Keys).Count, @($environment.EnvUser.Keys).Count, $summary.Certificates.Count, $firewall, $summary.ScheduledTasks.Count) 'OK'
-    Write-GuestNote -Notes (@($environment.Notes) + @($certificates.Notes) + @($tasks.Notes))
+    Write-LogEntry ("  windows: {0} certificate(s), {1} firewall rule(s), {2} task(s)" -f $summary.Certificates.Count, $firewall, $summary.ScheduledTasks.Count) 'OK'
+    Write-GuestNote -Notes (@($certificates.Notes) + @($tasks.Notes))
 
     return [pscustomobject]@{
         Archive        = $archive
         Certificates   = $summary.Certificates
         FirewallRules  = $firewall
         ScheduledTasks = $summary.ScheduledTasks
-        MappedDrives   = $summary.MappedDrives
-    }
-}
-
-function Save-GuestEnvironment {
-    <#
-      Environment variables, PATH entries, the hosts file and mapped drives.
-      PATH is kept apart from the other variables: restoring it wholesale onto
-      a fresh install would wipe what the new installers added.
-    #>
-    param(
-        [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][string]$Staging
-    )
-
-    return Invoke-GuestScript -VM $VM -Activity 'environment capture' -TimeoutMinutes 5 -ArgumentList @($Staging) -ScriptBlock {
-        param($staging)
-        $out = @{ EnvMachine = @{}; EnvUser = @{}; PathEntries = @{}; MappedDrives = @(); Notes = @() }
-        foreach ($scope in 'Machine', 'User') {
-            $variables = [Environment]::GetEnvironmentVariables($scope)
-            $table = @{}
-            foreach ($key in $variables.Keys) {
-                if ($key -notin 'Path', 'PSModulePath', 'TEMP', 'TMP') { $table[$key] = $variables[$key] }
-            }
-            $out["Env$scope"] = $table
-            $out.PathEntries[$scope] = @(([Environment]::GetEnvironmentVariable('Path', $scope) -split ';') | Where-Object { $_ })
-        }
-
-        $hosts = "$env:SystemRoot\System32\drivers\etc\hosts"
-        $active = @(Get-Content $hosts -ErrorAction SilentlyContinue | Where-Object { $_ -match '^\s*[^#\s]' })
-        if ($active.Count -gt 0) {
-            Copy-Item $hosts (Join-Path $staging 'hosts') -Force
-            $out.Notes += New-GuestNote -Level INFO -Text "hosts file has $($active.Count) active entr(ies)"
-        }
-
-        foreach ($drive in @(Get-CimInstance Win32_NetworkConnection -ErrorAction SilentlyContinue)) {
-            $out.MappedDrives += [pscustomobject]@{ Letter = "$($drive.LocalName)"; Path = "$($drive.RemoteName)" }
-        }
-        return [pscustomobject]$out
     }
 }
 

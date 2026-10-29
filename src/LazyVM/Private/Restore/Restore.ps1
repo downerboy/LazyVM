@@ -64,8 +64,12 @@ function Restore-GuestWindowsState {
         [Parameter(Mandatory)][CaptureManifest]$Manifest
     )
 
+    # The environment is in VM.json (#131), so it comes back even without an archive.
     $guestZip = Send-CaptureArchive -VM $VM -Area $Manifest.Windows -What 'Windows environment'
-    if (-not $guestZip) { return }
+    if (-not $guestZip) {
+        Write-GuestNote -Notes @(Restore-GuestEnvironment -VM $VM)
+        return
+    }
 
     $work = Invoke-GuestScript -VM $VM -Activity 'Windows restore staging' -TimeoutMinutes 10 -ArgumentList @($guestZip, $VM.Settings.GuestSetupDir) -ScriptBlock {
         param($zip, $setupDir)
@@ -138,9 +142,94 @@ function Restore-GuestWindowsState {
 
 function Restore-GuestEnvironment {
     <#
-      Environment variables, then PATH, merged rather than replaced so the
-      fresh install's own entries survive, then the hosts file, keeping the
-      new one as hosts.lazyvm-original.
+      Puts back the environment VM.json records: environment variables,
+      the secret ones from the credential store, then PATH, merged rather
+      than replaced so the fresh install's own entries survive, then the
+      hosts entries the new hosts file lacks, then the mapped drives, which
+      Windows reconnects at sign-in. A VM whose environment was never
+      recorded gets it from the capture archive unpacked at $Work instead.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [string]$Work
+    )
+
+    $saved = Get-GuestEnvironmentRestore -VM $VM
+    if (-not $saved) {
+        if (-not $Work) { return }
+        return Restore-GuestEnvironmentFromArchive -VM $VM -Work $Work
+    }
+
+    $recordJson = ConvertTo-Json -InputObject $saved.Record -Depth 10 -Compress
+    $secretsJson = ConvertTo-Json -InputObject $saved.Secrets -Compress
+    return Invoke-GuestScript -VM $VM -Activity 'environment restore' -TimeoutMinutes 10 -ArgumentList @($recordJson, $secretsJson) -ScriptBlock {
+        param($recordJson, $secretsJson)
+        $record = $recordJson | ConvertFrom-Json
+        $secrets = $secretsJson | ConvertFrom-Json
+        $notes = @()
+
+        $count = 0
+        foreach ($scope in 'Machine', 'User') {
+            $table = $record."${scope}Variables"
+            if (-not $table) { continue }
+            foreach ($property in $table.PSObject.Properties) {
+                [Environment]::SetEnvironmentVariable($property.Name, $property.Value, $scope)
+                $count++
+            }
+        }
+        foreach ($variable in @($record.SecretVariables | Where-Object { $_ })) {
+            $value = if ($secrets) { $secrets."$($variable.Scope)\$($variable.Name)" } else { $null }
+            if ($null -eq $value) {
+                $notes += New-GuestNote -Level WARN -Text "no stored value for the secret variable $($variable.Name) ($($variable.Scope)) - set it again by hand"
+                continue
+            }
+            [Environment]::SetEnvironmentVariable($variable.Name, $value, $variable.Scope)
+            $count++
+        }
+        $notes += New-GuestNote -Level OK -Text "restored $count environment variable(s)"
+
+        foreach ($scope in 'Machine', 'User') {
+            $saved = @($record."${scope}Path" | Where-Object { $_ })
+            if ($saved.Count -eq 0) { continue }
+            $current = @(([Environment]::GetEnvironmentVariable('Path', $scope) -split ';') | Where-Object { $_ })
+            $added = @($saved | Where-Object { $current -notcontains $_ -and (Test-Path $_ -ErrorAction SilentlyContinue) })
+            if ($added.Count -gt 0) {
+                [Environment]::SetEnvironmentVariable('Path', (($current + $added) -join ';'), $scope)
+                $notes += New-GuestNote -Level OK -Text "added $($added.Count) entr(ies) to the $scope PATH"
+            }
+        }
+
+        $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
+        $present = @(Get-Content $hostsFile -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim() })
+        $missing = @($record.Hosts | Where-Object { $_ -and $present -notcontains $_ })
+        if ($missing.Count -gt 0) {
+            Add-Content -Path $hostsFile -Value $missing -Encoding ASCII
+            $notes += New-GuestNote -Level OK -Text "added $($missing.Count) entr(ies) to the hosts file"
+        }
+
+        $mapped = 0
+        foreach ($drive in @($record.MappedDrives | Where-Object { $_ })) {
+            $key = "HKCU:\Network\$($drive.Letter.TrimEnd(':'))"
+            if (Test-Path $key) { continue }
+            New-Item -Path $key -Force | Out-Null
+            New-ItemProperty -Path $key -Name RemotePath -Value $drive.Path -PropertyType String | Out-Null
+            New-ItemProperty -Path $key -Name UserName -Value '' -PropertyType String | Out-Null
+            New-ItemProperty -Path $key -Name ProviderName -Value 'Microsoft Windows Network' -PropertyType String | Out-Null
+            New-ItemProperty -Path $key -Name ProviderType -Value 0x20000 -PropertyType DWord | Out-Null
+            New-ItemProperty -Path $key -Name ConnectionType -Value 1 -PropertyType DWord | Out-Null
+            New-ItemProperty -Path $key -Name DeferFlags -Value 4 -PropertyType DWord | Out-Null
+            $mapped++
+        }
+        if ($mapped -gt 0) { $notes += New-GuestNote -Level OK -Text "mapped $mapped network drive(s); Windows connects them at sign-in" }
+        return $notes
+    }
+}
+
+function Restore-GuestEnvironmentFromArchive {
+    <#
+      The environment from a capture taken before #131, unpacked at $Work:
+      environment variables, then PATH, merged rather than replaced, then the
+      hosts file, keeping the new one as hosts.lazyvm-original.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -164,7 +253,7 @@ function Restore-GuestEnvironment {
         $notes += New-GuestNote -Level OK -Text "restored $count environment variable(s)"
 
         foreach ($scope in 'Machine', 'User') {
-            $saved = @($state.PathEntries.$scope)
+            $saved = @($state.PathEntries.$scope | Where-Object { $_ })
             if ($saved.Count -eq 0) { continue }
             $current = @(([Environment]::GetEnvironmentVariable('Path', $scope) -split ';') | Where-Object { $_ })
             $added = @($saved | Where-Object { $current -notcontains $_ -and (Test-Path $_ -ErrorAction SilentlyContinue) })

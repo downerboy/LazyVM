@@ -129,9 +129,9 @@ function Get-LicenseReport {
 function Invoke-Maintenance {
     <#
       The scheduled task's daily work: extends C: into any new space, records
-      the guest's tooling, then does nothing more until the evaluation is
-      close to expiry, when it captures state and rearms. Returns what the
-      caller does next.
+      the guest's tooling and environment, then does nothing more until the
+      evaluation is close to expiry, when it captures state and rearms.
+      Returns what the caller does next.
     #>
     [OutputType([MaintenanceStep])]
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -154,6 +154,10 @@ function Invoke-Maintenance {
     # Tooling every day. A failure here must not stop the license work below.
     try { $null = Update-ToolingRecord -VM $VM }
     catch { Write-LogError 'Tooling check failed (non-fatal)' $_ }
+
+    # The guest's environment, recorded in VM.json whenever it changed (#131).
+    try { $null = Update-GuestEnvironmentRecord -VM $VM }
+    catch { Write-LogError 'Environment check failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM
     Write-LogEntry "License: $($license.Status); $($license.DaysLeft) day(s) left; $($license.RearmsLeft) rearm(s) remaining" 'INFO'

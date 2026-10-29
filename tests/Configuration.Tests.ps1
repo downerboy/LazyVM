@@ -93,6 +93,18 @@ Describe 'The settings schema' {
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
     }
 
+    It 'accepts a GuestEnvironment section with a mapped drive' {
+        $path = New-TestFile -Text '{ "GuestEnvironment": { "MachineVariables": { "JAVA_HOME": "C:\\Java" }, "SecretVariables": [ { "Scope": "User", "Name": "GITHUB_TOKEN" } ], "MappedDrives": [ { "Letter": "Z:", "Path": "\\\\server\\share" } ] } }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
+    }
+
+    It 'rejects a mapped drive in GuestEnvironment that is not a letter and a share' {
+        $path = New-TestFile -Text '{ "GuestEnvironment": { "MappedDrives": [ { "Letter": "ZZ", "Path": "C:\\not-a-share" } ] } }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+    }
+
     It 'accepts all its own defaults' {
         $defaults = InModuleScope $module { Get-DefaultSetting }
         $path = New-TestFile -Text (ConvertTo-Json -InputObject $defaults -Depth 20)
@@ -363,6 +375,7 @@ Describe 'Add-DerivedSetting' {
         $settings.CredKeyFile | Should -Be "$root\Shared\Credentials\.lazyvm.key"
         $settings.GuestCredFile | Should -Be "$root\Alpha\Credentials\guest.cred"
         $settings.CertCredFile | Should -Be "$root\Alpha\Credentials\certs.cred"
+        $settings.EnvironmentCredFile | Should -Be "$root\Alpha\Credentials\environment.cred"
         $settings.ResumeRegKey | Should -Be 'HKLM:\SOFTWARE\LazyVM\Alpha'
         $settings.ResumeTaskName | Should -Be 'LazyVM-ResumeAfterReboot-Alpha'
         $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
@@ -1289,6 +1302,170 @@ Describe 'Save-VMHardware (#6)' {
 
         $saved | Should -BeFalse
         Get-Content -LiteralPath $path -Raw | Should -Be $before
+    }
+}
+
+Describe 'Test-SecretVariableName (#131)' {
+    It 'treats <Name> as secret' -ForEach @(
+        @{ Name = 'GITHUB_TOKEN' }, @{ Name = 'OPENAI_API_KEY' }, @{ Name = 'DB_PASSWORD' }, @{ Name = 'AZURE_CLIENT_SECRET' }
+        @{ Name = 'ADO_PAT' }, @{ Name = 'Sql_ConnectionString' }, @{ Name = 'MyApiKey' }, @{ Name = 'NUGET_CREDENTIALS' }
+    ) {
+        InModuleScope $module -Parameters @{ Name = $Name } { param($Name) Test-SecretVariableName -Name $Name } | Should -BeTrue
+    }
+
+    It 'does not treat <Name> as secret' -ForEach @(
+        @{ Name = 'JAVA_HOME' }, @{ Name = 'PATHEXT' }, @{ Name = 'KEYBOARD_LAYOUT' }, @{ Name = 'DOTNET_ROOT' }, @{ Name = 'MONKEY' }
+    ) {
+        InModuleScope $module -Parameters @{ Name = $Name } { param($Name) Test-SecretVariableName -Name $Name } | Should -BeFalse
+    }
+}
+
+Describe 'ConvertTo-GuestEnvironmentRecord (#131)' {
+    BeforeAll {
+        function Invoke-TestConvert {
+            param([Parameter(Mandatory)][hashtable]$Snapshot)
+            InModuleScope $module -Parameters @{ Snapshot = $Snapshot } {
+                param($Snapshot)
+                ConvertTo-GuestEnvironmentRecord -Snapshot $Snapshot
+            }
+        }
+        function New-TestSnapshot {
+            @{
+                Machine      = @{ JAVA_HOME = 'C:\Java'; GITHUB_TOKEN = 'ghp_secret'; ComSpec = 'C:\Windows\system32\cmd.exe'; NUMBER_OF_PROCESSORS = '4' }
+                User         = @{ EDITOR = 'code'; OPENAI_API_KEY = 'sk-secret'; TEMP = 'C:\Users\x\Temp' }
+                MachinePath  = @('C:\Windows\system32', 'C:\Tools')
+                UserPath     = @('C:\Users\x\bin')
+                Hosts        = @('127.0.0.1 api.local')
+                MappedDrives = @([pscustomobject]@{ Letter = 'Z:'; Path = '\\server\share' })
+            }
+        }
+    }
+
+    It 'keeps the variables a user set, leaving out those Windows sets itself' {
+        $result = Invoke-TestConvert -Snapshot (New-TestSnapshot)
+
+        @($result.Record.MachineVariables.Keys) | Should -Be @('JAVA_HOME')
+        @($result.Record.UserVariables.Keys) | Should -Be @('EDITOR')
+    }
+
+    It 'lists a secret variable by name only, and returns its value apart' {
+        $result = Invoke-TestConvert -Snapshot (New-TestSnapshot)
+
+        $result.Record.SecretVariables | ForEach-Object { "$($_.Scope)\$($_.Name)" } | Should -Be @('Machine\GITHUB_TOKEN', 'User\OPENAI_API_KEY')
+        $result.Secrets['Machine\GITHUB_TOKEN'] | Should -Be 'ghp_secret'
+        $result.Secrets['User\OPENAI_API_KEY'] | Should -Be 'sk-secret'
+        ConvertTo-Json -InputObject $result.Record -Depth 10 | Should -Not -Match 'ghp_secret|sk-secret'
+    }
+
+    It 'keeps PATH, the hosts entries and the mapped drives as they are' {
+        $result = Invoke-TestConvert -Snapshot (New-TestSnapshot)
+
+        $result.Record.MachinePath | Should -Be @('C:\Windows\system32', 'C:\Tools')
+        $result.Record.UserPath | Should -Be @('C:\Users\x\bin')
+        $result.Record.Hosts | Should -Be @('127.0.0.1 api.local')
+        "$($result.Record.MappedDrives[0].Letter) $($result.Record.MappedDrives[0].Path)" | Should -Be 'Z: \\server\share'
+    }
+}
+
+Describe 'Update-GuestEnvironmentRecord (#131)' {
+    BeforeAll {
+        function Invoke-TestRecord {
+            <# Records Alpha's guest environment under $Root, with the guest reporting $Snapshot. Returns whether anything changed. #>
+            param([string]$Root, [hashtable]$Snapshot)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Snapshot = $Snapshot } {
+                param($Root, $Snapshot)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                $reported = $Snapshot
+                Mock Get-GuestEnvironmentSnapshot { $reported }.GetNewClosure()
+                $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+                Update-GuestEnvironmentRecord -VM $vm
+            }
+        }
+        function New-TestEnvironmentRoot {
+            <# A root with Alpha and a credential key, as a VM LazyVM built has. #>
+            $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+            $keyDir = Join-Path -Path $root -ChildPath 'Shared/Credentials'
+            New-Item -ItemType Directory -Path $keyDir -Force | Out-Null
+            $key = [byte[]]::new(32)
+            [Security.Cryptography.RandomNumberGenerator]::Fill($key)
+            [IO.File]::WriteAllBytes((Join-Path -Path $keyDir -ChildPath '.lazyvm.key'), $key)
+            return $root
+        }
+        function New-TestSnapshot {
+            param([hashtable]$Machine = @{ JAVA_HOME = 'C:\Java'; GITHUB_TOKEN = 'ghp_secret' })
+            @{ Machine = $Machine; User = @{}; MachinePath = @('C:\Tools'); UserPath = @(); Hosts = @(); MappedDrives = @() }
+        }
+        function Read-TestSecret {
+            param([string]$Root)
+            InModuleScope $module -Parameters @{ Root = $Root } {
+                param($Root)
+                Read-GuestEnvironmentSecret -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+            }
+        }
+    }
+
+    It 'writes the environment into VM.json and the secret values into the encrypted store' {
+        $root = New-TestEnvironmentRoot
+
+        $changed = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot)
+
+        $changed | Should -BeTrue
+        $path = Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json'
+        (Read-TestJson -Path $path).GuestEnvironment.MachineVariables.JAVA_HOME | Should -Be 'C:\Java'
+        Get-Content -LiteralPath $path -Raw | Should -Not -Match 'ghp_secret'
+        Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Credentials/environment.cred') -Raw | Should -Not -Match 'ghp_secret'
+        (Read-TestSecret -Root $root)['Machine\GITHUB_TOKEN'] | Should -Be 'ghp_secret'
+    }
+
+    It 'writes nothing the second time, when nothing changed' {
+        $root = New-TestEnvironmentRoot
+        $null = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot)
+
+        $changed = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot)
+
+        $changed | Should -BeFalse
+        @(Get-ChildItem -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/History') -Filter 'VM-*.json').Count | Should -Be 1
+    }
+
+    It 'records a variable that was removed, and its secret value with it' {
+        $root = New-TestEnvironmentRoot
+        $null = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot)
+
+        $changed = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot -Machine @{ JAVA_HOME = 'C:\Java' })
+
+        $changed | Should -BeTrue
+        (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).GuestEnvironment.SecretVariables | Should -BeNullOrEmpty
+        (Read-TestSecret -Root $root).Count | Should -Be 0
+    }
+}
+
+Describe 'Get-GuestEnvironmentRestore (#131)' {
+    It 'returns nothing for a VM whose environment was never recorded, so an older capture is used' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Get-GuestEnvironmentRestore -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+        } | Should -BeNullOrEmpty
+    }
+
+    It 'returns what VM.json holds now, not what the run started with' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $restore = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Mock Get-ToolingCheckpointStamp { , @() }
+            $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+            $record = @{ MachineVariables = @{ JAVA_HOME = 'C:\Java' }; UserVariables = @{}; SecretVariables = @(); MachinePath = @(); UserPath = @(); Hosts = @(); MappedDrives = @() }
+            $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestEnvironment = $record } -Reason 'a test'
+            Get-GuestEnvironmentRestore -VM $vm
+        }
+
+        $restore.Record.MachineVariables.JAVA_HOME | Should -Be 'C:\Java'
+        $restore.Secrets.Count | Should -Be 0
     }
 }
 
