@@ -1,4 +1,4 @@
-# GuestSql.ps1 - The guest's SQL Server logins and instance settings, recorded in VM.json.
+# GuestSql.ps1 - The guest's SQL Server logins, instance settings and Agent objects, recorded in VM.json.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
 # Logins, their server roles and the instance settings are plain data, so
@@ -6,7 +6,8 @@
 # and every capture, whenever they changed. A SQL login keeps its SID and
 # password hash, never the password, so database users are not orphaned
 # when the databases come back in a new instance. The databases themselves
-# stay on the SQL data disk (Capture.ps1).
+# stay on the SQL data disk (Capture.ps1); Agent jobs, operators and alerts
+# are read and recreated by GuestSqlAgent.ps1.
 
 function Get-GuestSqlSnapshot {
     <#
@@ -85,8 +86,8 @@ function ConvertTo-GuestSqlRecord {
 
 function Update-GuestSqlRecord {
     <#
-      Records the guest's SQL logins and instance settings as they are now in
-      VM.json. A guest without SQL Server keeps what was recorded, so an
+      Records the guest's SQL logins, instance settings and Agent jobs,
+      operators and alerts as they are now in VM.json. A guest without SQL Server keeps what was recorded, so an
       install that failed cannot erase the logins a rebuild needs. Writes
       nothing when nothing changed. Returns whether anything did.
     #>
@@ -98,23 +99,25 @@ function Update-GuestSqlRecord {
         return $false
     }
     $record = ConvertTo-GuestSqlRecord -Snapshot (Get-GuestSqlSnapshot -VM $VM)
+    $record.Agent = ConvertTo-GuestSqlAgentRecord -Snapshot (Get-GuestSqlAgentSnapshot -VM $VM)
 
     $change = @{ $script:GuestSqlSettingName = $record }
-    $changed = @(Update-VMProfile -Root $VM.Settings.Root -Name $VM.Name -Change $change -Reason 'guest SQL logins or settings changed').Count -gt 0
-    if ($changed) { Write-LogEntry "Guest SQL recorded: $($record.Logins.Count) login(s), $($record.Configs.Count) instance setting(s)" 'OK' }
+    $changed = @(Update-VMProfile -Root $VM.Settings.Root -Name $VM.Name -Change $change -Reason 'guest SQL logins, settings or Agent objects changed').Count -gt 0
+    if ($changed) { Write-LogEntry "Guest SQL recorded: $($record.Logins.Count) login(s), $($record.Configs.Count) instance setting(s), $($record.Agent.Jobs.Count) Agent job(s)" 'OK' }
     return $changed
 }
 
 function Get-GuestSqlRestore {
     <#
       What a restore puts back into the guest's SQL Server: VM.json's
-      GuestSql as the file holds it now, as Configs and Logins. $null when it
-      was never recorded, so a capture from before #131 is used instead.
+      GuestSql as the file holds it now, as Configs, Logins and Agent ($null
+      when recorded before Agent objects were). $null when it was never
+      recorded, so a capture from before #131 is used instead.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $current = Read-SettingsFile -Path (Get-VMProfilePath -Root $VM.Settings.Root -Name $VM.Name)
     $sql = $current[$script:GuestSqlSettingName]
     if ($null -eq $sql) { return $null }
-    return [pscustomobject]@{ Configs = @($sql.Configs); Logins = @($sql.Logins) }
+    return [pscustomobject]@{ Configs = @($sql.Configs); Logins = @($sql.Logins); Agent = $sql['Agent'] }
 }

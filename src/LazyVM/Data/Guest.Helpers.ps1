@@ -74,6 +74,30 @@ function Invoke-GuestSql {
     return $command.ExecuteNonQuery()
 }
 
+function Invoke-GuestSqlProcedure {
+    <#
+      Runs a stored procedure with named parameters (name without the @ ->
+      value), so every value reaches SQL Server as data, never as SQL text.
+    #>
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Name,
+        [hashtable]$Parameter = @{}
+    )
+
+    $command = $Connection.CreateCommand()
+    $command.CommandType = [System.Data.CommandType]::StoredProcedure
+    $command.CommandText = $Name
+    $command.CommandTimeout = 300
+    foreach ($key in $Parameter.Keys) {
+        # Values from ConvertFrom-Json come wrapped; SqlClient needs the value itself.
+        $value = $Parameter[$key]
+        if ($null -ne $value) { $value = $value.PSObject.BaseObject }
+        $null = $command.Parameters.AddWithValue("@$key", $value)
+    }
+    return $command.ExecuteNonQuery()
+}
+
 function Get-GuestSqlScalar {
     param(
         [Parameter(Mandatory)]$Connection,

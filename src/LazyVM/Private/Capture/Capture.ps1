@@ -179,8 +179,8 @@ function Save-GuestVisualStudioState {
 function Save-GuestSqlState {
     <#
       Backs up every user database to the data disk and checks each backup.
-      Logins and instance settings are recorded in VM.json instead
-      (GuestSql.ps1).
+      Logins, instance settings and SQL Agent objects are recorded in VM.json
+      instead (GuestSql.ps1, GuestSqlAgent.ps1).
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -192,9 +192,9 @@ function Save-GuestSqlState {
     $server = $VM.Runtime.SqlServer
     $backupDir = $VM.Runtime.GuestSqlBackupDir
 
-    # Logins and instance settings are plain data, so they are recorded in VM.json (#131), not the capture.
+    # Logins, instance settings and Agent objects are plain data, so they are recorded in VM.json (#131), not the capture.
     try { $null = Update-GuestSqlRecord -VM $VM }
-    catch { Write-LogError '  The SQL logins and settings could not be recorded; VM.json keeps what it had' $_ }
+    catch { Write-LogError '  The SQL logins, settings and Agent objects could not be recorded; VM.json keeps what it had' $_ }
 
     $state = Invoke-GuestScript -VM $VM -Activity 'SQL databases check' -TimeoutMinutes 10 -ArgumentList @($server) -ScriptBlock {
         param($server)
@@ -207,7 +207,8 @@ function Save-GuestSqlState {
             # What a capture knowingly does not bring across.
             $notMigrated = @()
             foreach ($check in @(
-                    @{ What = 'SQL Agent jobs'; Sql = 'SELECT name FROM msdb.dbo.sysjobs' }
+                    @{ What = 'maintenance plans'; Sql = 'SELECT name FROM msdb.dbo.sysmaintplan_plans' }
+                    @{ What = 'SQL Agent proxies'; Sql = 'SELECT name FROM msdb.dbo.sysproxies' }
                     @{ What = 'linked servers'; Sql = 'SELECT name FROM sys.servers WHERE server_id <> 0' }
                     @{ What = 'credentials'; Sql = 'SELECT name FROM sys.credentials' })) {
                 $names = @(Get-GuestSqlRow -Connection $connection -Sql $check.Sql | ForEach-Object { "$($_.name)" })
