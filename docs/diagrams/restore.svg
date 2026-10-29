@@ -180,7 +180,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="808" text-anchor="middle">«folder»</text>
 <text class="nm" x="147.5" y="824" text-anchor="middle">&lt;VM&gt;\State\vs\</text>
 <line class="div" x1="20" y1="831" x2="275" y2="831"/>
-<text class="at" x="30" y="846">settings, vs.vsconfig</text>
+<text class="at" x="30" y="846">settings</text>
 </g>
 <g class="bx-store"><rect x="740" y="794" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="808" text-anchor="middle">«guest»</text>

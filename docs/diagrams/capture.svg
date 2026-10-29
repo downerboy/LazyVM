@@ -167,14 +167,14 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="700" text-anchor="middle">«guest»</text>
 <text class="nm" x="147.5" y="716" text-anchor="middle">Guest</text>
 <line class="div" x1="20" y1="723" x2="275" y2="723"/>
-<text class="at" x="30" y="738">VS settings, .vsconfig</text>
+<text class="at" x="30" y="738">VS settings</text>
 <text class="at" x="30" y="755">per instance</text>
 </g>
 <g class="bx-store"><rect x="740" y="686" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="700" text-anchor="middle">«folder»</text>
 <text class="nm" x="875.0" y="716" text-anchor="middle">&lt;VM&gt;\State\vs\</text>
 <line class="div" x1="740" y1="723" x2="1010" y2="723"/>
-<text class="at" x="750" y="738">settings, vs.vsconfig</text>
+<text class="at" x="750" y="738">settings</text>
 </g>
 <g class="bx-store"><rect x="740" y="763" width="270" height="67" rx="3"/>
 <text class="st" x="875.0" y="777" text-anchor="middle">«file»</text>

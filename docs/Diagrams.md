@@ -210,7 +210,7 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
 6. `Get-MaintenanceDecision` (Maintenance, called by Invoke-Maintenance): > threshold or no countdown: none; rearms left: rearm; otherwise: rebuild
    - Reads D12, threshold: VM settings (RebuildThresholdDays = 10)
 7. `Save-GuestState` (Capture, called by Invoke-Maintenance): only on rearm or rebuild (see Capture state)
-   - Reads D13, state to keep: Running guest (VS settings, .vsconfig, SQL databases + logins, env, certs, tasks, apps)
+   - Reads D13, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
    - Writes D14, captured state: <VM>\State\ (vs\  windows\  sql\, projects\, manifest.json, manifest-<stamp>.json)
 8. `Invoke-GuestRearm` (Maintenance, called by Invoke-Maintenance): slmgr rearm, then Restart-GuestAndWait
    - Writes D15, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
@@ -252,7 +252,7 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
 2. `Invoke-Rebuild` (Maintenance): steps 3-15 are its calls
 3. `Save-GuestState` (Capture, called by Invoke-Rebuild): skipped with -SkipCapture: the last manifest is used
-   - Reads D3, state to keep: Running guest (VS settings, .vsconfig, SQL databases + logins, env, certs, tasks, apps)
+   - Reads D3, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
    - Writes D4, captured state: <VM>\State\ (vs\  windows\  sql\, projects\, manifest.json, manifest-<stamp>.json)
    - Writes D5, database backups on the data disk: D:\SQLBackup\ (<database>.bak)
 4. `Invoke-RetireCurrentVM` (Maintenance, called by Invoke-Rebuild): only if the VM exists; shuts down, removes checkpoints and the VM definition; keeps disks
@@ -401,8 +401,8 @@ Copies everything a rebuild must keep to the host. Maintenance and rebuilds run 
 5. `Get-GuestIdentity` (Capture, called by Save-GuestState): computer name, OS build
    - Reads D5, guest identity: Guest (identity)
 6. `Save-GuestVisualStudioState` (Capture, called by Save-GuestState)
-   - Reads D6, Visual Studio: Guest (VS settings, .vsconfig, per instance)
-   - Writes D7, VS state: <VM>\State\vs\ (settings, vs.vsconfig)
+   - Reads D6, Visual Studio: Guest (VS settings, per instance)
+   - Writes D7, VS state: <VM>\State\vs\ (settings)
    - Writes D8, settings used by phase 8: <VM>\Backups\ (VisualStudio.vssettings)
 7. `Save-GuestSqlState` (Capture, called by Save-GuestState): BACKUP DATABASE per user database, plus logins
    - Reads D9, databases: SQL Server (user databases, logins)
@@ -445,7 +445,7 @@ Applies the last capture to the VM. A rebuild runs this after installing.
    - Reads D6, Windows state: <VM>\State\windows\ (zip)
    - Writes D7, Windows restored: Guest (environment, certificates)
 7. `Restore-GuestVisualStudioState` (Restore, called by Restore-GuestState): 10b
-   - Reads D8, VS state: <VM>\State\vs\ (settings, vs.vsconfig)
+   - Reads D8, VS state: <VM>\State\vs\ (settings)
    - Writes D9, VS restored: Guest (VS settings imported)
 8. `Restore-GuestSqlState` (Restore, called by Restore-GuestState): 10c
    - Reads D10, backups: D:\SQLBackup\ (<database>.bak)
