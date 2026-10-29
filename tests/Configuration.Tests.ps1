@@ -123,6 +123,18 @@ Describe 'The settings schema' {
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
     }
 
+    It 'accepts a GuestAppSettings list' {
+        $path = New-TestFile -Text '{ "GuestAppSettings": [ { "Name": "WinMerge", "RegistryKey": "HKCU\\Software\\WinMerge", "Values": [ { "Path": "Settings", "Name": "Font", "Kind": "String", "Data": "Consolas" }, { "Path": "", "Name": "Size", "Kind": "DWord", "Data": 12 } ], "SecretValues": [ { "Path": "", "Name": "Password" } ] } ] }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
+    }
+
+    It 'rejects an application setting value of a kind the registry restore cannot write' {
+        $path = New-TestFile -Text '{ "GuestAppSettings": [ { "Name": "WinMerge", "RegistryKey": "HKCU\\Software\\WinMerge", "Values": [ { "Path": "", "Name": "Font", "Kind": "Link", "Data": "x" } ], "SecretValues": [] } ] }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+    }
+
     It 'rejects a firewall rule whose direction is neither Inbound nor Outbound' {
         $path = New-TestFile -Text '{ "GuestFirewallRules": [ { "DisplayName": "Dev API", "Direction": "Sideways", "Action": "Allow", "Protocol": "TCP", "LocalPort": [ "5000" ], "RemoteAddress": [ "Any" ], "Profile": "Any" } ] }'
 
@@ -400,6 +412,7 @@ Describe 'Add-DerivedSetting' {
         $settings.GuestCredFile | Should -Be "$root\Alpha\Credentials\guest.cred"
         $settings.CertCredFile | Should -Be "$root\Alpha\Credentials\certs.cred"
         $settings.EnvironmentCredFile | Should -Be "$root\Alpha\Credentials\environment.cred"
+        $settings.AppSettingsCredFile | Should -Be "$root\Alpha\Credentials\appsettings.cred"
         $settings.ResumeRegKey | Should -Be 'HKLM:\SOFTWARE\LazyVM\Alpha'
         $settings.ResumeTaskName | Should -Be 'LazyVM-ResumeAfterReboot-Alpha'
         $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
@@ -1739,6 +1752,179 @@ Describe 'Get-GuestScheduledTaskRestore (#131)' {
         $restore = Invoke-TestRestore -Root $root -Tasks @([ordered]@{ Name = 'Nightly build'; Xml = '<Task />' })
 
         @($restore.Tasks).Name | Should -Be @('Nightly build')
+    }
+}
+
+Describe 'ConvertTo-GuestAppSettingRecord (#131)' {
+    BeforeAll {
+        function Invoke-TestConvert {
+            param([object[]]$Key)
+            InModuleScope $module -Parameters @{ Key = $Key } {
+                param($Key)
+                ConvertTo-GuestAppSettingRecord -Key $Key
+            }
+        }
+        function New-TestKey {
+            [pscustomobject]@{
+                Name        = 'WinMerge'
+                RegistryKey = 'HKCU\Software\WinMerge'
+                Values      = @(
+                    [pscustomobject]@{ Path = 'Settings'; Name = 'Font'; Kind = 'String'; Data = 'Consolas' }
+                    [pscustomobject]@{ Path = ''; Name = 'SyncPassword'; Kind = 'String'; Data = 'hunter2' }
+                    [pscustomobject]@{ Path = ''; Name = 'Size'; Kind = 'DWord'; Data = 12 }
+                )
+            }
+        }
+    }
+
+    It 'keeps each value by path and name, sorted' {
+        $result = Invoke-TestConvert -Key @(New-TestKey)
+
+        @($result.Record).Name | Should -Be @('WinMerge')
+        $result.Record[0].Values | ForEach-Object { "$($_.Path)\$($_.Name)=$($_.Data)" } | Should -Be @('\Size=12', 'Settings\Font=Consolas')
+    }
+
+    It 'lists a secret value by name only, and returns its data apart' {
+        $result = Invoke-TestConvert -Key @(New-TestKey)
+
+        $result.Record[0].SecretValues | ForEach-Object { "$($_.Path)\$($_.Name)" } | Should -Be @('\SyncPassword')
+        $result.Secrets['WinMerge\\SyncPassword'].Data | Should -Be 'hunter2'
+        $result.Secrets['WinMerge\\SyncPassword'].Kind | Should -Be 'String'
+        ConvertTo-Json -InputObject $result.Record -Depth 10 | Should -Not -Match 'hunter2'
+    }
+}
+
+Describe 'Update-GuestAppSettingRecord (#131)' {
+    BeforeAll {
+        function Invoke-TestRecord {
+            <# Records Alpha's application settings under $Root, with the guest reading $Keys and failing on $Failed. Returns whether anything changed. #>
+            param([string]$Root, [object[]]$Keys, [string[]]$Failed = @())
+
+            InModuleScope $module -Parameters @{ Root = $Root; Keys = $Keys; Failed = $Failed } {
+                param($Root, $Keys, $Failed)
+                Mock Write-LogEntry {}
+                Mock Write-GuestNote {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                $reported = [pscustomobject]@{ Keys = @($Keys); Failed = @($Failed); Notes = @() }
+                Mock Get-GuestAppSettingSnapshot { $reported }.GetNewClosure()
+                $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+                Update-GuestAppSettingRecord -VM $vm
+            }
+        }
+        function New-TestAppSettingRoot {
+            <# A root with Alpha and a credential key, as a VM LazyVM built has. #>
+            $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+            $keyDir = Join-Path -Path $root -ChildPath 'Shared/Credentials'
+            New-Item -ItemType Directory -Path $keyDir -Force | Out-Null
+            $key = [byte[]]::new(32)
+            [Security.Cryptography.RandomNumberGenerator]::Fill($key)
+            [IO.File]::WriteAllBytes((Join-Path -Path $keyDir -ChildPath '.lazyvm.key'), $key)
+            return $root
+        }
+        function New-TestKey {
+            param([string]$Name = 'WinMerge', [string]$Font = 'Consolas', [switch]$WithSecret)
+            $values = @([pscustomobject]@{ Path = ''; Name = 'Font'; Kind = 'String'; Data = $Font })
+            if ($WithSecret) { $values += [pscustomobject]@{ Path = ''; Name = 'SyncPassword'; Kind = 'String'; Data = 'hunter2' } }
+            [pscustomobject]@{ Name = $Name; RegistryKey = "HKCU\Software\$Name"; Values = $values }
+        }
+        function Get-TestRecordedKey {
+            param([string]$Root)
+            @((Read-TestJson -Path (Join-Path -Path $Root -ChildPath 'Alpha/Config/VM.json')).GuestAppSettings)
+        }
+        function Read-TestSecret {
+            param([string]$Root)
+            InModuleScope $module -Parameters @{ Root = $Root } {
+                param($Root)
+                Read-GuestAppSettingSecret -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+            }
+        }
+    }
+
+    It 'writes the values into VM.json and the secret ones into the encrypted store' {
+        $root = New-TestAppSettingRoot
+
+        $changed = Invoke-TestRecord -Root $root -Keys @(New-TestKey -WithSecret)
+
+        $changed | Should -BeTrue
+        (Get-TestRecordedKey -Root $root).Values.Data | Should -Be @('Consolas')
+        Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json') -Raw | Should -Not -Match 'hunter2'
+        Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Credentials/appsettings.cred') -Raw | Should -Not -Match 'hunter2'
+        (Read-TestSecret -Root $root)['WinMerge\\SyncPassword'].Data | Should -Be 'hunter2'
+    }
+
+    It 'writes nothing the second time, when nothing changed' {
+        $root = New-TestAppSettingRoot
+        $null = Invoke-TestRecord -Root $root -Keys @(New-TestKey -WithSecret)
+
+        $changed = Invoke-TestRecord -Root $root -Keys @(New-TestKey -WithSecret)
+
+        $changed | Should -BeFalse
+        @(Get-ChildItem -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/History') -Filter 'VM-*.json').Count | Should -Be 1
+    }
+
+    It 'records a key that is gone, and its secret values with it' {
+        $root = New-TestAppSettingRoot
+        $null = Invoke-TestRecord -Root $root -Keys @(New-TestKey -WithSecret)
+
+        $changed = Invoke-TestRecord -Root $root -Keys @()
+
+        $changed | Should -BeTrue
+        $text = Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json') -Raw
+        $text | Should -Match '"GuestAppSettings":\s*\[\s*\]'
+        (Read-TestSecret -Root $root).Count | Should -Be 0
+    }
+
+    It 'keeps what it had for a key that could not be read this time, secrets included' {
+        $root = New-TestAppSettingRoot
+        $null = Invoke-TestRecord -Root $root -Keys @(New-TestKey -WithSecret)
+
+        $changed = Invoke-TestRecord -Root $root -Keys @() -Failed @('WinMerge')
+
+        $changed | Should -BeFalse
+        (Get-TestRecordedKey -Root $root).Values.Data | Should -Be @('Consolas')
+        (Read-TestSecret -Root $root)['WinMerge\\SyncPassword'].Data | Should -Be 'hunter2'
+    }
+}
+
+Describe 'Get-GuestAppSettingRestore (#131)' {
+    BeforeAll {
+        function Invoke-TestRestore {
+            <# What a restore of Alpha under $Root would put back, after VM.json records $Keys (unless it is $null). #>
+            param([string]$Root, [object[]]$Keys)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Keys = $Keys } {
+                param($Root, $Keys)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                if ($null -ne $Keys) { $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestAppSettings = $Keys } -Reason 'a test' }
+                Get-GuestAppSettingRestore -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+            }
+        }
+    }
+
+    It 'returns nothing for a VM whose settings were never recorded, so an older capture is used' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        Invoke-TestRestore -Root $root -Keys $null | Should -BeNullOrEmpty
+    }
+
+    It 'returns an empty list, not nothing, when the guest was recorded with no settings' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $restore = Invoke-TestRestore -Root $root -Keys @()
+
+        $restore | Should -Not -BeNullOrEmpty
+        @($restore.Keys).Count | Should -Be 0
+        $restore.Secrets.Count | Should -Be 0
+    }
+
+    It 'returns the keys VM.json holds now' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $key = [ordered]@{ Name = 'WinMerge'; RegistryKey = 'HKCU\Software\WinMerge'; Values = @([ordered]@{ Path = ''; Name = 'Font'; Kind = 'String'; Data = 'Consolas' }); SecretValues = @() }
+
+        $restore = Invoke-TestRestore -Root $root -Keys @($key)
+
+        @($restore.Keys).Name | Should -Be @('WinMerge')
     }
 }
 

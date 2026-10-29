@@ -29,6 +29,8 @@ $script:GuestEnvironmentSettingName = 'GuestEnvironment'
 $script:GuestFirewallSettingName = 'GuestFirewallRules'
 # The setting in VM.json that holds the guest's own scheduled tasks (GuestScheduledTask.ps1).
 $script:GuestScheduledTaskSettingName = 'GuestScheduledTasks'
+# The setting in VM.json that holds the values under the AppSettings keys (GuestAppSetting.ps1).
+$script:GuestAppSettingName = 'GuestAppSettings'
 
 # Environment variables Windows sets itself: a fresh install has its own, so
 # they are neither recorded nor put back.

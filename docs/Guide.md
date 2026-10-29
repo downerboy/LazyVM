@@ -570,7 +570,7 @@ A VM set up before LazyVM kept the list in `VM.json` has it in `Tooling.json`, `
 
 ### Application settings
 
-Reinstalling an application does not bring back its settings. For one that keeps them in the registry, add its key to `AppSettings`: a capture exports the key, and a restore imports it after the application is back. WinMerge is included by default.
+Reinstalling an application does not bring back its settings. For one that keeps them in the registry, add its key to `AppSettings`: the key's values, subkeys included, are recorded in `VM.json` as `GuestAppSettings` whenever they change, and a restore writes them back after the application is back. A value whose name looks secret, such as `SyncPassword`, is kept encrypted in `Credentials\appsettings.cred` instead. WinMerge is included by default.
 
 ### Going back to an earlier version
 

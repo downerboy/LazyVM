@@ -531,11 +531,22 @@ function Restore-GuestProjectFolder {
 }
 
 function Restore-GuestAppSetting {
-    <# Imports each captured application settings file into the guest's registry. #>
+    <#
+      Writes the application settings VM.json records into the guest's
+      registry, the secret values from the credential store. A VM whose
+      settings were never recorded gets the .reg files its capture has
+      instead.
+    #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][CaptureManifest]$Manifest
     )
+
+    $recorded = Get-GuestAppSettingRestore -VM $VM
+    if ($recorded) {
+        Write-GuestNote -Notes @(Restore-GuestAppSettingValue -VM $VM -Recorded $recorded)
+        return
+    }
 
     $saved = @($Manifest.AppSettings | Where-Object { $_ })
     if ($saved.Count -eq 0) {
@@ -557,5 +568,56 @@ function Restore-GuestAppSetting {
         }
         if ($imported) { Write-LogEntry "  restored $($entry.Name) settings" 'OK' }
         else { Write-LogEntry "  $($entry.Name) settings import failed" 'WARN' }
+    }
+}
+
+function Restore-GuestAppSettingValue {
+    <#
+      Sets each value $Recorded (from Get-GuestAppSettingRestore) holds in
+      the guest's registry, creating the keys it needs and replacing values
+      already there. Returns the guest's notes.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][object]$Recorded
+    )
+
+    $keysJson = ConvertTo-Json -InputObject @($Recorded.Keys) -Depth 10 -Compress
+    $secretsJson = ConvertTo-Json -InputObject $Recorded.Secrets -Depth 5 -Compress
+    return Invoke-GuestScript -VM $VM -Activity 'application settings restore' -TimeoutMinutes 5 -ArgumentList @($keysJson, $secretsJson) -ScriptBlock {
+        param($keysJson, $secretsJson)
+        $secrets = $secretsJson | ConvertFrom-Json
+        $notes = @()
+        foreach ($key in @($keysJson | ConvertFrom-Json)) {
+            if (-not $key) { continue }
+            $values = @($key.Values | Where-Object { $_ })
+            foreach ($secret in @($key.SecretValues | Where-Object { $_ })) {
+                $stored = if ($secrets) { $secrets."$($key.Name)\$($secret.Path)\$($secret.Name)" } else { $null }
+                if ($null -eq $stored) {
+                    $notes += New-GuestNote -Level WARN -Text "no stored value for $($key.Name)'s secret setting $($secret.Name) - set it again by hand"
+                    continue
+                }
+                $values += [pscustomobject]@{ Path = $secret.Path; Name = $secret.Name; Kind = $stored.Kind; Data = $stored.Data }
+            }
+            try {
+                $hive, $subKey = $key.RegistryKey -split '\\', 2
+                $base = if ($hive -eq 'HKLM') { [Microsoft.Win32.Registry]::LocalMachine } else { [Microsoft.Win32.Registry]::CurrentUser }
+                foreach ($value in $values) {
+                    $target = $base.CreateSubKey($(if ($value.Path) { "$subKey\$($value.Path)" } else { $subKey }))
+                    try {
+                        if ($value.Kind -eq 'Binary') { $data = [Convert]::FromBase64String($value.Data) }
+                        elseif ($value.Kind -eq 'MultiString') { $data = [string[]]@($value.Data) }
+                        elseif ($value.Kind -eq 'DWord') { $data = [int]$value.Data }
+                        elseif ($value.Kind -eq 'QWord') { $data = [long]$value.Data }
+                        else { $data = [string]$value.Data }
+                        $target.SetValue($value.Name, $data, [Microsoft.Win32.RegistryValueKind]$value.Kind)
+                    }
+                    finally { $target.Dispose() }
+                }
+                $notes += New-GuestNote -Level OK -Text "restored $($key.Name) settings ($($values.Count) value(s))"
+            }
+            catch { $notes += New-GuestNote -Level WARN -Text "$($key.Name) settings could not be restored: $($_.Exception.Message)" }
+        }
+        return $notes
     }
 }

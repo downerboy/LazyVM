@@ -36,7 +36,7 @@ function Save-GuestState {
     catch { Write-LogEntry "Could not prepare the data disk: $($_.Exception.Message)" 'WARN' }
 
     $stateDir = $VM.Settings.StateDir
-    foreach ($sub in 'vs', 'windows', 'sql', 'projects', 'apps') { New-Folder -Path (Join-Path $stateDir $sub) }
+    foreach ($sub in 'vs', 'windows', 'sql', 'projects') { New-Folder -Path (Join-Path $stateDir $sub) }
 
     $manifest = [CaptureManifest]::new()
     $manifest.CapturedAt = (Get-Date).ToString('o')
@@ -470,33 +470,13 @@ function Save-GuestProjectFolder {
 
 function Save-GuestAppSetting {
     <#
-      Exports each registry key in AppSettings to <StateDir>\apps\<Name>.reg.
-      A key that does not exist yet (the application was never started) is
-      skipped, not an error.
+      Records the values under the AppSettings keys in VM.json
+      (GuestAppSetting.ps1). Nothing goes into the capture itself, so the
+      manifest's AppSettings stays empty.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $saved = @()
-    foreach ($entry in @($VM.Settings.AppSettings)) {
-        $name = "$($entry['Name'])"
-        $key = "$($entry['RegistryKey'])"
-        $guestFile = Join-Path $VM.Settings.GuestSetupDir "app-$name.reg"
-
-        $exported = Invoke-GuestScript -VM $VM -Activity "$name settings export" -TimeoutMinutes 5 -ArgumentList @($key, $guestFile) -ScriptBlock {
-            param($key, $file)
-            New-GuestFolder -Path (Split-Path $file -Parent)
-            Remove-Item $file -Force -ErrorAction SilentlyContinue
-            & reg.exe export $key $file /y 2>&1 | Out-Null
-            return ($LASTEXITCODE -eq 0 -and (Test-Path $file))
-        }
-        if (-not $exported) {
-            Write-LogEntry "  $name - no settings in the registry yet ($key)" 'INFO'
-            continue
-        }
-        $hostFile = Join-Path (Join-Path $VM.Settings.StateDir 'apps') "$name.reg"
-        Copy-FromGuest -VM $VM -GuestPath $guestFile -HostPath $hostFile
-        Write-LogEntry "  $name settings" 'OK'
-        $saved += [pscustomobject]@{ Name = $name; RegistryKey = $key; File = $hostFile }
-    }
-    return $saved
+    $null = Update-GuestAppSettingRecord -VM $VM
+    Write-LogEntry '  application settings: recorded in VM.json' 'OK'
+    return $null
 }

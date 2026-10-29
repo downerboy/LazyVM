@@ -107,6 +107,35 @@ function Get-StoredCredential {
     }
 }
 
+function Get-StoredSecretTable {
+    <# The name -> value table stored, encrypted, at $Path; empty when none is stored. #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][string]$KeyPath,
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    $stored = Get-StoredCredential -KeyPath $KeyPath -Path $Path
+    if (-not $stored) { return @{} }
+    $values = ConvertTo-PlainText -Secure $stored.Password | ConvertFrom-Json -AsHashtable
+    if (-not $values) { return @{} }
+    return $values
+}
+
+function Save-StoredSecretTable {
+    <# Stores a name -> value table, encrypted, at $Path, replacing what was stored. #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'The values come out of the guest as text and are encrypted here, straight away.')]
+    param(
+        [Parameter(Mandatory)][string]$KeyPath,
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$UserName,
+        [Parameter(Mandatory)][AllowEmptyCollection()][hashtable]$Secrets
+    )
+
+    $text = ConvertTo-Json -InputObject $Secrets -Depth 5 -Compress
+    Save-StoredCredential -KeyPath $KeyPath -Path $Path -UserName $UserName -Password (ConvertTo-SecureString -String $text -AsPlainText -Force)
+}
+
 function New-RandomPassword {
     <#
       A random password that always meets Windows' complexity rules: one of
