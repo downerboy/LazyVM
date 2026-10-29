@@ -56,18 +56,41 @@ BeforeAll {
 
     function Read-TestJson {
         param([Parameter(Mandatory)][string]$Path)
-        return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable
+        return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable -DateKind String
+    }
+
+    # A small tooling list, as it appears in Tooling.json or VM.json's Tooling section.
+    $toolingJson = '{ "Version": 1, "RecordedAt": "2026-10-08T19:30:00.0000000-07:00", "Products": [], "WingetPackages": [ { "Id": "Git.Git", "Source": "winget" } ], "Programs": [] }'
+
+    function Get-TestWingetId {
+        <# The winget ids in a profile's Tooling section. #>
+        param([Parameter(Mandatory)][System.Collections.IDictionary]$Settings)
+        return @($Settings.Tooling.WingetPackages | ForEach-Object { $_.Id })
     }
 }
 
 Describe 'The settings schema' {
-    It 'has a default and a description for every setting' {
+    It 'has a default (or a file holding it) and a description for every setting' {
         $schema = InModuleScope $module { Get-SettingsSchema }
 
         foreach ($name in @($schema.properties.Keys | Where-Object { $_ -ne '$schema' })) {
-            $schema.properties[$name].Contains('default') | Should -BeTrue -Because "'$name' needs a default"
+            ($schema.properties[$name].Contains('default') -or $schema.properties[$name].Contains('defaultFile')) | Should -BeTrue -Because "'$name' needs a default"
             $schema.properties[$name]['description'] | Should -Not -BeNullOrEmpty -Because "'$name' needs a description"
         }
+    }
+
+    It 'gives the Tooling setting the default list that ships with the module' {
+        $defaults = InModuleScope $module { Get-DefaultSetting }
+        $shipped = Read-TestJson -Path (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data/Tooling.Default.json')
+
+        Get-TestWingetId -Settings $defaults | Should -Be @($shipped.WingetPackages | ForEach-Object { $_.Id })
+        $defaults.Tooling.RecordedAt | Should -BeOfType ([string])
+    }
+
+    It 'rejects a Tooling section with a misspelled part' {
+        $path = New-TestFile -Text '{ "Tooling": { "Version": 1, "Product": [] } }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
     }
 
     It 'accepts all its own defaults' {
@@ -513,13 +536,26 @@ Describe 'New-VMProfile' {
         (Read-TestJson -Path $path).MaintenanceTime | Should -Be $expected
     }
 
+    It 'keeps the new profile as the first version in History' {
+        $root = New-TestRoot
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -Root $Root -Name 'Alpha'
+        }
+
+        $history = @(Get-ChildItem -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/History') -Filter 'VM-*.json')
+        $history.Count | Should -Be 1
+        Get-Content -LiteralPath $history[0].FullName -Raw | Should -Be (Get-Content -LiteralPath $path -Raw)
+    }
+
     It 'with -From, copies the source VM''s settings and tooling list, and takes the per-VM ones from the shared template' {
         $root = New-TestRoot -Profiles @{
             Alpha = '{ "MemMaxGB": 32, "LogFile": "Logs\\Alpha-Old.log", "GuestComputerName": "ALPHA",
                        "SQLDiskGuid": "{11111111-2222-3333-4444-555555555555}", "SQLDiskScsiLocation": 1,
-                       "DevDriveGuid": "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}", "DevDriveScsiLocation": 2 }'
+                       "DevDriveGuid": "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}", "DevDriveScsiLocation": 2,
+                       "Tooling": ' + $toolingJson + ' }'
         }
-        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value '{ "Version": 1 }'
 
         $path = InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
@@ -535,7 +571,23 @@ Describe 'New-VMProfile' {
             $vmProfile.Keys | Should -Contain $identity
             $vmProfile[$identity] | Should -BeNullOrEmpty -Because "-From must not copy $identity"
         }
-        Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'Tooling.json' | Should -Exist
+        Get-TestWingetId -Settings $vmProfile | Should -Be @('Git.Git')
+        Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'Tooling.json' | Should -Not -Exist
+    }
+
+    It 'with -From, first folds an older source VM''s Tooling.json into its VM.json' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "MemMaxGB": 32 }' }
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value $toolingJson
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Mock Get-ToolingCheckpointStamp { , @() }
+            New-VMProfile -Root $Root -Name 'Beta' -From 'Alpha'
+        }
+
+        Get-TestWingetId -Settings (Read-TestJson -Path $path) | Should -Be @('Git.Git')
+        Get-TestWingetId -Settings (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')) | Should -Be @('Git.Git')
     }
 
     It 'refuses <Case>' -ForEach @(
@@ -621,23 +673,73 @@ Describe 'Update-VMProfile' {
         }
     }
 
-    It 'writes the change, keeps the earlier version in History and returns what changed' {
+    It 'writes the change, keeps the version it wrote in History and returns what changed' {
         $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4, "MemMaxGB": 16 }' }
 
         $changed = InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
             Mock Write-LogEntry {}
+            Mock Get-ToolingCheckpointStamp { , @() }
             Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ vcpu = 8; MemMaxGB = 16 } -Reason 'a test'
         }
 
         $changed | Should -Be @('vCPU')
-        $vmProfile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
+        $path = Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json'
+        $vmProfile = Read-TestJson -Path $path
         $vmProfile.vCPU | Should -Be 8
         $vmProfile.MemMaxGB | Should -Be 16
         $vmProfile['$schema'] | Should -Be '../../Shared/Config/LazyVM.Settings.schema.json'
         $history = @(Get-HistoryFile -Root $root)
         $history.Count | Should -Be 1
-        (Read-TestJson -Path $history[0].FullName).vCPU | Should -Be 4
+        Get-Content -LiteralPath $history[0].FullName -Raw | Should -Be (Get-Content -LiteralPath $path -Raw)
+    }
+
+    It 'names the version it keeps after the date and time it is given' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Mock Get-ToolingCheckpointStamp { , @() }
+            $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ vCPU = 8 } -Reason 'a test' -Stamp '20261028-120000'
+        }
+
+        (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/History/VM-20261028-120000.json')).vCPU | Should -Be 8
+    }
+
+    It 'keeps the newest 3 versions, and any older one a tooling checkpoint still needs' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 5 }' }
+        $historyDir = Join-Path -Path $root -ChildPath 'Alpha/Config/History'
+        New-Item -ItemType Directory -Path (Join-Path -Path $historyDir -ChildPath 'Daily') -Force | Out-Null
+        foreach ($n in 1..5) { Set-Content -LiteralPath (Join-Path -Path $historyDir -ChildPath "VM-20260101-00000$n.json") -Value "{ `"vCPU`": $n }" }
+        Set-Content -LiteralPath (Join-Path -Path $historyDir -ChildPath 'Daily/Tooling-20260101.json') -Value '{}'
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Mock Get-ToolingCheckpointStamp { , @('20260101-000001') }
+            $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ vCPU = 6 } -Reason 'a test' -Stamp '20260102-000000'
+        }
+
+        @(Get-HistoryFile -Root $root | ForEach-Object { $_.Name } | Sort-Object) |
+            Should -Be @('VM-20260101-000001.json', 'VM-20260101-000004.json', 'VM-20260101-000005.json', 'VM-20260102-000000.json')
+        Join-Path -Path $historyDir -ChildPath 'Daily/Tooling-20260101.json' | Should -Exist
+    }
+
+    It 'removes nothing from History when it cannot tell which versions the checkpoints need' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 5 }' }
+        $historyDir = Join-Path -Path $root -ChildPath 'Alpha/Config/History'
+        New-Item -ItemType Directory -Path $historyDir -Force | Out-Null
+        foreach ($n in 1..5) { Set-Content -LiteralPath (Join-Path -Path $historyDir -ChildPath "VM-20260101-00000$n.json") -Value "{ `"vCPU`": $n }" }
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Mock Get-ToolingCheckpointStamp { $null }
+            $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ vCPU = 6 } -Reason 'a test'
+        }
+
+        @(Get-HistoryFile -Root $root).Count | Should -Be 6
     }
 
     It 'writes nothing when no value differs' {
@@ -685,6 +787,7 @@ Describe 'Sync-VMProfile' {
                 param($Root)
                 Mock Write-LogEntry {}
                 Mock Test-Unattended { $false }
+                Mock Get-ToolingCheckpointStamp { , @() }
                 $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
                 Sync-VMProfile -VM $vm
             }
@@ -724,12 +827,23 @@ Describe 'Sync-VMProfile' {
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
             Mock Write-LogEntry {}
+            Mock Get-ToolingCheckpointStamp { , @() }
             $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ vCPU = 8 } -Reason 'a test'
         }
         Invoke-Sync -Root $root
 
         (Read-TestJson -Path $template).vCPU | Should -Be 2
         (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).vCPU | Should -Be 8
+    }
+
+    It 'fills in the shared template''s tooling list for a VM that has none' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+
+        Invoke-Sync -Root $root
+
+        $default = InModuleScope $module { (Get-DefaultSetting).Tooling }
+        Get-TestWingetId -Settings (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')) |
+            Should -Be @($default.WingetPackages | ForEach-Object { $_.Id })
     }
 
     It 'never writes over a profile that cannot be read' {
@@ -748,6 +862,95 @@ Describe 'Sync-VMProfile' {
         }
 
         (Get-Content -LiteralPath $path -Raw).Trim() | Should -Be '{ "vCPU": "two" }'
+    }
+}
+
+Describe 'Move-ToolingIntoProfile (#130)' {
+    BeforeAll {
+        function Invoke-Move {
+            param([string]$Root)
+            InModuleScope $module -Parameters @{ Root = $Root } {
+                param($Root)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                Move-ToolingIntoProfile -Root $Root -Name 'Alpha'
+            }
+        }
+    }
+
+    BeforeEach {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+        $configDir = Join-Path -Path $root -ChildPath 'Alpha/Config'
+    }
+
+    It 'folds Tooling.json into VM.json, and deletes it once VM.json reads back the same list' {
+        Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'Tooling.json') -Value $toolingJson
+
+        $moved = Invoke-Move -Root $root
+
+        $moved | Should -BeTrue
+        $vmProfile = Read-TestJson -Path (Join-Path -Path $configDir -ChildPath 'VM.json')
+        $vmProfile.vCPU | Should -Be 2
+        Get-TestWingetId -Settings $vmProfile | Should -Be @('Git.Git')
+        $vmProfile.Tooling.RecordedAt | Should -Be '2026-10-08T19:30:00.0000000-07:00'
+        Join-Path -Path $configDir -ChildPath 'Tooling.json' | Should -Not -Exist
+    }
+
+    It 'folds Tooling.Template.json into VM.Template.json, and deletes it' {
+        Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'VM.Template.json') -Value '{ "vCPU": 2 }'
+        Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'Tooling.Template.json') -Value $toolingJson
+
+        $null = Invoke-Move -Root $root
+
+        Get-TestWingetId -Settings (Read-TestJson -Path (Join-Path -Path $configDir -ChildPath 'VM.Template.json')) | Should -Be @('Git.Git')
+        Join-Path -Path $configDir -ChildPath 'Tooling.Template.json' | Should -Not -Exist
+    }
+
+    It 'keeps Tooling.Template.json while there is no VM.Template.json to fold it into' {
+        Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'Tooling.Template.json') -Value $toolingJson
+
+        $null = Invoke-Move -Root $root
+
+        Join-Path -Path $configDir -ChildPath 'Tooling.Template.json' | Should -Exist
+    }
+
+    It 'makes each recorded tooling version a VM.json version under the same date and time, for its restore point' {
+        New-Item -ItemType Directory -Path (Join-Path -Path $configDir -ChildPath 'History') | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'History/Tooling-20261008-193000.json') -Value $toolingJson
+
+        $null = Invoke-Move -Root $root
+
+        $version = Read-TestJson -Path (Join-Path -Path $configDir -ChildPath 'History/VM-20261008-193000.json')
+        $version.vCPU | Should -Be 2
+        Get-TestWingetId -Settings $version | Should -Be @('Git.Git')
+        Join-Path -Path $configDir -ChildPath 'History/Tooling-20261008-193000.json' | Should -Not -Exist
+    }
+
+    It 'changes nothing for a VM with no Tooling.json' {
+        $path = Join-Path -Path $configDir -ChildPath 'VM.json'
+        $before = Get-Content -LiteralPath $path -Raw
+
+        $moved = Invoke-Move -Root $root
+
+        $moved | Should -BeFalse
+        Get-Content -LiteralPath $path -Raw | Should -Be $before
+    }
+
+    It 'keeps Tooling.json, and warns, when VM.json already holds a different list' {
+        $path = Join-Path -Path $configDir -ChildPath 'VM.json'
+        Set-Content -LiteralPath $path -Value '{ "vCPU": 2, "Tooling": { "Version": 1, "Products": [], "WingetPackages": [], "Programs": [] } }'
+        Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'Tooling.json') -Value $toolingJson
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Mock Get-ToolingCheckpointStamp { , @() }
+            $null = Move-ToolingIntoProfile -Root $Root -Name 'Alpha'
+            Should -Invoke Write-LogEntry -ParameterFilter { $Level -eq 'WARN' -and $Message -like '*Tooling.json*' }
+        }
+
+        Join-Path -Path $configDir -ChildPath 'Tooling.json' | Should -Exist
+        Get-TestWingetId -Settings (Read-TestJson -Path $path) | Should -BeNullOrEmpty
     }
 }
 
@@ -851,6 +1054,27 @@ Describe 'Initialize-CommandRun' {
             $alpha.Settings.LogFile | Should -Be "$Root\Alpha\Logs\Alpha.log"
             Should -Invoke Start-Log -Times 1 -ParameterFilter { $Path -like '*\Logs\Alpha.log' }
         }
+    }
+
+    It 'folds an older VM''s Tooling.json into VM.json before the run uses it' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value $toolingJson
+
+        $wingetIds = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $Root; Source = 'a test' } }.GetNewClosure()
+            Mock Start-Log {}
+            Mock Write-LogEntry {}
+            Mock Sync-GuestUserFromStore {}
+            Mock Get-ToolingCheckpointStamp { , @() }
+
+            $vm = Initialize-CommandRun -Title 'A test' -Name 'Alpha'
+            $vm.Settings.ProfileDir | Should -Be "$Root\Alpha\Config"
+            @($vm.Settings.Tooling.WingetPackages | ForEach-Object { $_.Id })
+        }
+
+        $wingetIds | Should -Be @('Git.Git')
+        Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json' | Should -Not -Exist
     }
 }
 

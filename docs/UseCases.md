@@ -52,7 +52,7 @@ Build a VM includes:
 - Get the installation media (phase 4). Extended by **Open the evaluation download page** when no Windows ISO is found, and by **Download the SQL Server ISO** when it is missing.
 - Create the data disk and Dev Drive (phase 5). Existing disks are never overwritten.
 - Create the VM and install Windows unattended (phase 6). Extended by **Generate the guest account** when no credential is stored.
-- Install the tooling list (phase 7), which includes **Extend C: to the whole disk**. Tooling comes from the VM's `Tooling.json`, or the module's `Tooling.Default.json` for a new VM.
+- Install the tooling list (phase 7), which includes **Extend C: to the whole disk**. Tooling comes from the `Tooling` section of the VM's `VM.json`, which a new VM gets from the shared template (by default the module's `Tooling.Default.json`).
 - Configure the guest (phase 8): SQL data files to D:, Visual Studio settings, databases restored from D:\SQLBackup.
 - Schedule daily maintenance.
 

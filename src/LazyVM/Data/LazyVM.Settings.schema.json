@@ -5,6 +5,63 @@
   "description": "Every LazyVM setting, with its default. List only the settings you want to change: in LazyVM.Settings.json for every VM on this host, or in a VM's VM.json for that VM alone. Hover a setting's name to see what it does.",
   "type": "object",
   "additionalProperties": false,
+  "definitions": {
+    "ToolingProduct": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ProductId", "ChannelId"],
+      "properties": {
+        "ProductId": { "type": "string", "minLength": 1 },
+        "ChannelId": { "type": "string", "minLength": 1 },
+        "DisplayName": { "type": "string" },
+        "Components": { "type": "array", "items": { "type": "string" } },
+        "Extensions": { "type": "array", "items": { "type": "string" } },
+        "UserExtensions": { "type": "array", "items": { "$ref": "#/definitions/ToolingExtension" } },
+        "IncludeRecommended": { "type": "boolean" }
+      }
+    },
+    "ToolingExtension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Id"],
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "DisplayName": { "type": "string" },
+        "Publisher": { "type": "string" },
+        "MoreInfo": { "type": "string" },
+        "MarketplaceItem": { "type": ["string", "null"] }
+      }
+    },
+    "WingetPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Id"],
+      "properties": {
+        "Id": { "type": "string", "minLength": 1 },
+        "Source": { "type": "string" }
+      }
+    },
+    "ToolingProgram": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Name"],
+      "properties": {
+        "Name": { "type": "string", "minLength": 1 },
+        "Publisher": { "type": "string" }
+      }
+    },
+    "AwaitingExtension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ProductKey", "Id"],
+      "properties": {
+        "ProductKey": { "type": "string", "minLength": 1 },
+        "Id": { "type": "string", "minLength": 1 },
+        "DisplayName": { "type": "string" },
+        "Publisher": { "type": "string" }
+      }
+    }
+  },
   "properties": {
     "$schema": {
       "type": "string",
@@ -498,7 +555,7 @@
     "ToolingHistoryDays": {
       "type": "integer",
       "default": 30,
-      "description": "How many days of daily copies of the tooling list to keep.",
+      "description": "No longer used: LazyVM no longer keeps a daily copy of the tooling list. Every recorded version is in History with the rest of VM.json. Kept so older VM.json files still load; it can be deleted.",
       "minimum": 1,
       "maximum": 3650
     },
@@ -534,6 +591,57 @@
         "minLength": 1
       },
       "uniqueItems": true
+    },
+    "Tooling": {
+      "type": "object",
+      "defaultFile": "Tooling.Default.json",
+      "description": "The VM's tooling list: Visual Studio Installer products with their components and extensions, winget packages, and other programs, without versions. A build installs it, and maintenance records what you install or remove inside the VM. A new VM starts with the list in the module's Data\\Tooling.Default.json.",
+      "additionalProperties": false,
+      "properties": {
+        "Version": {
+          "type": "integer",
+          "description": "The format of the list. Leave it as it is.",
+          "minimum": 1
+        },
+        "RecordedAt": {
+          "type": "string",
+          "description": "When the list was recorded."
+        },
+        "Description": {
+          "type": "string",
+          "description": "A note about the list."
+        },
+        "Products": {
+          "type": "array",
+          "description": "Visual Studio Installer products: Visual Studio, SSMS.",
+          "items": { "$ref": "#/definitions/ToolingProduct" }
+        },
+        "WingetPackages": {
+          "type": "array",
+          "description": "winget packages, by identifier.",
+          "items": { "$ref": "#/definitions/WingetPackage" }
+        },
+        "Programs": {
+          "type": "array",
+          "description": "Other installed programs, by name without version.",
+          "items": { "$ref": "#/definitions/ToolingProgram" }
+        },
+        "AwaitingReinstall": {
+          "type": "object",
+          "description": "Items from before the last rebuild that must be installed by hand. Delete one you no longer want.",
+          "additionalProperties": false,
+          "properties": {
+            "Programs": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/ToolingProgram" }
+            },
+            "Extensions": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/AwaitingExtension" }
+            }
+          }
+        }
+      }
     },
     "MaintenanceTime": {
       "type": "string",

@@ -336,7 +336,7 @@ D:\DevVM\
     Installers\     the SQL Server ISO
     Credentials\    .lazyvm.key
   DevBox\
-    Config\         VM.json, VM.Template.json, Tooling.json, Tooling.Template.json, History\
+    Config\         VM.json, VM.Template.json, History\
     Virtual Machines\
     Checkpoints\
     Disks\          DevBox-OS.vhdx, DevBox-SQL.vhdx, DevBox-DevDrive.vhdx, DevBox-Seed.iso
@@ -353,7 +353,7 @@ D:\DevVM\
 | `D:\DevVM\Shared\Installers` | The SQL Server ISO. |
 | `D:\DevVM\Shared\Credentials` | `.lazyvm.key`, the key that encrypts every VM's stored passwords. |
 | `D:\DevVM\DevBox` | Everything that belongs to the VM DevBox. Removing the VM deletes this folder. |
-| `D:\DevVM\DevBox\Config` | The VM's configuration (`VM.json`) and the one it was first built from (`VM.Template.json`), its tooling list (`Tooling.json`) and the list it was first built from (`Tooling.Template.json`), and `History`: every earlier version of `VM.json`, every recorded version of the tooling list, plus a daily copy of that list kept for 30 days. |
+| `D:\DevVM\DevBox\Config` | The VM's configuration (`VM.json`), which includes its tooling list, the one it was first built from (`VM.Template.json`), and `History`: the three latest versions of `VM.json`, plus any older one a tooling restore point still needs. |
 | `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
 | `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
 | `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk and the Dev Drive persist across rebuilds: one carries the database backups, the other your working source. |
@@ -405,7 +405,7 @@ In a VM's `VM.json`, the first line is `"$schema": "../../Shared/Config/LazyVM.S
 LazyVM keeps `VM.json` describing the VM as it is, so you never have to:
 
 - Before every build, maintenance run and rebuild, any setting `VM.json` lacks is filled in from the shared template. That covers a VM created before `VM.json` held every setting, and a setting added by a newer LazyVM. The log says which.
-- Every time LazyVM changes `VM.json`, the version it replaces is kept in `<Name>\Config\History\VM-<date>-<time>.json`, so you can see what changed and go back.
+- Every time LazyVM changes `VM.json`, the version it writes is kept in `<Name>\Config\History\VM-<date>-<time>.json`, so you can see what changed and go back. The three latest versions are kept, and any older one a tooling restore point still needs ([section 9](#9-tooling-and-going-back)).
 - A `VM.json` that cannot be read is never written over. The run uses the last copy that loaded cleanly and logs the problem.
 - It records which disk inside the VM is the SQL data disk and which is the Dev Drive (see below).
 
@@ -472,7 +472,6 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `MaxProjectCaptureGB` | 20 | The most a capture copies out of the VM. |
 | `MaintenanceTime` | 02:00 | When the VM's daily maintenance runs. Run `Register-LazyVMMaintenance` after changing it. |
 | `ToolingCheckpointsToKeep` | 3 | How many tooling checkpoints to keep. |
-| `ToolingHistoryDays` | 30 | How many days of daily tooling-list copies to keep. |
 | `ToolingWingetExclude` | Windows built-ins | winget packages never recorded. Your list replaces the default, so copy it and add to it. |
 | `AppSettings` | WinMerge | Registry keys a capture exports and a restore imports, so an application's settings survive a rebuild. |
 | `InstallerBootstrappers` | 5 channels | The bootstrapper for each Visual Studio Installer channel. Add one if a tooling list uses a channel not listed. |
@@ -499,7 +498,7 @@ A VM with no tooling list of its own is built from the default list that ships w
 - Tools from winget: Git, GitHub CLI, GitHub Desktop, Visual Studio Code, Windows Terminal, PowerShell 7, WSL, LINQPad 9, Notepad++, WinMerge and 7-Zip.
 - SDKs and runtimes from winget: the Windows SDK, the SQL Server ODBC and OLE DB drivers, System CLR Types, the Visual C++ redistributables and Web Deploy.
 
-To give a VM less, before its first build, copy the default list from the module's `Data` folder to `<Name>\Config\Tooling.json` and remove what you don't need. To build a new VM with another VM's tools instead, create it with `New-LazyVM -From` ([section 10](#10-several-vms-on-one-host)).
+To give a VM less, before its first build, remove what you don't need from the `Tooling` section of its `<Name>\Config\VM.json`. For every new VM, copy the default list from the module's `Data\Tooling.Default.json` into `LazyVM.Settings.json` as `"Tooling"` and trim it there. To build a new VM with another VM's tools instead, create it with `New-LazyVM -From` ([section 10](#10-several-vms-on-one-host)).
 
 ### A note on networking
 
@@ -507,7 +506,7 @@ The Default Switch is managed by Windows. Its address range **cannot** be set; W
 
 ## 9. Tooling, and going back
 
-Each VM has a tooling list, `DevBox\Config\Tooling.json`: what is installed in it, without version numbers. It is what a build installs, so a rebuilt VM comes back with the tools the old one had, not the ones it started with.
+Each VM has a tooling list, the `Tooling` section of `DevBox\Config\VM.json`: what is installed in it, without version numbers. It is what a build installs, so a rebuilt VM comes back with the tools the old one had, not the ones it started with.
 
 ### What the list holds
 
@@ -521,10 +520,10 @@ Each VM has a tooling list, `DevBox\Config\Tooling.json`: what is installed in i
 Every day the VM's maintenance takes an inventory of the VM and compares it with the list. When nothing has changed, it does nothing more. When something has, it:
 
 - takes a Hyper-V checkpoint of the VM, named `Tooling <date-time>`;
-- saves the new list in `History` under the same date and time, and as `Tooling.json`;
+- saves the new list in `VM.json`, and keeps that version of `VM.json` in `History` under the same date and time;
 - logs each addition and removal.
 
-If the checkpoint cannot be taken, nothing is recorded and the next run tries again: a change is never adopted without a way back. A copy of the list is also saved in `History\Daily` every day, changed or not, and kept for 30 days.
+If the checkpoint cannot be taken, nothing is recorded and the next run tries again: a change is never adopted without a way back.
 
 Only additions and removals count. Updating Visual Studio, an SDK or a runtime never takes a checkpoint.
 
@@ -544,7 +543,7 @@ Phase 7 installs the whole list, in this order:
 
 Anything already present is skipped.
 
-The first build also keeps a copy of the list it installs as `DevBox\Config\Tooling.Template.json`. See [What the VM started with](#what-the-vm-started-with).
+`DevBox\Config\VM.Template.json` keeps the list the first build installed. See [What the VM started with](#what-the-vm-started-with).
 
 The Visual Studio Installer refuses an unsigned extension unless its item name is in `UnsignedExtensions`. When it refuses some of a product's extensions, the rest are still added, one at a time, and the log names each refused one.
 
@@ -552,20 +551,22 @@ Programs winget does not provide, and extensions with no Marketplace match, cann
 
 ### What the VM started with
 
-`Tooling.json` changes as you work: maintenance adds what you install and drops what you remove. `Tooling.Template.json`, beside it, is the list the VM was first built from: the default list, or the VM's own list if it had one before its first build. It is written once and never changed:
+The `Tooling` section of `VM.json` changes as you work: maintenance adds what you install and drops what you remove. `VM.Template.json`, beside it, is `VM.json` as the VM was first built, tooling list included. It is written once and never changed:
 
-- maintenance, `Save-LazyVMTooling` and `Restore-LazyVMTooling` change only `Tooling.json`;
+- maintenance, `Save-LazyVMTooling` and `Restore-LazyVMTooling` change only `VM.json`;
 - running `Build-LazyVM` again, or a rebuild of a replacement VM, keeps the copy that is there;
 - `Remove-LazyVM` deletes it with the rest of the VM's folder.
 
-Both files are written the same way, so a diff lines up entry by entry and shows what has changed since the build, along with when each list was recorded (`RecordedAt`). With Visual Studio Code or Git:
+Both files are written the same way, so a diff lines up entry by entry and shows what has changed since the build, along with when the list was recorded (`RecordedAt`). With Visual Studio Code or Git:
 
 ```powershell
-code --diff D:\DevVM\DevBox\Config\Tooling.Template.json D:\DevVM\DevBox\Config\Tooling.json
-git diff --no-index D:\DevVM\DevBox\Config\Tooling.Template.json D:\DevVM\DevBox\Config\Tooling.json
+code --diff D:\DevVM\DevBox\Config\VM.Template.json D:\DevVM\DevBox\Config\VM.json
+git diff --no-index D:\DevVM\DevBox\Config\VM.Template.json D:\DevVM\DevBox\Config\VM.json
 ```
 
-WinMerge, from the default list, compares them too. A VM built before LazyVM kept this copy gets one at its next build or rebuild, holding the list that build installs.
+WinMerge, from the default list, compares them too.
+
+A VM set up before LazyVM kept the list in `VM.json` has it in `Tooling.json`, `Tooling.Template.json` and `History\Tooling-<date>-<time>.json`. The first command run on it folds each into `VM.json`, `VM.Template.json` and `History\VM-<date>-<time>.json`, and deletes the old file once the new one reads back with the same list. One that cannot be folded in stays, and the log says why.
 
 ### Application settings
 
@@ -580,7 +581,7 @@ Get-LazyVMRestorePoint
 Restore-LazyVMTooling -RestorePoint 20261008-201746
 ```
 
-This applies the checkpoint and restores the matching tooling list. A checkpoint of the current state is taken first, and the log gives the command that undoes the revert.
+This applies the checkpoint and puts the matching tooling list back into `VM.json`; every other setting stays as it is now. A checkpoint of the current state is taken first, and the log gives the command that undoes the revert.
 
 > **Important**
 > A checkpoint covers all of the VM's disks, including the Dev Drive and the SQL data disk. Reverting loses code you have not pushed and database changes made since. Push your work first.

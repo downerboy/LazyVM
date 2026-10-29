@@ -49,12 +49,21 @@ function ConvertTo-PlainValue {
 }
 
 function Get-DefaultSetting {
-    <# Every setting at its default, from the schema. A fresh copy each time. #>
+    <#
+      Every setting at its default, from the schema. A fresh copy each time.
+      A default too large for the schema (the tooling list) is in a file in
+      the module's Data folder, which the setting names as its defaultFile.
+    #>
     $schema = Get-SettingsSchema
     $settings = @{}
     foreach ($name in $schema.properties.Keys) {
         if ($name -eq '$schema') { continue }
-        $settings[$name] = ConvertTo-PlainValue -Value $schema.properties[$name]['default']
+        $property = $schema.properties[$name]
+        $default = $property['default']
+        if ($property.Contains('defaultFile')) {
+            $default = Get-Content -LiteralPath (Join-Path -Path $script:DataDir -ChildPath $property['defaultFile']) -Raw | ConvertFrom-Json -AsHashtable -DateKind String
+        }
+        $settings[$name] = ConvertTo-PlainValue -Value $default
     }
     return $settings
 }
@@ -180,7 +189,8 @@ function Read-SettingsFile {
     if ([string]::IsNullOrWhiteSpace($text)) { return @{} }
 
     try {
-        $parsed = $text | ConvertFrom-Json -AsHashtable
+        # Dates stay text, as written: a value is never rewritten in another form.
+        $parsed = $text | ConvertFrom-Json -AsHashtable -DateKind String
     }
     catch {
         $reason = $_.Exception.Message -replace '^Conversion from JSON failed with error: ', ''

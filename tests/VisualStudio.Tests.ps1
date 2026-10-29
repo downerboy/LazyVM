@@ -180,7 +180,7 @@ Describe 'Add-ProductExtension' {
 Describe 'The default tooling list' {
     It 'loads, and holds none of the extensions the installer refused as unsigned (#112)' {
         $links = InModuleScope $module {
-            $record = Read-ToolingRecord -Path (Join-Path -Path $script:DataDir -ChildPath $script:DefaultToolingFileName)
+            $record = [ToolingRecord]::FromObject((Get-DefaultSetting).Tooling)
             @($record.Products | ForEach-Object { $_.ExtensionLinks() })
         }
 

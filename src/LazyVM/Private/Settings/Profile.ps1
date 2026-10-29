@@ -7,10 +7,11 @@
 #
 # The shared template (the defaults, then LazyVM.Settings.json, which lists
 # only the settings it changes) is used only to create a VM. From then on
-# the VM's VM.json is its one source of truth: it holds every setting, so
-# it can rebuild the VM or be copied for another one, and LazyVM keeps it
-# up to date as the VM changes (Update-VMProfile), keeping every earlier
-# version in <Name>\Config\History. A copy of the schema is kept
+# the VM's VM.json is its one source of truth: it holds every setting and
+# the tooling list, so it can rebuild the VM or be copied for another one,
+# and LazyVM keeps it up to date as the VM changes (Update-VMProfile),
+# keeping recent versions in <Name>\Config\History (ProfileHistory.ps1).
+# A copy of the schema is kept
 # beside the host-wide file, so an editor such as VS Code offers
 # autocomplete, shows each setting's description and default on hover, and
 # underlines mistakes.
@@ -45,7 +46,7 @@ function Get-VMRoot {
 }
 
 function Get-VMProfileDir {
-    <# A VM's Config folder: its profile, tooling list and tooling history. #>
+    <# A VM's Config folder: its profile, the profile it was built from, and their history. #>
     param(
         [Parameter(Mandatory)][string]$Root,
         [Parameter(Mandatory)][string]$Name
@@ -244,10 +245,13 @@ function New-VMProfile {
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $Root)
 
     $settings = (Get-SharedTemplateSetting -Root $Root).Values
-    $source = $null
     if ($From) {
         $source = $existing | Where-Object { $_ -eq $From } | Select-Object -First 1
         if (-not $source) { throw "There is no VM named '$From' to copy." }
+        # The tooling list is copied with the other settings, so an older
+        # source VM's Tooling.json must be in its VM.json first. Its history
+        # and checkpoints belong to the source VM and stay there.
+        $null = Move-ToolingIntoProfile -Root $Root -Name $source
         $perVM = Get-PerVMSettingName
         $sourceSettings = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $source)
         foreach ($key in $sourceSettings.Keys) {
@@ -259,16 +263,9 @@ function New-VMProfile {
     if ($maintenanceTime) { $settings['MaintenanceTime'] = $maintenanceTime }
 
     $path = Get-VMProfilePath -Root $Root -Name $Name
-    Write-TextFileAtomic -Path $path -Text (ConvertTo-SettingsJson -Settings $settings -ForProfile)
-
-    # The source VM's tooling list is what the new VM is built with. Its
-    # history and checkpoints belong to the source VM and stay there.
-    if ($source) {
-        $sourceTooling = Join-Path -Path (Get-VMProfileDir -Root $Root -Name $source) -ChildPath $script:ToolingFileName
-        if (Test-Path -LiteralPath $sourceTooling -PathType Leaf) {
-            Copy-Item -LiteralPath $sourceTooling -Destination (Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath $script:ToolingFileName)
-        }
-    }
+    $text = ConvertTo-SettingsJson -Settings $settings -ForProfile
+    Write-TextFileAtomic -Path $path -Text $text
+    $null = Save-ProfileVersion -Root $Root -Name $Name -Text $text -Stamp (Get-Stamp)
     return $path
 }
 
@@ -294,17 +291,19 @@ function ConvertTo-ComparableJson {
 function Update-VMProfile {
     <#
       The one way VM.json changes after it is created. Applies $Change (setting
-      name -> new value), checks the result against the schema, keeps the
-      file as it was in <Name>\Config\History\VM-<stamp>.json, and writes the
-      new one in a single step. Logs each setting that changed and returns
-      their names; returns nothing, and writes nothing, when no value differs.
+      name -> new value), checks the result against the schema, writes it in
+      a single step and keeps that version in History, named after $Stamp
+      (now, by default), removing versions no longer needed. Logs each
+      setting that changed and returns their names; returns nothing, and
+      writes nothing, when no value differs.
     #>
     [OutputType([string[]])]
     param(
         [Parameter(Mandatory)][string]$Root,
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][hashtable]$Change,
-        [Parameter(Mandatory)][string]$Reason
+        [Parameter(Mandatory)][string]$Reason,
+        [ValidatePattern('^\d{8}-\d{6}$')][string]$Stamp
     )
 
     $path = Get-VMProfilePath -Root $Root -Name $Name
@@ -314,11 +313,12 @@ function Update-VMProfile {
     foreach ($key in $current.Keys) { $updated[$key] = $current[$key] }
     $changed = [System.Collections.Generic.List[string]]::new()
     foreach ($key in @($Change.Keys | Sort-Object)) {
-        $name = Find-SettingName -Name $key
-        if (-not $name) { throw "'$key' is not a setting, so it cannot be recorded in $path." }
-        if ($current.ContainsKey($name) -and (ConvertTo-ComparableJson $current[$name]) -eq (ConvertTo-ComparableJson $Change[$key])) { continue }
-        $updated[$name] = $Change[$key]
-        $changed.Add($name)
+        # Not $name: that is $Name, the VM, whatever the case.
+        $setting = Find-SettingName -Name $key
+        if (-not $setting) { throw "'$key' is not a setting, so it cannot be recorded in $path." }
+        if ($current.ContainsKey($setting) -and (ConvertTo-ComparableJson $current[$setting]) -eq (ConvertTo-ComparableJson $Change[$key])) { continue }
+        $updated[$setting] = $Change[$key]
+        $changed.Add($setting)
     }
     if ($changed.Count -eq 0) { return @() }
 
@@ -327,14 +327,11 @@ function Update-VMProfile {
         throw (Format-ProblemList -Heading "VM.json was left as it was: the change has {0} problem(s):`n  $path" -Problems $problems)
     }
 
-    $historyDir = Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'History'
-    New-Folder -Path $historyDir
-    # Two changes in the same second each keep their own copy.
-    $stamp = Get-Stamp
-    $copy = Join-Path -Path $historyDir -ChildPath "VM-$stamp.json"
-    for ($n = 2; Test-Path -LiteralPath $copy; $n++) { $copy = Join-Path -Path $historyDir -ChildPath "VM-$stamp-$n.json" }
-    Copy-Item -LiteralPath $path -Destination $copy
-    Write-TextFileAtomic -Path $path -Text (ConvertTo-SettingsJson -Settings $updated -ForProfile)
+    $text = ConvertTo-SettingsJson -Settings $updated -ForProfile
+    Write-TextFileAtomic -Path $path -Text $text
+    if (-not $Stamp) { $Stamp = Get-Stamp }
+    $null = Save-ProfileVersion -Root $Root -Name $Name -Text $text -Stamp $Stamp
+    Remove-OldProfileVersion -Root $Root -Name $Name -Needed (Get-ToolingCheckpointStamp -Name $Name)
 
     $what = if ($changed.Count -le 10) { $changed -join ', ' } else { "$($changed.Count) settings" }
     Write-LogEntry "Updated $path ($Reason): $what" 'INFO'

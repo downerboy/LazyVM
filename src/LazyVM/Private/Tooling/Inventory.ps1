@@ -189,7 +189,7 @@ function Get-GuestToolingReport {
     $path = Join-Path $toolingDir ('inventory-{0}.json' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
     Write-TextFileAtomic -Path $path -Text (ConvertTo-Json -InputObject $inventory -Depth 8)
 
-    $recorded = Read-ToolingRecord -Path (Get-ToolingPath -VM $VM).Record
+    $recorded = Read-VMTooling -VM $VM
     $observed = ConvertTo-ToolingRecord -Inventory $inventory -WingetExclude $VM.Settings.ToolingWingetExclude
     Add-MarketplaceItem -Record $observed -Previous $recorded
 

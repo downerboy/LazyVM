@@ -1,7 +1,7 @@
 ﻿{
   "Version": 1,
   "RecordedAt": "2026-10-08T20:17:42.2138422-07:00",
-  "Description": "Default tooling list for a VM that has none of its own yet. Replaced when the script is updated; a VM's own list is Config\\VMs\\<Name>\\Tooling.json.",
+  "Description": "Default tooling list: the default of the Tooling setting, for a VM that has none of its own yet. Replaced when LazyVM is updated; a VM's own list is the Tooling section of <Name>\\Config\\VM.json.",
   "Products": [
     {
       "ProductId": "Microsoft.VisualStudio.Product.Community",

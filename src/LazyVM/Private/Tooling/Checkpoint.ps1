@@ -6,9 +6,10 @@
 
 function Get-ToolingStamp {
     <#
-      A date-time no existing tooling checkpoint uses. Two checkpoints in the
-      same second would otherwise share a name, and a revert would pick the
-      wrong one.
+      A date-time no existing tooling checkpoint or kept version of VM.json
+      uses. Two checkpoints in the same second would otherwise share a name,
+      or a checkpoint the version of VM.json of another, and a revert would
+      pick the wrong one.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -16,9 +17,38 @@ function Get-ToolingStamp {
     while ($true) {
         $stamp = Get-Stamp
         $name = "$script:ToolingCheckpointPrefix $stamp"
-        if (-not ($existing | Where-Object { $_ -eq $name -or $_ -like "$name *" })) { return $stamp }
+        $versionKept = Test-Path -LiteralPath (Get-ProfileVersionPath -Root $VM.Settings.Root -Name $VM.Name -Stamp $stamp)
+        if (-not $versionKept -and -not ($existing | Where-Object { $_ -eq $name -or $_ -like "$name *" })) { return $stamp }
         Start-Sleep -Seconds 1
     }
+}
+
+function Get-ToolingCheckpointStamp {
+    <#
+      The date-times of a VM's tooling checkpoints: the versions of VM.json
+      its restore points need. None for a VM Hyper-V does not have yet; $null
+      when Hyper-V cannot be asked, so that nothing they need is removed.
+    #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    try {
+        $machine = Get-VM -Name $Name -ErrorAction Stop
+    }
+    catch [System.Management.Automation.CommandNotFoundException] {
+        return $null
+    }
+    catch {
+        if ($_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::ObjectNotFound) { return , [string[]]@() }
+        return $null
+    }
+
+    try {
+        $checkpoints = @(Get-VMSnapshot -VM $machine -ErrorAction Stop | Where-Object { $_.Name -like "$script:ToolingCheckpointPrefix *" })
+    }
+    catch {
+        return $null
+    }
+    return , [string[]]@($checkpoints | ForEach-Object { Get-CheckpointStamp -Name $_.Name })
 }
 
 function Get-ToolingCheckpoint {
@@ -113,16 +143,18 @@ function Get-ToolingRestorePoint {
     <# Get-LazyVMRestorePoint: the tooling versions that still have their checkpoint, oldest first. #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $paths = Get-ToolingPath -VM $VM
     foreach ($checkpoint in Get-ToolingCheckpoint -VM $VM) {
         $stamp = Get-CheckpointStamp -Name $checkpoint.Name
+        $hasList = $true
+        try { $null = Get-ProfileTooling -VM $VM -Stamp $stamp }
+        catch { $hasList = $false }
         [pscustomobject]@{
             PSTypeName     = 'LazyVM.RestorePoint'
             Name           = $VM.Name
             RestorePoint   = $stamp
             Taken          = $checkpoint.CreationTime
             Checkpoint     = $checkpoint.Name
-            HasToolingList = (Test-Path -LiteralPath (Join-Path $paths.HistoryDir "Tooling-$stamp.json"))
+            HasToolingList = $hasList
         }
     }
 }
@@ -141,23 +173,22 @@ function Invoke-ToolingRevert {
 
     Write-LogEntry "Revert - $($VM.Name) to tooling version $Stamp" 'PHASE'
 
-    $paths = Get-ToolingPath -VM $VM
     $checkpoint = Get-ToolingCheckpoint -VM $VM | Where-Object { (Get-CheckpointStamp -Name $_.Name) -eq $Stamp } | Select-Object -First 1
     if (-not $checkpoint) { throw "There is no checkpoint '$script:ToolingCheckpointPrefix $Stamp'. See them with: Get-LazyVMRestorePoint -Name $($VM.Name)" }
-    $listFile = Join-Path $paths.HistoryDir "Tooling-$Stamp.json"
-    if (-not (Test-Path -LiteralPath $listFile)) { throw "The tooling list for $Stamp is missing: $listFile" }
+    # Checked before anything changes.
+    $null = Get-ProfileTooling -VM $VM -Stamp $Stamp
 
-    # The current state, as an ordinary tooling version, so the revert can be reverted.
+    # The current state, as an ordinary tooling version, so the revert can be
+    # reverted: a checkpoint, and VM.json as it is now kept under its date-time.
     $now = Get-ToolingStamp -VM $VM
     New-ToolingCheckpoint -VM $VM -Name "$script:ToolingCheckpointPrefix $now before revert" -SkipPrune
-    if (Test-Path -LiteralPath $paths.Record) {
-        Copy-Item -LiteralPath $paths.Record -Destination (Join-Path $paths.HistoryDir "Tooling-$now.json") -Force
-    }
+    $profilePath = Get-VMProfilePath -Root $VM.Settings.Root -Name $VM.Name
+    $null = Save-ProfileVersion -Root $VM.Settings.Root -Name $VM.Name -Text ([IO.File]::ReadAllText($profilePath)) -Stamp $now
 
     $wasRunning = ((Get-VM -Name $VM.Name).State -eq 'Running')
     Remove-GuestSession -VM $VM
     Restore-VMSnapshot -VMSnapshot $checkpoint -Confirm:$false -ErrorAction Stop
-    Write-TextFileAtomic -Path $paths.Record -Text ([IO.File]::ReadAllText($listFile))
+    Restore-ProfileTooling -VM $VM -Stamp $Stamp
     Write-LogEntry "VM returned to '$($checkpoint.Name)' and its tooling list restored" 'OK'
     Write-LogEntry "  To undo this revert: Restore-LazyVMTooling -Name $($VM.Name) -RestorePoint $now" 'INFO'
 
