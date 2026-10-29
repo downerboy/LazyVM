@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.4.0](https://github.com/downerboy/LazyVM/compare/v4.3.2...v4.4.0) (2026-10-29)
+
+
+### Features
+
+* record hardware changes made in Hyper-V in VM.json ([#144](https://github.com/downerboy/LazyVM/issues/144)) ([b0e48ac](https://github.com/downerboy/LazyVM/commit/b0e48acbb2324584292473f6f86bf6c22ad16d5d))
+
 ## [4.3.2](https://github.com/downerboy/LazyVM/compare/v4.3.1...v4.3.2) (2026-10-27)
 
 
