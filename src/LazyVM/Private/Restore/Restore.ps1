@@ -385,14 +385,20 @@ function Restore-GuestVisualStudioState {
 # ── SQL Server ───────────────────────────────────────────────────────────────
 
 function Restore-GuestSqlState {
-    <# Instance settings, then logins with their original SIDs, then each database from its backup on the data disk. #>
+    <#
+      Instance settings, then logins with their original SIDs, then each
+      database from its backup on the data disk. The settings and logins are
+      the ones VM.json records (#131), or the capture's for a VM recorded
+      before that.
+    #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][CaptureManifest]$Manifest
     )
 
     $sql = $Manifest.Sql
-    if (-not $sql) {
+    $recorded = Get-GuestSqlRestore -VM $VM
+    if (-not $sql -and -not $recorded) {
         Write-LogEntry '  no SQL capture - skipping' 'INFO'
         return
     }
@@ -403,8 +409,10 @@ function Restore-GuestSqlState {
 
     $runtime = $VM.Runtime
     $notes = @()
-    $notes += Restore-GuestSqlLogin -VM $VM -Configs @($sql.Configs) -Logins @($sql.Logins)
-    foreach ($database in @($sql.Databases | Where-Object { $_ })) {
+    $logins = if ($recorded) { $recorded } else { $sql }
+    $notes += Restore-GuestSqlLogin -VM $VM -Configs @($logins.Configs) -Logins @($logins.Logins)
+    $databases = if ($sql) { @($sql.Databases | Where-Object { $_ }) } else { @() }
+    foreach ($database in $databases) {
         $notes += Invoke-GuestScript -VM $VM -Activity "restoring the database $($database.Name)" -TimeoutMinutes 180 `
             -ArgumentList @($runtime.SqlServer, $database.Name, "$($database.BackupFile)", $runtime.GuestSqlBackupDir, $runtime.GuestSqlDataDir, $runtime.GuestSqlLogDir, "$($database.Recovery)", [int]$database.CompatLevel) -ScriptBlock {
             param($server, $name, $backupFile, $backupDir, $dataDir, $logDir, $recovery, $compatLevel)
@@ -441,7 +449,9 @@ function Restore-GuestSqlState {
         }
     }
     Write-GuestNote -Notes $notes
-    foreach ($item in @($sql.NotMigrated)) { Write-LogEntry "  reminder - not migrated: $item" 'WARN' }
+    if ($sql) {
+        foreach ($item in @($sql.NotMigrated)) { Write-LogEntry "  reminder - not migrated: $item" 'WARN' }
+    }
 }
 
 function Restore-GuestSqlLogin {

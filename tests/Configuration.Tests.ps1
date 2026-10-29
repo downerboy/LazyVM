@@ -123,6 +123,21 @@ Describe 'The settings schema' {
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
     }
 
+    It 'accepts a GuestSql record of instance settings and logins' {
+        $path = New-TestFile -Text '{ "GuestSql": { "Configs": [ { "Name": "max server memory (MB)", "Value": 4096 } ], "Logins": [ { "Name": "app", "TypeDesc": "SQL_LOGIN", "IsDisabled": false, "DefaultDb": "master", "DefaultLang": "us_english", "SidHex": "0x1A2B", "HashHex": "0x0200FF", "PolicyChecked": true, "ExpirationChecked": false, "ServerRoles": [ "dbcreator" ] }, { "Name": "DEV\\sean", "TypeDesc": "WINDOWS_LOGIN", "IsDisabled": false, "DefaultDb": "master", "DefaultLang": "us_english", "SidHex": "0x0105", "HashHex": "", "PolicyChecked": false, "ExpirationChecked": false, "ServerRoles": [] } ] } }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
+    }
+
+    It 'rejects a SQL login whose <Field> is not hexadecimal, since restore writes it into SQL as it is' -ForEach @(
+        @{ Field = 'SidHex'; SidHex = '0x1A; DROP LOGIN x'; HashHex = '0x02' }
+        @{ Field = 'HashHex'; SidHex = '0x1A'; HashHex = 'secret' }
+    ) {
+        $path = New-TestFile -Text ('{ "GuestSql": { "Configs": [], "Logins": [ { "Name": "app", "TypeDesc": "SQL_LOGIN", "IsDisabled": false, "DefaultDb": "master", "DefaultLang": "us_english", "SidHex": "' + $SidHex + '", "HashHex": "' + $HashHex + '", "PolicyChecked": true, "ExpirationChecked": false, "ServerRoles": [] } ] } }')
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+    }
+
     It 'accepts a GuestAppSettings list' {
         $path = New-TestFile -Text '{ "GuestAppSettings": [ { "Name": "WinMerge", "RegistryKey": "HKCU\\Software\\WinMerge", "Values": [ { "Path": "Settings", "Name": "Font", "Kind": "String", "Data": "Consolas" }, { "Path": "", "Name": "Size", "Kind": "DWord", "Data": 12 } ], "SecretValues": [ { "Path": "", "Name": "Password" } ] } ] }'
 
@@ -1937,6 +1952,203 @@ Describe 'Get-GuestAppSettingRestore (#131)' {
         $restore = Invoke-TestRestore -Root $root -Keys @($listed, $planted)
 
         @($restore.Keys).Name | Should -Be @('WinMerge')
+    }
+}
+
+Describe 'ConvertTo-GuestSqlRecord (#131)' {
+    It 'keeps instance settings and logins sorted by name, with whole-number values and sorted roles' {
+        $snapshot = [pscustomobject]@{
+            Configs = @(
+                [pscustomobject]@{ Name = 'remote access'; Value = '1' }
+                [pscustomobject]@{ Name = 'max server memory (MB)'; Value = '4096' }
+            )
+            Logins  = @(
+                [pscustomobject]@{ Name = 'app'; TypeDesc = 'SQL_LOGIN'; IsDisabled = $false; DefaultDb = 'master'; DefaultLang = 'us_english'; SidHex = '0x1A'; HashHex = '0x02'; PolicyChecked = $true; ExpirationChecked = $false; ServerRoles = @('sysadmin', 'dbcreator') }
+                [pscustomobject]@{ Name = 'DEV\sean'; TypeDesc = 'WINDOWS_LOGIN'; IsDisabled = $false; DefaultDb = 'master'; DefaultLang = 'us_english'; SidHex = '0x0105'; HashHex = $null; PolicyChecked = $false; ExpirationChecked = $false; ServerRoles = 'sysadmin' }
+            )
+        }
+
+        $record = InModuleScope $module -Parameters @{ Snapshot = $snapshot } { param($Snapshot) ConvertTo-GuestSqlRecord -Snapshot $Snapshot }
+
+        @($record.Configs).Name | Should -Be @('max server memory (MB)', 'remote access')
+        $record.Configs[0].Value | Should -BeOfType [long]
+        @($record.Logins).Name | Should -Be @('app', 'DEV\sean')
+        $record.Logins[0].ServerRoles | Should -Be @('dbcreator', 'sysadmin')
+        $record.Logins[1].ServerRoles.GetType().IsArray | Should -BeTrue
+        $record.Logins[1].HashHex | Should -Be ''
+    }
+}
+
+Describe 'Update-GuestSqlRecord (#131)' {
+    BeforeAll {
+        function Invoke-TestRecord {
+            <#
+              Records Alpha's SQL logins and settings under $Root, with the
+              guest reporting $Snapshot, or having no SQL Server when
+              -NoInstance. Returns whether anything changed.
+            #>
+            param([string]$Root, [object]$Snapshot, [switch]$NoInstance)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Snapshot = $Snapshot; NoInstance = [bool]$NoInstance } {
+                param($Root, $Snapshot, $NoInstance)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                $instance = if ($NoInstance) { $null } else { [pscustomobject]@{ Instance = 'MSSQLSERVER' } }
+                Mock Connect-GuestSqlInstance { $instance }.GetNewClosure()
+                $reported = $Snapshot
+                Mock Get-GuestSqlSnapshot { $reported }.GetNewClosure()
+                $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+                Update-GuestSqlRecord -VM $vm
+            }
+        }
+        function New-TestSnapshot {
+            param([string[]]$Login = @('app'))
+            [pscustomobject]@{
+                Configs = @([pscustomobject]@{ Name = 'max server memory (MB)'; Value = '4096' })
+                Logins  = @($Login | ForEach-Object {
+                        [pscustomobject]@{ Name = $_; TypeDesc = 'SQL_LOGIN'; IsDisabled = $false; DefaultDb = 'master'; DefaultLang = 'us_english'; SidHex = '0x1A'; HashHex = '0x02'; PolicyChecked = $true; ExpirationChecked = $false; ServerRoles = @() }
+                    })
+            }
+        }
+        function Get-TestRecordedSql {
+            param([string]$Root)
+            (Read-TestJson -Path (Join-Path -Path $Root -ChildPath 'Alpha/Config/VM.json')).GuestSql
+        }
+    }
+
+    It 'writes the logins and instance settings into VM.json' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $changed = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot)
+
+        $changed | Should -BeTrue
+        $recorded = Get-TestRecordedSql -Root $root
+        @($recorded.Logins).Name | Should -Be @('app')
+        $recorded.Logins[0].HashHex | Should -Be '0x02'
+        $recorded.Configs[0].Value | Should -Be 4096
+    }
+
+    It 'writes nothing the second time, when nothing changed' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot)
+
+        $changed = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot)
+
+        $changed | Should -BeFalse
+        @(Get-ChildItem -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/History') -Filter 'VM-*.json').Count | Should -Be 1
+    }
+
+    It 'records a login that was removed' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot -Login 'app', 'report')
+
+        $changed = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot -Login 'report')
+
+        $changed | Should -BeTrue
+        @((Get-TestRecordedSql -Root $root).Logins).Name | Should -Be @('report')
+    }
+
+    It 'keeps what it had when the guest has no SQL Server, so a failed install cannot erase the logins' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Snapshot (New-TestSnapshot)
+
+        $changed = Invoke-TestRecord -Root $root -NoInstance
+
+        $changed | Should -BeFalse
+        @((Get-TestRecordedSql -Root $root).Logins).Name | Should -Be @('app')
+    }
+}
+
+Describe 'Get-GuestSqlRestore (#131)' {
+    BeforeAll {
+        function Invoke-TestRestore {
+            <# What a restore of Alpha under $Root would put back, after VM.json records $Sql (unless it is $null). #>
+            param([string]$Root, [object]$Sql)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Sql = $Sql } {
+                param($Root, $Sql)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                if ($null -ne $Sql) { $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestSql = $Sql } -Reason 'a test' }
+                Get-GuestSqlRestore -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+            }
+        }
+    }
+
+    It 'returns nothing for a VM whose SQL state was never recorded, so an older capture is used' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        Invoke-TestRestore -Root $root -Sql $null | Should -BeNullOrEmpty
+    }
+
+    It 'returns the recorded logins and instance settings' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $login = [ordered]@{ Name = 'app'; TypeDesc = 'SQL_LOGIN'; IsDisabled = $false; DefaultDb = 'master'; DefaultLang = 'us_english'; SidHex = '0x1A'; HashHex = '0x02'; PolicyChecked = $true; ExpirationChecked = $false; ServerRoles = @() }
+
+        $restore = Invoke-TestRestore -Root $root -Sql ([ordered]@{ Configs = @(); Logins = @($login) })
+
+        @($restore.Logins).Name | Should -Be @('app')
+        @($restore.Configs).Count | Should -Be 0
+    }
+}
+
+Describe 'Restore-GuestSqlState (#131)' {
+    BeforeAll {
+        function Invoke-TestRestore {
+            <#
+              Restores Alpha's SQL state under $Root from a capture whose Sql is
+              $CapturedSql, after VM.json records $RecordedSql (unless it is
+              $null). Returns the logins handed to Restore-GuestSqlLogin, or
+              $null when it was not called.
+            #>
+            param([string]$Root, [object]$CapturedSql, [object]$RecordedSql)
+
+            InModuleScope $module -Parameters @{ Root = $Root; CapturedSql = $CapturedSql; RecordedSql = $RecordedSql } {
+                param($Root, $CapturedSql, $RecordedSql)
+                Mock Write-LogEntry {}
+                Mock Write-GuestNote {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                Mock Connect-GuestSqlInstance { [pscustomobject]@{ Instance = 'MSSQLSERVER' } }
+                Mock Invoke-GuestScript {}
+                $script:handedLogins = $null
+                Mock Restore-GuestSqlLogin { $script:handedLogins = @($Logins) }
+                if ($null -ne $RecordedSql) { $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestSql = $RecordedSql } -Reason 'a test' }
+                $manifest = [CaptureManifest]::new()
+                $manifest.Sql = $CapturedSql
+                Restore-GuestSqlState -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) -Manifest $manifest
+                , $script:handedLogins
+            }
+        }
+        function New-TestLogin {
+            param([string]$Name)
+            [ordered]@{ Name = $Name; TypeDesc = 'SQL_LOGIN'; IsDisabled = $false; DefaultDb = 'master'; DefaultLang = 'us_english'; SidHex = '0x1A'; HashHex = '0x02'; PolicyChecked = $true; ExpirationChecked = $false; ServerRoles = @() }
+        }
+    }
+
+    It 'restores the logins VM.json records rather than the ones in the capture' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $captured = [pscustomobject]@{ Databases = @(); Logins = @([pscustomobject](New-TestLogin -Name 'old')); Configs = @(); NotMigrated = @() }
+
+        $logins = Invoke-TestRestore -Root $root -CapturedSql $captured -RecordedSql ([ordered]@{ Configs = @(); Logins = @(New-TestLogin -Name 'recorded') })
+
+        @($logins).Name | Should -Be @('recorded')
+    }
+
+    It 'restores the logins in the capture for a VM recorded before #131' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $captured = [pscustomobject]@{ Databases = @(); Logins = @([pscustomobject](New-TestLogin -Name 'old')); Configs = @(); NotMigrated = @() }
+
+        $logins = Invoke-TestRestore -Root $root -CapturedSql $captured -RecordedSql $null
+
+        @($logins).Name | Should -Be @('old')
+    }
+
+    It 'restores the recorded logins even when the capture has no SQL state' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $logins = Invoke-TestRestore -Root $root -CapturedSql $null -RecordedSql ([ordered]@{ Configs = @(); Logins = @(New-TestLogin -Name 'recorded') })
+
+        @($logins).Name | Should -Be @('recorded')
     }
 }
 

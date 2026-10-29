@@ -177,7 +177,11 @@ function Save-GuestVisualStudioState {
 # ── SQL Server ───────────────────────────────────────────────────────────────
 
 function Save-GuestSqlState {
-    <# Backs up every user database to the data disk, checks each backup, and records logins and instance settings. #>
+    <#
+      Backs up every user database to the data disk and checks each backup.
+      Logins and instance settings are recorded in VM.json instead
+      (GuestSql.ps1).
+    #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $instance = Connect-GuestSqlInstance -VM $VM
@@ -188,44 +192,17 @@ function Save-GuestSqlState {
     $server = $VM.Runtime.SqlServer
     $backupDir = $VM.Runtime.GuestSqlBackupDir
 
-    $state = Invoke-GuestScript -VM $VM -Activity 'SQL logins and settings capture' -TimeoutMinutes 10 -ArgumentList @($server) -ScriptBlock {
+    # Logins and instance settings are plain data, so they are recorded in VM.json (#131), not the capture.
+    try { $null = Update-GuestSqlRecord -VM $VM }
+    catch { Write-LogError '  The SQL logins and settings could not be recorded; VM.json keeps what it had' $_ }
+
+    $state = Invoke-GuestScript -VM $VM -Activity 'SQL databases check' -TimeoutMinutes 10 -ArgumentList @($server) -ScriptBlock {
         param($server)
         $ErrorActionPreference = 'Stop'
         $connection = Open-GuestSqlConnection -Server $server
         try {
             $version = @(Get-GuestSqlRow -Connection $connection -Sql "SELECT SERVERPROPERTY('ProductVersion') AS V, SERVERPROPERTY('Edition') AS E, @@SERVICENAME AS S")[0]
             $databases = @(Get-GuestSqlRow -Connection $connection -Sql "SELECT name FROM sys.databases WHERE database_id > 4 AND state_desc = 'ONLINE' AND is_read_only = 0" | ForEach-Object { "$($_.name)" })
-
-            # SID and password hash are kept, so database users are not
-            # orphaned when the databases are restored into a new instance.
-            $logins = @(foreach ($login in @(Get-GuestSqlRow -Connection $connection -Sql @'
-SELECT sp.name, sp.type_desc AS TypeDesc, sp.is_disabled AS IsDisabled,
-       sp.default_database_name AS DefaultDb, sp.default_language_name AS DefaultLang,
-       CONVERT(varchar(max), sp.sid, 1) AS SidHex,
-       CONVERT(varchar(max), sl.password_hash, 1) AS HashHex,
-       sl.is_policy_checked AS PolicyChecked, sl.is_expiration_checked AS ExpirationChecked
-FROM sys.server_principals sp
-LEFT JOIN sys.sql_logins sl ON sl.principal_id = sp.principal_id
-WHERE sp.type IN ('S','U','G') AND sp.name NOT LIKE '##%' AND sp.name NOT LIKE 'NT %'
-  AND sp.name <> 'sa' AND sp.name NOT LIKE 'BUILTIN\%'
-'@)) {
-                    $roles = @(Get-GuestSqlRow -Connection $connection -Sql "SELECT r.name FROM sys.server_role_members m JOIN sys.server_principals r ON r.principal_id = m.role_principal_id JOIN sys.server_principals p ON p.principal_id = m.member_principal_id WHERE p.name = $(ConvertTo-SqlString -Text "$($login.name)")" | ForEach-Object { "$($_.name)" })
-                    [pscustomobject]@{
-                        Name              = "$($login.name)"
-                        TypeDesc          = "$($login.TypeDesc)"
-                        IsDisabled        = [bool]$login.IsDisabled
-                        DefaultDb         = "$($login.DefaultDb)"
-                        DefaultLang       = "$($login.DefaultLang)"
-                        SidHex            = "$($login.SidHex)"
-                        HashHex           = "$($login.HashHex)"
-                        PolicyChecked     = [bool]$login.PolicyChecked
-                        ExpirationChecked = [bool]$login.ExpirationChecked
-                        ServerRoles       = $roles
-                    }
-                })
-
-            $configs = @(Get-GuestSqlRow -Connection $connection -Sql 'SELECT name, value_in_use FROM sys.configurations WHERE value <> value_in_use OR value_in_use <> 0' |
-                    ForEach-Object { [pscustomobject]@{ Name = "$($_.name)"; Value = "$($_.value_in_use)" } })
 
             # What a capture knowingly does not bring across.
             $notMigrated = @()
@@ -239,7 +216,7 @@ WHERE sp.type IN ('S','U','G') AND sp.name NOT LIKE '##%' AND sp.name NOT LIKE '
 
             return [pscustomobject]@{
                 Instance = "$($version.S)"; Version = "$($version.V)"; Edition = "$($version.E)"
-                DatabaseNames = $databases; Logins = $logins; Configs = $configs; NotMigrated = $notMigrated
+                DatabaseNames = $databases; NotMigrated = $notMigrated
             }
         }
         finally { $connection.Close() }
@@ -250,7 +227,7 @@ WHERE sp.type IN ('S','U','G') AND sp.name NOT LIKE '##%' AND sp.name NOT LIKE '
         })
 
     $total = ($backups | Measure-Object -Property SizeBytes -Sum).Sum
-    Write-LogEntry "  SQL $($state.Version) ($($state.Edition)): $($backups.Count) database(s), $(Format-Size ([double]$total)) of backups, $(@($state.Logins).Count) login(s)" 'OK'
+    Write-LogEntry "  SQL $($state.Version) ($($state.Edition)): $($backups.Count) database(s), $(Format-Size ([double]$total)) of backups" 'OK'
     Write-LogEntry "  Backups stay on the data disk ($backupDir), which survives the rebuild" 'INFO'
     foreach ($item in @($state.NotMigrated)) { Write-LogEntry "  NOT migrated automatically - $item" 'WARN' }
 
@@ -260,8 +237,6 @@ WHERE sp.type IN ('S','U','G') AND sp.name NOT LIKE '##%' AND sp.name NOT LIKE '
         Edition     = $state.Edition
         BackupDir   = $backupDir
         Databases   = $backups
-        Logins      = @($state.Logins)
-        Configs     = @($state.Configs)
         NotMigrated = @($state.NotMigrated)
     }
 }
