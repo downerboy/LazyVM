@@ -185,7 +185,7 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
 
 `Invoke-LazyVMMaintenance` `-Name <VM>`
 
-Extends C: into any space added to the OS disk and records tooling changes every day, then acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry.
+Records hardware changes made in Hyper-V, extends C: into any space added to the OS disk and records tooling changes every day, then acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry.
 
 Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
 

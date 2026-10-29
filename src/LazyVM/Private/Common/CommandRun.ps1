@@ -22,13 +22,15 @@ function Initialize-CommandRun {
     <#
       The start of every command that works on a VM: reads its settings,
       starts its log, writes the run's header and any settings warnings, and
-      adopts the guest account name from the credential store. Returns the
-      VM's context.
+      adopts the guest account name from the credential store. With
+      -RecordHardware, first records in VM.json any hardware change made in
+      Hyper-V. Returns the VM's context.
     #>
     [OutputType([VMContext])]
     param(
         [Parameter(Mandatory)][string]$Title,
-        [string]$Name
+        [string]$Name,
+        [switch]$RecordHardware
     )
 
     $root = Resolve-LazyVMRoot
@@ -53,7 +55,10 @@ function Initialize-CommandRun {
 
     # A VM from before #130 has its tooling list in files of its own: they
     # go into VM.json before anything reads it.
-    if (Move-ToolingIntoProfile -Root $root.Path -Name $vm.Name) {
+    $changed = Move-ToolingIntoProfile -Root $root.Path -Name $vm.Name
+    # A rebuild must make the VM as it is now, not as it was first set up.
+    if ($RecordHardware -and (Save-VMHardware -VM $vm)) { $changed = $true }
+    if ($changed) {
         $configuration = Read-VMSetting -Root $root.Path -VMName $vm.Name -Unattended:(Test-Unattended)
         $vm = [VMContext]::new($configuration.Settings)
     }
@@ -86,13 +91,14 @@ function Invoke-CommandRun {
         [string]$Name,
         [string]$FailureMessage,
         [System.Management.Automation.PSCmdlet]$Cmdlet,
-        [scriptblock]$ScriptBlock
+        [scriptblock]$ScriptBlock,
+        [switch]$RecordHardware
     )
 
     Assert-Administrator
     $context = $null
     try {
-        $context = Initialize-CommandRun -Title $Title -Name $Name
+        $context = Initialize-CommandRun -Title $Title -Name $Name -RecordHardware:$RecordHardware
         & $ScriptBlock $context
     }
     catch {

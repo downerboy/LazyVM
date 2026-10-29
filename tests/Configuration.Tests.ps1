@@ -1076,6 +1076,220 @@ Describe 'Initialize-CommandRun' {
         $wingetIds | Should -Be @('Git.Git')
         Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json' | Should -Not -Exist
     }
+
+    It 'with -RecordHardware, records what Hyper-V says before the run uses the settings' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+
+        $vCPU = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            $rootFolder = [pscustomobject]@{ Path = $Root; Source = 'a test' }
+            Mock Resolve-LazyVMRoot { $rootFolder }.GetNewClosure()
+            Mock Start-Log {}
+            Mock Write-LogEntry {}
+            Mock Sync-GuestUserFromStore {}
+            Mock Get-ToolingCheckpointStamp { , @() }
+            Mock Get-VMHardware { [pscustomobject]@{ ProcessorCount = 6; DynamicMemoryEnabled = $true; StartupBytes = 8GB; MinimumBytes = 2GB; MaximumBytes = 16GB; SwitchNames = @('Default Switch'); DiskBytes = @{} } }
+
+            (Initialize-CommandRun -Title 'A test' -Name 'Alpha' -RecordHardware).Settings.vCPU
+        }
+
+        $vCPU | Should -Be 6
+        (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).vCPU | Should -Be 6
+    }
+
+    It 'without -RecordHardware, does not ask Hyper-V' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            $rootFolder = [pscustomobject]@{ Path = $Root; Source = 'a test' }
+            Mock Resolve-LazyVMRoot { $rootFolder }.GetNewClosure()
+            Mock Start-Log {}
+            Mock Write-LogEntry {}
+            Mock Sync-GuestUserFromStore {}
+            Mock Save-VMHardware { $true }
+
+            $null = Initialize-CommandRun -Title 'A test' -Name 'Alpha'
+
+            Should -Invoke Save-VMHardware -Times 0
+        }
+    }
+}
+
+Describe 'Get-HardwareChange (#6)' {
+    BeforeAll {
+        function New-TestHardware {
+            <# What Hyper-V reports for a VM configured exactly as the default settings say. #>
+            [pscustomobject]@{
+                ProcessorCount       = 4
+                DynamicMemoryEnabled = $true
+                StartupBytes         = 8GB
+                MinimumBytes         = 2GB
+                MaximumBytes         = 16GB
+                SwitchNames          = @('Default Switch')
+                DiskBytes            = @{ OSDiskSizeGB = 120GB; SQLDiskSizeGB = 100GB; DevDriveSizeGB = 250GB }
+            }
+        }
+        $settings = @{ vCPU = 4; MemStartGB = 8; MemMinGB = 2; MemMaxGB = 16; OSDiskSizeGB = 120; SQLDiskSizeGB = 100; DevDriveSizeGB = 250; SwitchName = 'Default Switch'; NatSwitchName = 'LazyVM-NAT' }
+    }
+
+    It 'finds nothing when Hyper-V matches the settings' {
+        $changes = InModuleScope $module -Parameters @{ Settings = $settings; Hardware = (New-TestHardware) } {
+            param($Settings, $Hardware)
+            @(Get-HardwareChange -Settings $Settings -Hardware $Hardware)
+        }
+
+        $changes | Should -BeNullOrEmpty
+    }
+
+    It 'reports each changed processor, memory and disk setting with its old and new value' {
+        $hardware = New-TestHardware
+        $hardware.ProcessorCount = 8
+        $hardware.MaximumBytes = 24GB
+        $hardware.DiskBytes.OSDiskSizeGB = 200GB
+
+        $changes = InModuleScope $module -Parameters @{ Settings = $settings; Hardware = $hardware } {
+            param($Settings, $Hardware)
+            @(Get-HardwareChange -Settings $Settings -Hardware $Hardware)
+        }
+
+        $changes | ForEach-Object { "$($_.Setting) $($_.Old)->$($_.New) $($_.Recordable)" } |
+            Should -Be @('vCPU 4->8 True', 'MemMaxGB 16->24 True', 'OSDiskSizeGB 120->200 True')
+    }
+
+    It 'ignores minimum and maximum memory while dynamic memory is off' {
+        $hardware = New-TestHardware
+        $hardware.DynamicMemoryEnabled = $false
+        $hardware.MinimumBytes = 512MB
+        $hardware.MaximumBytes = 1TB
+
+        $changes = InModuleScope $module -Parameters @{ Settings = $settings; Hardware = $hardware } {
+            param($Settings, $Hardware)
+            @(Get-HardwareChange -Settings $Settings -Hardware $Hardware)
+        }
+
+        $changes | Should -BeNullOrEmpty
+    }
+
+    It 'marks a size that is not a whole number of GB as not recordable' {
+        $hardware = New-TestHardware
+        $hardware.StartupBytes = 6GB + 512MB
+
+        $changes = InModuleScope $module -Parameters @{ Settings = $settings; Hardware = $hardware } {
+            param($Settings, $Hardware)
+            @(Get-HardwareChange -Settings $Settings -Hardware $Hardware)
+        }
+
+        $changes.Setting | Should -Be 'MemStartGB'
+        $changes.New | Should -Be 6.5
+        $changes.Recordable | Should -BeFalse
+    }
+
+    It 'leaves a disk alone when it does not exist' {
+        $hardware = New-TestHardware
+        $hardware.DiskBytes = @{ OSDiskSizeGB = 120GB }
+
+        $changes = InModuleScope $module -Parameters @{ Settings = $settings; Hardware = $hardware } {
+            param($Settings, $Hardware)
+            @(Get-HardwareChange -Settings $Settings -Hardware $Hardware)
+        }
+
+        $changes | Should -BeNullOrEmpty
+    }
+
+    It 'reports the switch the VM was moved to' {
+        $hardware = New-TestHardware
+        $hardware.SwitchNames = @('External')
+
+        $changes = InModuleScope $module -Parameters @{ Settings = $settings; Hardware = $hardware } {
+            param($Settings, $Hardware)
+            @(Get-HardwareChange -Settings $Settings -Hardware $Hardware)
+        }
+
+        "$($changes.Setting) $($changes.Old)->$($changes.New)" | Should -Be 'SwitchName Default Switch->External'
+    }
+
+    It 'leaves the switch alone when the VM is on the NAT fallback, has no adapter or has several' -TestCases @(
+        @{ Switches = @('LazyVM-NAT') }
+        @{ Switches = @() }
+        @{ Switches = @('External', 'Internal') }
+    ) {
+        param($Switches)
+        $hardware = New-TestHardware
+        $hardware.SwitchNames = $Switches
+
+        $changes = InModuleScope $module -Parameters @{ Settings = $settings; Hardware = $hardware } {
+            param($Settings, $Hardware)
+            @(Get-HardwareChange -Settings $Settings -Hardware $Hardware)
+        }
+
+        $changes | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Save-VMHardware (#6)' {
+    BeforeAll {
+        function Invoke-TestSave {
+            <# Runs Save-VMHardware for Alpha under $Root, with Hyper-V reporting $Hardware. #>
+            param([string]$Root, [AllowNull()][object]$Hardware)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Hardware = $Hardware } {
+                param($Root, $Hardware)
+                Mock Write-LogEntry {}
+                Mock Write-LogError {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                $reported = $Hardware
+                Mock Get-VMHardware { $reported }.GetNewClosure()
+                $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+                Save-VMHardware -VM $vm
+            }
+        }
+        $profileJson = '{ "vCPU": 4, "MemStartGB": 8, "MemMinGB": 2, "MemMaxGB": 16, "OSDiskSizeGB": 120, "SwitchName": "Default Switch" }'
+        function New-TestHardware {
+            param([int]$ProcessorCount = 4, [long]$OSDiskBytes = 120GB)
+            [pscustomobject]@{ ProcessorCount = $ProcessorCount; DynamicMemoryEnabled = $true; StartupBytes = 8GB; MinimumBytes = 2GB; MaximumBytes = 16GB; SwitchNames = @('Default Switch'); DiskBytes = @{ OSDiskSizeGB = $OSDiskBytes } }
+        }
+    }
+
+    It 'records a change made in Hyper-V in VM.json and says so' {
+        $root = New-TestRoot -Profiles @{ Alpha = $profileJson }
+
+        $saved = Invoke-TestSave -Root $root -Hardware (New-TestHardware -ProcessorCount 8 -OSDiskBytes 160GB)
+
+        $saved | Should -BeTrue
+        $vmProfile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
+        $vmProfile.vCPU | Should -Be 8
+        $vmProfile.OSDiskSizeGB | Should -Be 160
+    }
+
+    It 'writes nothing when Hyper-V matches VM.json' {
+        $root = New-TestRoot -Profiles @{ Alpha = $profileJson }
+
+        $saved = Invoke-TestSave -Root $root -Hardware (New-TestHardware)
+
+        $saved | Should -BeFalse
+        Join-Path -Path $root -ChildPath 'Alpha/Config/History' | Should -Not -Exist
+    }
+
+    It 'writes nothing when the VM does not exist in Hyper-V' {
+        $root = New-TestRoot -Profiles @{ Alpha = $profileJson }
+
+        $saved = Invoke-TestSave -Root $root -Hardware $null
+
+        $saved | Should -BeFalse
+        Join-Path -Path $root -ChildPath 'Alpha/Config/History' | Should -Not -Exist
+    }
+
+    It 'leaves VM.json as it was, without failing, when the schema refuses a value' {
+        $root = New-TestRoot -Profiles @{ Alpha = $profileJson }
+        $path = Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json'
+        $before = Get-Content -LiteralPath $path -Raw
+
+        $saved = Invoke-TestSave -Root $root -Hardware (New-TestHardware -ProcessorCount 8 -OSDiskBytes 32GB)
+
+        $saved | Should -BeFalse
+        Get-Content -LiteralPath $path -Raw | Should -Be $before
+    }
 }
 
 Describe 'The credential store' {

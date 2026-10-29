@@ -4,8 +4,10 @@
     Rebuilds a VM from scratch, keeping its work.
 
     .DESCRIPTION
-    Captures the VM's state, retires its Windows disk by renaming it, builds
-    a fresh VM from the profile and tooling list, puts the captured state
+    Records in VM.json any hardware change made to the VM in Hyper-V, so the
+    new VM is made as the VM is now. Then captures the VM's state, retires
+    its Windows disk by renaming it, builds a fresh VM from the profile and
+    tooling list, puts the captured state
     back and checks the result. The old Windows disk is deleted only once the
     new VM has passed the check; if anything goes wrong it is kept, and the
     log says how to go back to it.
@@ -46,7 +48,7 @@
 
     process {
         Set-ForceConfirmation -Force:$Force -BoundParameters $PSBoundParameters
-        Invoke-CommandRun -Title 'Rebuild' -Name $Name -FailureMessage 'The rebuild stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+        Invoke-CommandRun -Title 'Rebuild' -Name $Name -FailureMessage 'The rebuild stopped' -Cmdlet $PSCmdlet -RecordHardware -ScriptBlock {
             param($VM)
             $action = 'Rebuild from scratch. State is captured first and restored afterwards, and the old Windows disk is kept until the new VM is checked'
             if (-not $PSCmdlet.ShouldProcess($VM.Name, $action)) {
