@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.0](https://github.com/downerboy/LazyVM/compare/v4.4.0...v4.5.0) (2026-10-29)
+
+
+### Features
+
+* record the guest's environment in VM.json ([#146](https://github.com/downerboy/LazyVM/issues/146)) ([8d07fe2](https://github.com/downerboy/LazyVM/commit/8d07fe265fbd61ae0b76cdf88368174fd130c2ac))
+
 ## [4.4.0](https://github.com/downerboy/LazyVM/compare/v4.3.2...v4.4.0) (2026-10-29)
 
 
