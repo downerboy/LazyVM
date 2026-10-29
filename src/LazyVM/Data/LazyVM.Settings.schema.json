@@ -785,6 +785,49 @@
         }
       }
     },
+    "GuestSql": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "The guest's SQL Server logins, their server roles and the instance settings, recorded by LazyVM whenever they change and put back by a rebuild. A SQL login keeps its SID and password hash, never the password, so database users are not orphaned. Empty until first recorded.",
+      "additionalProperties": false,
+      "required": ["Configs", "Logins"],
+      "properties": {
+        "Configs": {
+          "type": "array",
+          "description": "Instance settings (sp_configure) that are not zero or are waiting for a restart.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["Name", "Value"],
+            "properties": {
+              "Name": { "type": "string", "minLength": 1 },
+              "Value": { "type": "integer" }
+            }
+          }
+        },
+        "Logins": {
+          "type": "array",
+          "description": "Logins other than sa and those SQL Server and Windows create themselves.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["Name", "TypeDesc", "IsDisabled", "DefaultDb", "DefaultLang", "SidHex", "HashHex", "PolicyChecked", "ExpirationChecked", "ServerRoles"],
+            "properties": {
+              "Name": { "type": "string", "minLength": 1 },
+              "TypeDesc": { "enum": ["SQL_LOGIN", "WINDOWS_LOGIN", "WINDOWS_GROUP"] },
+              "IsDisabled": { "type": "boolean" },
+              "DefaultDb": { "type": "string" },
+              "DefaultLang": { "type": "string" },
+              "SidHex": { "type": "string", "pattern": "^0x[0-9A-Fa-f]+$", "description": "The login's SID, kept so database users stay linked to it." },
+              "HashHex": { "type": "string", "pattern": "^(0x[0-9A-Fa-f]+)?$", "description": "A SQL login's password hash; empty for a Windows login." },
+              "PolicyChecked": { "type": "boolean" },
+              "ExpirationChecked": { "type": "boolean" },
+              "ServerRoles": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            }
+          }
+        }
+      }
+    },
     "MaintenanceTime": {
       "type": "string",
       "default": "02:00",

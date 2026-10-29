@@ -29,6 +29,8 @@ $script:GuestEnvironmentSettingName = 'GuestEnvironment'
 $script:GuestFirewallSettingName = 'GuestFirewallRules'
 # The setting in VM.json that holds the guest's own scheduled tasks (GuestScheduledTask.ps1).
 $script:GuestScheduledTaskSettingName = 'GuestScheduledTasks'
+# The setting in VM.json that holds the guest's SQL logins and instance settings (GuestSql.ps1).
+$script:GuestSqlSettingName = 'GuestSql'
 # The setting in VM.json that holds the values under the AppSettings keys (GuestAppSetting.ps1).
 $script:GuestAppSettingName = 'GuestAppSettings'
 
