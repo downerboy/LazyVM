@@ -230,7 +230,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="1064" text-anchor="middle">«guest»</text>
 <text class="nm" x="147.5" y="1080" text-anchor="middle">Running guest</text>
 <line class="div" x1="20" y1="1087" x2="275" y2="1087"/>
-<text class="at" x="30" y="1102">VS settings, .vsconfig</text>
+<text class="at" x="30" y="1102">VS settings</text>
 <text class="at" x="30" y="1119">SQL databases + logins</text>
 <text class="at" x="30" y="1136">env, certs, tasks, apps</text>
 </g>
