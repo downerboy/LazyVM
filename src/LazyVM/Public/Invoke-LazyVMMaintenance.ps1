@@ -37,7 +37,7 @@
         Invoke-CommandRun -Title 'Maintenance' -Name $Name -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware -ScriptBlock {
             param($VM)
             Sync-VMProfile -VM $VM
-            $step = [MaintenanceStep]@(Invoke-Maintenance -VM $VM)[-1]
+            $step = [MaintenanceStep](Invoke-Maintenance -VM $VM)
             switch ($step) {
                 ([MaintenanceStep]::None) {
                     Write-LogEntry 'Maintenance complete - nothing needed' 'OK'
@@ -50,14 +50,14 @@
                 ([MaintenanceStep]::Rebuild) {
                     Write-LogEntry 'Maintenance is escalating to a full rebuild' 'WARN'
                     # The capture already ran inside Invoke-Maintenance.
-                    if (@(Invoke-Rebuild -VM $VM -SkipCapture)[-1] -ne $true) {
+                    if ((Invoke-Rebuild -VM $VM -SkipCapture) -ne $true) {
                         throw "The rebuild of '$($VM.Name)' did not complete cleanly. The log says what happened and how to go back: $($VM.Settings.LogFile)"
                     }
                     return 'Rebuilt'
                 }
                 ([MaintenanceStep]::Build) {
                     Write-LogEntry 'Maintenance found no VM - building one' 'INFO'
-                    if (@(Invoke-Rebuild -VM $VM)[-1] -ne $true) {
+                    if ((Invoke-Rebuild -VM $VM) -ne $true) {
                         throw "Building '$($VM.Name)' did not complete cleanly. The log says what happened: $($VM.Settings.LogFile)"
                     }
                     return 'Built'

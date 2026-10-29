@@ -56,7 +56,7 @@
                 return
             }
             Sync-VMProfile -VM $VM
-            if (@(Invoke-Rebuild -VM $VM -SkipCapture:$SkipCapture -NoUnattend:$NoUnattend)[-1] -ne $true) {
+            if ((Invoke-Rebuild -VM $VM -SkipCapture:$SkipCapture -NoUnattend:$NoUnattend) -ne $true) {
                 throw "The rebuild of '$($VM.Name)' did not complete cleanly. The log says what happened and how to go back: $($VM.Settings.LogFile)"
             }
         }
