@@ -1,0 +1,14 @@
+# Proposes updates to the actions the workflows use. They are pinned to a
+# commit, so without this they would never move; each update arrives as a
+# pull request titled "ci: ...", checked like any other.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: [ '*' ]

@@ -9,14 +9,16 @@ on:
   # Started by release-please on its own pull request's branch.
   workflow_dispatch:
 
-permissions:
-  pull-requests: read
-  statuses: write
+# Nothing by default: each job asks for only what it needs.
+permissions: {}
 
 jobs:
   title:
     name: Conventional Commits title
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      statuses: write
     steps:
       - name: Find the title
         id: find

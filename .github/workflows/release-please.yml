@@ -17,10 +17,8 @@ on:
         description: Build, attach the zip to and publish this draft release instead, such as v2.1.0
         required: false
 
-permissions:
-  contents: write
-  pull-requests: write
-  actions: write
+# Nothing by default: each job asks for only what it needs.
+permissions: {}
 
 env:
   # While LazyVM is in alpha, every release is marked as a pre-release.
@@ -31,12 +29,19 @@ jobs:
     name: Update the release pull request
     if: inputs.tag == ''
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      # To start the required checks on the release pull request.
+      actions: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # Pinned to a commit, not a tag, so it cannot change under us;
+      # Dependabot proposes updates.
       - id: release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
@@ -64,16 +69,22 @@ jobs:
     needs: release-please
     if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || inputs.tag != '') }}
     runs-on: windows-latest
+    permissions:
+      # To edit, upload to and publish the draft release.
+      contents: write
     defaults:
       run:
         shell: pwsh
+    # The token is given only to the steps that call gh, never to the build
+    # and tests, which run code installed from the PowerShell Gallery.
     env:
       TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       # A draft release has no tag yet, only the commit it will tag.
       - name: Find the release's commit
         id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $release = gh release view $env:TAG --repo $env:GITHUB_REPOSITORY --json isDraft,targetCommitish | ConvertFrom-Json
@@ -82,9 +93,11 @@ jobs:
           }
           "sha=$($release.targetCommitish)" >> $env:GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      # The token is not left in .git/config, where the build could read it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ steps.commit.outputs.sha }}
+          persist-credentials: false
 
       - name: Build, analyze and test
         run: ./Invoke-AnalyzerAndTest.ps1
@@ -93,6 +106,8 @@ jobs:
         run: ./New-ReleasePackage.ps1
 
       - name: Attach the zip and install notes, and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $zip = Get-Item out/release/*.zip
