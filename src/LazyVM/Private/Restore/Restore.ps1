@@ -387,9 +387,9 @@ function Restore-GuestVisualStudioState {
 function Restore-GuestSqlState {
     <#
       Instance settings, then logins with their original SIDs, then each
-      database from its backup on the data disk. The settings and logins are
-      the ones VM.json records (#131), or the capture's for a VM recorded
-      before that.
+      database from its backup on the data disk, then the SQL Agent jobs. The
+      settings, logins and jobs are the ones VM.json records (#131); a VM
+      recorded before that gets its settings and logins from the capture.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -398,7 +398,8 @@ function Restore-GuestSqlState {
 
     $sql = $Manifest.Sql
     $recorded = Get-GuestSqlRestore -VM $VM
-    if (-not $sql -and -not $recorded) {
+    $agent = Get-GuestSqlAgentRestore -VM $VM
+    if (-not $sql -and -not $recorded -and -not $agent) {
         Write-LogEntry '  no SQL capture - skipping' 'INFO'
         return
     }
@@ -448,6 +449,8 @@ function Restore-GuestSqlState {
             finally { $connection.Close() }
         }
     }
+    # After the databases, since a job step names the database it runs in.
+    if ($agent) { $notes += Restore-GuestSqlAgent -VM $VM -Agent $agent }
     Write-GuestNote -Notes $notes
     if ($sql) {
         foreach ($item in @($sql.NotMigrated)) { Write-LogEntry "  reminder - not migrated: $item" 'WARN' }
@@ -508,6 +511,139 @@ function Restore-GuestSqlLogin {
                 catch { $notes += New-GuestNote -Level WARN -Text "login '$($login.Name)' failed: $($_.Exception.Message)" }
             }
             if ($added -gt 0) { $notes += New-GuestNote -Level OK -Text "created $added login(s) with their original SIDs" }
+        }
+        finally { $connection.Close() }
+        return $notes
+    }
+}
+
+function Restore-GuestSqlAgent {
+    <#
+      The SQL Agent operators, then the jobs with their steps and schedules,
+      then the alerts that notify the operators and run the jobs. Each one the
+      guest does not already have by name is created whole or not at all.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][object]$Agent
+    )
+
+    $agentJson = ConvertTo-Json -InputObject $Agent -Depth 10 -Compress
+
+    return Invoke-GuestScript -VM $VM -Activity 'SQL Agent restore' -TimeoutMinutes 15 -ArgumentList @($VM.Runtime.SqlServer, $agentJson) -ScriptBlock {
+        param($server, $agentJson)
+        $ErrorActionPreference = 'Stop'
+        $agent = $agentJson | ConvertFrom-Json
+
+        function Format-AgentCall {
+            <# EXEC msdb.dbo.<Procedure> with each parameter quoted or cast; an empty or $null value is left to its default. #>
+            param([string]$Procedure, [System.Collections.Specialized.OrderedDictionary]$Parameter)
+            $values = foreach ($name in $Parameter.Keys) {
+                $value = $Parameter[$name]
+                if ($null -eq $value -or ($value -is [string] -and $value -eq '')) { continue }
+                $literal = if ($value -is [string]) { ConvertTo-SqlString -Text $value } elseif ($value -is [bool]) { [int]$value } else { [long]$value }
+                "@$name = $literal"
+            }
+            return "EXEC msdb.dbo.$Procedure $($values -join ', ')"
+        }
+        function Invoke-AgentBatch {
+            <# Runs $Statement in one transaction, so a failure leaves nothing half made. #>
+            param($Connection, [string[]]$Statement)
+            $null = Invoke-GuestSql -Connection $Connection -Sql "BEGIN TRY BEGIN TRAN; $($Statement -join '; '); COMMIT TRAN; END TRY BEGIN CATCH IF @@TRANCOUNT > 0 ROLLBACK TRAN; THROW; END CATCH"
+        }
+        function Test-AgentObject {
+            param($Connection, [string]$Table, [string]$Name)
+            return [int](Get-GuestSqlScalar -Connection $Connection -Sql "SELECT COUNT(*) FROM msdb.dbo.$Table WHERE name = $(ConvertTo-SqlString -Text $Name)") -gt 0
+        }
+
+        $notes = @(); $added = 0
+        $connection = Open-GuestSqlConnection -Server $server
+        try {
+            foreach ($operator in @($agent.Operators | Where-Object { $_ })) {
+                if (Test-AgentObject -Connection $connection -Table 'sysoperators' -Name $operator.Name) { continue }
+                try {
+                    Invoke-AgentBatch -Connection $connection -Statement (Format-AgentCall -Procedure 'sp_add_operator' -Parameter ([ordered]@{
+                                name = [string]$operator.Name; enabled = [bool]$operator.Enabled
+                                email_address = [string]$operator.EmailAddress; pager_address = [string]$operator.PagerAddress
+                            }))
+                    $added++
+                }
+                catch { $notes += New-GuestNote -Level WARN -Text "SQL Agent operator '$($operator.Name)' failed: $($_.Exception.Message)" }
+            }
+
+            foreach ($job in @($agent.Jobs | Where-Object { $_ })) {
+                if (Test-AgentObject -Connection $connection -Table 'sysjobs' -Name $job.Name) { continue }
+                try {
+                    $statements = @()
+                    if ($job.CategoryName) {
+                        $category = ConvertTo-SqlString -Text $job.CategoryName
+                        $statements += "IF NOT EXISTS (SELECT 1 FROM msdb.dbo.syscategories WHERE category_class = 1 AND name = $category) EXEC msdb.dbo.sp_add_category @class = N'JOB', @type = N'LOCAL', @name = $category"
+                    }
+                    $owner = [string]$job.OwnerLogin
+                    $ownerSid = if ($owner) { Get-GuestSqlScalar -Connection $connection -Sql "SELECT SUSER_SID($(ConvertTo-SqlString -Text $owner))" }
+                    if ($owner -and ($null -eq $ownerSid -or $ownerSid -is [DBNull])) {
+                        $notes += New-GuestNote -Level WARN -Text "SQL Agent job '$($job.Name)': its owner '$owner' does not exist, so the restoring login owns it"
+                        $owner = ''
+                    }
+                    $statements += Format-AgentCall -Procedure 'sp_add_job' -Parameter ([ordered]@{
+                            job_name = [string]$job.Name; enabled = [bool]$job.Enabled; description = [string]$job.Description
+                            category_name = [string]$job.CategoryName; owner_login_name = $owner
+                            notify_level_eventlog = [int]$job.NotifyLevelEventlog; notify_level_email = [int]$job.NotifyLevelEmail
+                            notify_email_operator_name = [string]$job.NotifyEmailOperator
+                        })
+                    foreach ($step in @($job.Steps | Where-Object { $_ })) {
+                        $statements += Format-AgentCall -Procedure 'sp_add_jobstep' -Parameter ([ordered]@{
+                                job_name = [string]$job.Name; step_id = [int]$step.StepId; step_name = [string]$step.Name
+                                subsystem = [string]$step.Subsystem; command = [string]$step.Command; database_name = [string]$step.DatabaseName
+                                on_success_action = [int]$step.OnSuccessAction; on_success_step_id = [int]$step.OnSuccessStepId
+                                on_fail_action = [int]$step.OnFailAction; on_fail_step_id = [int]$step.OnFailStepId
+                                retry_attempts = [int]$step.RetryAttempts; retry_interval = [int]$step.RetryInterval
+                                output_file_name = [string]$step.OutputFileName
+                            })
+                    }
+                    # The start step can only be set once the steps exist; 1 is the default.
+                    if ([int]$job.StartStepId -ne 1) {
+                        $statements += Format-AgentCall -Procedure 'sp_update_job' -Parameter ([ordered]@{ job_name = [string]$job.Name; start_step_id = [int]$job.StartStepId })
+                    }
+                    foreach ($schedule in @($job.Schedules | Where-Object { $_ })) {
+                        $statements += Format-AgentCall -Procedure 'sp_add_jobschedule' -Parameter ([ordered]@{
+                                job_name = [string]$job.Name; name = [string]$schedule.Name; enabled = [bool]$schedule.Enabled
+                                freq_type = [int]$schedule.FreqType; freq_interval = [int]$schedule.FreqInterval
+                                freq_subday_type = [int]$schedule.FreqSubdayType; freq_subday_interval = [int]$schedule.FreqSubdayInterval
+                                freq_relative_interval = [int]$schedule.FreqRelativeInterval; freq_recurrence_factor = [int]$schedule.FreqRecurrenceFactor
+                                active_start_date = [int]$schedule.ActiveStartDate; active_end_date = [int]$schedule.ActiveEndDate
+                                active_start_time = [int]$schedule.ActiveStartTime; active_end_time = [int]$schedule.ActiveEndTime
+                            })
+                    }
+                    $statements += Format-AgentCall -Procedure 'sp_add_jobserver' -Parameter ([ordered]@{ job_name = [string]$job.Name; server_name = '(local)' })
+                    Invoke-AgentBatch -Connection $connection -Statement $statements
+                    $added++
+                }
+                catch { $notes += New-GuestNote -Level WARN -Text "SQL Agent job '$($job.Name)' failed: $($_.Exception.Message)" }
+            }
+
+            foreach ($alert in @($agent.Alerts | Where-Object { $_ })) {
+                if (Test-AgentObject -Connection $connection -Table 'sysalerts' -Name $alert.Name) { continue }
+                try {
+                    $statements = @(Format-AgentCall -Procedure 'sp_add_alert' -Parameter ([ordered]@{
+                                name = [string]$alert.Name; message_id = [int]$alert.MessageId; severity = [int]$alert.Severity
+                                enabled = [bool]$alert.Enabled; delay_between_responses = [int]$alert.DelayBetweenResponses
+                                include_event_description_in = [int]$alert.IncludeEventDescription; database_name = [string]$alert.DatabaseName
+                                event_description_keyword = [string]$alert.EventDescriptionKeyword
+                                performance_condition = [string]$alert.PerformanceCondition; job_name = [string]$alert.JobName
+                            }))
+                    foreach ($notification in @($alert.Notifications | Where-Object { $_ })) {
+                        $statements += Format-AgentCall -Procedure 'sp_add_notification' -Parameter ([ordered]@{
+                                alert_name = [string]$alert.Name; operator_name = [string]$notification.OperatorName
+                                notification_method = [int]$notification.Method
+                            })
+                    }
+                    Invoke-AgentBatch -Connection $connection -Statement $statements
+                    $added++
+                }
+                catch { $notes += New-GuestNote -Level WARN -Text "SQL Agent alert '$($alert.Name)' failed: $($_.Exception.Message)" }
+            }
+            if ($added -gt 0) { $notes += New-GuestNote -Level OK -Text "created $added SQL Agent operator(s), job(s) and alert(s)" }
         }
         finally { $connection.Close() }
         return $notes

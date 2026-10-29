@@ -28,6 +28,34 @@ BeforeAll {
         return $path
     }
 
+    function New-TestSqlAgentRecord {
+        <# A GuestSqlAgent record as VM.json holds it: one operator, one alert and one job named $JobName. #>
+        param([string]$JobName = 'Nightly cleanup')
+
+        [ordered]@{
+            Operators = @([ordered]@{ Name = 'DBA'; Enabled = $true; EmailAddress = 'dba@example.test'; PagerAddress = '' })
+            Alerts    = @([ordered]@{
+                    Name = 'Severity 17'; Enabled = $true; MessageId = 0; Severity = 17; DatabaseName = ''; EventDescriptionKeyword = ''
+                    PerformanceCondition = ''; DelayBetweenResponses = 60; IncludeEventDescription = 1; JobName = ''
+                    Notifications = @([ordered]@{ OperatorName = 'DBA'; Method = 1 })
+                })
+            Jobs      = @([ordered]@{
+                    Name = $JobName; Enabled = $true; Description = ''; CategoryName = '[Uncategorized (Local)]'; OwnerLogin = 'sa'
+                    StartStepId = 1; NotifyLevelEventlog = 2; NotifyLevelEmail = 0; NotifyEmailOperator = ''
+                    Steps = @([ordered]@{
+                            StepId = 1; Name = 'Purge'; Subsystem = 'TSQL'; Command = 'EXEC dbo.Purge'; DatabaseName = 'App'
+                            OnSuccessAction = 1; OnSuccessStepId = 0; OnFailAction = 2; OnFailStepId = 0
+                            RetryAttempts = 0; RetryInterval = 0; OutputFileName = ''
+                        })
+                    Schedules = @([ordered]@{
+                            Name = 'Every night'; Enabled = $true; FreqType = 4; FreqInterval = 1; FreqSubdayType = 1; FreqSubdayInterval = 0
+                            FreqRelativeInterval = 0; FreqRecurrenceFactor = 0; ActiveStartDate = 20260101; ActiveEndDate = 99991231
+                            ActiveStartTime = 20000; ActiveEndTime = 235959
+                        })
+                })
+        }
+    }
+
     function New-TestRoot {
         <#
           A root folder with one VM folder per entry in $Profiles (VM name ->
@@ -134,6 +162,21 @@ Describe 'The settings schema' {
         @{ Field = 'HashHex'; SidHex = '0x1A'; HashHex = 'secret' }
     ) {
         $path = New-TestFile -Text ('{ "GuestSql": { "Configs": [], "Logins": [ { "Name": "app", "TypeDesc": "SQL_LOGIN", "IsDisabled": false, "DefaultDb": "master", "DefaultLang": "us_english", "SidHex": "' + $SidHex + '", "HashHex": "' + $HashHex + '", "PolicyChecked": true, "ExpirationChecked": false, "ServerRoles": [] } ] } }')
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+    }
+
+    It 'accepts a GuestSqlAgent record of operators, alerts and jobs' {
+        $agent = New-TestSqlAgentRecord
+        $path = New-TestFile -Text (@{ GuestSqlAgent = $agent } | ConvertTo-Json -Depth 10)
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
+    }
+
+    It 'rejects a SQL Agent job step without a command' {
+        $agent = New-TestSqlAgentRecord
+        $agent.Jobs[0].Steps[0].Remove('Command')
+        $path = New-TestFile -Text (@{ GuestSqlAgent = $agent } | ConvertTo-Json -Depth 10)
 
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
     }
@@ -2149,6 +2192,226 @@ Describe 'Restore-GuestSqlState (#131)' {
         $logins = Invoke-TestRestore -Root $root -CapturedSql $null -RecordedSql ([ordered]@{ Configs = @(); Logins = @(New-TestLogin -Name 'recorded') })
 
         @($logins).Name | Should -Be @('recorded')
+    }
+}
+
+Describe 'ConvertTo-GuestSqlAgentRecord (#131)' {
+    BeforeAll {
+        function New-TestAgentSnapshot {
+            <# What the guest reports: msdb's rows, each step and schedule tagged with its job's id. #>
+            [pscustomobject]@{
+                Operators     = @(
+                    [pscustomobject]@{ Name = 'Ops'; Enabled = $true; EmailAddress = 'ops@example.test'; PagerAddress = '' }
+                    [pscustomobject]@{ Name = 'DBA'; Enabled = $false; EmailAddress = 'dba@example.test'; PagerAddress = '' }
+                )
+                Alerts        = @([pscustomobject]@{ Name = 'Severity 17'; Enabled = $true; MessageId = 0; Severity = 17; DatabaseName = ''; EventDescriptionKeyword = ''; PerformanceCondition = ''; DelayBetweenResponses = 60; IncludeEventDescription = 1; JobName = '' })
+                Notifications = @(
+                    [pscustomobject]@{ AlertName = 'Severity 17'; OperatorName = 'Ops'; Method = 1 }
+                    [pscustomobject]@{ AlertName = 'Severity 17'; OperatorName = 'DBA'; Method = 2 }
+                )
+                Jobs          = @(
+                    [pscustomobject]@{ JobId = 'b'; Name = 'Reindex'; Enabled = $true; Description = ''; CategoryName = 'Database Maintenance'; OwnerLogin = 'sa'; StartStepId = 1; NotifyLevelEventlog = 2; NotifyLevelEmail = 0; NotifyEmailOperator = '' }
+                    [pscustomobject]@{ JobId = 'a'; Name = 'Backup'; Enabled = $false; Description = 'Nightly'; CategoryName = '[Uncategorized (Local)]'; OwnerLogin = 'sa'; StartStepId = 1; NotifyLevelEventlog = 2; NotifyLevelEmail = 2; NotifyEmailOperator = 'DBA' }
+                )
+                Steps         = @(
+                    [pscustomobject]@{ JobId = 'a'; StepId = 2; Name = 'Verify'; Subsystem = 'TSQL'; Command = 'SELECT 2'; DatabaseName = 'master'; OnSuccessAction = 1; OnSuccessStepId = 0; OnFailAction = 2; OnFailStepId = 0; RetryAttempts = 0; RetryInterval = 0; OutputFileName = '' }
+                    [pscustomobject]@{ JobId = 'b'; StepId = 1; Name = 'Rebuild'; Subsystem = 'TSQL'; Command = 'SELECT 3'; DatabaseName = 'App'; OnSuccessAction = 1; OnSuccessStepId = 0; OnFailAction = 2; OnFailStepId = 0; RetryAttempts = 0; RetryInterval = 0; OutputFileName = '' }
+                    [pscustomobject]@{ JobId = 'a'; StepId = 1; Name = 'Back up'; Subsystem = 'TSQL'; Command = 'SELECT 1'; DatabaseName = 'master'; OnSuccessAction = 3; OnSuccessStepId = 0; OnFailAction = 2; OnFailStepId = 0; RetryAttempts = 1; RetryInterval = 5; OutputFileName = '' }
+                )
+                Schedules     = @([pscustomobject]@{ JobId = 'a'; Name = 'Every night'; Enabled = $true; FreqType = 4; FreqInterval = 1; FreqSubdayType = 1; FreqSubdayInterval = 0; FreqRelativeInterval = 0; FreqRecurrenceFactor = 0; ActiveStartDate = 20260101; ActiveEndDate = 99991231; ActiveStartTime = 20000; ActiveEndTime = 235959 })
+            }
+        }
+        function ConvertTo-TestRecord {
+            param([object]$Snapshot)
+            InModuleScope $module -Parameters @{ Snapshot = $Snapshot } { param($Snapshot) ConvertTo-GuestSqlAgentRecord -Snapshot $Snapshot }
+        }
+    }
+
+    It 'keeps operators, alerts and jobs sorted by name' {
+        $record = ConvertTo-TestRecord -Snapshot (New-TestAgentSnapshot)
+
+        @($record.Operators).Name | Should -Be @('DBA', 'Ops')
+        @($record.Alerts).Name | Should -Be @('Severity 17')
+        @($record.Jobs).Name | Should -Be @('Backup', 'Reindex')
+    }
+
+    It 'puts each job''s steps, in step order, and schedules under that job' {
+        $record = ConvertTo-TestRecord -Snapshot (New-TestAgentSnapshot)
+
+        @($record.Jobs[0].Steps).Name | Should -Be @('Back up', 'Verify')
+        @($record.Jobs[0].Schedules).Name | Should -Be @('Every night')
+        @($record.Jobs[1].Steps).Name | Should -Be @('Rebuild')
+        $record.Jobs[1].Schedules.GetType().IsArray | Should -BeTrue
+        @($record.Jobs[1].Schedules).Count | Should -Be 0
+    }
+
+    It 'puts each alert''s notifications, sorted by operator, under that alert' {
+        $record = ConvertTo-TestRecord -Snapshot (New-TestAgentSnapshot)
+
+        @($record.Alerts[0].Notifications).OperatorName | Should -Be @('DBA', 'Ops')
+    }
+
+    It 'does not keep the guest''s job ids, which a new instance would not share' {
+        $record = ConvertTo-TestRecord -Snapshot (New-TestAgentSnapshot)
+
+        $record.Jobs[0].Keys | Should -Not -Contain 'JobId'
+        $record.Jobs[0].Steps[0].Keys | Should -Not -Contain 'JobId'
+    }
+
+    It 'returns empty lists for an instance with no Agent objects' {
+        $empty = [pscustomobject]@{ Operators = @(); Alerts = @(); Notifications = @(); Jobs = @(); Steps = @(); Schedules = @() }
+
+        $record = ConvertTo-TestRecord -Snapshot $empty
+
+        @($record.Operators, $record.Alerts, $record.Jobs) | ForEach-Object { $_.GetType().IsArray | Should -BeTrue }
+    }
+}
+
+Describe 'Update-GuestSqlAgentRecord (#131)' {
+    BeforeAll {
+        function Invoke-TestRecord {
+            <#
+              Records Alpha's SQL Agent objects under $Root, the guest's
+              snapshot converting to $Record, or the guest having no SQL
+              Server when -NoInstance. Returns whether anything changed.
+            #>
+            param([string]$Root, [object]$Record, [switch]$NoInstance)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Record = $Record; NoInstance = [bool]$NoInstance } {
+                param($Root, $Record, $NoInstance)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                $instance = if ($NoInstance) { $null } else { [pscustomobject]@{ Instance = 'MSSQLSERVER' } }
+                Mock Connect-GuestSqlInstance { $instance }.GetNewClosure()
+                Mock Get-GuestSqlAgentSnapshot { [pscustomobject]@{} }
+                $converted = $Record
+                Mock ConvertTo-GuestSqlAgentRecord { $converted }.GetNewClosure()
+                $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+                Update-GuestSqlAgentRecord -VM $vm
+            }
+        }
+        function Get-TestRecordedAgent {
+            param([string]$Root)
+            (Read-TestJson -Path (Join-Path -Path $Root -ChildPath 'Alpha/Config/VM.json')).GuestSqlAgent
+        }
+    }
+
+    It 'writes the operators, alerts and jobs into VM.json' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $changed = Invoke-TestRecord -Root $root -Record (New-TestSqlAgentRecord)
+
+        $changed | Should -BeTrue
+        $recorded = Get-TestRecordedAgent -Root $root
+        @($recorded.Jobs).Name | Should -Be @('Nightly cleanup')
+        $recorded.Jobs[0].Steps[0].Command | Should -Be 'EXEC dbo.Purge'
+        @($recorded.Operators).Name | Should -Be @('DBA')
+    }
+
+    It 'writes nothing the second time, when nothing changed' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Record (New-TestSqlAgentRecord)
+
+        $changed = Invoke-TestRecord -Root $root -Record (New-TestSqlAgentRecord)
+
+        $changed | Should -BeFalse
+    }
+
+    It 'records a job that was renamed' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Record (New-TestSqlAgentRecord)
+
+        $changed = Invoke-TestRecord -Root $root -Record (New-TestSqlAgentRecord -JobName 'Weekly cleanup')
+
+        $changed | Should -BeTrue
+        @((Get-TestRecordedAgent -Root $root).Jobs).Name | Should -Be @('Weekly cleanup')
+    }
+
+    It 'keeps what it had when the guest has no SQL Server, so a failed install cannot erase the jobs' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Record (New-TestSqlAgentRecord)
+
+        $changed = Invoke-TestRecord -Root $root -NoInstance
+
+        $changed | Should -BeFalse
+        @((Get-TestRecordedAgent -Root $root).Jobs).Name | Should -Be @('Nightly cleanup')
+    }
+}
+
+Describe 'Get-GuestSqlAgentRestore (#131)' {
+    BeforeAll {
+        function Invoke-TestRestore {
+            <# What a restore of Alpha under $Root would put back, after VM.json records $Agent (unless it is $null). #>
+            param([string]$Root, [object]$Agent)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Agent = $Agent } {
+                param($Root, $Agent)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                if ($null -ne $Agent) { $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestSqlAgent = $Agent } -Reason 'a test' }
+                Get-GuestSqlAgentRestore -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+            }
+        }
+    }
+
+    It 'returns nothing for a VM whose SQL Agent objects were never recorded' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        Invoke-TestRestore -Root $root -Agent $null | Should -BeNullOrEmpty
+    }
+
+    It 'returns the recorded operators, alerts and jobs' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $restore = Invoke-TestRestore -Root $root -Agent (New-TestSqlAgentRecord)
+
+        @($restore.Jobs).Name | Should -Be @('Nightly cleanup')
+        @($restore.Operators).Name | Should -Be @('DBA')
+        @($restore.Alerts).Name | Should -Be @('Severity 17')
+    }
+}
+
+Describe 'Restore-GuestSqlState and the SQL Agent (#131)' {
+    BeforeAll {
+        function Invoke-TestRestore {
+            <#
+              Restores Alpha's SQL state under $Root, after VM.json records
+              $Agent (unless it is $null) and some logins. Returns the jobs
+              handed to Restore-GuestSqlAgent, or $null when it was not called.
+            #>
+            param([string]$Root, [object]$Agent)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Agent = $Agent } {
+                param($Root, $Agent)
+                Mock Write-LogEntry {}
+                Mock Write-GuestNote {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                Mock Connect-GuestSqlInstance { [pscustomobject]@{ Instance = 'MSSQLSERVER' } }
+                Mock Invoke-GuestScript {}
+                Mock Restore-GuestSqlLogin {}
+                $script:handedJobs = $null
+                Mock Restore-GuestSqlAgent { $script:handedJobs = @($Agent.Jobs) }
+                $change = @{ GuestSql = [ordered]@{ Configs = @(); Logins = @() } }
+                if ($null -ne $Agent) { $change.GuestSqlAgent = $Agent }
+                $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change $change -Reason 'a test'
+                Restore-GuestSqlState -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) -Manifest ([CaptureManifest]::new())
+                , $script:handedJobs
+            }
+        }
+    }
+
+    It 'restores the SQL Agent objects VM.json records' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $jobs = Invoke-TestRestore -Root $root -Agent (New-TestSqlAgentRecord)
+
+        @($jobs).Name | Should -Be @('Nightly cleanup')
+    }
+
+    It 'restores no SQL Agent objects when none were recorded' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        Invoke-TestRestore -Root $root -Agent $null | Should -BeNullOrEmpty
     }
 }
 

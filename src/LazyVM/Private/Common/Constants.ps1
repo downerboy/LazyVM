@@ -31,6 +31,8 @@ $script:GuestFirewallSettingName = 'GuestFirewallRules'
 $script:GuestScheduledTaskSettingName = 'GuestScheduledTasks'
 # The setting in VM.json that holds the guest's SQL logins and instance settings (GuestSql.ps1).
 $script:GuestSqlSettingName = 'GuestSql'
+# The setting in VM.json that holds the guest's SQL Agent operators, alerts and jobs (GuestSqlAgent.ps1).
+$script:GuestSqlAgentSettingName = 'GuestSqlAgent'
 # The setting in VM.json that holds the values under the AppSettings keys (GuestAppSetting.ps1).
 $script:GuestAppSettingName = 'GuestAppSettings'
 

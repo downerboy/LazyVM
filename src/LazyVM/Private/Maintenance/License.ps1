@@ -130,7 +130,7 @@ function Invoke-Maintenance {
     <#
       The scheduled task's daily work: extends C: into any new space, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
-      logins and application settings, then does nothing more until the evaluation is close to expiry, when it
+      logins, SQL Agent jobs and application settings, then does nothing more until the evaluation is close to expiry, when it
       captures state and rearms.
       Returns what the caller does next.
     #>
@@ -156,7 +156,7 @@ function Invoke-Maintenance {
     try { $null = Update-ToolingRecord -VM $VM }
     catch { Write-LogError 'Tooling check failed (non-fatal)' $_ }
 
-    # The guest's environment, firewall rules, scheduled tasks, SQL logins and application settings, recorded in VM.json whenever they changed (#131).
+    # The guest's environment, firewall rules, scheduled tasks, SQL logins, SQL Agent jobs and application settings, recorded in VM.json whenever they changed (#131).
     try { $null = Update-GuestEnvironmentRecord -VM $VM }
     catch { Write-LogError 'Environment check failed (non-fatal)' $_ }
     try { $null = Update-GuestFirewallRecord -VM $VM }
@@ -165,6 +165,8 @@ function Invoke-Maintenance {
     catch { Write-LogError 'Scheduled task check failed (non-fatal)' $_ }
     try { $null = Update-GuestSqlRecord -VM $VM }
     catch { Write-LogError 'SQL logins and settings check failed (non-fatal)' $_ }
+    try { $null = Update-GuestSqlAgentRecord -VM $VM }
+    catch { Write-LogError 'SQL Agent check failed (non-fatal)' $_ }
     try { $null = Update-GuestAppSettingRecord -VM $VM }
     catch { Write-LogError 'Application settings check failed (non-fatal)' $_ }
 

@@ -828,6 +828,124 @@
         }
       }
     },
+    "GuestSqlAgent": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "The guest's SQL Agent operators, alerts and jobs, recorded by LazyVM whenever they change and put back by a rebuild. They live in msdb, which a rebuild makes fresh. Empty until first recorded.",
+      "additionalProperties": false,
+      "required": ["Operators", "Alerts", "Jobs"],
+      "properties": {
+        "Operators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["Name", "Enabled", "EmailAddress", "PagerAddress"],
+            "properties": {
+              "Name": { "type": "string", "minLength": 1 },
+              "Enabled": { "type": "boolean" },
+              "EmailAddress": { "type": "string" },
+              "PagerAddress": { "type": "string" }
+            }
+          }
+        },
+        "Alerts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["Name", "Enabled", "MessageId", "Severity", "DatabaseName", "EventDescriptionKeyword", "PerformanceCondition", "DelayBetweenResponses", "IncludeEventDescription", "JobName", "Notifications"],
+            "properties": {
+              "Name": { "type": "string", "minLength": 1 },
+              "Enabled": { "type": "boolean" },
+              "MessageId": { "type": "integer", "description": "The error number the alert fires on; 0 when it fires on a severity or a performance condition." },
+              "Severity": { "type": "integer", "minimum": 0, "maximum": 25 },
+              "DatabaseName": { "type": "string" },
+              "EventDescriptionKeyword": { "type": "string" },
+              "PerformanceCondition": { "type": "string" },
+              "DelayBetweenResponses": { "type": "integer", "minimum": 0 },
+              "IncludeEventDescription": { "type": "integer", "minimum": 0, "maximum": 7 },
+              "JobName": { "type": "string", "description": "The job the alert runs; empty for none." },
+              "Notifications": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["OperatorName", "Method"],
+                  "properties": {
+                    "OperatorName": { "type": "string", "minLength": 1 },
+                    "Method": { "type": "integer", "minimum": 1, "maximum": 7, "description": "1 e-mail, 2 pager, 4 net send, or their sum." }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Jobs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["Name", "Enabled", "Description", "CategoryName", "OwnerLogin", "StartStepId", "NotifyLevelEventlog", "NotifyLevelEmail", "NotifyEmailOperator", "Steps", "Schedules"],
+            "properties": {
+              "Name": { "type": "string", "minLength": 1 },
+              "Enabled": { "type": "boolean" },
+              "Description": { "type": "string" },
+              "CategoryName": { "type": "string" },
+              "OwnerLogin": { "type": "string", "description": "The login that owns the job; the restoring login owns it when this login does not exist." },
+              "StartStepId": { "type": "integer", "minimum": 1 },
+              "NotifyLevelEventlog": { "type": "integer", "minimum": 0, "maximum": 3 },
+              "NotifyLevelEmail": { "type": "integer", "minimum": 0, "maximum": 3 },
+              "NotifyEmailOperator": { "type": "string" },
+              "Steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["StepId", "Name", "Subsystem", "Command", "DatabaseName", "OnSuccessAction", "OnSuccessStepId", "OnFailAction", "OnFailStepId", "RetryAttempts", "RetryInterval", "OutputFileName"],
+                  "properties": {
+                    "StepId": { "type": "integer", "minimum": 1 },
+                    "Name": { "type": "string", "minLength": 1 },
+                    "Subsystem": { "type": "string", "minLength": 1 },
+                    "Command": { "type": "string" },
+                    "DatabaseName": { "type": "string" },
+                    "OnSuccessAction": { "type": "integer", "minimum": 1, "maximum": 4 },
+                    "OnSuccessStepId": { "type": "integer", "minimum": 0 },
+                    "OnFailAction": { "type": "integer", "minimum": 1, "maximum": 4 },
+                    "OnFailStepId": { "type": "integer", "minimum": 0 },
+                    "RetryAttempts": { "type": "integer", "minimum": 0 },
+                    "RetryInterval": { "type": "integer", "minimum": 0 },
+                    "OutputFileName": { "type": "string" }
+                  }
+                }
+              },
+              "Schedules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["Name", "Enabled", "FreqType", "FreqInterval", "FreqSubdayType", "FreqSubdayInterval", "FreqRelativeInterval", "FreqRecurrenceFactor", "ActiveStartDate", "ActiveEndDate", "ActiveStartTime", "ActiveEndTime"],
+                  "properties": {
+                    "Name": { "type": "string", "minLength": 1 },
+                    "Enabled": { "type": "boolean" },
+                    "FreqType": { "type": "integer" },
+                    "FreqInterval": { "type": "integer" },
+                    "FreqSubdayType": { "type": "integer" },
+                    "FreqSubdayInterval": { "type": "integer" },
+                    "FreqRelativeInterval": { "type": "integer" },
+                    "FreqRecurrenceFactor": { "type": "integer" },
+                    "ActiveStartDate": { "type": "integer" },
+                    "ActiveEndDate": { "type": "integer" },
+                    "ActiveStartTime": { "type": "integer" },
+                    "ActiveEndTime": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "MaintenanceTime": {
       "type": "string",
       "default": "02:00",
