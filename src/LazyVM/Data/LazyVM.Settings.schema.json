@@ -6,6 +6,297 @@
   "type": "object",
   "additionalProperties": false,
   "definitions": {
+    "SqlAgentOperator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Name",
+        "Enabled",
+        "EmailAddress",
+        "Category"
+      ],
+      "properties": {
+        "Name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Enabled": {
+          "type": "boolean"
+        },
+        "EmailAddress": {
+          "type": "string"
+        },
+        "Category": {
+          "type": "string"
+        }
+      }
+    },
+    "SqlAgentJobStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Id",
+        "Name",
+        "Subsystem",
+        "Command",
+        "Database",
+        "OnSuccessAction",
+        "OnSuccessStepId",
+        "OnFailAction",
+        "OnFailStepId",
+        "RetryAttempts",
+        "RetryInterval",
+        "OutputFile",
+        "Flags",
+        "Proxy"
+      ],
+      "properties": {
+        "Id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "Name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Subsystem": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Command": {
+          "type": "string"
+        },
+        "Database": {
+          "type": "string"
+        },
+        "OnSuccessAction": {
+          "type": "integer"
+        },
+        "OnSuccessStepId": {
+          "type": "integer"
+        },
+        "OnFailAction": {
+          "type": "integer"
+        },
+        "OnFailStepId": {
+          "type": "integer"
+        },
+        "RetryAttempts": {
+          "type": "integer"
+        },
+        "RetryInterval": {
+          "type": "integer"
+        },
+        "OutputFile": {
+          "type": "string"
+        },
+        "Flags": {
+          "type": "integer"
+        },
+        "Proxy": {
+          "type": "string",
+          "description": "The proxy the step runs as; empty for the Agent service account. Its credential is not recorded."
+        }
+      }
+    },
+    "SqlAgentSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Name",
+        "Enabled",
+        "FreqType",
+        "FreqInterval",
+        "FreqSubdayType",
+        "FreqSubdayInterval",
+        "FreqRelativeInterval",
+        "FreqRecurrenceFactor",
+        "ActiveStartDate",
+        "ActiveEndDate",
+        "ActiveStartTime",
+        "ActiveEndTime"
+      ],
+      "properties": {
+        "Name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Enabled": {
+          "type": "boolean"
+        },
+        "FreqType": {
+          "type": "integer"
+        },
+        "FreqInterval": {
+          "type": "integer"
+        },
+        "FreqSubdayType": {
+          "type": "integer"
+        },
+        "FreqSubdayInterval": {
+          "type": "integer"
+        },
+        "FreqRelativeInterval": {
+          "type": "integer"
+        },
+        "FreqRecurrenceFactor": {
+          "type": "integer"
+        },
+        "ActiveStartDate": {
+          "type": "integer"
+        },
+        "ActiveEndDate": {
+          "type": "integer"
+        },
+        "ActiveStartTime": {
+          "type": "integer"
+        },
+        "ActiveEndTime": {
+          "type": "integer"
+        }
+      }
+    },
+    "SqlAgentJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Name",
+        "Enabled",
+        "Description",
+        "Category",
+        "Owner",
+        "StartStepId",
+        "NotifyLevelEventLog",
+        "NotifyLevelEmail",
+        "NotifyEmailOperator",
+        "DeleteLevel",
+        "Steps",
+        "Schedules"
+      ],
+      "properties": {
+        "Name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Enabled": {
+          "type": "boolean"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "Owner": {
+          "type": "string"
+        },
+        "StartStepId": {
+          "type": "integer"
+        },
+        "NotifyLevelEventLog": {
+          "type": "integer"
+        },
+        "NotifyLevelEmail": {
+          "type": "integer"
+        },
+        "NotifyEmailOperator": {
+          "type": "string"
+        },
+        "DeleteLevel": {
+          "type": "integer"
+        },
+        "Steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SqlAgentJobStep"
+          }
+        },
+        "Schedules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SqlAgentSchedule"
+          }
+        }
+      }
+    },
+    "SqlAgentAlert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Name",
+        "Enabled",
+        "MessageId",
+        "Severity",
+        "DelayBetweenResponses",
+        "NotificationMessage",
+        "IncludeEventDescription",
+        "Database",
+        "EventDescriptionKeyword",
+        "Job",
+        "PerformanceCondition",
+        "Category",
+        "Notifications"
+      ],
+      "properties": {
+        "Name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Enabled": {
+          "type": "boolean"
+        },
+        "MessageId": {
+          "type": "integer"
+        },
+        "Severity": {
+          "type": "integer"
+        },
+        "DelayBetweenResponses": {
+          "type": "integer"
+        },
+        "NotificationMessage": {
+          "type": "string"
+        },
+        "IncludeEventDescription": {
+          "type": "integer"
+        },
+        "Database": {
+          "type": "string"
+        },
+        "EventDescriptionKeyword": {
+          "type": "string"
+        },
+        "Job": {
+          "type": "string"
+        },
+        "PerformanceCondition": {
+          "type": "string"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "Notifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "Operator",
+              "Method"
+            ],
+            "properties": {
+              "Operator": {
+                "type": "string",
+                "minLength": 1
+              },
+              "Method": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
     "ToolingProduct": {
       "type": "object",
       "additionalProperties": false,
@@ -788,7 +1079,7 @@
     "GuestSql": {
       "type": ["object", "null"],
       "default": null,
-      "description": "The guest's SQL Server logins, their server roles and the instance settings, recorded by LazyVM whenever they change and put back by a rebuild. A SQL login keeps its SID and password hash, never the password, so database users are not orphaned. Empty until first recorded.",
+      "description": "The guest's SQL Server logins, their server roles, the instance settings and the SQL Agent jobs, operators and alerts, recorded by LazyVM whenever they change and put back by a rebuild. A SQL login keeps its SID and password hash, never the password, so database users are not orphaned. Empty until first recorded.",
       "additionalProperties": false,
       "required": ["Configs", "Logins"],
       "properties": {
@@ -823,6 +1114,36 @@
               "PolicyChecked": { "type": "boolean" },
               "ExpirationChecked": { "type": "boolean" },
               "ServerRoles": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            }
+          }
+        },
+        "Agent": {
+          "type": "object",
+          "description": "SQL Server Agent operators, jobs (with their steps and schedules) and alerts (with whom they notify). They live in msdb, which a rebuild replaces.",
+          "additionalProperties": false,
+          "required": [
+            "Operators",
+            "Jobs",
+            "Alerts"
+          ],
+          "properties": {
+            "Operators": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SqlAgentOperator"
+              }
+            },
+            "Jobs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SqlAgentJob"
+              }
+            },
+            "Alerts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SqlAgentAlert"
+              }
             }
           }
         }

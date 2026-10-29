@@ -387,9 +387,10 @@ function Restore-GuestVisualStudioState {
 function Restore-GuestSqlState {
     <#
       Instance settings, then logins with their original SIDs, then each
-      database from its backup on the data disk. The settings and logins are
-      the ones VM.json records (#131), or the capture's for a VM recorded
-      before that.
+      database from its backup on the data disk, then the SQL Agent jobs,
+      operators and alerts, whose job steps need their databases. All but the
+      databases come from VM.json (#131); a VM recorded before that gets its
+      settings and logins from the capture.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -448,6 +449,7 @@ function Restore-GuestSqlState {
             finally { $connection.Close() }
         }
     }
+    if ($recorded -and $recorded.Agent) { $notes += Restore-GuestSqlAgent -VM $VM -Agent $recorded.Agent }
     Write-GuestNote -Notes $notes
     if ($sql) {
         foreach ($item in @($sql.NotMigrated)) { Write-LogEntry "  reminder - not migrated: $item" 'WARN' }

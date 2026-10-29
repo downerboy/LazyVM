@@ -129,6 +129,18 @@ Describe 'The settings schema' {
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
     }
 
+    It 'accepts SQL Agent operators, jobs and alerts in GuestSql' {
+        $path = New-TestFile -Text '{ "GuestSql": { "Configs": [], "Logins": [], "Agent": { "Operators": [ { "Name": "Dev team", "Enabled": true, "EmailAddress": "dev@example.com", "Category": "[Uncategorized]" } ], "Jobs": [ { "Name": "Nightly ETL", "Enabled": true, "Description": "", "Category": "[Uncategorized (Local)]", "Owner": "DEV\\sean", "StartStepId": 1, "NotifyLevelEventLog": 2, "NotifyLevelEmail": 2, "NotifyEmailOperator": "Dev team", "DeleteLevel": 0, "Steps": [ { "Id": 1, "Name": "Load", "Subsystem": "TSQL", "Command": "EXEC dbo.Load", "Database": "Sales", "OnSuccessAction": 1, "OnSuccessStepId": 0, "OnFailAction": 2, "OnFailStepId": 0, "RetryAttempts": 0, "RetryInterval": 0, "OutputFile": "", "Flags": 0, "Proxy": "" } ], "Schedules": [ { "Name": "Nightly", "Enabled": true, "FreqType": 4, "FreqInterval": 1, "FreqSubdayType": 1, "FreqSubdayInterval": 0, "FreqRelativeInterval": 0, "FreqRecurrenceFactor": 0, "ActiveStartDate": 20261029, "ActiveEndDate": 99991231, "ActiveStartTime": 20000, "ActiveEndTime": 235959 } ] } ], "Alerts": [ { "Name": "Severity 17", "Enabled": true, "MessageId": 0, "Severity": 17, "DelayBetweenResponses": 60, "NotificationMessage": "", "IncludeEventDescription": 1, "Database": "", "EventDescriptionKeyword": "", "Job": "", "PerformanceCondition": "", "Category": "[Uncategorized]", "Notifications": [ { "Operator": "Dev team", "Method": 1 } ] } ] } } }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
+    }
+
+    It 'rejects a SQL Agent job step without a command' {
+        $path = New-TestFile -Text '{ "GuestSql": { "Configs": [], "Logins": [], "Agent": { "Operators": [], "Alerts": [], "Jobs": [ { "Name": "Nightly ETL", "Enabled": true, "Description": "", "Category": "", "Owner": "", "StartStepId": 1, "NotifyLevelEventLog": 2, "NotifyLevelEmail": 0, "NotifyEmailOperator": "", "DeleteLevel": 0, "Schedules": [], "Steps": [ { "Id": 1, "Name": "Load", "Subsystem": "TSQL", "Database": "Sales", "OnSuccessAction": 1, "OnSuccessStepId": 0, "OnFailAction": 2, "OnFailStepId": 0, "RetryAttempts": 0, "RetryInterval": 0, "OutputFile": "", "Flags": 0, "Proxy": "" } ] } ] } } }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+    }
+
     It 'rejects a SQL login whose <Field> is not hexadecimal, since restore writes it into SQL as it is' -ForEach @(
         @{ Field = 'SidHex'; SidHex = '0x1A; DROP LOGIN x'; HashHex = '0x02' }
         @{ Field = 'HashHex'; SidHex = '0x1A'; HashHex = 'secret' }
@@ -1979,6 +1991,49 @@ Describe 'ConvertTo-GuestSqlRecord (#131)' {
     }
 }
 
+Describe 'ConvertTo-GuestSqlAgentRecord (#131)' {
+    It 'keeps operators, jobs and alerts sorted by name, steps in step order, and numbers as whole numbers' {
+        $snapshot = [pscustomobject]@{
+            Operators = @(
+                [pscustomobject]@{ Name = 'Ops'; Enabled = $true; EmailAddress = $null; Category = '[Uncategorized]' }
+                [pscustomobject]@{ Name = 'Dev team'; Enabled = $false; EmailAddress = 'dev@example.com'; Category = '[Uncategorized]' }
+            )
+            Jobs      = @(
+                [pscustomobject]@{
+                    Name = 'Nightly ETL'; Enabled = $true; Description = $null; Category = '[Uncategorized (Local)]'; Owner = 'DEV\sean'
+                    StartStepId = '1'; NotifyLevelEventLog = '2'; NotifyLevelEmail = '0'; NotifyEmailOperator = $null; DeleteLevel = '0'
+                    Steps = @(
+                        [pscustomobject]@{ Id = '2'; Name = 'Report'; Subsystem = 'TSQL'; Command = 'EXEC dbo.Report'; Database = 'Sales'; OnSuccessAction = '1'; OnSuccessStepId = '0'; OnFailAction = '2'; OnFailStepId = '0'; RetryAttempts = '0'; RetryInterval = '0'; OutputFile = $null; Flags = '0'; Proxy = $null }
+                        [pscustomobject]@{ Id = '1'; Name = 'Load'; Subsystem = 'TSQL'; Command = 'EXEC dbo.Load'; Database = 'Sales'; OnSuccessAction = '3'; OnSuccessStepId = '0'; OnFailAction = '2'; OnFailStepId = '0'; RetryAttempts = '1'; RetryInterval = '5'; OutputFile = $null; Flags = '0'; Proxy = $null }
+                    )
+                    Schedules = @([pscustomobject]@{ Name = 'Nightly'; Enabled = $true; FreqType = '4'; FreqInterval = '1'; FreqSubdayType = '1'; FreqSubdayInterval = '0'; FreqRelativeInterval = '0'; FreqRecurrenceFactor = '0'; ActiveStartDate = '20261029'; ActiveEndDate = '99991231'; ActiveStartTime = '20000'; ActiveEndTime = '235959' })
+                }
+            )
+            Alerts    = @(
+                [pscustomobject]@{ Name = 'Severity 17'; Enabled = $true; MessageId = '0'; Severity = '17'; DelayBetweenResponses = '60'; NotificationMessage = $null; IncludeEventDescription = '1'; Database = $null; EventDescriptionKeyword = $null; Job = $null; PerformanceCondition = $null; Category = '[Uncategorized]'
+                    Notifications = @([pscustomobject]@{ Operator = 'Ops'; Method = '1' }, [pscustomobject]@{ Operator = 'Dev team'; Method = '1' })
+                }
+            )
+        }
+
+        $record = InModuleScope $module -Parameters @{ Snapshot = $snapshot } { param($Snapshot) ConvertTo-GuestSqlAgentRecord -Snapshot $Snapshot }
+
+        @($record.Operators).Name | Should -Be @('Dev team', 'Ops')
+        $record.Operators[1].EmailAddress | Should -Be ''
+        @($record.Jobs[0].Steps).Name | Should -Be @('Load', 'Report')
+        $record.Jobs[0].Steps[0].RetryInterval | Should -BeOfType [int]
+        $record.Jobs[0].Schedules[0].ActiveStartTime | Should -Be 20000
+        $record.Jobs[0].Description | Should -Be ''
+        @($record.Alerts[0].Notifications).Operator | Should -Be @('Dev team', 'Ops')
+    }
+
+    It 'returns empty lists when the instance has no Agent objects of its own' {
+        $record = InModuleScope $module { ConvertTo-GuestSqlAgentRecord -Snapshot ([pscustomobject]@{ Operators = @(); Jobs = @(); Alerts = @() }) }
+
+        foreach ($list in $record.Operators, $record.Jobs, $record.Alerts) { @($list).Count | Should -Be 0 }
+    }
+}
+
 Describe 'Update-GuestSqlRecord (#131)' {
     BeforeAll {
         function Invoke-TestRecord {
@@ -1997,6 +2052,8 @@ Describe 'Update-GuestSqlRecord (#131)' {
                 Mock Connect-GuestSqlInstance { $instance }.GetNewClosure()
                 $reported = $Snapshot
                 Mock Get-GuestSqlSnapshot { $reported }.GetNewClosure()
+                $agent = [pscustomobject]@{ Operators = @([pscustomobject]@{ Name = 'Dev team'; Enabled = $true; EmailAddress = 'dev@example.com'; Category = '[Uncategorized]' }); Jobs = @(); Alerts = @() }
+                Mock Get-GuestSqlAgentSnapshot { $agent }.GetNewClosure()
                 $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
                 Update-GuestSqlRecord -VM $vm
             }
@@ -2026,6 +2083,7 @@ Describe 'Update-GuestSqlRecord (#131)' {
         @($recorded.Logins).Name | Should -Be @('app')
         $recorded.Logins[0].HashHex | Should -Be '0x02'
         $recorded.Configs[0].Value | Should -Be 4096
+        @($recorded.Agent.Operators).Name | Should -Be @('Dev team')
     }
 
     It 'writes nothing the second time, when nothing changed' {
@@ -2099,12 +2157,13 @@ Describe 'Restore-GuestSqlState (#131)' {
               Restores Alpha's SQL state under $Root from a capture whose Sql is
               $CapturedSql, after VM.json records $RecordedSql (unless it is
               $null). Returns the logins handed to Restore-GuestSqlLogin, or
+              with -AgentOnly the Agent handed to Restore-GuestSqlAgent;
               $null when it was not called.
             #>
-            param([string]$Root, [object]$CapturedSql, [object]$RecordedSql)
+            param([string]$Root, [object]$CapturedSql, [object]$RecordedSql, [switch]$AgentOnly)
 
-            InModuleScope $module -Parameters @{ Root = $Root; CapturedSql = $CapturedSql; RecordedSql = $RecordedSql } {
-                param($Root, $CapturedSql, $RecordedSql)
+            InModuleScope $module -Parameters @{ Root = $Root; CapturedSql = $CapturedSql; RecordedSql = $RecordedSql; AgentOnly = [bool]$AgentOnly } {
+                param($Root, $CapturedSql, $RecordedSql, $AgentOnly)
                 Mock Write-LogEntry {}
                 Mock Write-GuestNote {}
                 Mock Get-ToolingCheckpointStamp { , @() }
@@ -2112,11 +2171,13 @@ Describe 'Restore-GuestSqlState (#131)' {
                 Mock Invoke-GuestScript {}
                 $script:handedLogins = $null
                 Mock Restore-GuestSqlLogin { $script:handedLogins = @($Logins) }
+                $script:handedAgent = $null
+                Mock Restore-GuestSqlAgent { $script:handedAgent = $Agent }
                 if ($null -ne $RecordedSql) { $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestSql = $RecordedSql } -Reason 'a test' }
                 $manifest = [CaptureManifest]::new()
                 $manifest.Sql = $CapturedSql
                 Restore-GuestSqlState -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) -Manifest $manifest
-                , $script:handedLogins
+                if ($AgentOnly) { $script:handedAgent } else { , $script:handedLogins }
             }
         }
         function New-TestLogin {
@@ -2149,6 +2210,24 @@ Describe 'Restore-GuestSqlState (#131)' {
         $logins = Invoke-TestRestore -Root $root -CapturedSql $null -RecordedSql ([ordered]@{ Configs = @(); Logins = @(New-TestLogin -Name 'recorded') })
 
         @($logins).Name | Should -Be @('recorded')
+    }
+
+    It 'recreates the SQL Agent objects VM.json records' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $agent = [ordered]@{ Operators = @([ordered]@{ Name = 'Dev team'; Enabled = $true; EmailAddress = 'dev@example.com'; Category = '[Uncategorized]' }); Jobs = @(); Alerts = @() }
+
+        $handed = Invoke-TestRestore -Root $root -CapturedSql $null -RecordedSql ([ordered]@{ Configs = @(); Logins = @(); Agent = $agent }) -AgentOnly
+
+        @($handed.Operators).Name | Should -Be @('Dev team')
+    }
+
+    It 'recreates no SQL Agent objects for a VM recorded before they were' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $handed = Invoke-TestRestore -Root $root -CapturedSql $null -RecordedSql ([ordered]@{ Configs = @(); Logins = @(New-TestLogin -Name 'recorded') }) -AgentOnly
+
+        $handed | Should -BeNullOrEmpty
+        Should -Invoke Restore-GuestSqlAgent -ModuleName $module -Times 0
     }
 }
 

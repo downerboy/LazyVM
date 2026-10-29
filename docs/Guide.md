@@ -36,7 +36,7 @@ The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyV
 
 A rebuild destroys the VM's operating system. These are carried across it:
 
-- **SQL Server**: user databases (backed up and restored), plus logins with their original SIDs and password hashes so database users are not orphaned, their server roles and the instance settings, recorded in `VM.json` whenever they change.
+- **SQL Server**: user databases (backed up and restored), plus logins with their original SIDs and password hashes so database users are not orphaned, their server roles, the instance settings, and SQL Agent jobs (with their steps and schedules), operators and alerts, recorded in `VM.json` whenever they change. A job step's command is copied as written, so keep secrets out of it.
 - **Visual Studio**: the products you actually have installed (2026, 2022 or both, and SSMS), their workloads and components, Marketplace extensions, your settings, NuGet and Git configuration, snippets and templates.
 - **Windows**: environment variables, PATH entries, hosts file entries, mapped drives, and the firewall rules and scheduled tasks you added, recorded in `VM.json` whenever they change (a variable whose name looks secret, such as `GITHUB_TOKEN`, is kept encrypted in `Credentials\environment.cred` instead), plus certificates.
 - **Files**: the profile folders listed in `GuestProjectPaths`.
@@ -50,7 +50,7 @@ A rebuild destroys the VM's operating system. These are carried across it:
 
 These are detected and reported by name rather than migrated. Doing them correctly is a project of its own, and a half-working migration is worse than a clear warning.
 
-- SQL Agent jobs, linked servers and SQL credentials.
+- Linked servers, SQL credentials, SQL Agent proxies and maintenance plans. A job step that runs as a proxy needs the proxy recreated first.
 - The `master`, `model` and `msdb` system databases, which are rebuilt fresh.
 - Programs winget cannot install, and Visual Studio extensions not found on the Visual Studio Marketplace. These are listed in a file for you to reinstall by hand ([section 9](#9-tooling-and-going-back)).
 
