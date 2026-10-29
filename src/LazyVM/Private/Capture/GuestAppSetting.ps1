@@ -143,11 +143,19 @@ function Get-GuestAppSettingRestore {
       the file holds it now, as Keys, and the secret values, as Secrets.
       $null when they were never recorded, so a capture from before #131 is
       used instead; an empty Keys when the guest was recorded with none.
+      Only the keys AppSettings lists are returned: the record came from the
+      guest, so a key it names that the user never listed is not trusted.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $current = Read-SettingsFile -Path (Get-VMProfilePath -Root $VM.Settings.Root -Name $VM.Name)
     $keys = $current[$script:GuestAppSettingName]
     if ($null -eq $keys) { return $null }
-    return [pscustomobject]@{ Keys = @($keys); Secrets = (Read-GuestAppSettingSecret -VM $VM) }
+
+    $listed = @($VM.Settings.AppSettings | ForEach-Object { "$($_['RegistryKey'])" })
+    $trusted = @(foreach ($key in @($keys)) {
+            if ("$($key['RegistryKey'])" -in $listed) { $key }
+            else { Write-LogEntry "  $($key['Name']) settings are not restored: $($key['RegistryKey']) is not in AppSettings" 'WARN' }
+        })
+    return [pscustomobject]@{ Keys = $trusted; Secrets = (Read-GuestAppSettingSecret -VM $VM) }
 }

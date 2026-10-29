@@ -1346,12 +1346,14 @@ Describe 'Test-SecretVariableName (#131)' {
     It 'treats <Name> as secret' -ForEach @(
         @{ Name = 'GITHUB_TOKEN' }, @{ Name = 'OPENAI_API_KEY' }, @{ Name = 'DB_PASSWORD' }, @{ Name = 'AZURE_CLIENT_SECRET' }
         @{ Name = 'ADO_PAT' }, @{ Name = 'Sql_ConnectionString' }, @{ Name = 'MyApiKey' }, @{ Name = 'NUGET_CREDENTIALS' }
+        @{ Name = 'AccessKey' }, @{ Name = 'PrivateKey' }, @{ Name = 'EncryptionKey' }, @{ Name = 'Passphrase' }, @{ Name = 'UserPwd' }, @{ Name = 'GitPat' }
     ) {
         InModuleScope $module -Parameters @{ Name = $Name } { param($Name) Test-SecretVariableName -Name $Name } | Should -BeTrue
     }
 
     It 'does not treat <Name> as secret' -ForEach @(
         @{ Name = 'JAVA_HOME' }, @{ Name = 'PATHEXT' }, @{ Name = 'KEYBOARD_LAYOUT' }, @{ Name = 'DOTNET_ROOT' }, @{ Name = 'MONKEY' }
+        @{ Name = 'KeyboardLayout' }, @{ Name = 'RecentPaths' }, @{ Name = 'FilePattern' }, @{ Name = 'Keys' }
     ) {
         InModuleScope $module -Parameters @{ Name = $Name } { param($Name) Test-SecretVariableName -Name $Name } | Should -BeFalse
     }
@@ -1825,7 +1827,7 @@ Describe 'Update-GuestAppSettingRecord (#131)' {
             param([string]$Name = 'WinMerge', [string]$Font = 'Consolas', [switch]$WithSecret)
             $values = @([pscustomobject]@{ Path = ''; Name = 'Font'; Kind = 'String'; Data = $Font })
             if ($WithSecret) { $values += [pscustomobject]@{ Path = ''; Name = 'SyncPassword'; Kind = 'String'; Data = 'hunter2' } }
-            [pscustomobject]@{ Name = $Name; RegistryKey = "HKCU\Software\$Name"; Values = $values }
+            [pscustomobject]@{ Name = $Name; RegistryKey = "HKCU\Software\Thingamahoochie\$Name"; Values = $values }
         }
         function Get-TestRecordedKey {
             param([string]$Root)
@@ -1920,9 +1922,19 @@ Describe 'Get-GuestAppSettingRestore (#131)' {
 
     It 'returns the keys VM.json holds now' {
         $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
-        $key = [ordered]@{ Name = 'WinMerge'; RegistryKey = 'HKCU\Software\WinMerge'; Values = @([ordered]@{ Path = ''; Name = 'Font'; Kind = 'String'; Data = 'Consolas' }); SecretValues = @() }
+        $key = [ordered]@{ Name = 'WinMerge'; RegistryKey = 'HKCU\Software\Thingamahoochie\WinMerge'; Values = @([ordered]@{ Path = ''; Name = 'Font'; Kind = 'String'; Data = 'Consolas' }); SecretValues = @() }
 
         $restore = Invoke-TestRestore -Root $root -Keys @($key)
+
+        @($restore.Keys).Name | Should -Be @('WinMerge')
+    }
+
+    It 'leaves out a recorded key that AppSettings does not list, so a guest cannot plant other keys' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $listed = [ordered]@{ Name = 'WinMerge'; RegistryKey = 'HKCU\software\thingamahoochie\winmerge'; Values = @(); SecretValues = @() }
+        $planted = [ordered]@{ Name = 'Run'; RegistryKey = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run'; Values = @([ordered]@{ Path = ''; Name = 'x'; Kind = 'String'; Data = 'evil.exe' }); SecretValues = @() }
+
+        $restore = Invoke-TestRestore -Root $root -Keys @($listed, $planted)
 
         @($restore.Keys).Name | Should -Be @('WinMerge')
     }

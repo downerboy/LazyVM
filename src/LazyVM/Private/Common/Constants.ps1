@@ -39,10 +39,11 @@ $script:WindowsVariableNames = @(
     'PROCESSOR_ARCHITECTURE', 'PROCESSOR_IDENTIFIER', 'PROCESSOR_LEVEL', 'PROCESSOR_REVISION',
     'PSModulePath', 'TEMP', 'TMP', 'USERNAME', 'windir'
 )
-# A variable whose name matches this is taken to hold a secret: its value is
-# kept encrypted, never in VM.json. Short words count only as a whole part of
-# the name (ADO_PAT, not PATHEXT).
-$script:SecretVariablePattern = '(?i)SECRET|PASSWORD|PASSWD|TOKEN|CONNECTIONSTRING|CREDENTIAL|APIKEY|(^|_)(KEY|PAT|PWD)(_|$)'
+# An environment variable or registry value whose name matches this is taken
+# to hold a secret: its value is kept encrypted, never in VM.json. Short words
+# count only as a whole part of the name, split by _ (ADO_PAT, not PATHEXT) or
+# by case (AccessKey, not KeyboardLayout).
+$script:SecretVariablePattern = '(?i)SECRET|PASSWORD|PASSWD|PASSPHRASE|TOKEN|CONNECTIONSTRING|CREDENTIAL|APIKEY|(^|_)(KEY|PAT|PWD)(_|$)|(?-i:[a-z](Key|Pat|Pwd)(?![a-z]))'
 
 # Every version of VM.json LazyVM writes is kept in <Name>\Config\History as
 # VM-<stamp>.json: the newest few, and any a tooling checkpoint still needs.
