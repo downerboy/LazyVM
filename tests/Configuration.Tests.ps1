@@ -105,6 +105,18 @@ Describe 'The settings schema' {
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
     }
 
+    It 'accepts a GuestFirewallRules list' {
+        $path = New-TestFile -Text '{ "GuestFirewallRules": [ { "DisplayName": "Dev API", "Direction": "Inbound", "Action": "Allow", "Protocol": "TCP", "LocalPort": [ "5000" ], "RemoteAddress": [ "Any" ], "Profile": "Any" } ] }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
+    }
+
+    It 'rejects a firewall rule whose direction is neither Inbound nor Outbound' {
+        $path = New-TestFile -Text '{ "GuestFirewallRules": [ { "DisplayName": "Dev API", "Direction": "Sideways", "Action": "Allow", "Protocol": "TCP", "LocalPort": [ "5000" ], "RemoteAddress": [ "Any" ], "Profile": "Any" } ] }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+    }
+
     It 'accepts all its own defaults' {
         $defaults = InModuleScope $module { Get-DefaultSetting }
         $path = New-TestFile -Text (ConvertTo-Json -InputObject $defaults -Depth 20)
@@ -1466,6 +1478,134 @@ Describe 'Get-GuestEnvironmentRestore (#131)' {
 
         $restore.Record.MachineVariables.JAVA_HOME | Should -Be 'C:\Java'
         $restore.Secrets.Count | Should -Be 0
+    }
+}
+
+Describe 'ConvertTo-GuestFirewallRecord (#131)' {
+    BeforeAll {
+        function Invoke-TestConvert {
+            param([object[]]$Snapshot)
+            InModuleScope $module -Parameters @{ Snapshot = $Snapshot } {
+                param($Snapshot)
+                ConvertTo-GuestFirewallRecord -Snapshot $Snapshot
+            }
+        }
+    }
+
+    It 'keeps each rule, sorted by name, with its ports and addresses as lists' {
+        $snapshot = @(
+            [pscustomobject]@{ DisplayName = 'Web'; Direction = 'Inbound'; Action = 'Allow'; Protocol = 'TCP'; LocalPort = @('80', '443'); RemoteAddress = 'Any'; Profile = 'Any' }
+            [pscustomobject]@{ DisplayName = 'Api'; Direction = 'Outbound'; Action = 'Block'; Protocol = 'UDP'; LocalPort = '5000'; RemoteAddress = @('10.0.0.0/8'); Profile = 'Domain, Private' }
+        )
+
+        $record = @(Invoke-TestConvert -Snapshot $snapshot)
+
+        $record.DisplayName | Should -Be @('Api', 'Web')
+        "$($record[0].Direction) $($record[0].Action) $($record[0].Protocol) $($record[0].Profile)" | Should -Be 'Outbound Block UDP Domain, Private'
+        @($record[0].LocalPort, $record[1].LocalPort, $record[1].RemoteAddress | ForEach-Object { $_.GetType().IsArray }) | Should -Be @($true, $true, $true)
+        $record[0].LocalPort -join ',' | Should -Be '5000'
+        $record[1].LocalPort -join ',' | Should -Be '80,443'
+        $record[1].RemoteAddress -join ',' | Should -Be 'Any'
+    }
+
+    It 'returns an empty list when the guest has no rules of its own' {
+        $record = @(Invoke-TestConvert -Snapshot @())
+
+        $record.Count | Should -Be 0
+    }
+}
+
+Describe 'Update-GuestFirewallRecord (#131)' {
+    BeforeAll {
+        function Invoke-TestRecord {
+            <# Records Alpha's firewall rules under $Root, with the guest reporting $Snapshot. Returns whether anything changed. #>
+            param([string]$Root, [object[]]$Snapshot)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Snapshot = $Snapshot } {
+                param($Root, $Snapshot)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                $reported = $Snapshot
+                Mock Get-GuestFirewallSnapshot { $reported }.GetNewClosure()
+                $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+                Update-GuestFirewallRecord -VM $vm
+            }
+        }
+        function New-TestRule {
+            param([string]$Name = 'Dev API')
+            [pscustomobject]@{ DisplayName = $Name; Direction = 'Inbound'; Action = 'Allow'; Protocol = 'TCP'; LocalPort = @('5000'); RemoteAddress = @('Any'); Profile = 'Any' }
+        }
+    }
+
+    It 'writes the rules into VM.json' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $changed = Invoke-TestRecord -Root $root -Snapshot @(New-TestRule)
+
+        $changed | Should -BeTrue
+        (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).GuestFirewallRules[0].DisplayName | Should -Be 'Dev API'
+    }
+
+    It 'writes nothing the second time, when nothing changed' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Snapshot @(New-TestRule)
+
+        $changed = Invoke-TestRecord -Root $root -Snapshot @(New-TestRule)
+
+        $changed | Should -BeFalse
+        @(Get-ChildItem -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/History') -Filter 'VM-*.json').Count | Should -Be 1
+    }
+
+    It 'records a rule that was removed as an empty list, not as never recorded' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Snapshot @(New-TestRule)
+
+        $changed = Invoke-TestRecord -Root $root -Snapshot @()
+
+        $changed | Should -BeTrue
+        $text = Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json') -Raw
+        $text | Should -Match '"GuestFirewallRules":\s*\[\s*\]'
+    }
+}
+
+Describe 'Get-GuestFirewallRestore (#131)' {
+    BeforeAll {
+        function Invoke-TestRestore {
+            <# What a restore of Alpha under $Root would put back, after VM.json records $Rules (unless it is $null). #>
+            param([string]$Root, [object[]]$Rules)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Rules = $Rules } {
+                param($Root, $Rules)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                if ($null -ne $Rules) { $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestFirewallRules = $Rules } -Reason 'a test' }
+                Get-GuestFirewallRestore -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+            }
+        }
+    }
+
+    It 'returns nothing for a VM whose rules were never recorded, so an older capture is used' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        Invoke-TestRestore -Root $root -Rules $null | Should -BeNullOrEmpty
+    }
+
+    It 'returns an empty list, not nothing, when the guest was recorded with no rules' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $restore = Invoke-TestRestore -Root $root -Rules @()
+
+        $restore | Should -Not -BeNullOrEmpty
+        @($restore.Rules).Count | Should -Be 0
+    }
+
+    It 'returns the rules VM.json holds now' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $rule = [ordered]@{ DisplayName = 'Dev API'; Direction = 'Inbound'; Action = 'Allow'; Protocol = 'TCP'; LocalPort = @('5000'); RemoteAddress = @('Any'); Profile = 'Any' }
+
+        $restore = Invoke-TestRestore -Root $root -Rules @($rule)
+
+        @($restore.Rules).DisplayName | Should -Be @('Dev API')
     }
 }
 

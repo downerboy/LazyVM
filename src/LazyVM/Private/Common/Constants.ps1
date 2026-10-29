@@ -25,6 +25,8 @@ $script:SchemaFileName = 'LazyVM.Settings.schema.json'
 $script:ToolingSettingName = 'Tooling'
 # The setting in VM.json that holds the guest's environment (GuestEnvironment.ps1).
 $script:GuestEnvironmentSettingName = 'GuestEnvironment'
+# The setting in VM.json that holds the guest's own firewall rules (GuestFirewall.ps1).
+$script:GuestFirewallSettingName = 'GuestFirewallRules'
 
 # Environment variables Windows sets itself: a fresh install has its own, so
 # they are neither recorded nor put back.

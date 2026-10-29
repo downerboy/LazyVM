@@ -64,10 +64,10 @@ function Restore-GuestWindowsState {
         [Parameter(Mandatory)][CaptureManifest]$Manifest
     )
 
-    # The environment is in VM.json (#131), so it comes back even without an archive.
+    # The environment and firewall rules are in VM.json (#131), so they come back even without an archive.
     $guestZip = Send-CaptureArchive -VM $VM -Area $Manifest.Windows -What 'Windows environment'
     if (-not $guestZip) {
-        Write-GuestNote -Notes @(Restore-GuestEnvironment -VM $VM)
+        Write-GuestNote -Notes (@(Restore-GuestEnvironment -VM $VM) + @(Restore-GuestFirewallRule -VM $VM))
         return
     }
 
@@ -102,26 +102,7 @@ function Restore-GuestWindowsState {
         if ($restored -gt 0) { $notes += New-GuestNote -Level OK -Text "restored $restored certificate(s)" }
         return $notes
     }
-    $notes += Invoke-GuestScript -VM $VM -Activity 'firewall restore' -TimeoutMinutes 10 -ArgumentList @($work) -ScriptBlock {
-        param($work)
-        $file = Join-Path $work 'firewall.json'
-        if (-not (Test-Path $file)) { return }
-        $notes = @(); $added = 0
-        foreach ($rule in @(Get-Content $file -Raw | ConvertFrom-Json)) {
-            if (-not $rule -or (Get-NetFirewallRule -DisplayName $rule.DisplayName -ErrorAction SilentlyContinue)) { continue }
-            try {
-                $parameters = @{ DisplayName = $rule.DisplayName; Direction = $rule.Direction; Action = $rule.Action; Profile = $rule.Profile }
-                if ($rule.Protocol -and $rule.Protocol -ne 'Any') { $parameters.Protocol = $rule.Protocol }
-                if ($rule.LocalPort -and @($rule.LocalPort)[0] -ne 'Any') { $parameters.LocalPort = @($rule.LocalPort) }
-                if ($rule.RemoteAddress -and @($rule.RemoteAddress)[0] -ne 'Any') { $parameters.RemoteAddress = @($rule.RemoteAddress) }
-                New-NetFirewallRule @parameters | Out-Null
-                $added++
-            }
-            catch { $notes += New-GuestNote -Level WARN -Text "firewall rule '$($rule.DisplayName)' failed: $($_.Exception.Message)" }
-        }
-        if ($added -gt 0) { $notes += New-GuestNote -Level OK -Text "recreated $added firewall rule(s)" }
-        return $notes
-    }
+    $notes += Restore-GuestFirewallRule -VM $VM -Work $work
     $notes += Invoke-GuestScript -VM $VM -Activity 'scheduled task restore' -TimeoutMinutes 10 -ArgumentList @($work) -ScriptBlock {
         param($work)
         $notes = @(); $added = 0
@@ -138,6 +119,47 @@ function Restore-GuestWindowsState {
         return $notes
     }
     Write-GuestNote -Notes $notes
+}
+
+function Restore-GuestFirewallRule {
+    <#
+      Recreates the firewall rules VM.json records, skipping any the guest
+      already has by name. A VM whose rules were never recorded gets them
+      from the capture archive unpacked at $Work instead.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [string]$Work
+    )
+
+    $saved = Get-GuestFirewallRestore -VM $VM
+    if (-not $saved -and -not $Work) { return }
+    $rulesJson = if ($saved) { ConvertTo-Json -InputObject @($saved.Rules) -Depth 5 -Compress } else { '' }
+
+    return Invoke-GuestScript -VM $VM -Activity 'firewall restore' -TimeoutMinutes 10 -ArgumentList @($rulesJson, $Work) -ScriptBlock {
+        param($rulesJson, $work)
+        if ($rulesJson) { $rules = @($rulesJson | ConvertFrom-Json) }
+        else {
+            $file = Join-Path $work 'firewall.json'
+            if (-not (Test-Path $file)) { return }
+            $rules = @(Get-Content $file -Raw | ConvertFrom-Json)
+        }
+        $notes = @(); $added = 0
+        foreach ($rule in $rules) {
+            if (-not $rule -or (Get-NetFirewallRule -DisplayName $rule.DisplayName -ErrorAction SilentlyContinue)) { continue }
+            try {
+                $parameters = @{ DisplayName = $rule.DisplayName; Direction = $rule.Direction; Action = $rule.Action; Profile = $rule.Profile }
+                if ($rule.Protocol -and $rule.Protocol -ne 'Any') { $parameters.Protocol = $rule.Protocol }
+                if ($rule.LocalPort -and @($rule.LocalPort)[0] -ne 'Any') { $parameters.LocalPort = @($rule.LocalPort) }
+                if ($rule.RemoteAddress -and @($rule.RemoteAddress)[0] -ne 'Any') { $parameters.RemoteAddress = @($rule.RemoteAddress) }
+                New-NetFirewallRule @parameters | Out-Null
+                $added++
+            }
+            catch { $notes += New-GuestNote -Level WARN -Text "firewall rule '$($rule.DisplayName)' failed: $($_.Exception.Message)" }
+        }
+        if ($added -gt 0) { $notes += New-GuestNote -Level OK -Text "recreated $added firewall rule(s)" }
+        return $notes
+    }
 }
 
 function Restore-GuestEnvironment {
