@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.7.0](https://github.com/downerboy/LazyVM/compare/v4.6.0...v4.7.0) (2026-10-29)
+
+
+### Features
+
+* record the guest's scheduled tasks in VM.json ([#150](https://github.com/downerboy/LazyVM/issues/150)) ([992f146](https://github.com/downerboy/LazyVM/commit/992f146e37cc3a6820aa5d70a4d9549481a53734))
+
 ## [4.6.0](https://github.com/downerboy/LazyVM/compare/v4.5.0...v4.6.0) (2026-10-29)
 
 
