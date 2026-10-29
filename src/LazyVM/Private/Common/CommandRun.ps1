@@ -51,6 +51,13 @@ function Initialize-CommandRun {
     Write-LogEntry $rule 'INFO'
     foreach ($warning in $configuration.Warnings) { Write-LogEntry $warning 'WARN' }
 
+    # A VM from before #130 has its tooling list in files of its own: they
+    # go into VM.json before anything reads it.
+    if (Move-ToolingIntoProfile -Root $root.Path -Name $vm.Name) {
+        $configuration = Read-VMSetting -Root $root.Path -VMName $vm.Name -Unattended:(Test-Unattended)
+        $vm = [VMContext]::new($configuration.Settings)
+    }
+
     Sync-GuestUserFromStore -VM $vm
     return $vm
 }

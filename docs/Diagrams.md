@@ -94,10 +94,10 @@ Creates the profile only. Build-LazyVM does this by itself when the profile is m
 1. `Resolve-LazyVMRoot` (Settings)
    - Reads D1, LazyVM folder: HKLM:\SOFTWARE\LazyVM (Root)
 2. `New-VMProfile` (Settings): copies -From settings except paths, computer name, maintenance time and disk identity; schedules maintenance an hour after the latest existing VM
-   - Reads D2, settings and tooling to copy: <OtherVM>\Config\ (VM.json, Tooling.json  (with -From))
+   - Reads D2, settings and tooling to copy: <OtherVM>\Config\ (VM.json  (with -From))
    - Reads D3, maintenance times in use: *\Config\ (VM.json)
    - Writes D4, new profile: <VM>\Config\ (VM.json)
-   - Writes D5, tooling list to build with: <VM>\Config\ (Tooling.json  (with -From))
+   - Writes D5, tooling list to build with: <VM>\Config\ (VM.json, its Tooling  (with -From))
 3. `Get-LazyVM` (Public): returns LazyVM.VM
 
 <a id="set-credential"></a>
@@ -165,10 +165,10 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
    - Writes D21, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
    - Writes D22, new VM: VM <VM> (started from the ISO,, Windows installs unattended)
 13. `Install-GuestSoftware` (Installation, called by Invoke-VMBuild): phase 7: waits for Setup, extends C: over the whole OS disk, attaches D: and W:, customizes Windows, installs the tooling list
-   - Reads D23, tooling list: <VM>\Config\ (Tooling.json, or the module's, Data\Tooling.Default.json)
+   - Reads D23, tooling list: <VM>\Config\ (VM.json, its Tooling, or the shared template's)
    - Reads D24, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
    - Writes D25, installed tooling: Guest (D: data disk, W: Dev Drive, VS + SSMS, extensions, SQL Server 2025, winget apps)
-   - Writes D26, list built from (first build only), what needs a manual install: <VM>\ (Config\Tooling.Template.json (once), State\reinstall-by-hand.txt)
+   - Writes D26, what needs a manual install: <VM>\ (Config\VM.json, State\reinstall-by-hand.txt)
 14. `Complete-GuestConfiguration` (Installation, called by Invoke-VMBuild): phase 8: SQL files to D:, VS settings, databases
    - Reads D27, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
    - Reads D28, database backups: D:\SQLBackup\ (<database>.bak)
@@ -202,10 +202,9 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
    - Then `Expand-GuestSystemDrive` (Installation): when the OS disk has new space: checkpoint, then moves the recovery partition to the end of the disk and extends C: up to it; a failure keeps the checkpoint and does not stop the run
 4. `Update-ToolingRecord` (Tooling, called by Invoke-Maintenance): takes the checkpoint before adopting a change; a failure does not stop the run
    - Reads D6, what is installed: Guest tooling (vswhere + vs_installer export, winget export, Marketplace extensions)
-   - Reads D7, last recorded tooling list: <VM>\Config\ (Tooling.json)
-   - Writes D8, today's copy, always: <VM>\Config\History\ (Daily\Tooling-<date>.json)
+   - Reads D7, last recorded tooling list: <VM>\Config\ (VM.json)
    - Writes D9, checkpoint, only on a change: <VM>\Checkpoints\ (checkpoint "Tooling <stamp>", oldest pruned past 3)
-   - Writes D10, new tooling version, only on a change: <VM>\Config\ (Tooling.json, History\Tooling-<stamp>.json)
+   - Writes D10, new tooling version, only on a change: <VM>\Config\ (VM.json, History\VM-<stamp>.json)
 5. `Get-GuestLicenseStatus` (Maintenance, called by Invoke-Maintenance): days left, rearms left
    - Reads D11, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
 6. `Get-MaintenanceDecision` (Maintenance, called by Invoke-Maintenance): > threshold or no countdown: none; rearms left: rearm; otherwise: rebuild
@@ -278,7 +277,7 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
    - Writes D18, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
    - Writes D19, new VM: VM <VM> (started from the ISO,, Windows installs unattended)
 11. `Install-GuestSoftware` (Installation, called by Invoke-Rebuild): phase 7: waits for Setup, extends C: over the whole OS disk, attaches D: and W:, customizes Windows, installs the tooling list
-   - Reads D20, tooling list: <VM>\Config\ (Tooling.json, or the module's, Data\Tooling.Default.json)
+   - Reads D20, tooling list: <VM>\Config\ (VM.json, its Tooling, or the shared template's)
    - Reads D21, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
    - Writes D22, installed tooling: Guest (D: data disk, W: Dev Drive, VS + SSMS, extensions, SQL Server 2025, winget apps)
    - Writes D23, what needs a manual install: <VM>\State\ (reinstall-by-hand.txt)
@@ -290,7 +289,7 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
    - Reads D27, captured state: <VM>\State\ (manifest.json and, captured files)
    - Writes D28, restored state: New guest (state put back)
 14. `Test-RebuiltVM` (Maintenance, called by Invoke-Rebuild): VM running and reachable, products, SQL, databases online, D: and W: mounted
-   - Reads D29, products expected: <VM>\Config\ (Tooling.json)
+   - Reads D29, products expected: <VM>\Config\ (VM.json)
    - Reads D30, databases expected: <VM>\State\ (manifest.json  Databases)
 15. `Remove-RetiredVM` (Maintenance, called by Invoke-Rebuild): passed: deletes the retired disk (DeleteRetiredDisk- OnSuccess). Failed: keeps it and logs how to roll back
    - Writes D31, disk space reclaimed: <VM>\ (Disks\<VM>-OS.retired-<stamp>.vhdx, Virtual Machines.retired-<stamp>\, deleted)
@@ -313,10 +312,9 @@ Does now what maintenance does every day. Get-LazyVMTooling shows the same compa
    - Writes D4, VM started if it was off: VM <VM> (running)
 3. `Update-ToolingRecord` (Tooling): takes the checkpoint before adopting a change
    - Reads D5, what is installed: Guest tooling (vswhere + vs_installer export, winget export, Marketplace extensions)
-   - Reads D6, last recorded tooling list: <VM>\Config\ (Tooling.json)
-   - Writes D7, today's copy, always: <VM>\Config\History\ (Daily\Tooling-<date>.json)
+   - Reads D6, last recorded tooling list: <VM>\Config\ (VM.json)
    - Writes D8, checkpoint, only on a change: <VM>\Checkpoints\ (checkpoint "Tooling <stamp>", oldest pruned past 3)
-   - Writes D9, new tooling version, only on a change: <VM>\Config\ (Tooling.json, History\Tooling-<stamp>.json)
+   - Writes D9, new tooling version, only on a change: <VM>\Config\ (VM.json, History\VM-<stamp>.json)
 4. `Stop-GuestGracefully` (Maintenance): only if it was started here
    - Writes D10, VM back off: VM <VM> (off)
 
@@ -335,7 +333,7 @@ Lists what is installed and what the next maintenance run would record.
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
 2. `Get-GuestToolingReport` (Tooling): inventory, then Compare-ToolingRecord against the recorded list
    - Reads D3, what is installed: Guest tooling (vswhere + vs_installer export, winget export, Marketplace extensions)
-   - Reads D4, last recorded tooling list: <VM>\Config\ (Tooling.json)
+   - Reads D4, last recorded tooling list: <VM>\Config\ (VM.json)
    - Writes D5, raw inventory: <VM>\State\tooling\ (inventory-<stamp>.json)
    - Writes D6, report: Pipeline (LazyVM.Tooling, pending changes)
 
@@ -374,13 +372,13 @@ Returns ALL the VM's disks to that checkpoint, Dev Drive and data disk included.
    - Reads D3, chosen checkpoint: <VM>\Checkpoints\ ("Tooling <stamp>")
    - Reads D4, that version's list: <VM>\Config\History\ (Tooling-<stamp>.json)
 3. `New-ToolingCheckpoint` (Tooling, called by Invoke-ToolingRevert): -SkipPrune: the current state, so the revert can be undone
-   - Reads D5, current list: <VM>\Config\ (Tooling.json)
+   - Reads D5, current list: <VM>\Config\ (VM.json)
    - Writes D6, safety checkpoint: <VM>\Checkpoints\ ("Tooling <now> before revert")
-   - Writes D7, current list kept: <VM>\Config\History\ (Tooling-<now>.json)
+   - Writes D7, current VM.json kept: <VM>\Config\History\ (VM-<now>.json)
 4. `Restore-VMSnapshot` (Hyper-V, called by Invoke-ToolingRevert): starts the VM again if it was running
    - Writes D8, VM returned to that version: VM <VM> (every disk back to <stamp>)
 5. `Write-TextFileAtomic` (Common, called by Invoke-ToolingRevert)
-   - Writes D9, tooling list matches the VM: <VM>\Config\ (Tooling.json)
+   - Writes D9, tooling list matches the VM: <VM>\Config\ (VM.json)
 
 <a id="capture"></a>
 

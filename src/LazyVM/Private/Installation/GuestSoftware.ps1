@@ -53,9 +53,9 @@ function Install-GuestSoftware {
     Enable-GuestEnhancedSession -VM $VM
     Set-GuestCustomization -VM $VM
 
-    # The VM's own recorded list, or the default list for a VM that has none.
+    # The VM's own recorded list, or the shared template's for a VM that has
+    # none. VM.Template.json keeps the list the VM was first built from.
     $tooling = Get-BuildTooling -VM $VM
-    Save-ToolingTemplate -VM $VM -Tooling $tooling
 
     # Anything already present is skipped: SQL setup with /ACTION=Install
     # against an existing instance fails outright, and running a bootstrapper

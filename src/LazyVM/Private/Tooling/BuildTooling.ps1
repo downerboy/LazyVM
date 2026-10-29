@@ -3,8 +3,8 @@
 
 function Get-BuildTooling {
     <#
-      The tooling list a build installs: this VM's recorded list, or, for a
-      VM that has none yet, the default list that ships with the module.
+      The tooling list a build installs: the one in this VM's VM.json, or,
+      while VM.json has none yet, the shared template's.
     #>
     [OutputType([ToolingRecord])]
     param(
@@ -12,39 +12,14 @@ function Get-BuildTooling {
         [switch]$Quiet
     )
 
-    $recordPath = (Get-ToolingPath -VM $VM).Record
-    $record = Read-ToolingRecord -Path $recordPath
+    $record = Read-VMTooling -VM $VM
     if ($record) {
-        if (-not $Quiet) { Write-LogEntry "Installing from this VM's tooling list: $recordPath" 'INFO' }
+        if (-not $Quiet) { Write-LogEntry "Installing from this VM's tooling list, in VM.json" 'INFO' }
         return $record
     }
 
-    $defaultPath = Join-Path -Path $script:DataDir -ChildPath $script:DefaultToolingFileName
-    $default = Read-ToolingRecord -Path $defaultPath
-    if (-not $default) { throw "This VM has no tooling list yet and the default list is missing: $defaultPath" }
-    if (-not $Quiet) { Write-LogEntry "This VM has no tooling list yet - installing the default one: $defaultPath" 'INFO' }
-    return $default
-}
-
-function Save-ToolingTemplate {
-    <#
-      Keeps the tooling list a build installs as <Name>\Config\Tooling.Template.json,
-      so the living Tooling.json can be diffed against what the VM started
-      with. Written once: a VM that already has a copy keeps it, so running the
-      build again or rebuilding a replacement VM never overwrites it, and
-      maintenance never touches it.
-    #>
-    param(
-        [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][ToolingRecord]$Tooling
-    )
-
-    $templatePath = (Get-ToolingPath -VM $VM).Template
-    if (Test-Path -LiteralPath $templatePath -PathType Leaf) { return }
-
-    # Written as Tooling.json is, so the two diff line for line.
-    Save-ToolingRecord -Record $Tooling -Path $templatePath
-    Write-LogEntry "Kept a copy of the tooling list this VM is built from: $templatePath" 'INFO'
+    if (-not $Quiet) { Write-LogEntry "This VM has no tooling list yet - installing the shared template's" 'INFO' }
+    return [ToolingRecord]::FromObject($VM.Settings[$script:ToolingSettingName])
 }
 
 function Write-ToolingReinstallReport {
@@ -86,10 +61,9 @@ function Write-ToolingReinstallReport {
 
     # Recorded in the VM's tooling list, so the next daily run does not take
     # these as uninstalled.
-    $recordPath = (Get-ToolingPath -VM $VM).Record
-    $record = Read-ToolingRecord -Path $recordPath
+    $record = Read-VMTooling -VM $VM
     if ($record) {
         $record.AwaitingReinstall = $awaiting
-        Save-ToolingRecord -Record $record -Path $recordPath
+        Save-VMTooling -VM $VM -Record $record -Reason 'items to reinstall by hand recorded'
     }
 }

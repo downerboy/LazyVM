@@ -55,7 +55,7 @@ BeforeAll {
     }
 
     function ConvertTo-RecordFromDisk {
-        <# The same record as Read-ToolingRecord would return it after Save-ToolingRecord. #>
+        <# The same record as it reads back after being written as JSON. #>
         param([Parameter(Mandatory)]$Record)
 
         return ($Record | ConvertTo-Json -Depth 10 | ConvertFrom-Json)
@@ -267,18 +267,16 @@ Describe 'ConvertTo-ToolingRecord' {
     }
 
     It 'gives an empty product list, which saves and reads back, for a guest with no Visual Studio or SSMS (#82)' {
-        $path = Join-Path -Path $TestDrive -ChildPath 'Tooling.json'
         $noProducts = [pscustomobject]@{
             Products       = @()
             WingetPackages = @([pscustomobject]@{ Id = 'Git.Git'; Source = 'winget' })
             Programs       = @([pscustomobject]@{ Name = 'Git'; Publisher = 'The Git Development Community' })
         }
 
-        $result = InModuleScope $module -Parameters @{ Inventory = $noProducts; Path = $path } {
-            param($Inventory, $Path)
+        $result = InModuleScope $module -Parameters @{ Inventory = $noProducts } {
+            param($Inventory)
             $converted = ConvertTo-ToolingRecord -Inventory $Inventory
-            Save-ToolingRecord -Record $converted -Path $Path
-            $readBack = Read-ToolingRecord -Path $Path
+            $readBack = [ToolingRecord]::FromObject((ConvertTo-ToolingSetting -Record $converted))
             [pscustomobject]@{
                 ProductsIsNull = $null -eq $converted.Products
                 ProductCount   = @($converted.Products).Count
@@ -503,76 +501,123 @@ Describe 'Merge-AwaitingReinstall' {
     }
 }
 
-Describe 'The copy of the tooling list a VM is built from (#71)' {
+Describe 'The tooling list in VM.json (#130)' {
+    BeforeAll {
+        function New-TestVM {
+            <# A LazyVM folder with one VM, Alpha, whose VM.json holds $Settings. Returns the root. #>
+            param([Parameter(Mandatory)][System.Collections.IDictionary]$Settings)
+
+            $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+            $configDir = Join-Path -Path $root -ChildPath 'Alpha/Config'
+            New-Item -ItemType Directory -Path $configDir, (Join-Path -Path $root -ChildPath 'Shared/Config') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'VM.json') -Value (ConvertTo-Json -InputObject $Settings -Depth 10)
+            return $root
+        }
+
+        function Read-TestProfile {
+            param([Parameter(Mandatory)][string]$Path)
+            return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable
+        }
+    }
+
     BeforeEach {
-        $profileDir = Join-Path -Path $TestDrive -ChildPath 'LazyVM\Alpha\Config'
-        $settings = @{ VMName = 'Alpha'; ProfileDir = $profileDir; ToolingWingetExclude = @(); ToolingHistoryDays = 30 }
-        $templatePath = Join-Path -Path $profileDir -ChildPath 'Tooling.Template.json'
         $buildList = New-TestRecord -Products @(New-TestProduct) -WingetIds @('Git.Git') -ProgramNames @('Git')
     }
 
-    It 'is kept as Config\Tooling.Template.json, written as Tooling.json is written' {
-        $expected = InModuleScope $module -Parameters @{ Settings = $settings; Tooling = $buildList } {
-            param($Settings, $Tooling)
-            $record = [ToolingRecord]::FromObject($Tooling)
-            Save-ToolingTemplate -VM ([VMContext]::new($Settings)) -Tooling $record 6>$null
-            $record.ToJson()
-        }
+    Context 'when maintenance records a change' {
+        BeforeEach {
+            Mock -ModuleName $module Get-GuestToolingInventory {
+                # The product New-TestProduct describes, as the guest reports it.
+                [pscustomobject]@{
+                    Products       = @([pscustomobject]@{
+                            ProductId          = 'Microsoft.VisualStudio.Product.Community'
+                            ChannelId          = 'VisualStudio.18.Release'
+                            DisplayName        = 'Visual Studio Community 2026'
+                            Components         = @()
+                            ExportedExtensions = @()
+                            UserExtensions     = @()
+                        })
+                    WingetPackages = @([pscustomobject]@{ Id = 'Git.Git'; Source = 'winget' }, [pscustomobject]@{ Id = 'Notepad++.Notepad++'; Source = 'winget' })
+                    Programs       = @([pscustomobject]@{ Name = 'Git'; Publisher = 'Test Publisher' })
+                }
+            }
+            Mock -ModuleName $module Add-MarketplaceItem {}
+            Mock -ModuleName $module Get-ToolingStamp { '20261024-120000' }
+            Mock -ModuleName $module New-ToolingCheckpoint {}
+            Mock -ModuleName $module Get-ToolingCheckpointStamp { , @('20261024-120000') }
 
-        $templatePath | Should -Exist
-        [IO.File]::ReadAllText($templatePath) | Should -BeExactly $expected
-    }
+            # As a build leaves the VM: VM.json and its template, the same.
+            $root = New-TestVM -Settings @{ vCPU = 4; Tooling = $buildList }
+            $configDir = Join-Path -Path $root -ChildPath 'Alpha/Config'
+            Copy-Item -LiteralPath (Join-Path -Path $configDir -ChildPath 'VM.json') -Destination (Join-Path -Path $configDir -ChildPath 'VM.Template.json')
 
-    It 'is not overwritten when the VM is built again or a replacement is rebuilt' {
-        New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
-        Set-Content -LiteralPath $templatePath -Value 'the original list' -NoNewline
-
-        InModuleScope $module -Parameters @{ Settings = $settings; Tooling = $buildList } {
-            param($Settings, $Tooling)
-            Save-ToolingTemplate -VM ([VMContext]::new($Settings)) -Tooling ([ToolingRecord]::FromObject($Tooling)) 6>$null
-        }
-
-        Get-Content -LiteralPath $templatePath -Raw | Should -BeExactly 'the original list'
-    }
-
-    It 'is left untouched when maintenance records a tooling change' {
-        Mock -ModuleName $module Get-GuestToolingInventory {
-            # The product New-TestProduct describes, as the guest reports it.
-            [pscustomobject]@{
-                Products       = @([pscustomobject]@{
-                        ProductId          = 'Microsoft.VisualStudio.Product.Community'
-                        ChannelId          = 'VisualStudio.18.Release'
-                        DisplayName        = 'Visual Studio Community 2026'
-                        Components         = @()
-                        ExportedExtensions = @()
-                        UserExtensions     = @()
-                    })
-                WingetPackages = @([pscustomobject]@{ Id = 'Git.Git'; Source = 'winget' }, [pscustomobject]@{ Id = 'Notepad++.Notepad++'; Source = 'winget' })
-                Programs       = @([pscustomobject]@{ Name = 'Git'; Publisher = 'Test Publisher' })
+            $changes = InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                Update-ToolingRecord -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) 6>$null
             }
         }
-        Mock -ModuleName $module Add-MarketplaceItem {}
-        Mock -ModuleName $module Get-ToolingStamp { '20261024-120000' }
-        Mock -ModuleName $module New-ToolingCheckpoint {}
 
-        # As a build leaves the VM: the living list and the copy, the same.
-        InModuleScope $module -Parameters @{ Settings = $settings; Tooling = $buildList } {
-            param($Settings, $Tooling)
-            $vm = [VMContext]::new($Settings)
-            $record = [ToolingRecord]::FromObject($Tooling)
-            Save-ToolingTemplate -VM $vm -Tooling $record 6>$null
-            Save-ToolingRecord -Record $record -Path (Get-ToolingPath -VM $vm).Record
-        }
-        $before = Get-Content -LiteralPath $templatePath -Raw
-
-        $changes = InModuleScope $module -Parameters @{ Settings = $settings } {
-            param($Settings)
-            Update-ToolingRecord -VM ([VMContext]::new($Settings)) 6>$null
+        It 'records it in VM.json''s Tooling section, keeping the other settings' {
+            @($changes) | Should -Contain '+ winget: Notepad++.Notepad++'
+            $vmProfile = Read-TestProfile -Path (Join-Path -Path $configDir -ChildPath 'VM.json')
+            @($vmProfile.Tooling.WingetPackages | ForEach-Object { $_.Id }) | Should -Contain 'Notepad++.Notepad++'
+            $vmProfile.vCPU | Should -Be 4
         }
 
-        @($changes) | Should -Contain '+ winget: Notepad++.Notepad++'
-        Get-Content -LiteralPath (Join-Path -Path $profileDir -ChildPath 'Tooling.json') -Raw | Should -Match 'Notepad\+\+'
-        Get-Content -LiteralPath $templatePath -Raw | Should -BeExactly $before
-        Get-Content -LiteralPath $templatePath -Raw | Should -Not -Match 'Notepad\+\+'
+        It 'keeps the version it recorded in History under its checkpoint''s date and time' {
+            $version = Read-TestProfile -Path (Join-Path -Path $configDir -ChildPath 'History/VM-20261024-120000.json')
+            @($version.Tooling.WingetPackages | ForEach-Object { $_.Id }) | Should -Contain 'Notepad++.Notepad++'
+        }
+
+        It 'leaves VM.Template.json as it was, and keeps no separate tooling files' {
+            Get-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'VM.Template.json') -Raw | Should -Not -Match 'Notepad\+\+'
+            Join-Path -Path $configDir -ChildPath 'Tooling.json' | Should -Not -Exist
+            Join-Path -Path $configDir -ChildPath 'History/Daily' | Should -Not -Exist
+        }
+    }
+
+    It 'refuses to read the list of a VM whose Tooling.json has not been folded into VM.json yet' {
+        $root = New-TestVM -Settings @{ vCPU = 4 }
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value (ConvertTo-Json -InputObject $buildList -Depth 10)
+
+        {
+            InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                Read-VMTooling -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+            }
+        } | Should -Throw -ExpectedMessage '*Tooling.json*'
+    }
+
+    Context 'when a revert restores an earlier list' {
+        BeforeEach {
+            $newerList = New-TestRecord -Products @(New-TestProduct) -WingetIds @('Git.Git', 'Notepad++.Notepad++') -ProgramNames @('Git')
+            $root = New-TestVM -Settings @{ vCPU = 8; Tooling = $newerList }
+            $historyDir = Join-Path -Path $root -ChildPath 'Alpha/Config/History'
+            New-Item -ItemType Directory -Path $historyDir | Out-Null
+            Set-Content -LiteralPath (Join-Path -Path $historyDir -ChildPath 'VM-20261008-193000.json') -Value (ConvertTo-Json -InputObject @{ vCPU = 4; Tooling = $buildList } -Depth 10)
+            Set-Content -LiteralPath (Join-Path -Path $historyDir -ChildPath 'VM-20261009-080000.json') -Value '{ "vCPU": 6 }'
+        }
+
+        It 'puts back only the Tooling section of that version, keeping settings changed since' {
+            InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @('20261008-193000') }
+                Restore-ProfileTooling -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) -Stamp '20261008-193000'
+            }
+
+            $vmProfile = Read-TestProfile -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
+            @($vmProfile.Tooling.WingetPackages | ForEach-Object { $_.Id }) | Should -Be @('Git.Git')
+            $vmProfile.vCPU | Should -Be 8
+        }
+
+        It 'refuses a version that has no tooling list' {
+            {
+                InModuleScope $module -Parameters @{ Root = $root } {
+                    param($Root)
+                    Get-ProfileTooling -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) -Stamp '20261009-080000'
+                }
+            } | Should -Throw -ExpectedMessage '*20261009-080000*'
+        }
     }
 }

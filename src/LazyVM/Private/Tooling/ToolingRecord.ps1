@@ -1,16 +1,13 @@
 ﻿# ToolingRecord.ps1 - Each VM's tooling list: building it, comparing it, recording changes.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# Each VM's tooling list is <Name>\Config\Tooling.json. The daily
-# maintenance run compares the guest with it and adopts any change, after
-# first taking a Hyper-V checkpoint (see Checkpoint.ps1), so every recorded
-# version of the list has a checkpoint of the VM as it was then:
+# Each VM's tooling list is the Tooling setting in <Name>\Config\VM.json.
+# The daily maintenance run compares the guest with it and adopts any
+# change, after first taking a Hyper-V checkpoint (see Checkpoint.ps1), so
+# every recorded version of the list has a checkpoint of the VM as it was then:
 #
-#   checkpoint  "Tooling <stamp>"                 the VM when it was recorded
-#   file        History\Tooling-<stamp>.json      the list recorded with it
-#
-# A dated copy of the list is also kept for every day the check runs
-# (History\Daily), whether or not it changed.
+#   checkpoint  "Tooling <stamp>"           the VM when it was recorded
+#   file        History\VM-<stamp>.json     VM.json, with the list recorded then
 #
 # Only additions and removals count as changes. Versions are not compared,
 # and version numbers are stripped from program names, so routine updates of
@@ -124,36 +121,76 @@ function Compare-ToolingRecord {
     return @($changes)
 }
 
-function Get-ToolingPath {
-    <# The VM's tooling list, the copy of the list it was first built from, and its history folders. #>
+function ConvertTo-ToolingSetting {
+    <# A tooling list as the value of VM.json's Tooling setting. #>
+    param([Parameter(Mandatory)][ToolingRecord]$Record)
+
+    return ConvertTo-PlainValue -Value ($Record.ToJson() | ConvertFrom-Json -AsHashtable -DateKind String)
+}
+
+function Read-VMTooling {
+    <#
+      The VM's tooling list, read from VM.json now, so a change recorded
+      earlier in the same run is seen; $null while VM.json has none. Throws
+      while a Tooling.json from before #130 has not been folded in, rather
+      than take the VM as having no list.
+    #>
+    [OutputType([ToolingRecord])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $historyDir = Join-Path $VM.Settings.ProfileDir 'History'
-    return [pscustomobject]@{
-        Record     = Join-Path $VM.Settings.ProfileDir $script:ToolingFileName
-        Template   = Join-Path $VM.Settings.ProfileDir $script:ToolingTemplateFileName
-        HistoryDir = $historyDir
-        DailyDir   = Join-Path $historyDir 'Daily'
+    $settings = Read-SettingsFile -Path (Get-VMProfilePath -Root $VM.Settings.Root -Name $VM.Name)
+    if ($settings.ContainsKey($script:ToolingSettingName)) {
+        return [ToolingRecord]::FromObject($settings[$script:ToolingSettingName])
     }
+    $legacy = Join-Path -Path $VM.Settings.ProfileDir -ChildPath $script:LegacyToolingFileName
+    if (Test-Path -LiteralPath $legacy -PathType Leaf) {
+        throw "This VM's tooling list is still in $legacy, which could not be folded into VM.json. The log says why."
+    }
+    return $null
 }
 
-function Read-ToolingRecord {
-    <# The tooling list at $Path, or $null when there is none. #>
-    [OutputType([ToolingRecord])]
-    param([Parameter(Mandatory)][string]$Path)
-
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    return [ToolingRecord]::FromJson((Get-Content -LiteralPath $Path -Raw))
-}
-
-function Save-ToolingRecord {
+function Save-VMTooling {
+    <# Records $Record as the VM's tooling list in VM.json, keeping that version in History under $Stamp (now, by default). #>
     param(
+        [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][ToolingRecord]$Record,
-        [Parameter(Mandatory)][string]$Path
+        [Parameter(Mandatory)][string]$Reason,
+        [string]$Stamp
     )
 
-    # Atomic, so a crash part-way through never leaves a half-written list.
-    Write-TextFileAtomic -Path $Path -Text $Record.ToJson()
+    $update = @{
+        Root   = $VM.Settings.Root
+        Name   = $VM.Name
+        Change = @{ $script:ToolingSettingName = ConvertTo-ToolingSetting -Record $Record }
+        Reason = $Reason
+    }
+    if ($Stamp) { $update.Stamp = $Stamp }
+    $null = Update-VMProfile @update
+}
+
+function Get-ProfileTooling {
+    <# The tooling list in the version of VM.json kept for $Stamp. Throws when there is none. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$Stamp
+    )
+
+    $path = Get-ProfileVersionPath -Root $VM.Settings.Root -Name $VM.Name -Stamp $Stamp
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "The tooling list for $Stamp is missing: there is no $path" }
+    $version = Read-SettingsFile -Path $path
+    if (-not $version.ContainsKey($script:ToolingSettingName)) { throw "The version of VM.json kept for $Stamp has no tooling list: $path" }
+    return $version[$script:ToolingSettingName]
+}
+
+function Restore-ProfileTooling {
+    <# Puts the tooling list kept for $Stamp back into VM.json. Every other setting stays as it is now. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$Stamp
+    )
+
+    $tooling = Get-ProfileTooling -VM $VM -Stamp $Stamp
+    $null = Update-VMProfile -Root $VM.Settings.Root -Name $VM.Name -Change @{ $script:ToolingSettingName = $tooling } -Reason "tooling list returned to version $Stamp"
 }
 
 function Update-ToolingRecord {
@@ -165,17 +202,10 @@ function Update-ToolingRecord {
 
     Write-LogEntry "Tooling Check - $($VM.Name)" 'PHASE'
 
-    $paths = Get-ToolingPath -VM $VM
     $current = ConvertTo-ToolingRecord -Inventory (Get-GuestToolingInventory -VM $VM) -WingetExclude $VM.Settings.ToolingWingetExclude
-    $previous = Read-ToolingRecord -Path $paths.Record
+    $previous = Read-VMTooling -VM $VM
     Add-MarketplaceItem -Record $current -Previous $previous
     Merge-AwaitingReinstall -Record $current -Previous $previous
-
-    # The day's copy, kept whether or not anything changed.
-    Save-ToolingRecord -Record $current -Path (Join-Path $paths.DailyDir ('Tooling-{0}.json' -f (Get-Date -Format 'yyyyMMdd')))
-    $cutoff = (Get-Date).AddDays(-[int]$VM.Settings.ToolingHistoryDays)
-    Get-ChildItem -LiteralPath $paths.DailyDir -Filter 'Tooling-*.json' -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.LastWriteTime -lt $cutoff } | Remove-Item -Force -ErrorAction SilentlyContinue
 
     if ($previous) {
         $changes = @(Compare-ToolingRecord -Old $previous -New $current)
@@ -199,8 +229,7 @@ function Update-ToolingRecord {
         return @()
     }
 
-    Save-ToolingRecord -Record $current -Path (Join-Path $paths.HistoryDir "Tooling-$stamp.json")
-    Save-ToolingRecord -Record $current -Path $paths.Record
-    Write-LogEntry "Tooling list recorded as version $stamp ($($paths.Record))" 'OK'
+    Save-VMTooling -VM $VM -Record $current -Reason 'tooling change recorded' -Stamp $stamp
+    Write-LogEntry "Tooling list recorded in VM.json as version $stamp" 'OK'
     return $changes
 }

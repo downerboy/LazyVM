@@ -6,7 +6,7 @@
 # list under AwaitingReinstall. The daily run keeps them recorded while they
 # are missing, so they are not taken as uninstalled, and reminds you of them;
 # each one leaves the list once it is installed again. To drop one you no
-# longer want, delete it from AwaitingReinstall in Tooling.json.
+# longer want, delete it from Tooling.AwaitingReinstall in VM.json.
 
 function Merge-AwaitingReinstall {
     <#

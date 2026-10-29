@@ -12,7 +12,8 @@ $script:GuestMarkerKey = 'HKLM:\SOFTWARE\LazyVM'
 # The LazyVM folder holds one folder per VM, <Root>\<Name>, and one folder
 # for what every VM uses, <Root>\Shared. The host-wide settings are in
 # Shared\Config are the shared template: they are only used to create a
-# VM. Each VM's profile, VM.json, and tooling list are in <Name>\Config.
+# VM. Each VM's profile, VM.json, which holds its tooling list too, is in
+# <Name>\Config.
 $script:SharedFolderName = 'Shared'
 $script:ConfigFolderName = 'Config'
 $script:SettingsFileName = 'LazyVM.Settings.json'
@@ -20,10 +21,18 @@ $script:ProfileFileName = 'VM.json'
 # The VM.json a VM was first built from, kept beside it to diff against it.
 $script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'
-$script:ToolingFileName = 'Tooling.json'
-$script:DefaultToolingFileName = 'Tooling.Default.json'
-# The tooling list a VM was first built from, kept beside Tooling.json to diff against it.
-$script:ToolingTemplateFileName = 'Tooling.Template.json'
+# The setting in VM.json that holds the VM's tooling list.
+$script:ToolingSettingName = 'Tooling'
+
+# Every version of VM.json LazyVM writes is kept in <Name>\Config\History as
+# VM-<stamp>.json: the newest few, and any a tooling checkpoint still needs.
+$script:HistoryFolderName = 'History'
+$script:ProfileVersionsToKeep = 3
+
+# Before #130 the tooling list had files of its own beside VM.json. A VM
+# that still has them gets them folded into VM.json once (ToolingMigration.ps1).
+$script:LegacyToolingFileName = 'Tooling.json'
+$script:LegacyToolingTemplateFileName = 'Tooling.Template.json'
 
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.
