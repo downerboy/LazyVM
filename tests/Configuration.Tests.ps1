@@ -111,6 +111,18 @@ Describe 'The settings schema' {
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
     }
 
+    It 'accepts a GuestScheduledTasks list' {
+        $path = New-TestFile -Text '{ "GuestScheduledTasks": [ { "Name": "Nightly build", "Xml": "<?xml version=\"1.0\"?><Task />" } ] }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
+    }
+
+    It 'rejects a scheduled task whose definition is not XML' {
+        $path = New-TestFile -Text '{ "GuestScheduledTasks": [ { "Name": "Nightly build", "Xml": "not xml" } ] }'
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+    }
+
     It 'rejects a firewall rule whose direction is neither Inbound nor Outbound' {
         $path = New-TestFile -Text '{ "GuestFirewallRules": [ { "DisplayName": "Dev API", "Direction": "Sideways", "Action": "Allow", "Protocol": "TCP", "LocalPort": [ "5000" ], "RemoteAddress": [ "Any" ], "Profile": "Any" } ] }'
 
@@ -1606,6 +1618,127 @@ Describe 'Get-GuestFirewallRestore (#131)' {
         $restore = Invoke-TestRestore -Root $root -Rules @($rule)
 
         @($restore.Rules).DisplayName | Should -Be @('Dev API')
+    }
+}
+
+Describe 'ConvertTo-GuestScheduledTaskRecord (#131)' {
+    It 'keeps each task by name and XML, sorted by name' {
+        $tasks = @(
+            [pscustomobject]@{ Name = 'Sync'; Xml = '<Task>sync</Task>' }
+            [pscustomobject]@{ Name = 'Backup'; Xml = '<Task>backup</Task>' }
+        )
+
+        $record = @(InModuleScope $module -Parameters @{ Tasks = $tasks } { param($Tasks) ConvertTo-GuestScheduledTaskRecord -Task $Tasks })
+
+        $record.Name | Should -Be @('Backup', 'Sync')
+        $record[0].Xml | Should -Be '<Task>backup</Task>'
+    }
+}
+
+Describe 'Update-GuestScheduledTaskRecord (#131)' {
+    BeforeAll {
+        function Invoke-TestRecord {
+            <# Records Alpha's scheduled tasks under $Root, with the guest exporting $Tasks and failing on $Failed. Returns whether anything changed. #>
+            param([string]$Root, [object[]]$Tasks, [string[]]$Failed = @())
+
+            InModuleScope $module -Parameters @{ Root = $Root; Tasks = $Tasks; Failed = $Failed } {
+                param($Root, $Tasks, $Failed)
+                Mock Write-LogEntry {}
+                Mock Write-GuestNote {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                $reported = [pscustomobject]@{ Tasks = @($Tasks); Failed = @($Failed); Notes = @() }
+                Mock Get-GuestScheduledTaskSnapshot { $reported }.GetNewClosure()
+                $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+                Update-GuestScheduledTaskRecord -VM $vm
+            }
+        }
+        function New-TestTask {
+            param([string]$Name = 'Nightly build', [string]$Xml = '<?xml version="1.0"?><Task>build</Task>')
+            [pscustomobject]@{ Name = $Name; Xml = $Xml }
+        }
+        function Get-TestRecordedTask {
+            param([string]$Root)
+            @((Read-TestJson -Path (Join-Path -Path $Root -ChildPath 'Alpha/Config/VM.json')).GuestScheduledTasks)
+        }
+    }
+
+    It 'writes the tasks into VM.json' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $changed = Invoke-TestRecord -Root $root -Tasks @(New-TestTask)
+
+        $changed | Should -BeTrue
+        (Get-TestRecordedTask -Root $root).Name | Should -Be @('Nightly build')
+    }
+
+    It 'writes nothing the second time, when nothing changed' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Tasks @(New-TestTask)
+
+        $changed = Invoke-TestRecord -Root $root -Tasks @(New-TestTask)
+
+        $changed | Should -BeFalse
+        @(Get-ChildItem -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/History') -Filter 'VM-*.json').Count | Should -Be 1
+    }
+
+    It 'records a task that was removed' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Tasks @((New-TestTask), (New-TestTask -Name 'Sync'))
+
+        $changed = Invoke-TestRecord -Root $root -Tasks @(New-TestTask -Name 'Sync')
+
+        $changed | Should -BeTrue
+        (Get-TestRecordedTask -Root $root).Name | Should -Be @('Sync')
+    }
+
+    It 'keeps what it had for a task that could not be exported this time' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestRecord -Root $root -Tasks @(New-TestTask)
+
+        $changed = Invoke-TestRecord -Root $root -Tasks @() -Failed @('Nightly build')
+
+        $changed | Should -BeFalse
+        (Get-TestRecordedTask -Root $root).Xml | Should -Be @('<?xml version="1.0"?><Task>build</Task>')
+    }
+}
+
+Describe 'Get-GuestScheduledTaskRestore (#131)' {
+    BeforeAll {
+        function Invoke-TestRestore {
+            <# What a restore of Alpha under $Root would put back, after VM.json records $Tasks (unless it is $null). #>
+            param([string]$Root, [object[]]$Tasks)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Tasks = $Tasks } {
+                param($Root, $Tasks)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                if ($null -ne $Tasks) { $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestScheduledTasks = $Tasks } -Reason 'a test' }
+                Get-GuestScheduledTaskRestore -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+            }
+        }
+    }
+
+    It 'returns nothing for a VM whose tasks were never recorded, so an older capture is used' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        Invoke-TestRestore -Root $root -Tasks $null | Should -BeNullOrEmpty
+    }
+
+    It 'returns an empty list, not nothing, when the guest was recorded with no tasks' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $restore = Invoke-TestRestore -Root $root -Tasks @()
+
+        $restore | Should -Not -BeNullOrEmpty
+        @($restore.Tasks).Count | Should -Be 0
+    }
+
+    It 'returns the tasks VM.json holds now' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        $restore = Invoke-TestRestore -Root $root -Tasks @([ordered]@{ Name = 'Nightly build'; Xml = '<Task />' })
+
+        @($restore.Tasks).Name | Should -Be @('Nightly build')
     }
 }
 

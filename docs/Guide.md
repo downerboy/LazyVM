@@ -38,7 +38,7 @@ A rebuild destroys the VM's operating system. These are carried across it:
 
 - **SQL Server**: user databases (backed up and restored), logins with their original SIDs and password hashes so database users are not orphaned, server roles and instance settings.
 - **Visual Studio**: the products you actually have installed (2026, 2022 or both, and SSMS), their workloads and components, Marketplace extensions, your settings, NuGet and Git configuration, snippets and templates.
-- **Windows**: environment variables, PATH entries, hosts file entries, mapped drives and the firewall rules you added, recorded in `VM.json` whenever they change (a variable whose name looks secret, such as `GITHUB_TOKEN`, is kept encrypted in `Credentials\environment.cred` instead), plus certificates and scheduled tasks.
+- **Windows**: environment variables, PATH entries, hosts file entries, mapped drives, and the firewall rules and scheduled tasks you added, recorded in `VM.json` whenever they change (a variable whose name looks secret, such as `GITHUB_TOKEN`, is kept encrypted in `Credentials\environment.cred` instead), plus certificates.
 - **Files**: the profile folders listed in `GuestProjectPaths`.
 - **Your tools**: every winget package you installed is reinstalled from the VM's tooling list, and application settings such as WinMerge's are carried across. [Section 9](#9-tooling-and-going-back) explains the tooling list.
 - **The Dev Drive**: a separate persistent disk holding your working source. It is never destroyed, so its contents need no capture. Source control remains the backup for the code on it. [Section 11](#11-moving-files-between-host-and-vm) explains it.

@@ -64,10 +64,10 @@ function Restore-GuestWindowsState {
         [Parameter(Mandatory)][CaptureManifest]$Manifest
     )
 
-    # The environment and firewall rules are in VM.json (#131), so they come back even without an archive.
+    # The environment, firewall rules and scheduled tasks are in VM.json (#131), so they come back even without an archive.
     $guestZip = Send-CaptureArchive -VM $VM -Area $Manifest.Windows -What 'Windows environment'
     if (-not $guestZip) {
-        Write-GuestNote -Notes (@(Restore-GuestEnvironment -VM $VM) + @(Restore-GuestFirewallRule -VM $VM))
+        Write-GuestNote -Notes (@(Restore-GuestEnvironment -VM $VM) + @(Restore-GuestFirewallRule -VM $VM) + @(Restore-GuestScheduledTask -VM $VM))
         return
     }
 
@@ -103,22 +103,46 @@ function Restore-GuestWindowsState {
         return $notes
     }
     $notes += Restore-GuestFirewallRule -VM $VM -Work $work
-    $notes += Invoke-GuestScript -VM $VM -Activity 'scheduled task restore' -TimeoutMinutes 10 -ArgumentList @($work) -ScriptBlock {
-        param($work)
+    $notes += Restore-GuestScheduledTask -VM $VM -Work $work
+    Write-GuestNote -Notes $notes
+}
+
+function Restore-GuestScheduledTask {
+    <#
+      Registers the scheduled tasks VM.json records, skipping any the guest
+      already has by name. A VM whose tasks were never recorded gets them
+      from the capture archive unpacked at $Work instead.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [string]$Work
+    )
+
+    $saved = Get-GuestScheduledTaskRestore -VM $VM
+    if (-not $saved -and -not $Work) { return }
+    $tasksJson = if ($saved) { ConvertTo-Json -InputObject @($saved.Tasks) -Depth 5 -Compress } else { '' }
+
+    return Invoke-GuestScript -VM $VM -Activity 'scheduled task restore' -TimeoutMinutes 10 -ArgumentList @($tasksJson, $Work) -ScriptBlock {
+        param($tasksJson, $work)
+        if ($tasksJson) { $tasks = @($tasksJson | ConvertFrom-Json) }
+        else {
+            # Before #131 each task was a file of its own, named after the task.
+            $tasks = @(foreach ($file in @(Get-ChildItem (Join-Path $work 'tasks') -Filter '*.xml' -File -ErrorAction SilentlyContinue)) {
+                    [pscustomobject]@{ Name = [IO.Path]::GetFileNameWithoutExtension($file.Name); Xml = (Get-Content $file.FullName -Raw) }
+                })
+        }
         $notes = @(); $added = 0
-        foreach ($file in @(Get-ChildItem (Join-Path $work 'tasks') -Filter '*.xml' -File -ErrorAction SilentlyContinue)) {
-            $name = [IO.Path]::GetFileNameWithoutExtension($file.Name)
-            if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) { continue }
+        foreach ($task in $tasks) {
+            if (-not $task -or (Get-ScheduledTask -TaskName $task.Name -ErrorAction SilentlyContinue)) { continue }
             try {
-                Register-ScheduledTask -TaskName $name -Xml (Get-Content $file.FullName -Raw) -Force | Out-Null
+                Register-ScheduledTask -TaskName $task.Name -Xml $task.Xml -Force | Out-Null
                 $added++
             }
-            catch { $notes += New-GuestNote -Level WARN -Text "scheduled task '$name' failed: $($_.Exception.Message)" }
+            catch { $notes += New-GuestNote -Level WARN -Text "scheduled task '$($task.Name)' failed: $($_.Exception.Message)" }
         }
         if ($added -gt 0) { $notes += New-GuestNote -Level OK -Text "recreated $added scheduled task(s)" }
         return $notes
     }
-    Write-GuestNote -Notes $notes
 }
 
 function Restore-GuestFirewallRule {

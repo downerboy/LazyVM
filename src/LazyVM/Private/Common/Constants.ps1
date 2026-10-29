@@ -27,6 +27,8 @@ $script:ToolingSettingName = 'Tooling'
 $script:GuestEnvironmentSettingName = 'GuestEnvironment'
 # The setting in VM.json that holds the guest's own firewall rules (GuestFirewall.ps1).
 $script:GuestFirewallSettingName = 'GuestFirewallRules'
+# The setting in VM.json that holds the guest's own scheduled tasks (GuestScheduledTask.ps1).
+$script:GuestScheduledTaskSettingName = 'GuestScheduledTasks'
 
 # Environment variables Windows sets itself: a fresh install has its own, so
 # they are neither recorded nor put back.

@@ -129,9 +129,9 @@ function Get-LicenseReport {
 function Invoke-Maintenance {
     <#
       The scheduled task's daily work: extends C: into any new space, records
-      the guest's tooling, environment and firewall rules, then does nothing
-      more until the evaluation is close to expiry, when it captures state
-      and rearms.
+      the guest's tooling, environment, firewall rules and scheduled tasks,
+      then does nothing more until the evaluation is close to expiry, when it
+      captures state and rearms.
       Returns what the caller does next.
     #>
     [OutputType([MaintenanceStep])]
@@ -156,11 +156,13 @@ function Invoke-Maintenance {
     try { $null = Update-ToolingRecord -VM $VM }
     catch { Write-LogError 'Tooling check failed (non-fatal)' $_ }
 
-    # The guest's environment and firewall rules, recorded in VM.json whenever they changed (#131).
+    # The guest's environment, firewall rules and scheduled tasks, recorded in VM.json whenever they changed (#131).
     try { $null = Update-GuestEnvironmentRecord -VM $VM }
     catch { Write-LogError 'Environment check failed (non-fatal)' $_ }
     try { $null = Update-GuestFirewallRecord -VM $VM }
     catch { Write-LogError 'Firewall check failed (non-fatal)' $_ }
+    try { $null = Update-GuestScheduledTaskRecord -VM $VM }
+    catch { Write-LogError 'Scheduled task check failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM
     Write-LogEntry "License: $($license.Status); $($license.DaysLeft) day(s) left; $($license.RearmsLeft) rearm(s) remaining" 'INFO'

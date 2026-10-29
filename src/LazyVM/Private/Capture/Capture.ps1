@@ -305,8 +305,8 @@ function Backup-GuestDatabase {
 #
 # Each part is saved into a staging folder in the guest by a call of its
 # own, then the folder is zipped and pulled out as winstate.zip. The
-# environment and firewall rules are recorded in VM.json instead
-# (GuestEnvironment.ps1, GuestFirewall.ps1).
+# environment, firewall rules and scheduled tasks are recorded in VM.json
+# instead (GuestEnvironment.ps1, GuestFirewall.ps1, GuestScheduledTask.ps1).
 
 function Save-GuestWindowsState {
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -315,21 +315,21 @@ function Save-GuestWindowsState {
     $null = Invoke-GuestScript -VM $VM -Activity 'Windows capture staging' -TimeoutMinutes 5 -ArgumentList @($staging) -ScriptBlock {
         param($staging)
         Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
-        foreach ($folder in $staging, (Join-Path $staging 'certs'), (Join-Path $staging 'tasks')) { New-GuestFolder -Path $folder }
+        foreach ($folder in $staging, (Join-Path $staging 'certs')) { New-GuestFolder -Path $folder }
     }
 
-    # The environment and firewall rules are plain data, so they are recorded in VM.json (#131), not the archive.
+    # The environment, firewall rules and scheduled tasks are plain data, so they are recorded in VM.json (#131), not the archive.
     try { $null = Update-GuestEnvironmentRecord -VM $VM }
     catch { Write-LogError '  The guest environment could not be recorded; VM.json keeps what it had' $_ }
     try { $null = Update-GuestFirewallRecord -VM $VM }
     catch { Write-LogError '  The guest firewall rules could not be recorded; VM.json keeps what it had' $_ }
+    try { $null = Update-GuestScheduledTaskRecord -VM $VM }
+    catch { Write-LogError '  The guest scheduled tasks could not be recorded; VM.json keeps what it had' $_ }
 
     $certificates = Save-GuestCertificate -VM $VM -Staging $staging
-    $tasks = Save-GuestScheduledTask -VM $VM -Staging $staging
 
     $summary = [pscustomobject]@{
-        Certificates   = @($certificates.Certificates)
-        ScheduledTasks = @($tasks.Tasks)
+        Certificates = @($certificates.Certificates)
     }
     $zip = Invoke-GuestScript -VM $VM -Activity 'Windows capture archive' -TimeoutMinutes 15 -ArgumentList @($staging, ($summary | ConvertTo-Json -Depth 8), $VM.Settings.GuestSetupDir) -ScriptBlock {
         param($staging, $summaryJson, $setupDir)
@@ -342,13 +342,12 @@ function Save-GuestWindowsState {
     $archive = Join-Path (Join-Path $VM.Settings.StateDir 'windows') 'winstate.zip'
     Copy-FromGuest -VM $VM -GuestPath $zip -HostPath $archive
 
-    Write-LogEntry ("  windows: {0} certificate(s), {1} task(s)" -f $summary.Certificates.Count, $summary.ScheduledTasks.Count) 'OK'
-    Write-GuestNote -Notes (@($certificates.Notes) + @($tasks.Notes))
+    Write-LogEntry "  windows: $($summary.Certificates.Count) certificate(s)" 'OK'
+    Write-GuestNote -Notes @($certificates.Notes)
 
     return [pscustomobject]@{
-        Archive        = $archive
-        Certificates   = $summary.Certificates
-        ScheduledTasks = $summary.ScheduledTasks
+        Archive      = $archive
+        Certificates = $summary.Certificates
     }
 }
 
@@ -395,31 +394,6 @@ function Save-GuestCertificate {
                     HasKey     = ($file -like '*.pfx')
                     NotAfter   = $cert.NotAfter.ToString('o')
                 }
-            }
-        }
-        return [pscustomobject]$out
-    }
-}
-
-function Save-GuestScheduledTask {
-    <# Scheduled tasks someone created in the root folder, as XML; LazyVM's own are left out. #>
-    param(
-        [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][string]$Staging
-    )
-
-    return Invoke-GuestScript -VM $VM -Activity 'scheduled task capture' -TimeoutMinutes 10 -ArgumentList @($Staging, $script:TaskPrefix) -ScriptBlock {
-        param($staging, $excludePrefix)
-        $out = @{ Tasks = @(); Notes = @() }
-        foreach ($task in @(Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskPath -eq '\' -and $_.TaskName -notlike "$excludePrefix*" })) {
-            try {
-                $xml = Export-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath
-                $safe = ($task.TaskName -replace '[\\/:*?"<>|]', '_')
-                $xml | Set-Content (Join-Path $staging "tasks\$safe.xml") -Encoding Unicode
-                $out.Tasks += $task.TaskName
-            }
-            catch {
-                $out.Notes += New-GuestNote -Level WARN -Text "scheduled task '$($task.TaskName)' could not be exported: $($_.Exception.Message)"
             }
         }
         return [pscustomobject]$out
