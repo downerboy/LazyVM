@@ -211,7 +211,7 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
    - Reads D12, threshold: VM settings (RebuildThresholdDays = 10)
 7. `Save-GuestState` (Capture, called by Invoke-Maintenance): only on rearm or rebuild (see Capture state)
    - Reads D13, state to keep: Running guest (VS settings, .vsconfig, SQL databases + logins, env, certs, tasks, apps)
-   - Writes D14, captured state: <VM>\State\ (vs\  windows\  sql\, projects\  apps\, manifest.json, manifest-<stamp>.json)
+   - Writes D14, captured state: <VM>\State\ (vs\  windows\  sql\, projects\, manifest.json, manifest-<stamp>.json)
 8. `Invoke-GuestRearm` (Maintenance, called by Invoke-Maintenance): slmgr rearm, then Restart-GuestAndWait
    - Writes D15, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
 9. `Stop-GuestGracefully` (Maintenance, called by Invoke-Maintenance): only if the VM was off before the run
@@ -253,7 +253,7 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
 2. `Invoke-Rebuild` (Maintenance): steps 3-15 are its calls
 3. `Save-GuestState` (Capture, called by Invoke-Rebuild): skipped with -SkipCapture: the last manifest is used
    - Reads D3, state to keep: Running guest (VS settings, .vsconfig, SQL databases + logins, env, certs, tasks, apps)
-   - Writes D4, captured state: <VM>\State\ (vs\  windows\  sql\, projects\  apps\, manifest.json, manifest-<stamp>.json)
+   - Writes D4, captured state: <VM>\State\ (vs\  windows\  sql\, projects\, manifest.json, manifest-<stamp>.json)
    - Writes D5, database backups on the data disk: D:\SQLBackup\ (<database>.bak)
 4. `Invoke-RetireCurrentVM` (Maintenance, called by Invoke-Rebuild): only if the VM exists; shuts down, removes checkpoints and the VM definition; keeps disks
    - Reads D6, old VM: VM <VM> (old VM, checkpoints)
@@ -417,7 +417,7 @@ Copies everything a rebuild must keep to the host. Maintenance and rebuilds run 
    - Writes D16, project files: <VM>\State\projects\ (zip)
 10. `Save-GuestAppSetting` (Capture, called by Save-GuestState)
    - Reads D17, registry keys: AppSettings keys (HKCU\Software\...)
-   - Writes D18, application settings: <VM>\State\apps\ (<Name>.reg)
+   - Writes D18, application settings: <VM>\Config\VM.json (GuestAppSettings), <VM>\Credentials\ (appsettings.cred)
 11. `Write-TextFileAtomic` (Common, called by Save-GuestState): failed steps are listed as warnings
    - Writes D19, manifest: <VM>\State\ (manifest.json, manifest-<stamp>.json)
 
@@ -455,8 +455,8 @@ Applies the last capture to the VM. A rebuild runs this after installing.
    - Reads D13, project files: <VM>\State\projects\ (zip)
    - Writes D14, projects restored: Guest (%USERPROFILE%\source)
 10. `Restore-GuestAppSetting` (Restore, called by Restore-GuestState): 10e
-   - Reads D15, app settings: <VM>\State\apps\ (<Name>.reg)
-   - Writes D16, app settings restored: Guest (HKCU keys imported)
+   - Reads D15, app settings: <VM>\Config\VM.json (GuestAppSettings), <VM>\Credentials\ (appsettings.cred)
+   - Writes D16, app settings restored: Guest (registry values written)
 
 <a id="remove"></a>
 

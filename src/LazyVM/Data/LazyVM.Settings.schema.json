@@ -745,6 +745,46 @@
         }
       }
     },
+    "GuestAppSettings": {
+      "type": ["array", "null"],
+      "default": null,
+      "description": "The values under each AppSettings registry key in the guest, recorded by LazyVM whenever they change and put back by a rebuild. A value whose name looks secret is listed by name only; its data is kept encrypted in Credentials\\appsettings.cred. Empty until first recorded.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["Name", "RegistryKey", "Values", "SecretValues"],
+        "properties": {
+          "Name": { "type": "string", "minLength": 1 },
+          "RegistryKey": { "type": "string", "pattern": "^(HKCU|HKLM)\\\\" },
+          "Values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["Path", "Name", "Kind", "Data"],
+              "properties": {
+                "Path": { "type": "string", "description": "The subkey under RegistryKey, empty for the key itself." },
+                "Name": { "type": "string", "description": "The value's name, empty for the key's default value." },
+                "Kind": { "enum": ["String", "ExpandString", "DWord", "QWord", "MultiString", "Binary"] },
+                "Data": { "type": ["string", "integer", "array"], "description": "Binary data is Base64; a MultiString is a list of strings." }
+              }
+            }
+          },
+          "SecretValues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["Path", "Name"],
+              "properties": {
+                "Path": { "type": "string" },
+                "Name": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
     "MaintenanceTime": {
       "type": "string",
       "default": "02:00",

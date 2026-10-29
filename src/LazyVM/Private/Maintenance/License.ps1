@@ -156,13 +156,15 @@ function Invoke-Maintenance {
     try { $null = Update-ToolingRecord -VM $VM }
     catch { Write-LogError 'Tooling check failed (non-fatal)' $_ }
 
-    # The guest's environment, firewall rules and scheduled tasks, recorded in VM.json whenever they changed (#131).
+    # The guest's environment, firewall rules, scheduled tasks and application settings, recorded in VM.json whenever they changed (#131).
     try { $null = Update-GuestEnvironmentRecord -VM $VM }
     catch { Write-LogError 'Environment check failed (non-fatal)' $_ }
     try { $null = Update-GuestFirewallRecord -VM $VM }
     catch { Write-LogError 'Firewall check failed (non-fatal)' $_ }
     try { $null = Update-GuestScheduledTaskRecord -VM $VM }
     catch { Write-LogError 'Scheduled task check failed (non-fatal)' $_ }
+    try { $null = Update-GuestAppSettingRecord -VM $VM }
+    catch { Write-LogError 'Application settings check failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM
     Write-LogEntry "License: $($license.Status); $($license.DaysLeft) day(s) left; $($license.RearmsLeft) rearm(s) remaining" 'INFO'

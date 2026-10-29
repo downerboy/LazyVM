@@ -82,24 +82,17 @@ function Read-GuestEnvironmentSecret {
     [OutputType([hashtable])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $stored = Get-StoredCredential -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.EnvironmentCredFile
-    if (-not $stored) { return @{} }
-    $values = ConvertTo-PlainText -Secure $stored.Password | ConvertFrom-Json -AsHashtable
-    if (-not $values) { return @{} }
-    return $values
+    return Get-StoredSecretTable -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.EnvironmentCredFile
 }
 
 function Save-GuestEnvironmentSecret {
     <# Keeps the secret variables' values, encrypted, replacing what was kept. #>
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'The values come out of the guest as text and are encrypted here, straight away.')]
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][AllowEmptyCollection()][hashtable]$Secrets
     )
 
-    $text = ConvertTo-Json -InputObject $Secrets -Compress
-    Save-StoredCredential -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.EnvironmentCredFile -UserName 'environment' `
-        -Password (ConvertTo-SecureString -String $text -AsPlainText -Force)
+    Save-StoredSecretTable -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.EnvironmentCredFile -UserName 'environment' -Secrets $Secrets
 }
 
 function Update-GuestEnvironmentRecord {
