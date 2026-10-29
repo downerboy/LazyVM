@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.8.0](https://github.com/downerboy/LazyVM/compare/v4.7.0...v4.8.0) (2026-10-29)
+
+
+### Features
+
+* record the AppSettings registry values in VM.json ([#152](https://github.com/downerboy/LazyVM/issues/152)) ([3a783a8](https://github.com/downerboy/LazyVM/commit/3a783a8469e13b00622ca92e3bd34de39f112616))
+
 ## [4.7.0](https://github.com/downerboy/LazyVM/compare/v4.6.0...v4.7.0) (2026-10-29)
 
 
