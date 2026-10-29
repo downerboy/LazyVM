@@ -9,19 +9,26 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  statuses: write
+# Nothing by default: each job asks for only what it needs.
+permissions: {}
 
 jobs:
   build:
     name: Build, analyze and test
     runs-on: windows-latest
+    permissions:
+      contents: read
+      statuses: write
     defaults:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to a commit, not a tag, so they cannot change
+      # under us; Dependabot proposes updates. The token is not left in
+      # .git/config, where the build and tests could read it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: PowerShell version
         run: $PSVersionTable
@@ -31,13 +38,13 @@ jobs:
 
       - name: Upload the test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-results
           path: out/testResults.xml
 
       - name: Upload the built module
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: LazyVM
           path: out/LazyVM
