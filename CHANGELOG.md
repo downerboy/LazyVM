@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.9.0](https://github.com/downerboy/LazyVM/compare/v4.8.0...v4.9.0) (2026-10-29)
+
+
+### Features
+
+* record and restore the SQL Agent jobs, operators and alerts in VM.json ([#155](https://github.com/downerboy/LazyVM/issues/155)) ([6c516f5](https://github.com/downerboy/LazyVM/commit/6c516f51c298ca61871f12222b276f97c6bf9f12)), closes [#131](https://github.com/downerboy/LazyVM/issues/131)
+* record the SQL logins and instance settings in VM.json ([#154](https://github.com/downerboy/LazyVM/issues/154)) ([ee7bfa1](https://github.com/downerboy/LazyVM/commit/ee7bfa1df27af748fa10ac8ec2e99f6c7ccb3220))
+
 ## [4.8.0](https://github.com/downerboy/LazyVM/compare/v4.7.0...v4.8.0) (2026-10-29)
 
 
