@@ -60,6 +60,24 @@
         "DisplayName": { "type": "string" },
         "Publisher": { "type": "string" }
       }
+    },
+    "SecretVariable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Scope", "Name"],
+      "properties": {
+        "Scope": { "enum": ["Machine", "User"] },
+        "Name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "MappedDrive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Letter", "Path"],
+      "properties": {
+        "Letter": { "type": "string", "pattern": "^[A-Za-z]:$" },
+        "Path": { "type": "string", "pattern": "^\\\\\\\\[^\\\\]+\\\\[^\\\\]+" }
+      }
     }
   },
   "properties": {
@@ -640,6 +658,49 @@
               "items": { "$ref": "#/definitions/AwaitingExtension" }
             }
           }
+        }
+      }
+    },
+    "GuestEnvironment": {
+      "type": ["object", "null"],
+      "default": null,
+      "description": "The guest's own Windows environment, recorded by LazyVM whenever it changes and put back by a rebuild: the environment variables you set, PATH entries, hosts file entries and mapped drives. A variable whose name looks secret (a token, key, password or connection string) is listed here by name only; its value is kept encrypted in <Name>\\Credentials\\environment.cred. Empty until first recorded.",
+      "additionalProperties": false,
+      "properties": {
+        "MachineVariables": {
+          "type": "object",
+          "description": "System environment variables, other than those Windows sets itself.",
+          "additionalProperties": { "type": "string" }
+        },
+        "UserVariables": {
+          "type": "object",
+          "description": "The guest account's own environment variables, other than those Windows sets itself.",
+          "additionalProperties": { "type": "string" }
+        },
+        "SecretVariables": {
+          "type": "array",
+          "description": "Variables whose values are kept encrypted, not here.",
+          "items": { "$ref": "#/definitions/SecretVariable" }
+        },
+        "MachinePath": {
+          "type": "array",
+          "description": "The system PATH, in order. A rebuild adds the entries a fresh install lacks.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "UserPath": {
+          "type": "array",
+          "description": "The guest account's PATH, in order. A rebuild adds the entries a fresh install lacks.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "Hosts": {
+          "type": "array",
+          "description": "The active lines of the hosts file.",
+          "items": { "type": "string", "pattern": "^[^\\r\\n]+$" }
+        },
+        "MappedDrives": {
+          "type": "array",
+          "description": "The guest account's mapped network drives.",
+          "items": { "$ref": "#/definitions/MappedDrive" }
         }
       }
     },

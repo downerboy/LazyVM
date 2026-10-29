@@ -23,6 +23,20 @@ $script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'
 # The setting in VM.json that holds the VM's tooling list.
 $script:ToolingSettingName = 'Tooling'
+# The setting in VM.json that holds the guest's environment (GuestEnvironment.ps1).
+$script:GuestEnvironmentSettingName = 'GuestEnvironment'
+
+# Environment variables Windows sets itself: a fresh install has its own, so
+# they are neither recorded nor put back.
+$script:WindowsVariableNames = @(
+    'ComSpec', 'DriverData', 'NUMBER_OF_PROCESSORS', 'OneDrive', 'OneDriveConsumer', 'OS', 'Path', 'PATHEXT',
+    'PROCESSOR_ARCHITECTURE', 'PROCESSOR_IDENTIFIER', 'PROCESSOR_LEVEL', 'PROCESSOR_REVISION',
+    'PSModulePath', 'TEMP', 'TMP', 'USERNAME', 'windir'
+)
+# A variable whose name matches this is taken to hold a secret: its value is
+# kept encrypted, never in VM.json. Short words count only as a whole part of
+# the name (ADO_PAT, not PATHEXT).
+$script:SecretVariablePattern = '(?i)SECRET|PASSWORD|PASSWD|TOKEN|CONNECTIONSTRING|CREDENTIAL|APIKEY|(^|_)(KEY|PAT|PWD)(_|$)'
 
 # Every version of VM.json LazyVM writes is kept in <Name>\Config\History as
 # VM-<stamp>.json: the newest few, and any a tooling checkpoint still needs.
