@@ -129,10 +129,13 @@ Describe 'The settings schema' {
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Not -Throw
     }
 
-    It 'rejects a SQL login whose SID or password hash is not hexadecimal, since restore writes them into SQL as they are' {
-        $path = New-TestFile -Text '{ "GuestSql": { "Configs": [], "Logins": [ { "Name": "app", "TypeDesc": "SQL_LOGIN", "IsDisabled": false, "DefaultDb": "master", "DefaultLang": "us_english", "SidHex": "0x1A; DROP LOGIN x", "HashHex": "secret", "PolicyChecked": true, "ExpirationChecked": false, "ServerRoles": [] } ] } }'
+    It 'rejects a SQL login whose <Field> is not hexadecimal, since restore writes it into SQL as it is' -ForEach @(
+        @{ Field = 'SidHex'; SidHex = '0x1A; DROP LOGIN x'; HashHex = '0x02' }
+        @{ Field = 'HashHex'; SidHex = '0x1A'; HashHex = 'secret' }
+    ) {
+        $path = New-TestFile -Text ('{ "GuestSql": { "Configs": [], "Logins": [ { "Name": "app", "TypeDesc": "SQL_LOGIN", "IsDisabled": false, "DefaultDb": "master", "DefaultLang": "us_english", "SidHex": "' + $SidHex + '", "HashHex": "' + $HashHex + '", "PolicyChecked": true, "ExpirationChecked": false, "ServerRoles": [] } ] } }')
 
-        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*2 problem*'
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
     }
 
     It 'accepts a GuestAppSettings list' {
