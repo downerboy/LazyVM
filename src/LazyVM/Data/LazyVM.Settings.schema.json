@@ -731,6 +731,20 @@
         }
       }
     },
+    "GuestScheduledTasks": {
+      "type": ["array", "null"],
+      "default": null,
+      "description": "The scheduled tasks created in the guest's root task folder, recorded by LazyVM whenever they change and put back by a rebuild. LazyVM's own tasks are left out. Empty until first recorded.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["Name", "Xml"],
+        "properties": {
+          "Name": { "type": "string", "minLength": 1 },
+          "Xml": { "type": "string", "pattern": "^\\s*<", "description": "The task as Export-ScheduledTask writes it." }
+        }
+      }
+    },
     "MaintenanceTime": {
       "type": "string",
       "default": "02:00",
