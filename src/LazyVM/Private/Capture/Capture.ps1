@@ -305,7 +305,8 @@ function Backup-GuestDatabase {
 #
 # Each part is saved into a staging folder in the guest by a call of its
 # own, then the folder is zipped and pulled out as winstate.zip. The
-# environment itself is recorded in VM.json instead (GuestEnvironment.ps1).
+# environment and firewall rules are recorded in VM.json instead
+# (GuestEnvironment.ps1, GuestFirewall.ps1).
 
 function Save-GuestWindowsState {
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -317,17 +318,17 @@ function Save-GuestWindowsState {
         foreach ($folder in $staging, (Join-Path $staging 'certs'), (Join-Path $staging 'tasks')) { New-GuestFolder -Path $folder }
     }
 
-    # The environment is plain data, so it is recorded in VM.json (#131), not the archive.
+    # The environment and firewall rules are plain data, so they are recorded in VM.json (#131), not the archive.
     try { $null = Update-GuestEnvironmentRecord -VM $VM }
     catch { Write-LogError '  The guest environment could not be recorded; VM.json keeps what it had' $_ }
+    try { $null = Update-GuestFirewallRecord -VM $VM }
+    catch { Write-LogError '  The guest firewall rules could not be recorded; VM.json keeps what it had' $_ }
 
     $certificates = Save-GuestCertificate -VM $VM -Staging $staging
-    $firewall = Save-GuestFirewallRule -VM $VM -Staging $staging
     $tasks = Save-GuestScheduledTask -VM $VM -Staging $staging
 
     $summary = [pscustomobject]@{
         Certificates   = @($certificates.Certificates)
-        FirewallRules  = $firewall
         ScheduledTasks = @($tasks.Tasks)
     }
     $zip = Invoke-GuestScript -VM $VM -Activity 'Windows capture archive' -TimeoutMinutes 15 -ArgumentList @($staging, ($summary | ConvertTo-Json -Depth 8), $VM.Settings.GuestSetupDir) -ScriptBlock {
@@ -341,13 +342,12 @@ function Save-GuestWindowsState {
     $archive = Join-Path (Join-Path $VM.Settings.StateDir 'windows') 'winstate.zip'
     Copy-FromGuest -VM $VM -GuestPath $zip -HostPath $archive
 
-    Write-LogEntry ("  windows: {0} certificate(s), {1} firewall rule(s), {2} task(s)" -f $summary.Certificates.Count, $firewall, $summary.ScheduledTasks.Count) 'OK'
+    Write-LogEntry ("  windows: {0} certificate(s), {1} task(s)" -f $summary.Certificates.Count, $summary.ScheduledTasks.Count) 'OK'
     Write-GuestNote -Notes (@($certificates.Notes) + @($tasks.Notes))
 
     return [pscustomobject]@{
         Archive        = $archive
         Certificates   = $summary.Certificates
-        FirewallRules  = $firewall
         ScheduledTasks = $summary.ScheduledTasks
     }
 }
@@ -398,33 +398,6 @@ function Save-GuestCertificate {
             }
         }
         return [pscustomobject]$out
-    }
-}
-
-function Save-GuestFirewallRule {
-    <# Firewall rules added in the guest: built-in ones belong to a group; LazyVM's own are left out. Returns how many. #>
-    param(
-        [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][string]$Staging
-    )
-
-    return Invoke-GuestScript -VM $VM -Activity 'firewall capture' -TimeoutMinutes 10 -ArgumentList @($Staging, $script:TaskPrefix) -ScriptBlock {
-        param($staging, $excludePrefix)
-        $rules = @(foreach ($rule in @(Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { -not $_.Group -and $_.Enabled -eq 'True' -and $_.DisplayName -notlike "$excludePrefix*" })) {
-                $ports = $rule | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
-                $addresses = $rule | Get-NetFirewallAddressFilter -ErrorAction SilentlyContinue
-                [pscustomobject]@{
-                    DisplayName   = $rule.DisplayName
-                    Direction     = "$($rule.Direction)"
-                    Action        = "$($rule.Action)"
-                    Protocol      = "$($ports.Protocol)"
-                    LocalPort     = @($ports.LocalPort)
-                    RemoteAddress = @($addresses.RemoteAddress)
-                    Profile       = "$($rule.Profile)"
-                }
-            })
-        ConvertTo-Json -InputObject $rules -Depth 5 | Set-Content (Join-Path $staging 'firewall.json') -Encoding UTF8
-        return $rules.Count
     }
 }
 

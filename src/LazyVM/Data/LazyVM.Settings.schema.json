@@ -704,6 +704,33 @@
         }
       }
     },
+    "GuestFirewallRules": {
+      "type": ["array", "null"],
+      "default": null,
+      "description": "The firewall rules added in the guest, recorded by LazyVM whenever they change and put back by a rebuild. Windows' own rules and LazyVM's are left out. Empty until first recorded.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["DisplayName", "Direction", "Action", "Protocol", "LocalPort", "RemoteAddress", "Profile"],
+        "properties": {
+          "DisplayName": { "type": "string", "minLength": 1 },
+          "Direction": { "enum": ["Inbound", "Outbound"] },
+          "Action": { "enum": ["Allow", "Block"] },
+          "Protocol": { "type": "string", "minLength": 1, "description": "TCP, UDP, Any or a protocol number." },
+          "LocalPort": {
+            "type": "array",
+            "description": "Ports or ranges, like 5000 or 8000-8010; Any for every port.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "RemoteAddress": {
+            "type": "array",
+            "description": "Addresses, subnets or ranges; Any for every address.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "Profile": { "type": "string", "minLength": 1, "description": "Any, or the network profiles it applies to, like 'Domain, Private'." }
+        }
+      }
+    },
     "MaintenanceTime": {
       "type": "string",
       "default": "02:00",
