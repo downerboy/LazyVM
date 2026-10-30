@@ -179,6 +179,58 @@ function Restore-GuestSqlBackup {
     return $true
 }
 
+function Mount-GuestSqlDatabase {
+    <#
+      Attaches database $Name from $Files, the paths VM.json recorded for it,
+      primary data file first (#132). A file not at its recorded path is
+      looked for at the same path on drive $DriveLetter, where the SQL data
+      disk is now. Returns 'Exists', changing nothing, when the database is
+      already there; 'Missing', changing nothing, when a file is on neither
+      drive; 'Attached' once attached. Throws when the attach fails.
+    #>
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string[]]$Files,
+        [Parameter(Mandatory)][string]$DriveLetter
+    )
+
+    $exists = [int](Get-GuestSqlScalar -Connection $Connection -Sql "SELECT COUNT(*) FROM sys.databases WHERE name = $(ConvertTo-SqlString -Text $Name)")
+    if ($exists -gt 0) { return 'Exists' }
+
+    $found = [System.Collections.Generic.List[string]]::new()
+    foreach ($file in $Files) {
+        $candidates = @($file)
+        if ($file -match '^[A-Za-z]:\\') { $candidates += "${DriveLetter}:$($file.Substring(2))" }
+        $here = @($candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }) | Select-Object -First 1
+        if (-not $here) { return 'Missing' }
+        $found.Add($here)
+    }
+
+    $on = @($found | ForEach-Object { "(FILENAME = $(ConvertTo-SqlString -Text $_))" }) -join ', '
+    $null = Invoke-GuestSql -Connection $Connection -Sql "CREATE DATABASE $(ConvertTo-SqlName -Name $Name) ON $on FOR ATTACH"
+    return 'Attached'
+}
+
+function Repair-GuestSqlOrphanedUser {
+    <#
+      Links each user in database $Name that has no login to the login of the
+      same name. The SIDs kept with the logins should already prevent
+      orphaned users. Returns a note for each user it could not link.
+    #>
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    $quoted = ConvertTo-SqlName -Name $Name
+    $orphans = @(Get-GuestSqlRow -Connection $Connection -Sql "SELECT dp.name FROM $quoted.sys.database_principals dp LEFT JOIN sys.server_principals sp ON dp.sid = sp.sid WHERE dp.type IN ('S','U') AND dp.principal_id > 4 AND sp.sid IS NULL" | ForEach-Object { "$($_.name)" })
+    foreach ($user in $orphans) {
+        try { $null = Invoke-GuestSql -Connection $Connection -Sql "USE $quoted; ALTER USER $(ConvertTo-SqlName -Name $user) WITH LOGIN = $(ConvertTo-SqlName -Name $user)" }
+        catch { New-GuestNote -Level WARN -Text "user '$user' in $Name has no login: $($_.Exception.Message)" }
+    }
+}
+
 # ── Volumes and drive letters ────────────────────────────────────────────────
 
 function Get-GuestVolumeByLetter {

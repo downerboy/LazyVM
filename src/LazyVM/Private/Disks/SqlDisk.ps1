@@ -36,7 +36,7 @@ function Initialize-GuestSqlDisk {
     $identity = Get-DataDiskIdentity -VM $VM -GuidSetting 'SQLDiskGuid' -LocationSetting 'SQLDiskScsiLocation' -Path $settings.SQLDiskPath
     $result = Invoke-GuestScript -VM $VM -Activity 'SQL data disk preparation' -TimeoutMinutes 15 -ArgumentList @(
         $settings.GuestDataDriveLetter, $identity.Guid, $identity.Location, $identity.FileLocation,
-        @($settings.SqlDataFolder, $settings.SqlLogFolder, $settings.SqlTempFolder, $settings.SqlBackupFolder)
+        @($settings.SqlDataFolder, $settings.SqlLogFolder, $settings.SqlBackupFolder)
     ) -ScriptBlock {
         param($desiredLetter, $guid, $location, $fileLocation, $folders)
         $ErrorActionPreference = 'Stop'
@@ -131,5 +131,5 @@ function Initialize-GuestSqlDisk {
     $state = if ($result.Formatted) { 'formatted as' } else { 'already prepared, mounted as' }
     Write-LogEntry "SQL data disk $state $($result.Letter): ($($result.FreeGB) GB free of $($result.SizeGB) GB)" 'OK'
     $runtime = $VM.Runtime
-    Write-LogEntry "  SQL directories: $($runtime.GuestSqlDataDir), $($runtime.GuestSqlLogDir), $($runtime.GuestSqlTempDir), $($runtime.GuestSqlBackupDir)" 'INFO'
+    Write-LogEntry "  SQL directories: $($runtime.GuestSqlDataDir), $($runtime.GuestSqlLogDir), $($runtime.GuestSqlBackupDir)" 'INFO'
 }

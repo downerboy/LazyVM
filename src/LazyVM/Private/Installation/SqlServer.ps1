@@ -76,7 +76,6 @@ function ConvertTo-SqlConfigurationFile {
         SQLSYSADMINACCOUNTS = @("$($VM.Settings.GuestComputerName)\$($runtime.GuestAdminUser)", 'BUILTIN\Administrators')
         SQLUSERDBDIR        = $runtime.GuestSqlDataDir
         SQLUSERDBLOGDIR     = $runtime.GuestSqlLogDir
-        SQLTEMPDBDIR        = $runtime.GuestSqlTempDir
         SQLBACKUPDIR        = $runtime.GuestSqlBackupDir
         TCPENABLED          = '1'
         UPDATEENABLED       = 'False'
@@ -164,10 +163,10 @@ function Install-SqlServer {
 
 function Move-GuestSqlDataFile {
     <#
-      Moves an existing instance's user databases and tempdb onto the data
-      disk: for a guest where SQL Server was installed before the data disk
-      existed, whose databases stay on C: because setup's folders only apply
-      at install time.
+      Moves an existing instance's user databases onto the data disk: for a
+      guest where SQL Server was installed before the data disk existed,
+      whose databases stay on C: because setup's folders only apply at
+      install time.
 
         * master, model and msdb are never moved: that needs startup
           parameters and a single-user restart.
@@ -176,8 +175,8 @@ function Move-GuestSqlDataFile {
         * Files are copied, checked by length, and the originals deleted only
           once the database is back online. Any failure points the database
           back at its original files and brings it up there.
-        * tempdb is only repointed: SQL Server creates its files again on
-          restart, so the old ones are removed afterwards.
+        * tempdb stays on C: (#132): SQL Server recreates it at every start,
+          so it has nothing to outlive the evaluation.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -199,66 +198,35 @@ function Move-GuestSqlDataFile {
             param($server)
             $connection = Open-GuestSqlConnection -Server $server
             # database_id 1-4 are master, tempdb, model and msdb: user
-            # databases and tempdb only.
+            # databases only.
             try {
                 @(Get-GuestSqlRow -Connection $connection -Sql @'
 SELECT d.name AS DbName, d.state_desc AS State, mf.name AS LogicalName, mf.physical_name AS PhysicalName, mf.type_desc AS FileType
 FROM sys.master_files mf JOIN sys.databases d ON d.database_id = mf.database_id
-WHERE d.database_id > 4 OR d.database_id = 2
+WHERE d.database_id > 4
 ORDER BY d.name, mf.file_id
 '@)
             }
             finally { $connection.Close() }
         })
     if ($files.Count -eq 0) {
-        Write-LogEntry '  no user databases or tempdb files found' 'INFO'
+        Write-LogEntry '  no user databases found' 'INFO'
         return
     }
 
     $target = "${letter}:\"
-    $folders = @($runtime.GuestSqlDataDir, $runtime.GuestSqlLogDir, $runtime.GuestSqlTempDir, $runtime.GuestSqlBackupDir)
-    $tempdbMoved = $false
+    $folders = @($runtime.GuestSqlDataDir, $runtime.GuestSqlLogDir, $runtime.GuestSqlBackupDir)
     foreach ($group in ($files | Group-Object DbName)) {
         $toMove = @($group.Group | Where-Object { $_.PhysicalName -notlike "$target*" })
         if ($toMove.Count -eq 0) {
             Write-LogEntry "  skipped $($group.Name) (already on ${letter}:)" 'INFO'
             continue
         }
-        $note = if ($group.Name -eq 'tempdb') {
-            $tempdbMoved = $true
-            Move-GuestTempdb -VM $VM -Files $toMove
-        }
-        else {
-            Move-GuestDatabase -VM $VM -Name $group.Name -Files $toMove -Folders $folders
-        }
-        Write-GuestNote -Notes $note
+        Write-GuestNote -Notes (Move-GuestDatabase -VM $VM -Name $group.Name -Files $toMove -Folders $folders)
     }
 
     Write-GuestNote -Notes (Set-GuestSqlDefaultFolder -VM $VM -Instance $instance.Instance)
-    if ($tempdbMoved) { Write-GuestNote -Notes (Restart-GuestSqlService -VM $VM -Instance $instance.Instance -OldTempFiles @($files | Where-Object { $_.DbName -eq 'tempdb' -and $_.PhysicalName -notlike "$target*" } | ForEach-Object { $_.PhysicalName })) }
     Write-LogEntry 'SQL data move complete' 'OK'
-}
-
-function Move-GuestTempdb {
-    <# Points tempdb's files at the temp folder on the data disk; takes effect when SQL Server restarts. #>
-    param(
-        [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][object[]]$Files
-    )
-
-    return Invoke-GuestScript -VM $VM -Activity 'tempdb move' -TimeoutMinutes 5 -ArgumentList @($VM.Runtime.SqlServer, $VM.Runtime.GuestSqlTempDir, @($Files | ForEach-Object { $_.LogicalName }), @($Files | ForEach-Object { $_.PhysicalName })) -ScriptBlock {
-        param($server, $tempDir, $logicalNames, $physicalNames)
-        New-GuestFolder -Path $tempDir
-        $connection = Open-GuestSqlConnection -Server $server
-        try {
-            for ($i = 0; $i -lt @($logicalNames).Count; $i++) {
-                $destination = Join-Path $tempDir ([IO.Path]::GetFileName(@($physicalNames)[$i]))
-                $null = Invoke-GuestSql -Connection $connection -Sql "ALTER DATABASE [tempdb] MODIFY FILE (NAME = $(ConvertTo-SqlString -Text @($logicalNames)[$i]), FILENAME = $(ConvertTo-SqlString -Text $destination))"
-            }
-        }
-        finally { $connection.Close() }
-        return New-GuestNote -Level OK -Text "tempdb: repointed to $tempDir (takes effect on restart)"
-    }
 }
 
 function Move-GuestDatabase {
@@ -369,67 +337,4 @@ function Set-GuestSqlDefaultFolder {
             return New-GuestNote -Level WARN -Text "could not set the default folders: $($_.Exception.Message)"
         }
     }
-}
-
-function Restart-GuestSqlService {
-    <# Restarts SQL Server so tempdb's move takes effect, then removes the old tempdb files. #>
-    param(
-        [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][string]$Instance,
-        [AllowEmptyCollection()][string[]]$OldTempFiles = @()
-    )
-
-    $serviceName = if ($Instance -eq 'MSSQLSERVER') { 'MSSQLSERVER' } else { "MSSQL`$$Instance" }
-    return Invoke-GuestScript -VM $VM -Activity 'SQL Server restart' -TimeoutMinutes 10 -ArgumentList @($serviceName, $OldTempFiles) -ScriptBlock {
-        param($serviceName, $oldTempFiles)
-        try {
-            $service = Get-Service -Name $serviceName -ErrorAction Stop
-            $dependents = @($service.DependentServices | Where-Object { $_.Status -eq 'Running' } | ForEach-Object { $_.Name })
-            Restart-Service -Name $serviceName -Force -ErrorAction Stop
-            (Get-Service -Name $serviceName).WaitForStatus('Running', [TimeSpan]::FromMinutes(5))
-            foreach ($dependent in $dependents) { Start-Service -Name $dependent -ErrorAction SilentlyContinue }
-            foreach ($old in @($oldTempFiles)) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
-            return New-GuestNote -Level OK -Text "restarted $serviceName"
-        }
-        catch {
-            return New-GuestNote -Level WARN -Text "could not restart ${serviceName}: $($_.Exception.Message) - restart it to finish moving tempdb"
-        }
-    }
-}
-
-function Restore-SqlDatabase {
-    <#
-      Restores each .bak in the data disk's backup folder whose database the
-      guest does not have yet. The existence check fails closed, logical file
-      names come from the backup itself, and nothing is ever overwritten.
-    #>
-    param([Parameter(Mandatory)][VMContext]$VM)
-
-    $runtime = $VM.Runtime
-    Write-LogEntry "Checking $($runtime.GuestSqlBackupDir) for databases to restore..." 'INFO'
-    $notes = Invoke-GuestScript -VM $VM -Activity 'SQL database restore' -TimeoutMinutes 60 `
-        -ArgumentList @($runtime.GuestSqlBackupDir, $runtime.GuestSqlDataDir, $runtime.GuestSqlLogDir, $runtime.SqlServer) -ScriptBlock {
-        param($backupDir, $dataDir, $logDir, $server)
-        $ErrorActionPreference = 'Stop'
-        $backups = @(Get-ChildItem -Path $backupDir -Filter '*.bak' -File -ErrorAction SilentlyContinue)
-        if ($backups.Count -eq 0) { return New-GuestNote -Level INFO -Text "no .bak files in $backupDir" }
-
-        $notes = @()
-        $connection = Open-GuestSqlConnection -Server $server
-        try {
-            foreach ($backup in $backups) {
-                $name = [IO.Path]::GetFileNameWithoutExtension($backup.Name)
-                if (Restore-GuestSqlBackup -Connection $connection -Name $name -BackupFile $backup.FullName -DataDir $dataDir -LogDir $logDir) {
-                    $notes += New-GuestNote -Level OK -Text "restored: $name"
-                }
-                else {
-                    $notes += New-GuestNote -Level INFO -Text "skipped (already exists): $name"
-                }
-            }
-        }
-        finally { $connection.Close() }
-        return $notes
-    }
-    Write-GuestNote -Notes $notes
-    Write-LogEntry 'Database restore check complete' 'OK'
 }
