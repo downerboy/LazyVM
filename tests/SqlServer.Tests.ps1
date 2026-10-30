@@ -36,6 +36,14 @@ Describe 'ConvertTo-SqlConfigurationFile' {
         $lines | Should -Contain 'FEATURES=SQLENGINE,FULLTEXT'
     }
 
+    It 'installs the Standard Developer edition' {
+        $vm = New-TestVM
+
+        $lines = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) ConvertTo-SqlConfigurationFile -VM $VM }) -split "`r?`n"
+
+        $lines | Should -Contain 'PID="33333-00000-00000-00000-00000"'
+    }
+
     It 'puts the VM''s data, log, tempdb and backup folders in quotes' {
         $vm = New-TestVM -Override @{ SqlDataFolder = 'SQL Data' }
 

@@ -64,6 +64,7 @@ function ConvertTo-SqlConfigurationFile {
     $runtime = $VM.Runtime
     $options = [ordered]@{
         ACTION              = 'Install'
+        PID                 = $script:SqlEditionProductKey
         INSTANCENAME        = 'MSSQLSERVER'
         SQLSVCACCOUNT       = 'NT Service\MSSQLSERVER'
         SQLSVCSTARTUPTYPE   = 'Automatic'
@@ -123,7 +124,7 @@ function Install-SqlServer {
 
     Set-VMDvdDrive -VMName $VM.Name -ControllerNumber $dvd.ControllerNumber -ControllerLocation $dvd.ControllerLocation -Path $VM.Settings.SQLIsoPath
     Write-LogEntry 'SQL Server ISO placed in the VM DVD drive' 'OK'
-    Write-LogEntry "Installing SQL Server 2025 Enterprise Developer (up to $($VM.Settings.SQLInstallMinutes) minutes)..." 'INFO'
+    Write-LogEntry "Installing $script:SqlEditionName (up to $($VM.Settings.SQLInstallMinutes) minutes)..." 'INFO'
 
     try {
         Copy-ToGuest -VM $VM -HostPath $hostConfigPath -GuestPath $guestConfigPath
@@ -151,7 +152,7 @@ function Install-SqlServer {
         Write-LogEntry 'VM DVD drive restored to its previous media' 'OK'
     }
 
-    if (-not (Test-InstallExitCode -Product 'SQL Server 2025 Enterprise Developer' -ExitCode $exitCode)) {
+    if (-not (Test-InstallExitCode -Product $script:SqlEditionName -ExitCode $exitCode)) {
         Write-LogEntry '  Guest log: C:\Program Files\Microsoft SQL Server\170\Setup Bootstrap\Log\Summary.txt' 'INFO'
         throw "SQL Server installation failed (exit $exitCode)."
     }

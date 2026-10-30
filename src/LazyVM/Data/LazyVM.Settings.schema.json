@@ -483,7 +483,7 @@
     "SQLIsoUrl": {
       "type": "string",
       "default": "https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso",
-      "description": "Where the SQL Server ISO is downloaded from. SQL Server 2025 Enterprise Developer: every Enterprise feature, free for development and test.",
+      "description": "Where the SQL Server ISO is downloaded from: the SQL Server 2025 Enterprise Developer ISO, from which LazyVM installs the Standard Developer edition, free for development and test, so code cannot come to depend on Enterprise-only features.",
       "format": "uri"
     },
     "SQLDiskPath": {
