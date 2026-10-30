@@ -13,6 +13,8 @@ BeforeAll {
 
         $settings = @{
             VMName               = 'Alpha'
+            GuestComputerName    = 'ALPHA'
+            GuestAdminUser       = 'devadmin'
             GuestDataDriveLetter = 'S'
             SqlDataFolder        = 'SQLData'
             SqlLogFolder         = 'SQLLog'
@@ -42,6 +44,14 @@ Describe 'ConvertTo-SqlConfigurationFile' {
         $lines = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) ConvertTo-SqlConfigurationFile -VM $VM }) -split "`r?`n"
 
         $lines | Should -Contain 'PID="33333-00000-00000-00000-00000"'
+    }
+
+    It 'makes the VM''s administrator a sysadmin as well as the Administrators group' {
+        $vm = New-TestVM -Override @{ GuestComputerName = 'DEVBOX'; GuestAdminUser = 'sean' }
+
+        $lines = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) ConvertTo-SqlConfigurationFile -VM $VM }) -split "`r?`n"
+
+        $lines | Should -Contain 'SQLSYSADMINACCOUNTS="DEVBOX\sean" "BUILTIN\Administrators"'
     }
 
     It 'puts the VM''s data, log, tempdb and backup folders in quotes' {

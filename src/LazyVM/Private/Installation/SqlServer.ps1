@@ -56,8 +56,9 @@ function Install-SqlServerIfMissing {
 function ConvertTo-SqlConfigurationFile {
     <#
       The ConfigurationFile.ini SQL Server setup takes, from the VM's
-      settings. A value holding a quote or a line break is refused, so no
-      setting can add an option of its own.
+      settings. An option with several values has each one quoted. A value
+      holding a quote or a line break is refused, so no setting can add an
+      option of its own.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -69,7 +70,10 @@ function ConvertTo-SqlConfigurationFile {
         SQLSVCACCOUNT       = 'NT Service\MSSQLSERVER'
         SQLSVCSTARTUPTYPE   = 'Automatic'
         AGTSVCACCOUNT       = 'NT Service\SQLSERVERAGENT'
-        SQLSYSADMINACCOUNTS = 'BUILTIN\Administrators'
+        # The administrator by name as well: under UAC its everyday token has
+        # the Administrators group switched off, so SSMS run normally could
+        # not sign in.
+        SQLSYSADMINACCOUNTS = @("$($VM.Settings.GuestComputerName)\$($runtime.GuestAdminUser)", 'BUILTIN\Administrators')
         SQLUSERDBDIR        = $runtime.GuestSqlDataDir
         SQLUSERDBLOGDIR     = $runtime.GuestSqlLogDir
         SQLTEMPDBDIR        = $runtime.GuestSqlTempDir
@@ -84,9 +88,9 @@ function ConvertTo-SqlConfigurationFile {
         'FEATURES=SQLENGINE,FULLTEXT'
     )
     foreach ($name in $options.Keys) {
-        $value = [string]$options[$name]
-        if ($value -match '["\p{Cc}]') { throw "SQL Server setup option $name has a quote or a control character in it: it cannot go in the configuration file." }
-        $lines += "$name=`"$value`""
+        $values = @($options[$name] | ForEach-Object { [string]$_ })
+        if ($values -match '["\p{Cc}]') { throw "SQL Server setup option $name has a quote or a control character in it: it cannot go in the configuration file." }
+        $lines += "$name=" + (($values | ForEach-Object { "`"$_`"" }) -join ' ')
     }
     return $lines -join "`r`n"
 }
