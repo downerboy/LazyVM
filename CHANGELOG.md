@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.10.0](https://github.com/downerboy/LazyVM/compare/v4.9.0...v4.10.0) (2026-10-30)
+
+
+### Features
+
+* **sql:** install the Standard Developer edition ([#163](https://github.com/downerboy/LazyVM/issues/163)) ([3a69c60](https://github.com/downerboy/LazyVM/commit/3a69c60d481baf814356ef17f5044024c40c4932))
+
 ## [4.9.0](https://github.com/downerboy/LazyVM/compare/v4.8.0...v4.9.0) (2026-10-29)
 
 
