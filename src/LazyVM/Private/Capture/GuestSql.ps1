@@ -50,7 +50,13 @@ WHERE sp.type IN ('S','U','G') AND sp.name NOT LIKE '##%' AND sp.name NOT LIKE '
             $configs = @(Get-GuestSqlRow -Connection $connection -Sql 'SELECT name, value_in_use FROM sys.configurations WHERE value <> value_in_use OR value_in_use <> 0' |
                     ForEach-Object { [pscustomobject]@{ Name = "$($_.name)"; Value = "$($_.value_in_use)" } })
 
-            return [pscustomobject]@{ Logins = $logins; Configs = $configs }
+            # database_id 1-4 are master, tempdb, model and msdb.
+            $files = @(Get-GuestSqlRow -Connection $connection -Sql 'SELECT d.name AS DbName, mf.physical_name AS PhysicalName FROM sys.master_files mf JOIN sys.databases d ON d.database_id = mf.database_id WHERE d.database_id > 4 ORDER BY d.name, mf.file_id')
+            $databases = @($files | Group-Object -Property DbName | ForEach-Object {
+                    [pscustomobject]@{ Name = $_.Name; Files = @($_.Group | ForEach-Object { "$($_.PhysicalName)" }) }
+                })
+
+            return [pscustomobject]@{ Logins = $logins; Configs = $configs; Databases = $databases }
         }
         finally { $connection.Close() }
     }
@@ -81,7 +87,11 @@ function ConvertTo-GuestSqlRecord {
                 ServerRoles       = @($login.ServerRoles | Where-Object { $_ } | ForEach-Object { [string]$_ } | Sort-Object)
             }
         })
-    return [ordered]@{ Configs = $configs; Logins = $logins }
+    # Files stay in file order: attaching needs the primary data file first.
+    $databases = @(foreach ($database in @($Snapshot.Databases | Where-Object { $_ } | Sort-Object -Property Name)) {
+            [ordered]@{ Name = [string]$database.Name; Files = @($database.Files | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
+        })
+    return [ordered]@{ Configs = $configs; Logins = $logins; Databases = $databases }
 }
 
 function Update-GuestSqlRecord {
@@ -103,21 +113,22 @@ function Update-GuestSqlRecord {
 
     $change = @{ $script:GuestSqlSettingName = $record }
     $changed = @(Update-VMProfile -Root $VM.Settings.Root -Name $VM.Name -Change $change -Reason 'guest SQL logins, settings or Agent objects changed').Count -gt 0
-    if ($changed) { Write-LogEntry "Guest SQL recorded: $($record.Logins.Count) login(s), $($record.Configs.Count) instance setting(s), $($record.Agent.Jobs.Count) Agent job(s)" 'OK' }
+    if ($changed) { Write-LogEntry "Guest SQL recorded: $($record.Logins.Count) login(s), $($record.Configs.Count) instance setting(s), $($record.Databases.Count) database(s), $($record.Agent.Jobs.Count) Agent job(s)" 'OK' }
     return $changed
 }
 
 function Get-GuestSqlRestore {
     <#
       What a restore puts back into the guest's SQL Server: VM.json's
-      GuestSql as the file holds it now, as Configs, Logins and Agent ($null
-      when recorded before Agent objects were). $null when it was never
-      recorded, so a capture from before #131 is used instead.
+      GuestSql as the file holds it now, as Configs, Logins, Databases (empty
+      when recorded before #132) and Agent ($null when recorded before Agent
+      objects were). $null when it was never recorded, so a capture from
+      before #131 is used instead.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $current = Read-SettingsFile -Path (Get-VMProfilePath -Root $VM.Settings.Root -Name $VM.Name)
     $sql = $current[$script:GuestSqlSettingName]
     if ($null -eq $sql) { return $null }
-    return [pscustomobject]@{ Configs = @($sql.Configs); Logins = @($sql.Logins); Agent = $sql['Agent'] }
+    return [pscustomobject]@{ Configs = @($sql.Configs); Logins = @($sql.Logins); Databases = @($sql['Databases'] | Where-Object { $_ }); Agent = $sql['Agent'] }
 }

@@ -1,4 +1,4 @@
-﻿# Configuration.Tests.ps1
+# Configuration.Tests.ps1
 # Settings: the schema and its defaults, reading and checking JSON settings
 # files, the last-good safety net, choosing the root folder, resolving host
 # paths, creating and selecting VM profiles, the VM context and the
@@ -1094,7 +1094,6 @@ Describe 'VMContext' {
         $runtime.GuestDataDriveLetter | Should -Be 'F'
         $runtime.GuestSqlDataDir | Should -Be 'F:\Data'
         $runtime.GuestSqlLogDir | Should -Be 'F:\Log'
-        $runtime.GuestSqlTempDir | Should -Be 'F:\Temp'
     }
 
     It "connects SQL work to '<Server>' for the instance '<Instance>'" -ForEach @(
@@ -1978,6 +1977,7 @@ Describe 'ConvertTo-GuestSqlRecord (#131)' {
                 [pscustomobject]@{ Name = 'app'; TypeDesc = 'SQL_LOGIN'; IsDisabled = $false; DefaultDb = 'master'; DefaultLang = 'us_english'; SidHex = '0x1A'; HashHex = '0x02'; PolicyChecked = $true; ExpirationChecked = $false; ServerRoles = @('sysadmin', 'dbcreator') }
                 [pscustomobject]@{ Name = 'DEV\sean'; TypeDesc = 'WINDOWS_LOGIN'; IsDisabled = $false; DefaultDb = 'master'; DefaultLang = 'us_english'; SidHex = '0x0105'; HashHex = $null; PolicyChecked = $false; ExpirationChecked = $false; ServerRoles = 'sysadmin' }
             )
+            Databases = @()
         }
 
         $record = InModuleScope $module -Parameters @{ Snapshot = $snapshot } { param($Snapshot) ConvertTo-GuestSqlRecord -Snapshot $Snapshot }
@@ -1988,6 +1988,23 @@ Describe 'ConvertTo-GuestSqlRecord (#131)' {
         $record.Logins[0].ServerRoles | Should -Be @('dbcreator', 'sysadmin')
         $record.Logins[1].ServerRoles.GetType().IsArray | Should -BeTrue
         $record.Logins[1].HashHex | Should -Be ''
+    }
+
+    It 'keeps the user databases sorted by name, each with its files in file order, so a rebuild can attach them (#132)' {
+        $snapshot = [pscustomobject]@{
+            Configs   = @()
+            Logins    = @()
+            Databases = @(
+                [pscustomobject]@{ Name = 'Sales'; Files = @('S:\SQLData\Sales.mdf', 'S:\SQLLog\Sales_log.ldf') }
+                [pscustomobject]@{ Name = 'Hr'; Files = 'S:\SQLData\Hr.mdf' }
+            )
+        }
+
+        $record = InModuleScope $module -Parameters @{ Snapshot = $snapshot } { param($Snapshot) ConvertTo-GuestSqlRecord -Snapshot $Snapshot }
+
+        @($record.Databases).Name | Should -Be @('Hr', 'Sales')
+        $record.Databases[1].Files | Should -Be @('S:\SQLData\Sales.mdf', 'S:\SQLLog\Sales_log.ldf')
+        $record.Databases[0].Files.GetType().IsArray | Should -BeTrue
     }
 }
 
@@ -2061,10 +2078,11 @@ Describe 'Update-GuestSqlRecord (#131)' {
         function New-TestSnapshot {
             param([string[]]$Login = @('app'))
             [pscustomobject]@{
-                Configs = @([pscustomobject]@{ Name = 'max server memory (MB)'; Value = '4096' })
-                Logins  = @($Login | ForEach-Object {
+                Configs   = @([pscustomobject]@{ Name = 'max server memory (MB)'; Value = '4096' })
+                Logins    = @($Login | ForEach-Object {
                         [pscustomobject]@{ Name = $_; TypeDesc = 'SQL_LOGIN'; IsDisabled = $false; DefaultDb = 'master'; DefaultLang = 'us_english'; SidHex = '0x1A'; HashHex = '0x02'; PolicyChecked = $true; ExpirationChecked = $false; ServerRoles = @() }
                     })
+                Databases = @([pscustomobject]@{ Name = 'Sales'; Files = @('S:\SQLData\Sales.mdf', 'S:\SQLLog\Sales_log.ldf') })
             }
         }
         function Get-TestRecordedSql {
@@ -2084,6 +2102,7 @@ Describe 'Update-GuestSqlRecord (#131)' {
         $recorded.Logins[0].HashHex | Should -Be '0x02'
         $recorded.Configs[0].Value | Should -Be 4096
         @($recorded.Agent.Operators).Name | Should -Be @('Dev team')
+        $recorded.Databases[0].Files | Should -Be @('S:\SQLData\Sales.mdf', 'S:\SQLLog\Sales_log.ldf')
     }
 
     It 'writes nothing the second time, when nothing changed' {
@@ -2147,6 +2166,51 @@ Describe 'Get-GuestSqlRestore (#131)' {
 
         @($restore.Logins).Name | Should -Be @('app')
         @($restore.Configs).Count | Should -Be 0
+    }
+
+    It 'returns the recorded databases and their files (#132)' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $database = [ordered]@{ Name = 'Sales'; Files = @('S:\SQLData\Sales.mdf', 'S:\SQLLog\Sales_log.ldf') }
+
+        $restore = Invoke-TestRestore -Root $root -Sql ([ordered]@{ Configs = @(); Logins = @(); Databases = @($database) })
+
+        @($restore.Databases).Name | Should -Be @('Sales')
+        $restore.Databases[0].Files | Should -Be @('S:\SQLData\Sales.mdf', 'S:\SQLLog\Sales_log.ldf')
+    }
+}
+
+Describe 'Restore-GuestSqlState attaching databases (#132)' {
+    BeforeEach {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $script:restored = @()
+    }
+
+    It 'attaches the recorded databases and restores from backup only those it could not attach' {
+        $restored = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            Mock Write-GuestNote {}
+            Mock Get-ToolingCheckpointStamp { , @() }
+            Mock Connect-GuestSqlInstance { [pscustomobject]@{ Instance = 'MSSQLSERVER' } }
+            Mock Restore-GuestSqlLogin {}
+            Mock Restore-GuestSqlAgent {}
+            Mock Invoke-GuestScript { [pscustomobject]@{ Attached = ($ArgumentList[1] -eq 'Sales'); Notes = @() } } -ParameterFilter { $Activity -like 'attaching*' }
+            $script:restoredNames = @()
+            Mock Invoke-GuestScript { $script:restoredNames += $ArgumentList[1] } -ParameterFilter { $Activity -like 'restoring*' }
+            $databases = @(
+                [ordered]@{ Name = 'Hr'; Files = @('S:\SQLData\Hr.mdf') }
+                [ordered]@{ Name = 'Sales'; Files = @('S:\SQLData\Sales.mdf') }
+            )
+            $recorded = [ordered]@{ Configs = @(); Logins = @(); Databases = $databases }
+            $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestSql = $recorded } -Reason 'a test'
+            $manifest = [CaptureManifest]::new()
+            $manifest.Sql = [pscustomobject]@{ NotMigrated = @(); Databases = @('Hr', 'Sales', 'Old') | ForEach-Object { [pscustomobject]@{ Name = $_; BackupFile = "S:\SQLBackup\$_.bak"; Recovery = 'SIMPLE'; CompatLevel = 170 } } }
+
+            Restore-GuestSqlState -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) -Manifest $manifest
+            $script:restoredNames
+        }
+
+        $restored | Should -Be @('Hr', 'Old')
     }
 }
 

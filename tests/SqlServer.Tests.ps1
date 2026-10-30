@@ -18,7 +18,6 @@ BeforeAll {
             GuestDataDriveLetter = 'S'
             SqlDataFolder        = 'SQLData'
             SqlLogFolder         = 'SQLLog'
-            SqlTempFolder        = 'SQLTemp'
             SqlBackupFolder      = 'SQLBackup'
         }
         foreach ($key in $Override.Keys) { $settings[$key] = $Override[$key] }
@@ -54,15 +53,22 @@ Describe 'ConvertTo-SqlConfigurationFile' {
         $lines | Should -Contain 'SQLSYSADMINACCOUNTS="DEVBOX\sean" "BUILTIN\Administrators"'
     }
 
-    It 'puts the VM''s data, log, tempdb and backup folders in quotes' {
+    It 'puts the VM''s data, log and backup folders in quotes' {
         $vm = New-TestVM -Override @{ SqlDataFolder = 'SQL Data' }
 
         $lines = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) ConvertTo-SqlConfigurationFile -VM $VM }) -split "`r?`n"
 
         $lines | Should -Contain 'SQLUSERDBDIR="S:\SQL Data"'
         $lines | Should -Contain 'SQLUSERDBLOGDIR="S:\SQLLog"'
-        $lines | Should -Contain 'SQLTEMPDBDIR="S:\SQLTemp"'
         $lines | Should -Contain 'SQLBACKUPDIR="S:\SQLBackup"'
+    }
+
+    It 'leaves tempdb in the instance''s own folder on C:, since it is recreated at every start (#132)' {
+        $vm = New-TestVM
+
+        $lines = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) ConvertTo-SqlConfigurationFile -VM $VM }) -split "`r?`n"
+
+        $lines -like 'SQLTEMPDB*' | Should -BeNullOrEmpty
     }
 
     It 'throws when a value would break out of its line' -ForEach @(

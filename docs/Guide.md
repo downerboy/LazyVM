@@ -36,7 +36,7 @@ The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyV
 
 A rebuild destroys the VM's operating system. These are carried across it:
 
-- **SQL Server**: user databases (backed up and restored), plus logins with their original SIDs and password hashes so database users are not orphaned, their server roles, the instance settings, and SQL Agent jobs (with their steps and schedules), operators and alerts, recorded in `VM.json` whenever they change. A job step's command is copied as written, so keep secrets out of it.
+- **SQL Server**: user databases (their files stay on the SQL data disk and are attached to the new instance; one that cannot be attached is restored from its backup), plus logins with their original SIDs and password hashes so database users are not orphaned, their server roles, the instance settings, and SQL Agent jobs (with their steps and schedules), operators and alerts, recorded in `VM.json` whenever they change. A job step's command is copied as written, so keep secrets out of it.
 - **Visual Studio**: the products you actually have installed (2026, 2022 or both, and SSMS), their workloads and components, Marketplace extensions, your settings, NuGet and Git configuration, snippets and templates.
 - **Windows**: environment variables, PATH entries, hosts file entries, mapped drives, and the firewall rules and scheduled tasks you added, recorded in `VM.json` whenever they change (a variable whose name looks secret, such as `GITHUB_TOKEN`, is kept encrypted in `Credentials\environment.cred` instead), plus certificates.
 - **Files**: the profile folders listed in `GuestProjectPaths`.
@@ -320,7 +320,7 @@ It asks for confirmation first. Budget a couple of hours: the Windows install an
 | 5b | Dev Drive disk | Creates the Dev Drive disk if missing. An existing one is never overwritten. |
 | 6 | VM | A Generation 2 VM with Secure Boot, a TPM, 4 processors and dynamic memory, plus a disc carrying the unattended Setup answer file. |
 | 7 | Installs | In this order: <ol><li>Waits for Windows to finish installing.</li><li>Makes `C:` use the whole OS disk: moves the recovery partition to the end of the disk and extends `C:` up to it, after taking a checkpoint. This works with BitLocker on.</li><li>Attaches and prepares the data disk and the Dev Drive, marks the Dev Drive as trusted again, and turns on Enhanced Session Mode.</li><li>Installs the VM's tooling list: Visual Studio Installer products with their workloads, components and extensions, then SQL Server, then winget packages.</li></ol>Anything already present is skipped, and anything that must be installed by hand is listed. SQL Server is installed from its ISO, placed in the VM's DVD drive for the install. |
-| 8 | Configuration | Relocates SQL data onto the data disk, restores Visual Studio settings and restores databases. |
+| 8 | Configuration | Relocates SQL data onto the data disk, restores Visual Studio settings, and attaches the databases (or restores them from their backups). |
 
 Capture (`Save-LazyVMState`) and restore (`Restore-LazyVMState`) run on their own, and as part of a rebuild.
 
@@ -356,7 +356,7 @@ D:\DevVM\
 | `D:\DevVM\DevBox\Config` | The VM's configuration (`VM.json`), which includes its tooling list, the one it was first built from (`VM.Template.json`), and `History`: the three latest versions of `VM.json`, plus any older one a tooling restore point still needs. |
 | `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
 | `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
-| `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk and the Dev Drive persist across rebuilds: one carries the database backups, the other your working source. |
+| `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk and the Dev Drive persist across rebuilds: one carries the databases and their backups, the other your working source. |
 | `D:\DevVM\DevBox\State` | Captured state and its manifest, application settings, `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
 | `D:\DevVM\DevBox\Backups` | The Visual Studio settings backup. |
 | `D:\DevVM\DevBox\Credentials` | The VM's encrypted account and certificate credentials. |
@@ -371,7 +371,7 @@ The module itself is installed in `C:\Program Files\PowerShell\Modules\LazyVM`. 
 | Path | Purpose |
 |---|---|
 | `C:` | Windows, Visual Studio, SQL Server binaries. |
-| `D:` | The SQL data disk: `SQLData`, `SQLLog`, `SQLTemp` and `SQLBackup`. |
+| `D:` | The SQL data disk: `SQLData`, `SQLLog` and `SQLBackup`. `tempdb` stays on C:, since SQL Server recreates it at every start. |
 | `W:` | The Dev Drive: working repositories, package caches, build output. |
 | `C:\LazyVMSetup` | The folder LazyVM uses for installers and staging. |
 
@@ -681,7 +681,7 @@ The log is the first place to look: `D:\DevVM\DevBox\Logs\DevBox.log`. Every lin
 | "This settings file has N problem(s), so none of it was used" | The message lists every problem, with the file and the setting. Open the file in VS Code: the same problems are underlined. |
 | A warning that a last good copy of a settings file was used | The scheduled maintenance found the file broken and used the copy from the last time it loaded cleanly. Fix the file; the next run uses it. |
 | A rebuild failed verification | The old Windows disk was kept, and the log gives the exact rollback commands. Nothing is lost. |
-| Databases did not come back | Check that the capture recorded them: `Get-LazyVMLicense` shows how many were captured. An empty capture restores nothing. Backups live on `D:\SQLBackup` inside the VM. |
+| Databases did not come back | The log says, for each database, whether it was attached or restored from its backup, and why not. `VM.json` records each database's files under `GuestSql`; the files and backups live on the SQL data disk (`D:\SQLData`, `D:\SQLLog`, `D:\SQLBackup`). `Get-LazyVMLicense` shows how many backups the last capture made. |
 | SSMS says "The certificate chain was issued by an authority that is not trusted" | SSMS 21 and later encrypt the connection by default, and SQL Server in the VM uses a self-signed certificate. In the connection dialog, tick **Trust server certificate**. The VM's administrator is a sysadmin, so SSMS run normally (not as administrator) signs in with Windows authentication. |
 | The scheduled task never runs, or `LastTaskResult` is 1 | Check `Get-LazyVM` shows it registered, and read the log. It runs as SYSTEM, so it needs a stored credential and the module installed for all users. |
 | The Dev Drive is not trusted | Run `fsutil devdrv enable` then `fsutil devdrv trust W:` in the VM as administrator. Trust does not survive a rebuild by design, and phase 7 normally reapplies it. |

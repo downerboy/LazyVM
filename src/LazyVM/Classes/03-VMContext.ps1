@@ -23,7 +23,6 @@ class VMRuntime {
     # SQL Server folders on the data disk, following its actual letter.
     [string]$GuestSqlDataDir
     [string]$GuestSqlLogDir
-    [string]$GuestSqlTempDir
     [string]$GuestSqlBackupDir
 
     # The account LazyVM signs in to the guest with, from the credential store.
@@ -63,7 +62,6 @@ class VMContext {
         $this.Runtime.GuestDataDriveLetter = $upper
         $this.Runtime.GuestSqlDataDir = '{0}:\{1}' -f $upper, $this.Settings['SqlDataFolder']
         $this.Runtime.GuestSqlLogDir = '{0}:\{1}' -f $upper, $this.Settings['SqlLogFolder']
-        $this.Runtime.GuestSqlTempDir = '{0}:\{1}' -f $upper, $this.Settings['SqlTempFolder']
         $this.Runtime.GuestSqlBackupDir = '{0}:\{1}' -f $upper, $this.Settings['SqlBackupFolder']
     }
 

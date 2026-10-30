@@ -386,11 +386,13 @@ function Restore-GuestVisualStudioState {
 
 function Restore-GuestSqlState {
     <#
-      Instance settings, then logins with their original SIDs, then each
-      database from its backup on the data disk, then the SQL Agent jobs,
-      operators and alerts, whose job steps need their databases. All but the
-      databases come from VM.json (#131); a VM recorded before that gets its
-      settings and logins from the capture.
+      Instance settings, then logins with their original SIDs, then the
+      databases, then the SQL Agent jobs, operators and alerts, whose job
+      steps need their databases. Each database VM.json records is attached
+      from its files on the SQL data disk (#132); one that cannot be, and one
+      VM.json does not record, comes from its backup on the data disk. All
+      but the backups come from VM.json (#131); a VM recorded before that
+      gets its settings and logins from the capture.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -412,7 +414,29 @@ function Restore-GuestSqlState {
     $notes = @()
     $logins = if ($recorded) { $recorded } else { $sql }
     $notes += Restore-GuestSqlLogin -VM $VM -Configs @($logins.Configs) -Logins @($logins.Logins)
-    $databases = if ($sql) { @($sql.Databases | Where-Object { $_ }) } else { @() }
+
+    $attached = @()
+    foreach ($database in @(if ($recorded) { $recorded.Databases })) {
+        $result = Invoke-GuestScript -VM $VM -Activity "attaching the database $($database.Name)" -TimeoutMinutes 30 `
+            -ArgumentList @($runtime.SqlServer, "$($database.Name)", @($database.Files), $runtime.GuestDataDriveLetter) -ScriptBlock {
+            param($server, $name, $files, $dataLetter)
+            $ErrorActionPreference = 'Stop'
+            $connection = Open-GuestSqlConnection -Server $server
+            try {
+                switch (Mount-GuestSqlDatabase -Connection $connection -Name $name -Files $files -DriveLetter $dataLetter) {
+                    'Exists' { return [pscustomobject]@{ Attached = $true; Notes = @(New-GuestNote -Level INFO -Text "skipped $name (already exists)") } }
+                    'Missing' { return [pscustomobject]@{ Attached = $false; Notes = @(New-GuestNote -Level INFO -Text "$name's files are not on the SQL data disk - restoring it from its backup instead") } }
+                    default { return [pscustomobject]@{ Attached = $true; Notes = @(New-GuestNote -Level OK -Text "attached $name") + @(Repair-GuestSqlOrphanedUser -Connection $connection -Name $name) } }
+                }
+            }
+            catch { return [pscustomobject]@{ Attached = $false; Notes = @(New-GuestNote -Level WARN -Text "could not attach $name - $($_.Exception.Message); restoring it from its backup instead") } }
+            finally { $connection.Close() }
+        }
+        $notes += @($result.Notes)
+        if ($result.Attached) { $attached += "$($database.Name)" }
+    }
+
+    $databases = if ($sql) { @($sql.Databases | Where-Object { $_ -and $attached -notcontains $_.Name }) } else { @() }
     foreach ($database in $databases) {
         $notes += Invoke-GuestScript -VM $VM -Activity "restoring the database $($database.Name)" -TimeoutMinutes 180 `
             -ArgumentList @($runtime.SqlServer, $database.Name, "$($database.BackupFile)", $runtime.GuestSqlBackupDir, $runtime.GuestSqlDataDir, $runtime.GuestSqlLogDir, "$($database.Recovery)", [int]$database.CompatLevel) -ScriptBlock {
@@ -435,15 +459,7 @@ function Restore-GuestSqlState {
                 if ($recovery) { $null = Invoke-GuestSql -Connection $connection -Sql "ALTER DATABASE $quoted SET RECOVERY $recovery" }
                 if ($compatLevel) { $null = Invoke-GuestSql -Connection $connection -Sql "ALTER DATABASE $quoted SET COMPATIBILITY_LEVEL = $compatLevel" }
 
-                # The SIDs kept with the logins should already prevent orphaned
-                # users; any that remain are linked to their login by name.
-                $notes = @(New-GuestNote -Level OK -Text "restored $name")
-                $orphans = @(Get-GuestSqlRow -Connection $connection -Sql "SELECT dp.name FROM $quoted.sys.database_principals dp LEFT JOIN sys.server_principals sp ON dp.sid = sp.sid WHERE dp.type IN ('S','U') AND dp.principal_id > 4 AND sp.sid IS NULL" | ForEach-Object { "$($_.name)" })
-                foreach ($user in $orphans) {
-                    try { $null = Invoke-GuestSql -Connection $connection -Sql "USE $quoted; ALTER USER $(ConvertTo-SqlName -Name $user) WITH LOGIN = $(ConvertTo-SqlName -Name $user)" }
-                    catch { $notes += New-GuestNote -Level WARN -Text "user '$user' in $name has no login: $($_.Exception.Message)" }
-                }
-                return $notes
+                return @(New-GuestNote -Level OK -Text "restored $name") + @(Repair-GuestSqlOrphanedUser -Connection $connection -Name $name)
             }
             catch { return New-GuestNote -Level ERROR -Text "failed to restore $name - $($_.Exception.Message)" }
             finally { $connection.Close() }
