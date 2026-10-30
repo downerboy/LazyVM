@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.13.0](https://github.com/downerboy/LazyVM/compare/v4.12.0...v4.13.0) (2026-10-30)
+
+
+### Features
+
+* keep the last three state captures, each in its own folder ([#171](https://github.com/downerboy/LazyVM/issues/171)) ([f83bc92](https://github.com/downerboy/LazyVM/commit/f83bc92c5b70a5e17f5129fde44f554a23017dc0))
+
 ## [4.12.0](https://github.com/downerboy/LazyVM/compare/v4.11.0...v4.12.0) (2026-10-30)
 
 
