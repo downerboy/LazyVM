@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.11.0](https://github.com/downerboy/LazyVM/compare/v4.10.1...v4.11.0) (2026-10-30)
+
+
+### Features
+
+* **sql:** keep tempdb on C: and attach the databases on rebuild ([#167](https://github.com/downerboy/LazyVM/issues/167)) ([bfa5e5b](https://github.com/downerboy/LazyVM/commit/bfa5e5bf3672f8c797a2460d3436efda7390ccd3))
+
 ## [4.10.1](https://github.com/downerboy/LazyVM/compare/v4.10.0...v4.10.1) (2026-10-30)
 
 
