@@ -22,7 +22,7 @@ Examples use `D:\DevVM` as the LazyVM folder and `DevBox` as the VM's name. Read
 
 ## 1. What LazyVM does
 
-LazyVM builds and looks after Hyper-V development VMs: Windows 11 machines with Visual Studio, SQL Server 2025 Enterprise Developer and whatever other tools you install. One host can run several, each with its own tools.
+LazyVM builds and looks after Hyper-V development VMs: Windows 11 machines with Visual Studio, SQL Server 2025 Standard Developer and whatever other tools you install. One host can run several, each with its own tools.
 
 The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyVM exists to make that expiry a non-event. It watches the license and extends it when Windows allows. When extensions run out, it captures everything you care about, rebuilds the VM from scratch and puts your state back.
 
@@ -480,7 +480,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `OSDiskSizeGB`, `SQLDiskSizeGB`, `DevDriveSizeGB` | 120, 100, 250 | Disk sizes, applied when each disk is created. All grow as needed up to this size. To give `C:` more room later, make the VM's OS disk bigger in Hyper-V Manager or with `Resize-VHD`; the next maintenance run extends `C:` into the new space, after taking a checkpoint it removes once all went well. If it fails, the checkpoint is kept, the log says how to go back to it, and `C:` is not extended again until you delete that checkpoint. |
 | `UseDevDrive` | true | Whether to create, attach and designate the Dev Drive. |
 | `DevDriveLetter` | W | Where the Dev Drive appears in the VM. |
-| `SQLIsoUrl` | SQL Server 2025 Enterprise Developer | Where the SQL Server ISO is downloaded from. |
+| `SQLIsoUrl` | SQL Server 2025 Enterprise Developer | Where the SQL Server ISO is downloaded from. LazyVM installs the Standard Developer edition from it, so code can't come to depend on Enterprise-only features. |
 | `SwitchName` | Default Switch | The virtual switch. See the note below. |
 | `GuestRemoveApps` | News, Microsoft 365, Xbox | Built-in apps removed at every build, so they stay gone after a rebuild. Your list replaces the default, so copy it and add to it. |
 | `GuestRemoveOneDrive` | true | Removes OneDrive and stops it installing for new users. |

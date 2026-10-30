@@ -68,3 +68,9 @@ $script:StampFormat = 'yyyyMMdd-HHmmss'
 
 # The capture manifest in each VM's StateDir.
 $script:ManifestFileName = 'manifest.json'
+
+# The SQL Server edition every VM gets (#136): Standard Developer, so code
+# cannot come to depend on Enterprise-only features. The Enterprise Developer
+# ISO installs it when given this product key.
+$script:SqlEditionName = 'SQL Server 2025 Standard Developer'
+$script:SqlEditionProductKey = '33333-00000-00000-00000-00000'
