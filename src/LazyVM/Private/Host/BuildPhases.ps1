@@ -12,7 +12,7 @@ function Get-BuildPhase {
     #>
     return @(
         [pscustomobject]@{ Number = 0; Name = 'Hyper-V Service Health Check'; Action = {
-                if (@(Repair-HyperVService)[-1] -eq $true) {
+                if (Repair-HyperVService) {
                     Write-LogEntry 'Hyper-V looks missing or broken; Phase 2 turns it on' 'WARN'
                 }
             }
@@ -20,7 +20,7 @@ function Get-BuildPhase {
         [pscustomobject]@{ Number = 1; Name = 'CPU, Firmware and Capacity Readiness'; Action = { param($VM) Test-HostReadiness -VM $VM } }
         [pscustomobject]@{ Number = 2; Name = 'Hyper-V Feature Installation'; Action = {
                 param($VM)
-                if (@(Enable-HyperVFeature -VM $VM)[-1] -eq $true) { return [BuildOutcome]::RestartPending }
+                if (Enable-HyperVFeature -VM $VM) { return [BuildOutcome]::RestartPending }
             }
         }
         [pscustomobject]@{ Number = 3; Name = 'Folder Structure'; Action = { param($VM) Initialize-HostFolder -VM $VM } }

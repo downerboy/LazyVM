@@ -19,7 +19,7 @@ function Restore-GuestState {
     Write-LogEntry "Restoring the capture taken at $($manifest.CapturedAt)" 'INFO'
 
     $null = Open-GuestSession -VM $VM -Purpose 'restore its state'
-    Initialize-GuestSqlDisk -VM $VM
+    $null = Initialize-GuestSqlDisk -VM $VM
 
     $run = Invoke-IsolatedStep -What 'restore' -Steps @(
         [pscustomobject]@{ Name = '10a - Windows environment'; Action = { Restore-GuestWindowsState -VM $VM -Manifest $manifest } }

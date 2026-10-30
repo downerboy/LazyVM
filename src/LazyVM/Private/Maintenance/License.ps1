@@ -75,7 +75,7 @@ function Invoke-GuestRearm {
         return $false
     }
     Write-LogEntry "Rearm accepted (had $($result.Before) remaining) - restarting the guest to apply it" 'OK'
-    Restart-GuestAndWait -VM $VM
+    $null = Restart-GuestAndWait -VM $VM
     return $true
 }
 
@@ -188,7 +188,7 @@ function Invoke-Maintenance {
 
     if ($decision -eq [MaintenanceDecision]::Rearm) {
         Write-LogEntry "Attempting rearm ($($license.RearmsLeft) remaining) - this avoids a rebuild" 'INFO'
-        if (@(Invoke-GuestRearm -VM $VM)[-1] -eq $true) {
+        if (Invoke-GuestRearm -VM $VM) {
             $after = Get-GuestLicenseStatus -VM $VM
             Write-LogEntry "Rearmed: $($after.DaysLeft) day(s) now remaining, $($after.RearmsLeft) rearm(s) left" 'OK'
             if ($wasOff) { $null = Stop-GuestGracefully -VM $VM }

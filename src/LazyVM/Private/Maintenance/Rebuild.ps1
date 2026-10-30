@@ -42,7 +42,7 @@ function Invoke-Rebuild {
     $rebuildOk = $false
     try {
         $null = Invoke-BuildPhase -VM $VM -FromPhase 3 -NoUnattend:$NoUnattend
-        if ($manifest -and -not (@(Restore-GuestState -VM $VM)[-1])) {
+        if ($manifest -and -not (Restore-GuestState -VM $VM)) {
             Write-LogEntry 'Some of the capture could not be restored; the log above says what' 'WARN'
         }
         $rebuildOk = $true
