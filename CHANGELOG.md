@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.10.1](https://github.com/downerboy/LazyVM/compare/v4.10.0...v4.10.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **sql:** make the VM's administrator a sysadmin ([#165](https://github.com/downerboy/LazyVM/issues/165)) ([50c7dbb](https://github.com/downerboy/LazyVM/commit/50c7dbbad588bbbcfc49502d66fe141777079bcf))
+
 ## [4.10.0](https://github.com/downerboy/LazyVM/compare/v4.9.0...v4.10.0) (2026-10-30)
 
 
