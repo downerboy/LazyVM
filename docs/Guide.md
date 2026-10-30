@@ -340,7 +340,7 @@ D:\DevVM\
     Virtual Machines\
     Checkpoints\
     Disks\          DevBox-OS.vhdx, DevBox-SQL.vhdx, DevBox-DevDrive.vhdx, DevBox-Seed.iso
-    State\
+    State\          manifest.json, Captures\<stamp>\ (the newest three)
     Backups\        VisualStudio.vssettings
     Credentials\    guest.cred, certs.cred, environment.cred
     Logs\           DevBox.log
@@ -357,7 +357,7 @@ D:\DevVM\
 | `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
 | `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
 | `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk and the Dev Drive persist across rebuilds: one carries the databases and their backups, the other your working source. |
-| `D:\DevVM\DevBox\State` | Captured state and its manifest, application settings, `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
+| `D:\DevVM\DevBox\State` | Captured state: each capture in a folder of its own, `Captures\<stamp>`, with its own manifest, and the newest three kept. `manifest.json` is a copy of the newest capture's manifest, the one a restore reads. Also application settings, `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
 | `D:\DevVM\DevBox\Backups` | The Visual Studio settings backup. |
 | `D:\DevVM\DevBox\Credentials` | The VM's encrypted account and certificate credentials. |
 | `D:\DevVM\DevBox\Logs` | `DevBox.log`: every run for that VM appends here. Set aside at 5 MB. |

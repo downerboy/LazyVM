@@ -1,4 +1,5 @@
-﻿# Capture.ps1 - Saving what a rebuild would lose to the VM's StateDir on the host.
+﻿# Capture.ps1 - Saving what a rebuild would lose to the VM's StateDir on the host,
+# one folder per capture under StateDir\Captures, the newest three kept.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
 # Files come out of the guest over PowerShell Direct (Copy-VMFile only goes
@@ -26,7 +27,13 @@ function Get-CaptureManifest {
 }
 
 function Save-GuestState {
-    <# Captures every area in turn; one that fails is recorded in the manifest's warnings and the rest carry on. #>
+    <#
+      Captures every area in turn into a folder of its own,
+      StateDir\Captures\<stamp> (#21); one that fails is recorded in the
+      manifest's warnings and the rest carry on. The manifest goes in that
+      folder and, as the newest capture, to StateDir\manifest.json, which
+      restore reads. Then the older captures are pruned.
+    #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $null = Open-GuestSession -VM $VM -Purpose 'capture its state'
@@ -35,20 +42,20 @@ function Save-GuestState {
     try { Initialize-GuestSqlDisk -VM $VM }
     catch { Write-LogEntry "Could not prepare the data disk: $($_.Exception.Message)" 'WARN' }
 
-    $stateDir = $VM.Settings.StateDir
-    foreach ($sub in 'vs', 'windows', 'sql', 'projects') { New-Folder -Path (Join-Path $stateDir $sub) }
-
     $manifest = [CaptureManifest]::new()
     $manifest.CapturedAt = (Get-Date).ToString('o')
     $manifest.CapturedFrom = $VM.Name
     $manifest.Stamp = Get-Stamp
 
+    $captureDir = Join-Path (Join-Path $VM.Settings.StateDir $script:CaptureFolderName) $manifest.Stamp
+    New-Folder -Path $captureDir
+
     $run = Invoke-IsolatedStep -What 'capture' -Steps @(
         [pscustomobject]@{ Name = 'Guest'; Action = { Get-GuestIdentity -VM $VM } }
-        [pscustomobject]@{ Name = 'VisualStudio'; Action = { Save-GuestVisualStudioState -VM $VM } }
+        [pscustomobject]@{ Name = 'VisualStudio'; Action = { Save-GuestVisualStudioState -VM $VM -CaptureDir $captureDir } }
         [pscustomobject]@{ Name = 'Sql'; Action = { Save-GuestSqlState -VM $VM } }
-        [pscustomobject]@{ Name = 'Windows'; Action = { Save-GuestWindowsState -VM $VM } }
-        [pscustomobject]@{ Name = 'Projects'; Action = { Save-GuestProjectFolder -VM $VM } }
+        [pscustomobject]@{ Name = 'Windows'; Action = { Save-GuestWindowsState -VM $VM -CaptureDir $captureDir } }
+        [pscustomobject]@{ Name = 'Projects'; Action = { Save-GuestProjectFolder -VM $VM -CaptureDir $captureDir } }
         [pscustomobject]@{ Name = 'AppSettings'; Action = { Save-GuestAppSetting -VM $VM } }
     )
     foreach ($name in $run.Results.Keys) { $manifest.$name = $run.Results[$name] }
@@ -57,12 +64,38 @@ function Save-GuestState {
     $manifest.Databases = @($manifest.Sql | Where-Object { $_ } | ForEach-Object { @($_.Databases) } | Where-Object { $_ } | ForEach-Object { $_.Name })
     $manifest.Summary = "$($manifest.Databases.Count) database(s) backed up"
 
+    $json = $manifest.ToJson()
+    Write-TextFileAtomic -Path (Join-Path $captureDir $script:ManifestFileName) -Text $json
     $manifestPath = Get-CaptureManifestPath -VM $VM
-    Write-TextFileAtomic -Path $manifestPath -Text $manifest.ToJson()
-    Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $stateDir "manifest-$($manifest.Stamp).json") -Force
+    Write-TextFileAtomic -Path $manifestPath -Text $json
+    Write-LogEntry "Capture written to $captureDir" 'OK'
 
-    Write-LogEntry "Capture written to $manifestPath" 'OK'
+    Remove-OldCapture -VM $VM
     return $manifest
+}
+
+function Remove-OldCapture {
+    <#
+      Keeps the newest CapturesToKeep capture folders under StateDir\Captures
+      and deletes the older ones (#21), with the manifest-<stamp>.json copies
+      earlier versions left in StateDir. Only folders named like a stamp are
+      touched. A folder that cannot be deleted is logged and left for the
+      next capture.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $stateDir = $VM.Settings.StateDir
+    $captures = @(Get-ChildItem -LiteralPath (Join-Path $stateDir $script:CaptureFolderName) -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d{8}-\d{6}$' } | Sort-Object -Property Name -Descending)
+    $copies = @(Get-ChildItem -LiteralPath $stateDir -Filter 'manifest-*.json' -File -ErrorAction SilentlyContinue)
+    $old = @($captures | Select-Object -Skip $script:CapturesToKeep) + $copies
+    foreach ($item in $old) {
+        try {
+            Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop
+            Write-LogEntry "  removed the old capture $($item.Name)" 'INFO'
+        }
+        catch { Write-LogEntry "  could not remove the old capture $($item.FullName): $($_.Exception.Message)" 'WARN' }
+    }
 }
 
 function Get-GuestIdentity {
@@ -89,7 +122,10 @@ function Save-GuestVisualStudioState {
       templates under Documents. Workloads and extensions are recorded in the
       tooling list, and reinstalled from it.
     #>
-    param([Parameter(Mandatory)][VMContext]$VM)
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$CaptureDir
+    )
 
     $vs = Get-GuestVisualStudio -VM $VM
     if (-not $vs) {
@@ -144,7 +180,7 @@ function Save-GuestVisualStudioState {
         ProductLine = "$($vs.ProductLine)"
         Files       = [ordered]@{}
     }
-    $vsDir = Join-Path $VM.Settings.StateDir 'vs'
+    $vsDir = Join-Path $CaptureDir 'vs'
     $pulls = @(
         [pscustomobject]@{ Guest = $info.Settings; Name = 'VisualStudio.vssettings'; Key = 'Settings' }
         [pscustomobject]@{ Guest = $info.NuGetConfig; Name = 'NuGet.Config'; Key = 'NuGetConfig' }
@@ -303,7 +339,11 @@ function Backup-GuestDatabase {
 # instead (GuestEnvironment.ps1, GuestFirewall.ps1, GuestScheduledTask.ps1).
 
 function Save-GuestWindowsState {
-    param([Parameter(Mandatory)][VMContext]$VM)
+    <# Certificates and anything else for the Windows archive, into <CaptureDir>\windows\winstate.zip. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$CaptureDir
+    )
 
     $staging = Join-Path $VM.Settings.GuestSetupDir 'winstate'
     $null = Invoke-GuestScript -VM $VM -Activity 'Windows capture staging' -TimeoutMinutes 5 -ArgumentList @($staging) -ScriptBlock {
@@ -333,7 +373,7 @@ function Save-GuestWindowsState {
         return $zip
     }
 
-    $archive = Join-Path (Join-Path $VM.Settings.StateDir 'windows') 'winstate.zip'
+    $archive = Join-Path (Join-Path $CaptureDir 'windows') 'winstate.zip'
     Copy-FromGuest -VM $VM -GuestPath $zip -HostPath $archive
 
     Write-LogEntry "  windows: $($summary.Certificates.Count) certificate(s)" 'OK'
@@ -402,7 +442,10 @@ function Save-GuestProjectFolder {
       Source on the Dev Drive needs no capture: that disk persists across
       rebuilds, and source control backs it.
     #>
-    param([Parameter(Mandatory)][VMContext]$VM)
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$CaptureDir
+    )
 
     $settings = $VM.Settings
     $result = Invoke-GuestScript -VM $VM -Activity 'project capture' -TimeoutMinutes 60 -ArgumentList @(
@@ -456,7 +499,7 @@ function Save-GuestProjectFolder {
         return $null
     }
 
-    $archive = Join-Path (Join-Path $settings.StateDir 'projects') 'projects.zip'
+    $archive = Join-Path (Join-Path $CaptureDir 'projects') 'projects.zip'
     Copy-FromGuest -VM $VM -GuestPath $result.Zip -HostPath $archive
     Write-LogEntry "  projects: $(@($result.Included).Count) folder(s), $(Format-Size $result.Bytes) -> $(Format-Size (Get-Item $archive).Length) compressed" 'OK'
     return [pscustomobject]@{ Archive = $archive; Included = @($result.Included); Bytes = $result.Bytes }
