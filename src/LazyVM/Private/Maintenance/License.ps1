@@ -130,9 +130,9 @@ function Invoke-Maintenance {
     <#
       The scheduled task's daily work: extends C: into any new space, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
-      logins and Agent jobs, and application settings, then does nothing more
-      until the evaluation is close to expiry, when it captures state and
-      rearms.
+      logins and Agent jobs, and application settings, checks and backs up
+      the databases, then does nothing more until the evaluation is close to
+      expiry, when it captures state and rearms.
       Returns what the caller does next.
     #>
     [OutputType([MaintenanceStep])]
@@ -168,6 +168,10 @@ function Invoke-Maintenance {
     catch { Write-LogError 'SQL logins, settings and Agent check failed (non-fatal)' $_ }
     try { $null = Update-GuestAppSettingRecord -VM $VM }
     catch { Write-LogError 'Application settings check failed (non-fatal)' $_ }
+
+    # Every user database checked with DBCC CHECKDB and, when it passes, backed up: one good backup of each (#133).
+    try { $null = Backup-GuestUserDatabase -VM $VM }
+    catch { Write-LogError 'Database check and backup failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM
     Write-LogEntry "License: $($license.Status); $($license.DaysLeft) day(s) left; $($license.RearmsLeft) rearm(s) remaining" 'INFO'

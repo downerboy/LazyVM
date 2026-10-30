@@ -27,6 +27,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Update-GuestScheduledTaskRecord { }
         Mock -ModuleName $module Update-GuestSqlRecord { }
         Mock -ModuleName $module Update-GuestAppSettingRecord { }
+        Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
         Mock -ModuleName $module Save-GuestState { 'stray' }
     }
@@ -38,6 +39,16 @@ Describe 'Invoke-Maintenance' {
 
         $result.Count | Should -Be 1
         "$($result[0])" | Should -Be 'None'
+    }
+
+    It 'checks and backs up the databases every day, and carries on when that fails (#133)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Backup-GuestUserDatabase { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Backup-GuestUserDatabase -Times 1
     }
 
     It 'returns only Rearmed after a rearm' {

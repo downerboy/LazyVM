@@ -202,7 +202,6 @@ function Save-GuestSqlState {
         $connection = Open-GuestSqlConnection -Server $server
         try {
             $version = @(Get-GuestSqlRow -Connection $connection -Sql "SELECT SERVERPROPERTY('ProductVersion') AS V, SERVERPROPERTY('Edition') AS E, @@SERVICENAME AS S")[0]
-            $databases = @(Get-GuestSqlRow -Connection $connection -Sql "SELECT name FROM sys.databases WHERE database_id > 4 AND state_desc = 'ONLINE' AND is_read_only = 0" | ForEach-Object { "$($_.name)" })
 
             # What a capture knowingly does not bring across.
             $notMigrated = @()
@@ -217,15 +216,13 @@ function Save-GuestSqlState {
 
             return [pscustomobject]@{
                 Instance = "$($version.S)"; Version = "$($version.V)"; Edition = "$($version.E)"
-                DatabaseNames = $databases; NotMigrated = $notMigrated
+                NotMigrated = $notMigrated
             }
         }
         finally { $connection.Close() }
     }
 
-    $backups = @(foreach ($name in @($state.DatabaseNames)) {
-            Backup-GuestDatabase -VM $VM -Name $name -BackupDir $backupDir
-        })
+    $backups = @(Backup-GuestUserDatabase -VM $VM)
 
     $total = ($backups | Measure-Object -Property SizeBytes -Sum).Sum
     Write-LogEntry "  SQL $($state.Version) ($($state.Edition)): $($backups.Count) database(s), $(Format-Size ([double]$total)) of backups" 'OK'
@@ -242,26 +239,47 @@ function Save-GuestSqlState {
     }
 }
 
+function Backup-GuestUserDatabase {
+    <#
+      Checks and backs up every online, writable user database to the SQL
+      data disk, keeping one good backup of each (#133). A database whose
+      check or backup fails is logged and keeps its last good backup; the
+      others still run. Returns the backups made.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    if (-not (Connect-GuestSqlInstance -VM $VM)) {
+        Write-LogEntry '  SQL Server is not installed - no databases to back up' 'INFO'
+        return
+    }
+    $names = @(Invoke-GuestScript -VM $VM -Activity 'SQL user database list' -TimeoutMinutes 5 -ArgumentList @($VM.Runtime.SqlServer) -ScriptBlock {
+            param($server)
+            $ErrorActionPreference = 'Stop'
+            $connection = Open-GuestSqlConnection -Server $server
+            try { @(Get-GuestSqlRow -Connection $connection -Sql "SELECT name FROM sys.databases WHERE database_id > 4 AND state_desc = 'ONLINE' AND is_read_only = 0" | ForEach-Object { "$($_.name)" }) }
+            finally { $connection.Close() }
+        })
+
+    foreach ($name in $names) {
+        try { Backup-GuestDatabase -VM $VM -Name $name -BackupDir $VM.Runtime.GuestSqlBackupDir }
+        catch { Write-LogError "  The database $name failed its check or backup; its last good backup is kept" $_ }
+    }
+}
+
 function Backup-GuestDatabase {
-    <# Backs up one database to <BackupDir>\<name>.bak and proves the backup readable. #>
+    <# Checks one database and backs it up to <BackupDir>\<name>.bak, replacing the last good backup only once the new one verifies (Backup-GuestSqlDatabase). #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$BackupDir
     )
 
-    return Invoke-GuestScript -VM $VM -Activity "backing up $Name" -TimeoutMinutes 180 -ArgumentList @($VM.Runtime.SqlServer, $Name, $BackupDir) -ScriptBlock {
+    return Invoke-GuestScript -VM $VM -Activity "checking and backing up $Name" -TimeoutMinutes 180 -ArgumentList @($VM.Runtime.SqlServer, $Name, $BackupDir) -ScriptBlock {
         param($server, $name, $backupDir)
         $ErrorActionPreference = 'Stop'
-        New-GuestFolder -Path $backupDir
-        $file = Join-Path $backupDir "$name.bak"
-        $target = "$(ConvertTo-SqlName -Name $name) TO DISK = $(ConvertTo-SqlString -Text $file)"
         $connection = Open-GuestSqlConnection -Server $server
         try {
-            # COMPRESSION is unavailable on some editions; retry without it.
-            try { $null = Invoke-GuestSql -Connection $connection -Sql "BACKUP DATABASE $target WITH INIT, FORMAT, CHECKSUM, COMPRESSION, STATS = 10" }
-            catch { $null = Invoke-GuestSql -Connection $connection -Sql "BACKUP DATABASE $target WITH INIT, FORMAT, CHECKSUM, STATS = 10" }
-            $null = Invoke-GuestSql -Connection $connection -Sql "RESTORE VERIFYONLY FROM DISK = $(ConvertTo-SqlString -Text $file) WITH CHECKSUM"
+            $file = Backup-GuestSqlDatabase -Connection $connection -Name $name -BackupDir $backupDir
 
             $details = @(Get-GuestSqlRow -Connection $connection -Sql "SELECT recovery_model_desc AS Recovery, compatibility_level AS CompatLevel, collation_name AS Collation FROM sys.databases WHERE name = $(ConvertTo-SqlString -Text $name)")[0]
             return [pscustomobject]@{
