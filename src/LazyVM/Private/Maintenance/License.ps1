@@ -151,7 +151,7 @@ function Invoke-Maintenance {
     }
 
     # A user who made the OS disk bigger gets the space on C: tonight.
-    Expand-GuestSystemDrive -VM $VM
+    $null = Expand-GuestSystemDrive -VM $VM
 
     # Tooling every day. A failure here must not stop the license work below.
     try { $null = Update-ToolingRecord -VM $VM }
@@ -177,7 +177,7 @@ function Invoke-Maintenance {
     if ($decision -eq [MaintenanceDecision]::None) {
         if ($license.DaysLeft -lt 0) { Write-LogEntry 'No evaluation countdown reported - nothing to do' 'OK' }
         else { Write-LogEntry "More than $threshold days remain - no action needed" 'OK' }
-        if ($wasOff) { Stop-GuestGracefully -VM $VM }
+        if ($wasOff) { $null = Stop-GuestGracefully -VM $VM }
         return [MaintenanceStep]::None
     }
 
@@ -191,7 +191,7 @@ function Invoke-Maintenance {
         if (@(Invoke-GuestRearm -VM $VM)[-1] -eq $true) {
             $after = Get-GuestLicenseStatus -VM $VM
             Write-LogEntry "Rearmed: $($after.DaysLeft) day(s) now remaining, $($after.RearmsLeft) rearm(s) left" 'OK'
-            if ($wasOff) { Stop-GuestGracefully -VM $VM }
+            if ($wasOff) { $null = Stop-GuestGracefully -VM $VM }
             return [MaintenanceStep]::Rearmed
         }
         Write-LogEntry 'Rearm did not succeed - falling through to a full rebuild' 'WARN'

@@ -64,7 +64,7 @@ function Invoke-Rebuild {
     $elapsed = [int]((Get-Date) - $started).TotalMinutes
     if ($rebuildOk -and $verification.Passed) {
         Write-LogEntry "Rebuild verified in $elapsed minutes" 'OK'
-        if ($retired) { Remove-RetiredVM -VM $VM -Retired $retired }
+        if ($retired) { $null = Remove-RetiredVM -VM $VM -Retired $retired }
         return $true
     }
 
