@@ -1,7 +1,7 @@
 ﻿# VMDisk.ps1 - The VM's extra virtual disks: creating them and attaching them.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# The SQL data disk and the Dev Drive carry data across rebuilds, so an
+# The SQL data disk, the Dev Drive and the User disk carry data across rebuilds, so an
 # existing disk is always kept and reported, never created again.
 #
 # The guest finds each one by the identity VM.json records for it, never by
@@ -18,6 +18,8 @@ $script:DataDiskIdentitySettings = @(
     'SQLDiskScsiLocation'
     'DevDriveGuid'
     'DevDriveScsiLocation'
+    'UserDiskGuid'
+    'UserDiskScsiLocation'
 )
 
 function Initialize-DataVhd {

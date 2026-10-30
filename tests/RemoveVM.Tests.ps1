@@ -32,6 +32,7 @@ BeforeAll {
             SQLIsoPath       = 'D:\DevVM\Shared\Installers\SQLServer2025-x64-ENU-EntDev.iso'
             SQLDiskPath      = "D:\DevVM\$Name\Disks\$Name-SQL.vhdx"
             DevDrivePath     = "D:\DevVM\$Name\Disks\$Name-DevDrive.vhdx"
+            UserDiskPath     = "D:\DevVM\$Name\Disks\$Name-User.vhdx"
             SeedDiskPath     = "D:\DevVM\$Name\Disks\$Name-Seed.iso"
             CheckpointDir    = "D:\DevVM\$Name\Checkpoints"
             VSSettingsBackup = "D:\DevVM\$Name\Backups\VisualStudio.vssettings"
@@ -158,11 +159,14 @@ Describe 'Get-VMRemovalPlan' {
         ($plan.Kept | Where-Object { $_.Path -eq 'D:\DevVM\Shared\Credentials\.lazyvm.key' }).Reason | Should -BeLike "*VM 'Beta'*"
     }
 
-    It 'lists a disk the settings put outside the VM folder' {
-        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ DevDrivePath = 'E:\DevDrives\Alpha.vhdx' }
+    It 'lists the <Setting> when the settings put it outside the VM folder' -ForEach @(
+        @{ Setting = 'DevDrivePath' }
+        @{ Setting = 'UserDiskPath' }
+    ) {
+        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ $Setting = 'E:\Disks\Alpha.vhdx' }
         $plan = Get-TestPlan -Settings $alpha
 
-        $plan.Files | Should -Contain 'E:\DevDrives\Alpha.vhdx'
+        $plan.Files | Should -Contain 'E:\Disks\Alpha.vhdx'
     }
 
     It 'lists a disk Hyper-V reports attached outside the VM folder, once' {

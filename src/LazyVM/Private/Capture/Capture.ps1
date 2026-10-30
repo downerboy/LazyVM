@@ -55,7 +55,6 @@ function Save-GuestState {
         [pscustomobject]@{ Name = 'VisualStudio'; Action = { Save-GuestVisualStudioState -VM $VM -CaptureDir $captureDir } }
         [pscustomobject]@{ Name = 'Sql'; Action = { Save-GuestSqlState -VM $VM } }
         [pscustomobject]@{ Name = 'Windows'; Action = { Save-GuestWindowsState -VM $VM -CaptureDir $captureDir } }
-        [pscustomobject]@{ Name = 'Projects'; Action = { Save-GuestProjectFolder -VM $VM -CaptureDir $captureDir } }
         [pscustomobject]@{ Name = 'AppSettings'; Action = { Save-GuestAppSetting -VM $VM } }
     )
     foreach ($name in $run.Results.Keys) { $manifest.$name = $run.Results[$name] }
@@ -479,76 +478,7 @@ function Save-GuestCertificate {
     }
 }
 
-# ── Project files and application settings ───────────────────────────────────
-
-function Save-GuestProjectFolder {
-    <#
-      Anything in GuestProjectPaths, which are on the guest's own disk.
-      Source on the Dev Drive needs no capture: that disk persists across
-      rebuilds, and source control backs it.
-    #>
-    param(
-        [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][string]$CaptureDir
-    )
-
-    $settings = $VM.Settings
-    $result = Invoke-GuestScript -VM $VM -Activity 'project capture' -TimeoutMinutes 60 -ArgumentList @(
-        $settings.GuestSetupDir, $settings.GuestProjectPaths, $settings.ProjectExcludeDirs, $settings.MaxProjectCaptureGB
-    ) -ScriptBlock {
-        param($setupDir, $paths, $excludes, $maxGB)
-        $ErrorActionPreference = 'Stop'
-        $staging = Join-Path $setupDir 'projects'
-        Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
-        New-GuestFolder -Path $staging
-
-        $included = @(); $notes = @(); $bytes = 0
-        foreach ($raw in $paths) {
-            $path = [Environment]::ExpandEnvironmentVariables($raw)
-            if (-not (Test-Path $path)) { continue }
-
-            $name = Split-Path $path -Leaf
-            $destination = Join-Path $staging $name
-            $i = 1
-            while (Test-Path $destination) { $destination = Join-Path $staging "$name-$i"; $i++ }
-
-            # Build outputs and package caches can be made again; copying them
-            # would only make the archive bigger.
-            $robocopyArgs = @($path, $destination, '/E', '/R:1', '/W:1', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
-            if (@($excludes).Count -gt 0) { $robocopyArgs += '/XD'; $robocopyArgs += $excludes }
-            & robocopy.exe @robocopyArgs | Out-Null
-            if ($LASTEXITCODE -ge 8) { $notes += New-GuestNote -Level WARN -Text "skipped $path (robocopy exit $LASTEXITCODE)"; continue }
-
-            $size = [double](Get-ChildItem $destination -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
-            if (($bytes + $size) -gt ($maxGB * 1GB)) {
-                Remove-Item $destination -Recurse -Force -ErrorAction SilentlyContinue
-                $notes += New-GuestNote -Level WARN -Text "skipped $path (would exceed the ${maxGB} GB capture limit)"
-                continue
-            }
-            $bytes += $size
-            $included += $path
-        }
-
-        $zip = $null
-        if ($included.Count -gt 0) {
-            $zip = Join-Path $setupDir 'projects.zip'
-            New-GuestZip -Source $staging -Destination $zip
-        }
-        Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
-        return [pscustomobject]@{ Zip = $zip; Included = $included; Notes = $notes; Bytes = $bytes }
-    }
-
-    Write-GuestNote -Notes $result.Notes
-    if (-not $result.Zip) {
-        Write-LogEntry '  no guest-side project files found' 'INFO'
-        return $null
-    }
-
-    $archive = Join-Path (Join-Path $CaptureDir 'projects') 'projects.zip'
-    Copy-FromGuest -VM $VM -GuestPath $result.Zip -HostPath $archive
-    Write-LogEntry "  projects: $(@($result.Included).Count) folder(s), $(Format-Size $result.Bytes) -> $(Format-Size (Get-Item $archive).Length) compressed" 'OK'
-    return [pscustomobject]@{ Archive = $archive; Included = @($result.Included); Bytes = $result.Bytes }
-}
+# ── Application settings ─────────────────────────────────────────────────────
 
 function Save-GuestAppSetting {
     <#

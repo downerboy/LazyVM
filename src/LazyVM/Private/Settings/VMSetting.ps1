@@ -2,8 +2,8 @@
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 # Settings that name a file or folder on the HOST, and so are resolved against
-# the root folder. Paths inside the guest (GuestSetupDir, GuestProjectPaths,
-# ...) are deliberately absent: they are not host paths.
+# the root folder. Paths inside the guest (GuestSetupDir, ...) are
+# deliberately absent: they are not host paths.
 $script:HostPathSettings = @(
     'DiskDir'
     'ISOPath'
@@ -11,6 +11,7 @@ $script:HostPathSettings = @(
     'SQLIsoPath'
     'SQLDiskPath'
     'DevDrivePath'
+    'UserDiskPath'
     'CheckpointDir'
     'VSSettingsBackup'
     'LogFile'

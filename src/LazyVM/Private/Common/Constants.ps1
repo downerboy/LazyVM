@@ -73,6 +73,18 @@ $script:ManifestFileName = 'manifest.json'
 $script:CaptureFolderName = 'Captures'
 $script:CapturesToKeep = 3
 
+# The folders on the User disk (#137), each named for its folder there.
+# A ShellFolder is redirected through the User Shell Folders key, with any
+# Aliases Windows keeps for it; a Link, under %USERPROFILE%, becomes a
+# junction to the folder.
+$script:UserDiskFolders = @(
+    @{ Name = 'Documents'; ShellFolder = 'Personal'; Aliases = @('{F42EE2D3-909F-4907-8871-4C22FC0BF756}') }
+    @{ Name = 'Desktop'; ShellFolder = 'Desktop'; Aliases = @() }
+    @{ Name = 'Downloads'; ShellFolder = '{374DE290-123F-4565-9164-39C4925E467B}'; Aliases = @('{7D83EE9B-2244-4E70-B1F5-5393042AF1E4}') }
+    @{ Name = '.ssh'; Link = '.ssh' }
+    @{ Name = 'repos'; Link = 'source\repos' }
+)
+
 # The SQL Server edition every VM gets (#136): Standard Developer, so code
 # cannot come to depend on Enterprise-only features. The Enterprise Developer
 # ISO installs it when given this product key.

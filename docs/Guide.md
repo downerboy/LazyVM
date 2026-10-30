@@ -29,7 +29,7 @@ The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyV
 ### The three jobs it does
 
 - **Build.** Create the VM and install Windows unattended. Then install everything in the VM's tooling list (Visual Studio, SSMS, SQL Server, winget packages) with no input from you.
-- **Configure.** Attach and prepare the SQL data disk and the Dev Drive, and relocate databases onto the data disk.
+- **Configure.** Attach and prepare the SQL data disk, the Dev Drive and the User disk, and relocate databases onto the data disk.
 - **Maintain.** Every day, record any tools you have added or removed in the VM, taking a checkpoint first so you can go back. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
 
 ### What survives a rebuild
@@ -39,7 +39,7 @@ A rebuild destroys the VM's operating system. These are carried across it:
 - **SQL Server**: user databases (their files stay on the SQL data disk and are attached to the new instance; one that cannot be attached is restored from its backup), plus logins with their original SIDs and password hashes so database users are not orphaned, their server roles, the instance settings, and SQL Agent jobs (with their steps and schedules), operators and alerts, recorded in `VM.json` whenever they change. A job step's command is copied as written, so keep secrets out of it.
 - **Visual Studio**: the products you actually have installed (2026, 2022 or both, and SSMS), their workloads and components, Marketplace extensions, your settings, NuGet and Git configuration, snippets and templates.
 - **Windows**: environment variables, PATH entries, hosts file entries, mapped drives, and the firewall rules and scheduled tasks you added, recorded in `VM.json` whenever they change (a variable whose name looks secret, such as `GITHUB_TOKEN`, is kept encrypted in `Credentials\environment.cred` instead), plus certificates.
-- **Files**: the profile folders listed in `GuestProjectPaths`.
+- **The User disk**: a separate persistent disk holding Documents, Desktop, Downloads, `.ssh` and `source\repos`. It is never destroyed, so its contents need no capture. A rebuilt VM's new account is given its folders. [Section 11](#11-moving-files-between-host-and-vm) explains it.
 - **Your tools**: every winget package you installed is reinstalled from the VM's tooling list, and application settings such as WinMerge's are carried across. [Section 9](#9-tooling-and-going-back) explains the tooling list.
 - **The Dev Drive**: a separate persistent disk holding your working source. It is never destroyed, so its contents need no capture. Source control remains the backup for the code on it. [Section 11](#11-moving-files-between-host-and-vm) explains it.
 
@@ -318,8 +318,9 @@ It asks for confirmation first. Budget a couple of hours: the Windows install an
 | 4 | Installation media | Verifies the Windows ISO by its file signature. Downloads the SQL Server ISO if it is missing, checking it before replacing any existing copy. Visual Studio and SSMS are downloaded inside the VM in phase 7, from their channel's bootstrapper. |
 | 5 | SQL data disk | Creates the VM's SQL data disk if missing. An existing disk is never overwritten. |
 | 5b | Dev Drive disk | Creates the Dev Drive disk if missing. An existing one is never overwritten. |
+| 5c | User disk | Creates the User disk if missing. An existing one is never overwritten. |
 | 6 | VM | A Generation 2 VM with Secure Boot, a TPM, 4 processors and dynamic memory, plus a disc carrying the unattended Setup answer file. |
-| 7 | Installs | In this order: <ol><li>Waits for Windows to finish installing.</li><li>Makes `C:` use the whole OS disk: moves the recovery partition to the end of the disk and extends `C:` up to it, after taking a checkpoint. This works with BitLocker on.</li><li>Attaches and prepares the data disk and the Dev Drive, marks the Dev Drive as trusted again, and turns on Enhanced Session Mode.</li><li>Installs the VM's tooling list: Visual Studio Installer products with their workloads, components and extensions, then SQL Server, then winget packages.</li></ol>Anything already present is skipped, and anything that must be installed by hand is listed. SQL Server is installed from its ISO, placed in the VM's DVD drive for the install. |
+| 7 | Installs | In this order: <ol><li>Waits for Windows to finish installing.</li><li>Makes `C:` use the whole OS disk: moves the recovery partition to the end of the disk and extends `C:` up to it, after taking a checkpoint. This works with BitLocker on.</li><li>Attaches and prepares the data disk, the Dev Drive and the User disk, marks the Dev Drive as trusted again, puts the personal folders on the User disk, and turns on Enhanced Session Mode.</li><li>Installs the VM's tooling list: Visual Studio Installer products with their workloads, components and extensions, then SQL Server, then winget packages.</li></ol>Anything already present is skipped, and anything that must be installed by hand is listed. SQL Server is installed from its ISO, placed in the VM's DVD drive for the install. |
 | 8 | Configuration | Relocates SQL data onto the data disk, restores Visual Studio settings, and attaches the databases (or restores them from their backups). |
 
 Capture (`Save-LazyVMState`) and restore (`Restore-LazyVMState`) run on their own, and as part of a rebuild.
@@ -356,7 +357,7 @@ D:\DevVM\
 | `D:\DevVM\DevBox\Config` | The VM's configuration (`VM.json`), which includes its tooling list, the one it was first built from (`VM.Template.json`), and `History`: the three latest versions of `VM.json`, plus any older one a tooling restore point still needs. |
 | `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
 | `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
-| `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk and the Dev Drive persist across rebuilds: one carries the databases and their backups, the other your working source. |
+| `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive, the 20 GB User disk and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk, the Dev Drive and the User disk persist across rebuilds: they carry the databases and their backups, your working source, and your personal folders. |
 | `D:\DevVM\DevBox\State` | Captured state: each capture in a folder of its own, `Captures\<stamp>`, with its own manifest, and the newest three kept. `manifest.json` is a copy of the newest capture's manifest, the one a restore reads. Also application settings, `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
 | `D:\DevVM\DevBox\Backups` | The Visual Studio settings backup. |
 | `D:\DevVM\DevBox\Credentials` | The VM's encrypted account and certificate credentials. |
@@ -373,6 +374,7 @@ The module itself is installed in `C:\Program Files\PowerShell\Modules\LazyVM`. 
 | `C:` | Windows, Visual Studio, SQL Server binaries. |
 | `D:` | The SQL data disk: `SQLData`, `SQLLog` and `SQLBackup`. `tempdb` stays on C:, since SQL Server recreates it at every start. |
 | `W:` | The Dev Drive: working repositories, package caches, build output. |
+| `U:` | The User disk: `Documents`, `Desktop` and `Downloads` are redirected here, and `%USERPROFILE%\.ssh` and `%USERPROFILE%\source\repos` are links to folders here. |
 | `C:\LazyVMSetup` | The folder LazyVM uses for installers and staging. |
 
 ### Credential storage
@@ -407,19 +409,19 @@ LazyVM keeps `VM.json` describing the VM as it is, so you never have to:
 - Before every build, maintenance run and rebuild, any setting `VM.json` lacks is filled in from the shared template. That covers a VM created before `VM.json` held every setting, and a setting added by a newer LazyVM. The log says which.
 - Every time LazyVM changes `VM.json`, the version it writes is kept in `<Name>\Config\History\VM-<date>-<time>.json`, so you can see what changed and go back. The three latest versions are kept, and any older one a tooling restore point still needs ([section 9](#9-tooling-and-going-back)).
 - A `VM.json` that cannot be read is never written over. The run uses the last copy that loaded cleanly and logs the problem.
-- It records which disk inside the VM is the SQL data disk and which is the Dev Drive (see below).
+- It records which disk inside the VM is the SQL data disk, which is the Dev Drive and which is the User disk (see below).
 
-### How LazyVM finds the SQL data disk and the Dev Drive
+### How LazyVM finds the SQL data disk, the Dev Drive and the User disk
 
 Preparing these disks can initialise and format them, so LazyVM finds each one by what `VM.json` records about it, never by its size:
 
-1. **Its GPT disk GUID** (`SQLDiskGuid`, `DevDriveGuid`), recorded the first time the VM prepares the disk.
-2. **Its SCSI location** (`SQLDiskScsiLocation`, `DevDriveScsiLocation`), recorded when LazyVM attaches the disk to the VM. This is how a new, empty disk is found. Windows in the VM reports it as the disk's LUN.
+1. **Its GPT disk GUID** (`SQLDiskGuid`, `DevDriveGuid`, `UserDiskGuid`), recorded the first time the VM prepares the disk.
+2. **Its SCSI location** (`SQLDiskScsiLocation`, `DevDriveScsiLocation`, `UserDiskScsiLocation`), recorded when LazyVM attaches the disk to the VM. This is how a new, empty disk is found. Windows in the VM reports it as the disk's LUN.
 3. **Only as a last resort, its `.vhdx` file**: where Hyper-V shows that file attached right now. This is how a VM built before LazyVM recorded disks finds them once; from then on it has a GPT disk GUID.
 
 If no disk matches, or the disk at the recorded location has a different GPT disk GUID, the run stops and says so. It initialises or formats nothing. Check in Hyper-V Manager that the disk is attached to the VM's SCSI controller.
 
-Leave these four settings as they are. `New-LazyVM -From` never copies them, because the new VM's disks are its own.
+Leave these six settings as they are. `New-LazyVM -From` never copies them, because the new VM's disks are its own.
 
 ### What the VM was built from
 
@@ -468,8 +470,6 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `RebuildThresholdDays` | 10 | How many days before expiry maintenance acts. |
 | `MoveSqlDataToDataDisk` | true | Whether phase 8 relocates existing databases from `C:` onto the data disk. |
 | `DeleteRetiredDiskOnSuccess` | true | Whether the old Windows disk is deleted after a verified rebuild. `false` keeps every generation, which uses disk quickly. |
-| `GuestProjectPaths` | profile folders | Folders inside the VM included in a capture. The Dev Drive needs none of these. |
-| `MaxProjectCaptureGB` | 20 | The most a capture copies out of the VM. |
 | `MaintenanceTime` | 02:00 | When the VM's daily maintenance runs. Run `Register-LazyVMMaintenance` after changing it. |
 | `ToolingCheckpointsToKeep` | 3 | How many tooling checkpoints to keep. |
 | `ToolingWingetExclude` | Windows built-ins | winget packages never recorded. Your list replaces the default, so copy it and add to it. |
@@ -477,9 +477,10 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `InstallerBootstrappers` | 5 channels | The bootstrapper for each Visual Studio Installer channel. Add one if a tooling list uses a channel not listed. |
 | `UnsignedExtensions` | none | Marketplace extensions, by item name (`Publisher.Name`), that may be installed even though they are not signed. Any other unsigned extension is refused by the installer and named in the log; Visual Studio and its other extensions install anyway. |
 | `vCPU`, `MemStartGB`, `MemMaxGB` | 4, 8, 16 | VM sizing, applied when the VM is built. 8 GB to start is the Dev Drive minimum. |
-| `OSDiskSizeGB`, `SQLDiskSizeGB`, `DevDriveSizeGB` | 120, 100, 250 | Disk sizes, applied when each disk is created. All grow as needed up to this size. To give `C:` more room later, make the VM's OS disk bigger in Hyper-V Manager or with `Resize-VHD`; the next maintenance run extends `C:` into the new space, after taking a checkpoint it removes once all went well. If it fails, the checkpoint is kept, the log says how to go back to it, and `C:` is not extended again until you delete that checkpoint. |
+| `OSDiskSizeGB`, `SQLDiskSizeGB`, `DevDriveSizeGB`, `UserDiskSizeGB` | 120, 100, 250, 20 | Disk sizes, applied when each disk is created. All grow as needed up to this size. To give `C:` more room later, make the VM's OS disk bigger in Hyper-V Manager or with `Resize-VHD`; the next maintenance run extends `C:` into the new space, after taking a checkpoint it removes once all went well. If it fails, the checkpoint is kept, the log says how to go back to it, and `C:` is not extended again until you delete that checkpoint. |
 | `UseDevDrive` | true | Whether to create, attach and designate the Dev Drive. |
 | `DevDriveLetter` | W | Where the Dev Drive appears in the VM. |
+| `UserDiskLetter` | U | Where the User disk appears in the VM. |
 | `SQLIsoUrl` | SQL Server 2025 Enterprise Developer | Where the SQL Server ISO is downloaded from. LazyVM installs the Standard Developer edition from it, so code can't come to depend on Enterprise-only features. |
 | `SwitchName` | Default Switch | The virtual switch. See the note below. |
 | `GuestRemoveApps` | News, Microsoft 365, Xbox | Built-in apps removed at every build, so they stay gone after a rebuild. Your list replaces the default, so copy it and add to it. |
@@ -625,7 +626,7 @@ This deletes the VM and everything created for it:
 
 Before anything is deleted, it lists everything with sizes and asks you to confirm. `-Force` skips the question.
 
-The Dev Drive goes too, and with it any source code not yet pushed. Push or copy your work first.
+The Dev Drive goes too, and with it any source code not yet pushed, and so does the User disk, with Documents, Desktop, Downloads, `.ssh` and `source\repos`. Push or copy your work first.
 
 What every VM uses is never touched: the LazyVM folder and `Shared`, with the ISOs and your settings file. Anything another VM also uses is kept as well, such as the credential key, and the list says why. If the VM's folder holds something another VM uses, nothing is removed and you are told what to move out first.
 
@@ -636,6 +637,7 @@ There are two mechanisms, each with its own job, and neither depends on the VM's
 | Mechanism | Path | Use it for |
 |---|---|---|
 | Dev Drive | Local disk | Working repositories, package caches, build output. Fastest by a wide margin, and nothing in the path can break. |
+| User disk | Local disk | Documents, Desktop, Downloads, `.ssh` and `source\repos`, kept across rebuilds. |
 | Enhanced Session Mode | VMBus (RDP) | Ad-hoc copying in either direction, drag and drop, clipboard. Works while you are connected in VMConnect. |
 
 ### The Dev Drive
@@ -654,6 +656,15 @@ To check its state from inside the VM:
 ```powershell
 fsutil devdrv query W:
 ```
+
+### The User disk
+
+Your personal folders live on the User disk, `U:`, so that nothing of yours is on the Windows disk a rebuild replaces. Like the Dev Drive, its disk lives on the host and a rebuild never touches it. It is a plain NTFS volume, not a Dev Drive: Defender's performance mode suits source and builds, not Downloads.
+
+- **Documents, Desktop and Downloads** are redirected to `U:\Documents`, `U:\Desktop` and `U:\Downloads`. File Explorer shows the new place after you next sign in.
+- **`%USERPROFILE%\.ssh` and `%USERPROFILE%\source\repos`** are links to `U:\.ssh` and `U:\repos`, so programs that look for them there still find them. Visual Studio's default projects folder is `source\repos`.
+- **A VM built before the User disk** gets it at the next maintenance run. What its folders hold on `C:` is copied to the User disk, never moved, and copied again each night until you next sign in: the copies on `C:` go only when a rebuild replaces that disk. A link you made yourself, say from `source\repos` to the Dev Drive, is left as it is.
+- **A rebuild** first copies the folders onto the User disk once more, and stops before retiring anything if it cannot. The rebuilt VM's account is then given the folders: its account is new to Windows, so only it, SYSTEM and Administrators can open them.
 
 ### Enhanced Session Mode
 
@@ -713,7 +724,7 @@ Get-Service MSSQLSERVER | Select-Object Name, Status
 ## 13. Habits worth keeping
 
 - **Keep source on the Dev Drive (`W:`), and in source control.** The Dev Drive is fast, persists across rebuilds, and nothing in its path can break. Commit and push regularly, so that a clone, not a capture, is the backup for your code. This is the single most useful habit.
-- **Capture after meaningful changes**: new databases, settings you care about, certificates. The daily run captures new certificates and Visual Studio settings the night after they change, and maintenance captures before it acts, but a capture of your own costs nothing. Project folders inside the VM are captured only by these.
+- **Capture after meaningful changes**: new databases, settings you care about, certificates. The daily run captures new certificates and Visual Studio settings the night after they change, and maintenance captures before it acts, but a capture of your own costs nothing.
 - **Close Visual Studio before a capture**, so its settings backup is current.
 - **Read the `[!]` lines after a capture.** Anything reported as not migrated has to be recreated by hand after a rebuild.
 - **Check `Get-LazyVMLicense` occasionally**, so the rearm count is never a surprise.

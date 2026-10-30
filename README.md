@@ -25,7 +25,7 @@ What it needs
 - **Builds a VM with no input from you.** It creates the VM, installs Windows from an answer file, then installs everything in the VM's tooling list: Visual Studio and SSMS with their workloads and Marketplace extensions, SQL Server, and winget packages.
 - **Keeps the VM's tooling list current.** Every day it records what you have added or removed in the VM, taking a Hyper-V checkpoint first, so any recorded version can be returned to.
 - **Makes the 90-day evaluation a non-event.** It watches the license and rearms Windows while it can. When it can't, it captures your state, rebuilds the VM and puts everything back: databases, logins, Visual Studio settings, certificates, environment and application settings.
-- **Keeps your source safe across rebuilds.** Source lives on a Dev Drive whose disk a rebuild never touches.
+- **Keeps your source and files safe across rebuilds.** Source lives on a Dev Drive, and Documents, Desktop, Downloads and `.ssh` on a User disk, whose disks a rebuild never touches.
 - **Runs several VMs on one host**, each with its own tools, disks, schedule and restore points.
 - **Never stops over a typo.** If a settings file breaks, the scheduled maintenance uses the last version that worked and says so in the log.
 
@@ -34,7 +34,7 @@ What it needs
 - Windows 10 or 11 Pro, Enterprise or Education on the host (Hyper-V is not available on Home).
 - [PowerShell 7.6 or later](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows), run as administrator: `winget install Microsoft.PowerShell`.
 - A Windows 11 Enterprise Evaluation ISO, downloaded by hand from the [Microsoft Evaluation Center](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise). LazyVM opens that page for you if it can't find one.
-- Memory and disk for each VM. By default a VM starts with 8 GB of memory and can grow to 16 GB. Its disks are 120 GB for Windows, 100 GB for SQL data and 250 GB for the Dev Drive, all dynamically expanding.
+- Memory and disk for each VM. By default a VM starts with 8 GB of memory and can grow to 16 GB. Its disks are 120 GB for Windows, 100 GB for SQL data, 250 GB for the Dev Drive and 20 GB for the User disk, all dynamically expanding.
 
 ## Install
 

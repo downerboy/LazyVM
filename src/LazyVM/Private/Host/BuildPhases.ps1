@@ -25,10 +25,11 @@ function Get-BuildPhase {
         }
         [pscustomobject]@{ Number = 3; Name = 'Folder Structure'; Action = { param($VM) Initialize-HostFolder -VM $VM } }
         [pscustomobject]@{ Number = 4; Name = 'SQL Server Media'; Action = { param($VM) Initialize-SqlServerIso -VM $VM } }
-        [pscustomobject]@{ Number = 5; Name = 'SQL Data Disk and Dev Drive'; Action = {
+        [pscustomobject]@{ Number = 5; Name = 'SQL Data Disk, Dev Drive and User Disk'; Action = {
                 param($VM)
                 Initialize-SqlDataVhd -VM $VM
                 Initialize-DevDriveVhd -VM $VM
+                Initialize-UserDataVhd -VM $VM
             }
         }
         [pscustomobject]@{ Number = 6; Name = 'VM Build'; Action = {

@@ -46,10 +46,12 @@ function Install-GuestSoftware {
     # folders are on the data disk from the start.
     Add-SqlDataDisk -VM $VM
     Add-DevDriveDisk -VM $VM
+    Add-UserDataDisk -VM $VM
     Connect-Guest -VM $VM -Credential $credential | Out-Null
     Expand-GuestSystemDrive -VM $VM
     Initialize-GuestSqlDisk -VM $VM
     Initialize-GuestDevDrive -VM $VM
+    Initialize-GuestUserDisk -VM $VM
     Enable-GuestEnhancedSession -VM $VM
     Set-GuestCustomization -VM $VM
 

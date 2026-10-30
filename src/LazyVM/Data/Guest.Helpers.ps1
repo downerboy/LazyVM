@@ -385,6 +385,145 @@ function Find-GuestDataDisk {
     throw "The $Label was not found in the guest ($what). Nothing was initialised or formatted. Check that the disk is attached to the VM."
 }
 
+# ── The User disk ────────────────────────────────────────────────────────────
+#
+# Personal folders live on the User disk, which no rebuild touches (#137).
+# What is already on C: is copied, never moved: the originals go only when a
+# rebuild replaces the OS disk.
+
+$script:UserShellFolderKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
+
+function Copy-GuestFolderContent {
+    <# Copies everything in $Source into $Destination, never overwriting a newer file there. Throws when a file could not be copied. #>
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Destination
+    )
+
+    # /XO keeps a newer file already on the User disk; /XJ skips junctions,
+    # which would copy what they point at. Security is not copied: the
+    # folder's own permissions apply.
+    & robocopy.exe $Source $Destination '/E' '/XO' '/XJ' '/COPY:DAT' '/DCOPY:DAT' '/R:1' '/W:1' '/NFL' '/NDL' '/NJH' '/NJS' '/NP' | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "could not copy $Source to $Destination (robocopy exit $LASTEXITCODE)" }
+}
+
+function Set-GuestFolderLink {
+    <#
+      Makes $Link a junction to $Target. A real folder at $Link is copied
+      into $Target first and kept, renamed. A link already pointing at
+      $Target is left alone, and so is one pointing elsewhere, which someone
+      chose: that returns a WARN note.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Link,
+        [Parameter(Mandatory)][string]$Target
+    )
+
+    New-GuestFolder -Path $Target
+    $item = Get-Item -LiteralPath $Link -Force -ErrorAction SilentlyContinue
+    if ($item -and $item.LinkType) {
+        if (@($item.Target) -contains $Target) { return }
+        return New-GuestNote -Level WARN -Text "$Link already links to $(@($item.Target) -join ', '); left as it is"
+    }
+    if ($item) {
+        Copy-GuestFolderContent -Source $Link -Destination $Target
+        Rename-Item -LiteralPath $Link -NewName "$($item.Name).before-user-disk-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    }
+    else {
+        New-GuestFolder -Path (Split-Path -Path $Link -Parent)
+    }
+    New-Item -ItemType Junction -Path $Link -Value $Target | Out-Null
+    return New-GuestNote -Level OK -Text "linked $Link to $Target"
+}
+
+function Set-GuestShellFolder {
+    <#
+      Points the shell folder $Name, and each of $Aliases Windows already
+      has, at $Path, once what its current location holds is copied there.
+      Explorer picks the new location up at the next sign-in.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [string[]]$Aliases = @(),
+        [Parameter(Mandatory)][string]$Path,
+        [string]$Key = $script:UserShellFolderKey
+    )
+
+    New-GuestFolder -Path $Path
+    $values = (Get-Item -LiteralPath $Key).GetValueNames()
+    $current = [Environment]::ExpandEnvironmentVariables("$((Get-Item -LiteralPath $Key).GetValue($Name, ''))")
+    if ($current -and $current.TrimEnd('\') -ne $Path.TrimEnd('\') -and (Test-Path -LiteralPath $current -PathType Container)) {
+        Copy-GuestFolderContent -Source $current -Destination $Path
+    }
+    foreach ($value in @($Name) + @($Aliases | Where-Object { $values -contains $_ })) {
+        Set-ItemProperty -LiteralPath $Key -Name $value -Value $Path -Type ExpandString
+    }
+}
+
+function Grant-GuestFolderAccess {
+    <#
+      Makes $Path and everything in it belong to the account $Sid, with full
+      control for it, SYSTEM and Administrators and no one else. A rebuilt
+      guest's account has a new SID, so what the old one had is dropped.
+      Returns whether anything changed: nothing does once it is so.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Sid
+    )
+
+    $allowed = @($Sid, 'S-1-5-18', 'S-1-5-32-544')
+    $acl = Get-Acl -LiteralPath $Path
+    $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    $others = @($acl.GetAccessRules($true, $false, [Security.Principal.SecurityIdentifier]) | Where-Object { $allowed -notcontains $_.IdentityReference.Value })
+    if ($acl.AreAccessRulesProtected -and $owner -eq $Sid -and $others.Count -eq 0) { return $false }
+
+    $acl = New-Object Security.AccessControl.DirectorySecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($who in $allowed) {
+        $identity = New-Object Security.Principal.SecurityIdentifier $who
+        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+    }
+    $acl.SetOwner((New-Object Security.Principal.SecurityIdentifier $Sid))
+    Set-Acl -LiteralPath $Path -AclObject $acl
+
+    # What is inside inherits the folder's permissions and changes owner.
+    if (@(Get-ChildItem -LiteralPath $Path -Force).Count -gt 0) {
+        & icacls.exe (Join-Path $Path '*') '/reset' '/T' '/C' '/Q' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "could not reset the permissions inside $Path (icacls exit $LASTEXITCODE)" }
+        & icacls.exe (Join-Path $Path '*') '/setowner' "*$Sid" '/T' '/C' '/Q' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "could not change the owner inside $Path (icacls exit $LASTEXITCODE)" }
+    }
+    return $true
+}
+
+function Get-GuestUserFolderProblem {
+    <#
+      What is not yet on the User disk at $Root: each of $Folders whose shell
+      folder points elsewhere, or whose place in $ProfileDir is not a link.
+      A link someone pointed elsewhere counts as their choice. Returns
+      nothing when every folder is in place.
+    #>
+    param(
+        [Parameter(Mandatory)][object[]]$Folders,
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$ProfileDir,
+        [string]$Key = $script:UserShellFolderKey
+    )
+
+    foreach ($folder in $Folders) {
+        $target = Join-Path $Root $folder['Name']
+        if ($folder['ShellFolder']) {
+            $now = [Environment]::ExpandEnvironmentVariables("$((Get-Item -LiteralPath $Key).GetValue($folder['ShellFolder'], ''))")
+            if ($now.TrimEnd('\') -ne $target) { "$($folder['Name']) is at '$now', not $target" }
+        }
+        else {
+            $link = Join-Path $ProfileDir $folder['Link']
+            if (-not (Get-Item -LiteralPath $link -Force -ErrorAction SilentlyContinue).LinkType) { "$link is not linked to $target" }
+        }
+    }
+}
+
 # ── Installed software ───────────────────────────────────────────────────────
 
 function Find-GuestWinget {

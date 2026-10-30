@@ -631,7 +631,8 @@ Describe 'New-VMProfile' {
             Alpha = '{ "MemMaxGB": 32, "LogFile": "Logs\\Alpha-Old.log", "GuestComputerName": "ALPHA",
                        "SQLDiskGuid": "{11111111-2222-3333-4444-555555555555}", "SQLDiskScsiLocation": 1,
                        "DevDriveGuid": "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}", "DevDriveScsiLocation": 2,
-                       "Tooling": ' + $toolingJson + ' }'
+                       "UserDiskGuid": "{BBBBBBBB-BBBB-CCCC-DDDD-EEEEEEEEEEEE}", "UserDiskScsiLocation": 3,
+                       "Tooling":' + $toolingJson + ' }'
         }
 
         $path = InModuleScope $module -Parameters @{ Root = $root } {
@@ -644,7 +645,7 @@ Describe 'New-VMProfile' {
         $vmProfile.LogFile | Should -Be '{VM}\Logs\{VM}.log'
         $vmProfile.GuestComputerName | Should -Be '{VM}'
         # The source VM's disks are not the new VM's: it records its own.
-        foreach ($identity in 'SQLDiskGuid', 'SQLDiskScsiLocation', 'DevDriveGuid', 'DevDriveScsiLocation') {
+        foreach ($identity in 'SQLDiskGuid', 'SQLDiskScsiLocation', 'DevDriveGuid', 'DevDriveScsiLocation', 'UserDiskGuid', 'UserDiskScsiLocation') {
             $vmProfile.Keys | Should -Contain $identity
             $vmProfile[$identity] | Should -BeNullOrEmpty -Because "-From must not copy $identity"
         }
@@ -707,6 +708,7 @@ Describe 'Read-VMSetting' {
         $settings.ISOPath | Should -Be "$root\Shared\ISO\Win11Ent_Eval.iso"
         $settings.SQLDiskPath | Should -Be "$root\Alpha\Disks\Alpha-SQL.vhdx"
         $settings.DevDrivePath | Should -Be "$root\Alpha\Disks\Alpha-DevDrive.vhdx"
+        $settings.UserDiskPath | Should -Be "$root\Alpha\Disks\Alpha-User.vhdx"
         $result.Sources.MemMaxGB | Should -Be 'LazyVM.Settings.json'
         $result.Sources.vCPU | Should -Be 'Alpha\Config\VM.json'
         $result.Sources.UseDevDrive | Should -Be 'Default'
