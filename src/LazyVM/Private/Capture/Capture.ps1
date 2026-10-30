@@ -61,6 +61,10 @@ function Save-GuestState {
     foreach ($name in $run.Results.Keys) { $manifest.$name = $run.Results[$name] }
     $manifest.Warnings = @($run.Failures | ForEach-Object { "capture of $_" })
 
+    # Without a fingerprint the next daily run simply captures again (#20).
+    try { $manifest.Fingerprint = Get-GuestStateFingerprint -VM $VM }
+    catch { Write-LogEntry "Could not take the state fingerprint: $($_.Exception.Message)" 'WARN' }
+
     $manifest.Databases = @($manifest.Sql | Where-Object { $_ } | ForEach-Object { @($_.Databases) } | Where-Object { $_ } | ForEach-Object { $_.Name })
     $manifest.Summary = "$($manifest.Databases.Count) database(s) backed up"
 
@@ -96,6 +100,59 @@ function Remove-OldCapture {
         }
         catch { Write-LogEntry "  could not remove the old capture $($item.FullName): $($_.Exception.Message)" 'WARN' }
     }
+}
+
+function Get-GuestStateFingerprint {
+    <#
+      A cheap fingerprint of what a capture keeps that the daily records in
+      VM.json do not (#20): the certificates a capture would export, by
+      thumbprint, and the live Visual Studio settings, by hash.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $vs = Get-GuestVisualStudio -VM $VM
+    $instanceId = if ($vs) { "$($vs.InstanceId)" } else { '' }
+    $snapshot = Invoke-GuestScript -VM $VM -Activity 'state fingerprint' -TimeoutMinutes 5 -ArgumentList @($instanceId) -ScriptBlock {
+        param($instanceId)
+        $ErrorActionPreference = 'Stop'
+        $settings = if ($instanceId) { Get-GuestVisualStudioSettingsFile -InstanceId $instanceId } else { $null }
+        return [pscustomobject]@{
+            Thumbprints              = @(Get-GuestCapturedCertificate | ForEach-Object { $_.Certificate.Thumbprint })
+            VisualStudioSettingsHash = if ($settings) { (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash } else { '' }
+        }
+    }
+    return ConvertTo-GuestStateFingerprint -Snapshot $snapshot
+}
+
+function ConvertTo-GuestStateFingerprint {
+    <# The fingerprint from what the guest reported: thumbprints sorted and without repeats, so the same certificates always compare equal. #>
+    param([Parameter(Mandatory)][object]$Snapshot)
+
+    return [ordered]@{
+        Certificates         = (@($Snapshot.Thumbprints | Where-Object { $_ } | ForEach-Object { "$_".ToUpperInvariant() } | Sort-Object -Unique) -join ',')
+        VisualStudioSettings = [string]$Snapshot.VisualStudioSettingsHash
+    }
+}
+
+function Test-GuestStateChanged {
+    <#
+      Whether the guest has changed since its newest capture in a way only a
+      capture keeps (#20): true when there is no capture, or no fingerprint
+      in it, or the fingerprint differs. Logs what changed.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $recorded = (Get-CaptureManifest -VM $VM)
+    if (-not $recorded -or -not $recorded.Fingerprint) {
+        Write-LogEntry 'No state fingerprint recorded yet - capturing' 'INFO'
+        return $true
+    }
+    $current = Get-GuestStateFingerprint -VM $VM
+    $changed = @($current.Keys | Where-Object { "$($current[$_])" -ne "$($recorded.Fingerprint.$_)" })
+    if ($changed.Count -eq 0) { return $false }
+    Write-LogEntry "Changed since the last capture: $($changed -join ', ') - capturing" 'INFO'
+    return $true
 }
 
 function Get-GuestIdentity {
@@ -141,15 +198,8 @@ function Save-GuestVisualStudioState {
         New-GuestFolder -Path $setupDir
         $out = [ordered]@{ Settings = $null; NuGetConfig = $null; GitConfig = $null; UserItems = $null; Notes = @() }
 
-        # Visual Studio writes a .vssettings backup every time it closes, so
-        # the newest one is the live configuration. The folder is named
-        # <version>_<instance id>, which ties it to this Visual Studio.
-        $candidates = @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Microsoft\VisualStudio') -Directory -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -like "*_$instanceId" } |
-                ForEach-Object { Get-ChildItem -Path (Join-Path $_.FullName 'Settings') -Filter '*.vssettings' -File -ErrorAction SilentlyContinue } |
-                Sort-Object LastWriteTime -Descending)
-        if ($candidates.Count -gt 0) { $out.Settings = $candidates[0].FullName }
-        else { $out.Notes += New-GuestNote -Level WARN -Text 'no .vssettings backup found (open and close Visual Studio once to create one)' }
+        $out.Settings = Get-GuestVisualStudioSettingsFile -InstanceId $instanceId
+        if (-not $out.Settings) { $out.Notes += New-GuestNote -Level WARN -Text 'no .vssettings backup found (open and close Visual Studio once to create one)' }
 
         $nuget = Join-Path $env:APPDATA 'NuGet\NuGet.Config'
         if (Test-Path $nuget) { $out.NuGetConfig = $nuget }
@@ -387,10 +437,8 @@ function Save-GuestWindowsState {
 
 function Save-GuestCertificate {
     <#
-      Personal certificates, and self-signed roots, which is where developer
-      and local HTTPS certificates live, as .pfx with their keys where the key
-      can be exported and .cer otherwise. The stock trust list comes back with
-      a fresh Windows install anyway.
+      The certificates Get-GuestCapturedCertificate picks, as .pfx with their
+      keys where the key can be exported and .cer otherwise.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'The certificate PFX password has to cross into the guest as text, where it becomes a SecureString again.')]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'The PFX password arrives in the guest as text and becomes a SecureString there.')]
@@ -404,30 +452,27 @@ function Save-GuestCertificate {
         param($staging, $certPassword)
         $securePassword = ConvertTo-SecureString -String $certPassword -AsPlainText -Force
         $out = @{ Certificates = @(); Notes = @() }
-        foreach ($store in 'Cert:\LocalMachine\My', 'Cert:\CurrentUser\My', 'Cert:\LocalMachine\Root') {
-            foreach ($cert in @(Get-ChildItem -Path $store -ErrorAction SilentlyContinue)) {
-                # In the root store, only certificates someone made themselves.
-                if ($store -eq 'Cert:\LocalMachine\Root' -and $cert.Issuer -ne $cert.Subject) { continue }
-                if ($store -eq 'Cert:\LocalMachine\Root' -and $cert.Subject -match '(?i)microsoft|verisign|digicert|globalsign|baltimore|thawte|entrust|sectigo|comodo|go daddy|symantec|starfield|usertrust') { continue }
-                $file = Join-Path $staging "certs\$($cert.Thumbprint).pfx"
-                try { Export-PfxCertificate -Cert $cert -FilePath $file -Password $securePassword -ErrorAction Stop | Out-Null }
+        foreach ($found in @(Get-GuestCapturedCertificate)) {
+            $cert = $found.Certificate
+            $store = $found.Store
+            $file = Join-Path $staging "certs\$($cert.Thumbprint).pfx"
+            try { Export-PfxCertificate -Cert $cert -FilePath $file -Password $securePassword -ErrorAction Stop | Out-Null }
+            catch {
+                # No exportable private key: a .cer still restores trust.
+                $file = Join-Path $staging "certs\$($cert.Thumbprint).cer"
+                try { Export-Certificate -Cert $cert -FilePath $file -ErrorAction Stop | Out-Null }
                 catch {
-                    # No exportable private key: a .cer still restores trust.
-                    $file = Join-Path $staging "certs\$($cert.Thumbprint).cer"
-                    try { Export-Certificate -Cert $cert -FilePath $file -ErrorAction Stop | Out-Null }
-                    catch {
-                        $out.Notes += New-GuestNote -Level WARN -Text "certificate $($cert.Thumbprint) could not be exported: $($_.Exception.Message)"
-                        continue
-                    }
+                    $out.Notes += New-GuestNote -Level WARN -Text "certificate $($cert.Thumbprint) could not be exported: $($_.Exception.Message)"
+                    continue
                 }
-                $out.Certificates += [pscustomobject]@{
-                    Thumbprint = $cert.Thumbprint
-                    Subject    = "$($cert.Subject)"
-                    Store      = $store
-                    File       = [IO.Path]::GetFileName($file)
-                    HasKey     = ($file -like '*.pfx')
-                    NotAfter   = $cert.NotAfter.ToString('o')
-                }
+            }
+            $out.Certificates += [pscustomobject]@{
+                Thumbprint = $cert.Thumbprint
+                Subject    = "$($cert.Subject)"
+                Store      = $store
+                File       = [IO.Path]::GetFileName($file)
+                HasKey     = ($file -like '*.pfx')
+                NotAfter   = $cert.NotAfter.ToString('o')
             }
         }
         return [pscustomobject]$out

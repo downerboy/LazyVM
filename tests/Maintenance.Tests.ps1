@@ -30,6 +30,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
         Mock -ModuleName $module Save-GuestState { 'stray' }
+        Mock -ModuleName $module Test-GuestStateChanged { $false }
     }
 
     It 'returns only None when nothing is due' {
@@ -49,6 +50,33 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Backup-GuestUserDatabase -Times 1
+    }
+
+    It 'captures the state when it changed and nothing else is due (#20)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Test-GuestStateChanged { $true }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Save-GuestState -Times 1
+    }
+
+    It 'captures nothing when the state is unchanged and nothing else is due (#20)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        Should -Invoke -ModuleName $module Save-GuestState -Times 0
+    }
+
+    It 'carries on when the change check fails (#20)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Test-GuestStateChanged { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
     }
 
     It 'returns only Rearmed after a rearm' {
