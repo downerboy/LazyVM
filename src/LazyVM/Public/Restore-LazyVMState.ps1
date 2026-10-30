@@ -30,7 +30,7 @@ function Restore-LazyVMState {
             if (-not $PSCmdlet.ShouldProcess($VM.Name, "Apply the capture in $($VM.Settings.StateDir) to the VM")) {
                 return
             }
-            $restored = @(Restore-GuestState -VM $VM)[-1]
+            $restored = Restore-GuestState -VM $VM
             Restore-GuestVisualStudioSetting -VM $VM
             if ($restored -eq $false) {
                 throw "The restore into '$($VM.Name)' did not complete. The log says what failed: $($VM.Settings.LogFile)"

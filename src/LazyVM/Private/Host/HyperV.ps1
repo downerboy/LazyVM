@@ -181,7 +181,7 @@ function Enable-HyperVFeature {
     }
 
     Write-LogEntry "Not yet enabled: $($disabled -join ', ')" 'WARN'
-    Register-ResumeTask -VM $VM -Phase 3
+    $null = Register-ResumeTask -VM $VM -Phase 3
 
     Write-LogEntry 'Enabling Microsoft-Hyper-V-All (several minutes)...' 'WARN'
     $result = Enable-WindowsOptionalFeature -Online -FeatureName 'Microsoft-Hyper-V-All' -All -NoRestart
@@ -194,7 +194,7 @@ function Enable-HyperVFeature {
     }
 
     Write-LogEntry 'Hyper-V enabled without requiring a restart' 'OK'
-    Unregister-ResumeTask -VM $VM
+    $null = Unregister-ResumeTask -VM $VM
     return $false
 }
 

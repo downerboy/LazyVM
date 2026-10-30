@@ -51,6 +51,21 @@ Describe 'Invoke-Maintenance' {
     }
 }
 
+Describe 'Invoke-GuestRearm' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Success = $true; Reason = ''; Before = 2 } }
+        Mock -ModuleName $module Restart-GuestAndWait { 'stray' }
+    }
+
+    It 'returns only $true when the rearm is accepted' {
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-GuestRearm -VM $VM })
+
+        $result.Count | Should -Be 1
+        $result[0] | Should -BeTrue
+    }
+}
+
 Describe 'Invoke-Rebuild' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
