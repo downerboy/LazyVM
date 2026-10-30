@@ -212,6 +212,40 @@ function Mount-GuestSqlDatabase {
     return 'Attached'
 }
 
+function Get-GuestCapturedCertificate {
+    <#
+      The certificates a capture keeps: personal ones, and self-signed roots,
+      which is where developer and local HTTPS certificates live. The stock
+      trust list comes back with a fresh Windows install anyway. Each comes
+      with the store it is in, as Store.
+    #>
+    foreach ($store in 'Cert:\LocalMachine\My', 'Cert:\CurrentUser\My', 'Cert:\LocalMachine\Root') {
+        foreach ($cert in @(Get-ChildItem -Path $store -ErrorAction SilentlyContinue)) {
+            # In the root store, only certificates someone made themselves.
+            if ($store -eq 'Cert:\LocalMachine\Root' -and $cert.Issuer -ne $cert.Subject) { continue }
+            if ($store -eq 'Cert:\LocalMachine\Root' -and $cert.Subject -match '(?i)microsoft|verisign|digicert|globalsign|baltimore|thawte|entrust|sectigo|comodo|go daddy|symantec|starfield|usertrust') { continue }
+            [pscustomobject]@{ Certificate = $cert; Store = $store }
+        }
+    }
+}
+
+function Get-GuestVisualStudioSettingsFile {
+    <#
+      The newest .vssettings backup of the Visual Studio with instance
+      $InstanceId, or $null. Visual Studio writes one every time it closes,
+      so the newest is the live configuration. Its folder is named
+      <version>_<instance id>, which ties it to that Visual Studio.
+    #>
+    param([Parameter(Mandatory)][string]$InstanceId)
+
+    $newest = @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Microsoft\VisualStudio') -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "*_$InstanceId" } |
+            ForEach-Object { Get-ChildItem -Path (Join-Path $_.FullName 'Settings') -Filter '*.vssettings' -File -ErrorAction SilentlyContinue } |
+            Sort-Object LastWriteTime -Descending) | Select-Object -First 1
+    if ($newest) { return $newest.FullName }
+    return $null
+}
+
 function Backup-GuestSqlDatabase {
     <#
       Checks database $Name with DBCC CHECKDB and, only when it passes, backs

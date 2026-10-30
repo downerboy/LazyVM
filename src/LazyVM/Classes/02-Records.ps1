@@ -307,6 +307,8 @@ class CaptureManifest {
     [object]$Windows
     [object]$Projects
     [object]$AppSettings
+    # What the daily records do not cover, as it was when captured (#20).
+    [object]$Fingerprint
     [string[]]$Warnings = @()
     [string]$Summary
     [string[]]$Databases = @()
@@ -321,7 +323,7 @@ class CaptureManifest {
         foreach ($name in 'CapturedAt', 'CapturedFrom', 'Stamp', 'Summary') {
             $manifest.$name = [RecordReader]::Text($item, $name)
         }
-        foreach ($name in 'Guest', 'VisualStudio', 'Sql', 'Windows', 'Projects', 'AppSettings') {
+        foreach ($name in 'Guest', 'VisualStudio', 'Sql', 'Windows', 'Projects', 'AppSettings', 'Fingerprint') {
             $manifest.$name = [RecordReader]::Field($item, $name)
         }
         $manifest.Warnings = [RecordReader]::Strings($item, 'Warnings')

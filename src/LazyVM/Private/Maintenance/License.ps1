@@ -181,6 +181,9 @@ function Invoke-Maintenance {
     if ($decision -eq [MaintenanceDecision]::None) {
         if ($license.DaysLeft -lt 0) { Write-LogEntry 'No evaluation countdown reported - nothing to do' 'OK' }
         else { Write-LogEntry "More than $threshold days remain - no action needed" 'OK' }
+        # A full capture whenever the guest changed in a way only a capture keeps (#20).
+        try { if (Test-GuestStateChanged -VM $VM) { $null = Save-GuestState -VM $VM } }
+        catch { Write-LogError 'State change check or capture failed (non-fatal)' $_ }
         if ($wasOff) { $null = Stop-GuestGracefully -VM $VM }
         return [MaintenanceStep]::None
     }

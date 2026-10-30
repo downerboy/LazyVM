@@ -222,7 +222,7 @@ Expect it to take between five and thirty minutes, depending on database size. W
 
 `Build-LazyVM` schedules it when the build succeeds. If that step fails, the build still succeeds and warns you; fix the cause and run `Register-LazyVMMaintenance`. Running that again at any time is harmless.
 
-This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records in `VM.json` any change made to the VM's hardware in Hyper-V (processors, memory, disk sizes, switch) and any tooling change ([section 9](#9-tooling-and-going-back)). It checks every user database with `DBCC CHECKDB` and, only when the check passes, backs it up to `D:\SQLBackup`, keeping one good, verified backup of each: a database that fails its check keeps the backup it had, and the log says so with `[X]`. Then it reads the license. On almost every day it finds plenty of time remaining and finishes within a few minutes, depending on database size.
+This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records in `VM.json` any change made to the VM's hardware in Hyper-V (processors, memory, disk sizes, switch) and any tooling change ([section 9](#9-tooling-and-going-back)). It checks every user database with `DBCC CHECKDB` and, only when the check passes, backs it up to `D:\SQLBackup`, keeping one good, verified backup of each: a database that fails its check keeps the backup it had, and the log says so with `[X]`. It then compares the VM's certificates and Visual Studio settings with the fingerprint the newest capture recorded, and takes a full capture when either has changed, so a change is captured the night after it is made, not only when the evaluation is about to expire. Then it reads the license. On almost every day it finds plenty of time remaining and finishes within a few minutes, depending on database size.
 
 A daily task is used rather than a 90-day one on purpose. A task that fires exactly every 90 days drifts past the expiry date, and misses it entirely if the host happens to be off that day.
 
@@ -713,7 +713,7 @@ Get-Service MSSQLSERVER | Select-Object Name, Status
 ## 13. Habits worth keeping
 
 - **Keep source on the Dev Drive (`W:`), and in source control.** The Dev Drive is fast, persists across rebuilds, and nothing in its path can break. Commit and push regularly, so that a clone, not a capture, is the backup for your code. This is the single most useful habit.
-- **Capture after meaningful changes**: new databases, settings you care about, certificates. Maintenance captures before it acts, but a recent capture of your own costs nothing.
+- **Capture after meaningful changes**: new databases, settings you care about, certificates. The daily run captures new certificates and Visual Studio settings the night after they change, and maintenance captures before it acts, but a capture of your own costs nothing. Project folders inside the VM are captured only by these.
 - **Close Visual Studio before a capture**, so its settings backup is current.
 - **Read the `[!]` lines after a capture.** Anything reported as not migrated has to be recreated by hand after a rebuild.
 - **Check `Get-LazyVMLicense` occasionally**, so the rearm count is never a surprise.
