@@ -580,6 +580,39 @@
       "minimum": 0,
       "maximum": 63
     },
+    "UserDiskPath": {
+      "type": "string",
+      "default": "{VM}\\Disks\\{VM}-User.vhdx",
+      "description": "The User disk: Documents, Desktop, Downloads, .ssh and source\\repos live on it, so a rebuild never touches them. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+    },
+    "UserDiskSizeGB": {
+      "type": "integer",
+      "default": 20,
+      "description": "Size of the User disk in GB. It grows as needed up to this size.",
+      "minimum": 5,
+      "maximum": 65536
+    },
+    "UserDiskLetter": {
+      "type": "string",
+      "default": "U",
+      "description": "Preferred letter for the User disk inside the VM. If it is taken, another is chosen.",
+      "pattern": "^[D-Zd-z]$"
+    },
+    "UserDiskGuid": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Recorded by LazyVM: the User disk's GPT disk GUID inside the VM, written the first time the VM prepares the disk. It is the first thing LazyVM looks for to find the disk. Leave it as it is; a VM copied with -From starts without it.",
+      "pattern": "^\\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\}$"
+    },
+    "UserDiskScsiLocation": {
+      "type": ["integer", "null"],
+      "default": null,
+      "description": "Recorded by LazyVM: the location on the VM's SCSI controller 0 where the User disk was attached. It is how a new, empty disk is found. Leave it as it is; a VM copied with -From starts without it.",
+      "minimum": 0,
+      "maximum": 63
+    },
     "CheckpointDir": {
       "type": "string",
       "default": "{VM}\\Checkpoints",
@@ -816,7 +849,7 @@
         "%USERPROFILE%\\Desktop",
         "%USERPROFILE%\\.ssh"
       ],
-      "description": "Folders inside the VM captured and carried across a rebuild. The Dev Drive needs none of this: it survives a rebuild on its own.",
+      "description": "No longer used: Documents, Desktop, Downloads, .ssh and source\\repos are on the User disk, which a rebuild never touches (#137). Kept so older VM.json files still load; it can be deleted.",
       "items": {
         "type": "string",
         "minLength": 1
@@ -834,7 +867,7 @@
         "TestResults",
         ".git"
       ],
-      "description": "Folder names left out when capturing GuestProjectPaths.",
+      "description": "No longer used, since GuestProjectPaths is not captured. Kept so older VM.json files still load; it can be deleted.",
       "items": {
         "type": "string",
         "minLength": 1
@@ -844,14 +877,14 @@
     "MaxProjectCaptureGB": {
       "type": "integer",
       "default": 20,
-      "description": "The most project files a capture will copy, in GB.",
+      "description": "No longer used, since GuestProjectPaths is not captured. Kept so older VM.json files still load; it can be deleted.",
       "minimum": 1,
       "maximum": 1024
     },
     "GuestRestoreRoot": {
       "type": "string",
       "default": "%USERPROFILE%\\source",
-      "description": "Where captured project folders are restored inside the VM.",
+      "description": "No longer used, since GuestProjectPaths is not captured. Kept so older VM.json files still load; it can be deleted.",
       "minLength": 1
     },
     "ToolingCheckpointsToKeep": {

@@ -247,6 +247,7 @@ Describe 'Recording a data disk''s identity' {
     It 'writes the GPT disk GUID back to VM.json once the guest has prepared the <Label>' -ForEach @(
         @{ Label = 'SQL data disk'; Function = 'Initialize-GuestSqlDisk'; Setting = 'SQLDiskGuid'; LocationSetting = 'SQLDiskScsiLocation' }
         @{ Label = 'Dev Drive'; Function = 'Initialize-GuestDevDrive'; Setting = 'DevDriveGuid'; LocationSetting = 'DevDriveScsiLocation' }
+        @{ Label = 'User disk'; Function = 'Initialize-GuestUserDisk'; Setting = 'UserDiskGuid'; LocationSetting = 'UserDiskScsiLocation' }
     ) {
         $root = New-TestRoot -VMJson "{ `"$LocationSetting`": 2 }"
         Mock -ModuleName $module Get-VMHardDiskDrive { }
@@ -260,6 +261,7 @@ Describe 'Recording a data disk''s identity' {
                     VMName = 'Alpha'; Root = $Root; UseDevDrive = $true; DevDriveLetter = 'W'; DevDriveLabel = 'DevDrive'; DevDriveFilters = @()
                     GuestDataDriveLetter = 'D'; SqlDataFolder = 'SQLData'; SqlLogFolder = 'SQLLog'; SqlTempFolder = 'SQLTemp'; SqlBackupFolder = 'SQLBackup'
                     SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx"; DevDrivePath = "$Root\Alpha\Disks\Alpha-DevDrive.vhdx"
+                    UserDiskPath = "$Root\Alpha\Disks\Alpha-User.vhdx"; UserDiskLetter = 'U'
                 })
             & $Function -VM $vm
         }

@@ -6,7 +6,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
-- Host paths are relative to the LazyVM folder (`HKLM:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk and `W:` is the Dev Drive.
+- Host paths are relative to the LazyVM folder (`HKLM:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
 - Every command except `Get-LazyVM`, `Get-LazyVMSetting`, `New-LazyVM` and `Get-LazyVMCredential` starts with `Initialize-CommandRun` and ends with `Complete-CommandRun`, which closes the guest session and the log.
 - A call that happens only in some cases says so in its box.
 
@@ -153,8 +153,8 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
    - Reads D13, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
    - Writes D14, Windows ISO in place: Shared\ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
    - Writes D15, SQL Server ISO in place: Shared\Installers\ (SQLServer2025-x64-ENU-, EntDev.iso)
-9. `Initialize-SqlDataVhd` (Host, called by Invoke-VMBuild): phase 5; also Initialize- DevDriveVhd. Existing disks are never overwritten
-   - Writes D16, data disk and Dev Drive: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB))
+9. `Initialize-SqlDataVhd` (Host, called by Invoke-VMBuild): phase 5; also Initialize- DevDriveVhd and Initialize-UserDataVhd. Existing disks are never overwritten
+   - Writes D16, data disk, Dev Drive and User disk: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB), <VM>-User.vhdx  (20 GB))
 10. `Get-GuestCredential` (Credentials, called by Invoke-VMBuild): -CreateIfMissing; skipped with -NoUnattend or if the VM exists
    - Reads D17, guest credential: Credential store (Shared\Credentials\.lazyvm.key, <VM>\Credentials\guest.cred)
    - Writes D18, credential, if new: Credential store (Shared\Credentials\.lazyvm.key, <VM>\Credentials\guest.cred)
@@ -164,10 +164,10 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
    - Reads D20, install discs: Shared\ISO\  <VM>\Disks\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
    - Writes D21, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
    - Writes D22, new VM: VM <VM> (started from the ISO,, Windows installs unattended)
-13. `Install-GuestSoftware` (Installation, called by Invoke-VMBuild): phase 7: waits for Setup, extends C: over the whole OS disk, attaches D: and W:, customizes Windows, installs the tooling list
+13. `Install-GuestSoftware` (Installation, called by Invoke-VMBuild): phase 7: waits for Setup, extends C: over the whole OS disk, attaches D:, W: and U:, puts Documents, Desktop, Downloads, .ssh and source\repos on U:, customizes Windows, installs the tooling list
    - Reads D23, tooling list: <VM>\Config\ (VM.json, its Tooling, or the shared template's)
    - Reads D24, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
-   - Writes D25, installed tooling: Guest (D: data disk, W: Dev Drive, VS + SSMS, extensions, SQL Server 2025, winget apps)
+   - Writes D25, installed tooling: Guest (D: data disk, W: Dev Drive, U: User disk, VS + SSMS, extensions, SQL Server 2025, winget apps)
    - Writes D26, what needs a manual install: <VM>\ (Config\VM.json, State\reinstall-by-hand.txt)
 14. `Complete-GuestConfiguration` (Installation, called by Invoke-VMBuild): phase 8: SQL files to D:, VS settings, databases
    - Reads D27, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
@@ -200,6 +200,7 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
    - Reads D4, guest credential: Credential store (Shared\Credentials\.lazyvm.key, <VM>\Credentials\guest.cred)
    - Writes D5, PowerShell Direct session: VM <VM> (running, reachable)
    - Then `Expand-GuestSystemDrive` (Installation): when the OS disk has new space: checkpoint, then moves the recovery partition to the end of the disk and extends C: up to it; a failure keeps the checkpoint and does not stop the run
+   - Then `Install-UserDisk` (Disks): creates and attaches the User disk if missing and copies what the personal folders hold on C: to it; a failure does not stop the run
 4. `Update-ToolingRecord` (Tooling, called by Invoke-Maintenance): takes the checkpoint before adopting a change; a failure does not stop the run
    - Reads D6, what is installed: Guest tooling (vswhere + vs_installer export, winget export, Marketplace extensions)
    - Reads D7, last recorded tooling list: <VM>\Config\ (VM.json)
@@ -211,7 +212,7 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
    - Reads D12, threshold: VM settings (RebuildThresholdDays = 10)
 7. `Save-GuestState` (Capture, called by Invoke-Maintenance): only on rearm or rebuild (see Capture state)
    - Reads D13, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
-   - Writes D14, captured state: <VM>\State\ (vs\  windows\  sql\, projects\, manifest.json, manifest-<stamp>.json)
+   - Writes D14, captured state: <VM>\State\ (vs\  windows\  sql\, manifest.json, manifest-<stamp>.json)
 8. `Invoke-GuestRearm` (Maintenance, called by Invoke-Maintenance): slmgr rearm, then Restart-GuestAndWait
    - Writes D15, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
 9. `Stop-GuestGracefully` (Maintenance, called by Invoke-Maintenance): only if the VM was off before the run
@@ -241,7 +242,7 @@ Build-LazyVM already does this. Use it after changing MaintenanceTime, or if sch
 
 `Invoke-LazyVMRebuild` `-Name <VM>` `-SkipCapture, -NoUnattend`
 
-Capture, retire the old VM, build a new one, restore, verify. The old Windows disk is deleted only after the new VM passes verification. The data disk and Dev Drive are never touched.
+Capture, retire the old VM, build a new one, restore, verify. The old Windows disk is deleted only after the new VM passes verification. The data disk, Dev Drive and User disk are never touched.
 
 Called by: `Invoke-LazyVMMaintenance` (no rearms left).
 
@@ -251,9 +252,10 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
    - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
 2. `Invoke-Rebuild` (Maintenance): steps 3-15 are its calls
-3. `Save-GuestState` (Capture, called by Invoke-Rebuild): skipped with -SkipCapture: the last manifest is used
+3. `Install-UserDisk` (Disks, called by Invoke-Rebuild): only if the VM exists; copies the personal folders to the User disk, and nothing is retired if it cannot
+   Then `Save-GuestState` (Capture, called by Invoke-Rebuild): skipped with -SkipCapture: the last manifest is used
    - Reads D3, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
-   - Writes D4, captured state: <VM>\State\ (vs\  windows\  sql\, projects\, manifest.json, manifest-<stamp>.json)
+   - Writes D4, captured state: <VM>\State\ (vs\  windows\  sql\, manifest.json, manifest-<stamp>.json)
    - Writes D5, database backups on the data disk: D:\SQLBackup\ (<database>.bak)
 4. `Invoke-RetireCurrentVM` (Maintenance, called by Invoke-Rebuild): only if the VM exists; shuts down, removes checkpoints and the VM definition; keeps disks
    - Reads D6, old VM: VM <VM> (old VM, checkpoints)
@@ -265,8 +267,8 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
    - Reads D10, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
    - Writes D11, Windows ISO in place: Shared\ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
    - Writes D12, SQL Server ISO in place: Shared\Installers\ (SQLServer2025-x64-ENU-, EntDev.iso)
-7. `Initialize-SqlDataVhd` (Host, called by Invoke-Rebuild): phase 5; also Initialize- DevDriveVhd. Existing disks are kept: they hold your data
-   - Writes D13, data disk and Dev Drive: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB))
+7. `Initialize-SqlDataVhd` (Host, called by Invoke-Rebuild): phase 5; also Initialize- DevDriveVhd and Initialize-UserDataVhd. Existing disks are kept: they hold your data
+   - Writes D13, data disk, Dev Drive and User disk: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB), <VM>-User.vhdx  (20 GB))
 8. `Get-GuestCredential` (Credentials, called by Invoke-Rebuild): -CreateIfMissing; skipped with -NoUnattend
    - Reads D14, guest credential: Credential store (Shared\Credentials\.lazyvm.key, <VM>\Credentials\guest.cred)
    - Writes D15, credential, if new: Credential store (Shared\Credentials\.lazyvm.key, <VM>\Credentials\guest.cred)
@@ -276,16 +278,16 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
    - Reads D17, install discs: Shared\ISO\  <VM>\Disks\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
    - Writes D18, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
    - Writes D19, new VM: VM <VM> (started from the ISO,, Windows installs unattended)
-11. `Install-GuestSoftware` (Installation, called by Invoke-Rebuild): phase 7: waits for Setup, extends C: over the whole OS disk, attaches D: and W:, customizes Windows, installs the tooling list
+11. `Install-GuestSoftware` (Installation, called by Invoke-Rebuild): phase 7: waits for Setup, extends C: over the whole OS disk, attaches D:, W: and U:, puts Documents, Desktop, Downloads, .ssh and source\repos on U:, customizes Windows, installs the tooling list
    - Reads D20, tooling list: <VM>\Config\ (VM.json, its Tooling, or the shared template's)
    - Reads D21, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
-   - Writes D22, installed tooling: Guest (D: data disk, W: Dev Drive, VS + SSMS, extensions, SQL Server 2025, winget apps)
+   - Writes D22, installed tooling: Guest (D: data disk, W: Dev Drive, U: User disk, VS + SSMS, extensions, SQL Server 2025, winget apps)
    - Writes D23, what needs a manual install: <VM>\State\ (reinstall-by-hand.txt)
 12. `Complete-GuestConfiguration` (Installation, called by Invoke-Rebuild): phase 8: SQL files to D:, VS settings, databases
    - Reads D24, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
    - Reads D25, database backups: D:\SQLBackup\ (<database>.bak)
    - Writes D26, configured guest: Guest (SQL data on D:\SQLData, VS settings imported, databases restored)
-13. `Restore-GuestState` (Restore, called by Invoke-Rebuild): Windows, VS, SQL, projects, app settings; a failed step does not stop the rest
+13. `Restore-GuestState` (Restore, called by Invoke-Rebuild): Windows, VS, SQL, app settings; a failed step does not stop the rest
    - Reads D27, captured state: <VM>\State\ (manifest.json and, captured files)
    - Writes D28, restored state: New guest (state put back)
 14. `Test-RebuiltVM` (Maintenance, called by Invoke-Rebuild): VM running and reachable, products, SQL, databases online, D: and W: mounted
@@ -393,7 +395,7 @@ Copies everything a rebuild must keep to the host. Maintenance and rebuilds run 
 1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
    - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
-2. `Save-GuestState` (Capture): steps 3-11 are its calls; a failed step is logged and the rest still run
+2. `Save-GuestState` (Capture): steps 3-10 are its calls; a failed step is logged and the rest still run
 3. `Connect-Guest` (Guest, called by Save-GuestState): starts the VM first if off (Wait-GuestReady)
    - Reads D3, guest credential: Credential store (Shared\Credentials\.lazyvm.key, <VM>\Credentials\guest.cred)
    - Writes D4, PowerShell Direct session: VM <VM> (running, reachable)
@@ -412,13 +414,10 @@ Copies everything a rebuild must keep to the host. Maintenance and rebuilds run 
    - Reads D12, Windows environment: Guest (environment, certificates, scheduled tasks, settings)
    - Writes D13, Windows state: <VM>\State\windows\ (zip of the export)
    - Writes D14, certificate password: <VM>\Credentials\ (certs.cred)
-9. `Save-GuestProjectFolder` (Capture, called by Save-GuestState): skips bin, obj, .git ... up to MaxProjectCaptureGB
-   - Reads D15, project files: GuestProjectPaths (source\repos, Documents ...)
-   - Writes D16, project files: <VM>\State\projects\ (zip)
-10. `Save-GuestAppSetting` (Capture, called by Save-GuestState)
+9. `Save-GuestAppSetting` (Capture, called by Save-GuestState)
    - Reads D17, registry keys: AppSettings keys (HKCU\Software\...)
    - Writes D18, application settings: <VM>\Config\VM.json (GuestAppSettings), <VM>\Credentials\ (appsettings.cred)
-11. `Write-TextFileAtomic` (Common, called by Save-GuestState): failed steps are listed as warnings
+10. `Write-TextFileAtomic` (Common, called by Save-GuestState): failed steps are listed as warnings
    - Writes D19, manifest: <VM>\State\ (manifest.json, manifest-<stamp>.json)
 
 <a id="restore"></a>
@@ -434,7 +433,7 @@ Applies the last capture to the VM. A rebuild runs this after installing.
 1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
    - Reads D1, settings, VM profile, guest user name: VM context sources (HKLM:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
-2. `Restore-GuestState` (Restore): steps 3-10 are its calls; a failed step is logged and the rest still run
+2. `Restore-GuestState` (Restore): steps 3-9 are its calls; a failed step is logged and the rest still run
 3. `Get-CaptureManifest` (Capture, called by Restore-GuestState): none: nothing to restore
    - Reads D3, what was captured: <VM>\State\ (manifest.json)
 4. `Connect-Guest` (Guest, called by Restore-GuestState): starts the VM first if off
@@ -451,10 +450,7 @@ Applies the last capture to the VM. A rebuild runs this after installing.
    - Reads D10, backups: D:\SQLBackup\ (<database>.bak)
    - Reads D11, logins: <VM>\State\sql\ (logins)
    - Writes D12, SQL restored: SQL Server (databases and logins)
-9. `Restore-GuestProjectFolder` (Restore, called by Restore-GuestState): 10d, under GuestRestoreRoot
-   - Reads D13, project files: <VM>\State\projects\ (zip)
-   - Writes D14, projects restored: Guest (%USERPROFILE%\source)
-10. `Restore-GuestAppSetting` (Restore, called by Restore-GuestState): 10e
+9. `Restore-GuestAppSetting` (Restore, called by Restore-GuestState): 10e
    - Reads D15, app settings: <VM>\Config\VM.json (GuestAppSettings), <VM>\Credentials\ (appsettings.cred)
    - Writes D16, app settings restored: Guest (registry values written)
 
@@ -464,7 +460,7 @@ Applies the last capture to the VM. A rebuild runs this after installing.
 
 `Remove-LazyVM` `-Name <VM>` `-WhatIf lists everything`
 
-Deletes the VM and everything created for it, Dev Drive included. Anything another VM also uses is kept and listed with the reason.
+Deletes the VM and everything created for it, Dev Drive and User disk included. Anything another VM also uses is kept and listed with the reason.
 
 ![Remove a VM: call order and data flow](diagrams/remove.svg)
 

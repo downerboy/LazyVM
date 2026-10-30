@@ -61,6 +61,7 @@ function Get-VMOwnedPath {
     $files = @(
         $Settings.SQLDiskPath
         $Settings.DevDrivePath
+        $Settings.UserDiskPath
         $Settings.SeedDiskPath
         $Settings.OSDiskPath
         $Settings.VSSettingsBackup
@@ -355,12 +356,19 @@ function Get-VMRemovalContext {
         Write-LogEntry "  Kept         $($item.Path) - $($item.Reason)" 'INFO'
     }
 
-    $devDriveInRoot = $vmRoot -and $settings.DevDrivePath -and (Test-PathWithin -Path $settings.DevDrivePath -Folder $vmRoot)
-    $devDriveGoes = ($files -contains $settings.DevDrivePath) -or ($devDriveInRoot -and (Test-Path -LiteralPath $settings.DevDrivePath -PathType Leaf))
-    if ($settings.DevDrivePath -and $devDriveGoes) {
-        Write-LogEntry '' 'INFO'
-        Write-LogEntry "The Dev Drive is deleted too: $($settings.DevDrivePath) ($(Format-Size (Get-PathSize -Path $settings.DevDrivePath)))." 'WARN'
-        Write-LogEntry '  It holds this VM''s source code. Push or copy anything not yet in source control first.' 'WARN'
+    # The disks that hold the user's own work get a warning of their own.
+    $workDisks = @(
+        @{ Path = $settings.DevDrivePath; Name = 'The Dev Drive'; Advice = 'It holds this VM''s source code. Push or copy anything not yet in source control first.' }
+        @{ Path = $settings.UserDiskPath; Name = 'The User disk'; Advice = 'It holds this VM''s Documents, Desktop, Downloads, .ssh and source\repos. Copy anything you need first.' }
+    )
+    foreach ($disk in $workDisks) {
+        $inRoot = $vmRoot -and $disk.Path -and (Test-PathWithin -Path $disk.Path -Folder $vmRoot)
+        $goes = ($files -contains $disk.Path) -or ($inRoot -and (Test-Path -LiteralPath $disk.Path -PathType Leaf))
+        if ($disk.Path -and $goes) {
+            Write-LogEntry '' 'INFO'
+            Write-LogEntry "$($disk.Name) is deleted too: $($disk.Path) ($(Format-Size (Get-PathSize -Path $disk.Path)))." 'WARN'
+            Write-LogEntry "  $($disk.Advice)" 'WARN'
+        }
     }
 
     return [pscustomobject]@{

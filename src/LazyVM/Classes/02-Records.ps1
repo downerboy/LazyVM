@@ -291,8 +291,9 @@ class ToolingRecord {
 
 # ── Captures ─────────────────────────────────────────────────────────────────
 #
-# Each capture area (VisualStudio, Sql, Windows, Projects, AppSettings) keeps
-# the object its capture step returned: its restore step is the only reader.
+# Each capture area (VisualStudio, Sql, Windows, AppSettings) keeps the
+# object its capture step returned: its restore step is the only reader. A
+# capture from before #137 also has Projects, which is no longer read.
 
 class CaptureManifest {
     static [int] $CurrentVersion = 2
@@ -305,7 +306,6 @@ class CaptureManifest {
     [object]$VisualStudio
     [object]$Sql
     [object]$Windows
-    [object]$Projects
     [object]$AppSettings
     # What the daily records do not cover, as it was when captured (#20).
     [object]$Fingerprint
@@ -323,7 +323,7 @@ class CaptureManifest {
         foreach ($name in 'CapturedAt', 'CapturedFrom', 'Stamp', 'Summary') {
             $manifest.$name = [RecordReader]::Text($item, $name)
         }
-        foreach ($name in 'Guest', 'VisualStudio', 'Sql', 'Windows', 'Projects', 'AppSettings', 'Fingerprint') {
+        foreach ($name in 'Guest', 'VisualStudio', 'Sql', 'Windows', 'AppSettings', 'Fingerprint') {
             $manifest.$name = [RecordReader]::Field($item, $name)
         }
         $manifest.Warnings = [RecordReader]::Strings($item, 'Warnings')

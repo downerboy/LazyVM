@@ -12,6 +12,7 @@ $script:HardwareDiskSettings = [ordered]@{
     OSDiskSizeGB   = 'OSDiskPath'
     SQLDiskSizeGB  = 'SQLDiskPath'
     DevDriveSizeGB = 'DevDrivePath'
+    UserDiskSizeGB = 'UserDiskPath'
 }
 
 function Get-VMHardware {

@@ -21,6 +21,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha' } }
         Mock -ModuleName $module Open-GuestSession { $true }
         Mock -ModuleName $module Expand-GuestSystemDrive { 'stray' }
+        Mock -ModuleName $module Install-UserDisk { 'stray' }
         Mock -ModuleName $module Update-ToolingRecord { }
         Mock -ModuleName $module Update-GuestEnvironmentRecord { }
         Mock -ModuleName $module Update-GuestFirewallRecord { }
@@ -50,6 +51,16 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Backup-GuestUserDatabase -Times 1
+    }
+
+    It 'sets up the User disk every day, and carries on when that fails (#137)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Install-UserDisk { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Install-UserDisk -Times 1
     }
 
     It 'captures the state when it changed and nothing else is due (#20)' {
@@ -111,6 +122,7 @@ Describe 'Invoke-Rebuild' {
         Mock -ModuleName $module Write-LogError { }
         Mock -ModuleName $module Get-Module { [pscustomobject]@{ Name = 'Hyper-V' } } -ParameterFilter { $ListAvailable -and $Name -eq 'Hyper-V' }
         Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha' } }
+        Mock -ModuleName $module Install-UserDisk { 'stray' }
         Mock -ModuleName $module Save-GuestState { [pscustomobject]@{ Databases = @() } }
         Mock -ModuleName $module Invoke-RetireCurrentVM { [pscustomobject]@{ RetiredOsPath = 'old.vhdx'; NewOsPath = 'new.vhdx' } }
         Mock -ModuleName $module Invoke-BuildPhase { 'stray' }
@@ -124,5 +136,13 @@ Describe 'Invoke-Rebuild' {
 
         $result.Count | Should -Be 1
         $result[0] | Should -BeTrue
+    }
+
+    It 'retires nothing when the personal files cannot be put on the User disk (#137)' {
+        Mock -ModuleName $module Install-UserDisk { throw 'robocopy failed' }
+
+        { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Rebuild -VM $VM } } | Should -Throw -ExpectedMessage '*robocopy failed*'
+
+        Should -Invoke -ModuleName $module Invoke-RetireCurrentVM -Times 0
     }
 }

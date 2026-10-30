@@ -5,8 +5,8 @@
 #   3-8 -> restore -> check -> only then delete the retired disk.
 #
 # The old OS disk is never deleted until the new guest has passed the check,
-# so a failed rebuild can be undone. The SQL data disk and the Dev Drive are
-# never touched.
+# so a failed rebuild can be undone. The SQL data disk, the Dev Drive and the
+# User disk are never touched.
 
 function Invoke-Rebuild {
     <# Returns whether the rebuild completed and passed its check. #>
@@ -24,6 +24,11 @@ function Invoke-Rebuild {
     }
 
     $exists = [bool](Get-VM -Name $VM.Name -ErrorAction SilentlyContinue)
+
+    # The personal folders go to the User disk before the OS disk is
+    # retired; if they cannot, nothing is retired (#137).
+    if ($exists) { $null = Install-UserDisk -VM $VM }
+
     $manifest = $null
     if ($SkipCapture) {
         Write-LogEntry 'Skipping capture (-SkipCapture): using the existing capture' 'WARN'
@@ -94,7 +99,7 @@ function Invoke-RetireCurrentVM {
 
     $null = Get-VM -Name $VM.Name -ErrorAction Stop   # fail fast if it vanished
     $drives = @(Get-VMHardDiskDrive -VMName $VM.Name)
-    $osDrive = @($drives | Where-Object { $_.ControllerLocation -eq 0 -and $_.ControllerNumber -eq 0 }) + @($drives | Where-Object { $_.Path -ne $settings.SQLDiskPath -and $_.Path -ne $settings.DevDrivePath }) |
+    $osDrive = @($drives | Where-Object { $_.ControllerLocation -eq 0 -and $_.ControllerNumber -eq 0 }) + @($drives | Where-Object { $_.Path -notin @($settings.SQLDiskPath, $settings.DevDrivePath, $settings.UserDiskPath) }) |
         Select-Object -First 1
     if (-not $osDrive) { throw 'Could not identify the OS disk on the existing VM.' }
 
@@ -139,6 +144,7 @@ function Invoke-RetireCurrentVM {
     if ($settings.UseDevDrive -and (Test-Path -LiteralPath $settings.DevDrivePath)) {
         Write-LogEntry "Dev Drive left untouched: $($settings.DevDrivePath)" 'INFO'
     }
+    Write-LogEntry "User disk left untouched: $($settings.UserDiskPath)" 'INFO'
 
     return [pscustomobject]@{
         RetiredOsPath = $retiredPath

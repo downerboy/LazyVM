@@ -7,11 +7,13 @@ function Save-LazyVMState {
     Copies what a rebuild would otherwise lose to the VM's State folder on
     the host: SQL Server databases (as backups), logins and settings, Visual
     Studio settings, the Windows environment (variables, certificates,
-    firewall rules, scheduled tasks), project folders listed in
-    GuestProjectPaths, and application settings listed in AppSettings.
+    firewall rules, scheduled tasks), and application settings listed in
+    AppSettings.
 
     The daily maintenance captures automatically before a rearm or rebuild.
-    The Dev Drive needs no capture: it is never deleted by a rebuild.
+    The Dev Drive and the User disk, which holds Documents, Desktop,
+    Downloads, .ssh and source\repos, need no capture: a rebuild never
+    deletes them.
 
     Starts the VM if it is off.
 

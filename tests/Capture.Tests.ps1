@@ -29,7 +29,6 @@ BeforeAll {
             $script:handed = @{}
             Mock Save-GuestVisualStudioState { $script:handed.VisualStudio = $CaptureDir; $null }
             Mock Save-GuestWindowsState { $script:handed.Windows = $CaptureDir; $null }
-            Mock Save-GuestProjectFolder { $script:handed.Projects = $CaptureDir; $null }
 
             $null = Save-GuestState -VM ([VMContext]::new(@{ VMName = 'Alpha'; StateDir = $StateDir }))
             $script:handed
@@ -54,7 +53,15 @@ Describe 'Save-GuestState capture generations (#21)' {
         Join-Path $folder 'manifest.json' | Should -Exist
         $handed.VisualStudio | Should -Be $folder
         $handed.Windows | Should -Be $folder
-        $handed.Projects | Should -Be $folder
+    }
+
+    It 'captures no project folders: personal files are on the User disk, which no rebuild touches (#137)' {
+        $stateDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+
+        $null = Invoke-TestCapture -StateDir $stateDir -Stamp '20261029-200000'
+
+        $manifest = Get-Content -LiteralPath (Join-Path $stateDir 'manifest.json') -Raw | ConvertFrom-Json
+        $manifest.PSObject.Properties.Name | Should -Not -Contain 'Projects'
     }
 
     It 'keeps the newest three captures and deletes older ones' {

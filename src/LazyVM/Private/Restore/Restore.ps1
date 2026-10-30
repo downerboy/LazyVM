@@ -25,7 +25,6 @@ function Restore-GuestState {
         [pscustomobject]@{ Name = '10a - Windows environment'; Action = { Restore-GuestWindowsState -VM $VM -Manifest $manifest } }
         [pscustomobject]@{ Name = '10b - Visual Studio files'; Action = { Restore-GuestVisualStudioState -VM $VM -Manifest $manifest } }
         [pscustomobject]@{ Name = '10c - SQL Server'; Action = { Restore-GuestSqlState -VM $VM -Manifest $manifest } }
-        [pscustomobject]@{ Name = '10d - project files'; Action = { Restore-GuestProjectFolder -VM $VM -Manifest $manifest } }
         [pscustomobject]@{ Name = '10e - application settings'; Action = { Restore-GuestAppSetting -VM $VM -Manifest $manifest } }
     )
     if ($run.Failures.Count -eq 0) { Write-LogEntry 'Restore complete' 'OK' }
@@ -532,31 +531,7 @@ function Restore-GuestSqlLogin {
     }
 }
 
-# ── Project files and application settings ───────────────────────────────────
-
-function Restore-GuestProjectFolder {
-    <# Extracts the project capture into a dated folder, so nothing already in the new guest is overwritten. #>
-    param(
-        [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][CaptureManifest]$Manifest
-    )
-
-    $guestZip = Send-CaptureArchive -VM $VM -Area $Manifest.Projects -What 'project'
-    if (-not $guestZip) { return }
-
-    $report = Invoke-GuestScript -VM $VM -Activity 'project restore' -TimeoutMinutes 60 -ArgumentList @($guestZip, $VM.Settings.GuestRestoreRoot) -ScriptBlock {
-        param($zip, $restoreRoot)
-        $ErrorActionPreference = 'Stop'
-        $root = [Environment]::ExpandEnvironmentVariables($restoreRoot)
-        New-GuestFolder -Path $root
-        $destination = Join-Path $root ('restored-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-        Expand-GuestZip -Archive $zip -Destination $destination
-        $files = @(Get-ChildItem $destination -Recurse -File -ErrorAction SilentlyContinue)
-        return [pscustomobject]@{ Path = $destination; Files = $files.Count; Bytes = [double]($files | Measure-Object -Property Length -Sum).Sum }
-    }
-    Write-LogEntry "  restored $($report.Files) file(s), $(Format-Size $report.Bytes) to $($report.Path)" 'OK'
-    Write-LogEntry '  Extracted to a dated folder so nothing in the new guest is overwritten.' 'INFO'
-}
+# ── Application settings ─────────────────────────────────────────────────────
 
 function Restore-GuestAppSetting {
     <#
