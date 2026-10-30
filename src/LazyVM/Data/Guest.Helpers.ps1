@@ -212,6 +212,40 @@ function Mount-GuestSqlDatabase {
     return 'Attached'
 }
 
+function Backup-GuestSqlDatabase {
+    <#
+      Checks database $Name with DBCC CHECKDB and, only when it passes, backs
+      it up to <BackupDir>\<Name>.bak.new, verifies that backup, and only then
+      lets it replace <Name>.bak (#133). So a corrupt database or a failed
+      backup never costs the one good backup kept. Returns the backup's path;
+      throws, leaving the last good backup as it was, when any step fails.
+    #>
+    param(
+        [Parameter(Mandatory)]$Connection,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$BackupDir
+    )
+
+    $null = Invoke-GuestSql -Connection $Connection -Sql "DBCC CHECKDB ($(ConvertTo-SqlString -Text $Name)) WITH NO_INFOMSGS, ALL_ERRORMSGS"
+
+    New-GuestFolder -Path $BackupDir
+    $file = Join-Path $BackupDir "$Name.bak"
+    $new = "$file.new"
+    $target = "$(ConvertTo-SqlName -Name $Name) TO DISK = $(ConvertTo-SqlString -Text $new)"
+    try {
+        # COMPRESSION is unavailable on some editions; retry without it.
+        try { $null = Invoke-GuestSql -Connection $Connection -Sql "BACKUP DATABASE $target WITH INIT, FORMAT, CHECKSUM, COMPRESSION, STATS = 10" }
+        catch { $null = Invoke-GuestSql -Connection $Connection -Sql "BACKUP DATABASE $target WITH INIT, FORMAT, CHECKSUM, STATS = 10" }
+        $null = Invoke-GuestSql -Connection $Connection -Sql "RESTORE VERIFYONLY FROM DISK = $(ConvertTo-SqlString -Text $new) WITH CHECKSUM"
+        Move-Item -LiteralPath $new -Destination $file -Force
+    }
+    catch {
+        Remove-Item -LiteralPath $new -Force -ErrorAction SilentlyContinue
+        throw
+    }
+    return $file
+}
+
 function Repair-GuestSqlOrphanedUser {
     <#
       Links each user in database $Name that has no login to the login of the
