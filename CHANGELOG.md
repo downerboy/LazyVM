@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.12.0](https://github.com/downerboy/LazyVM/compare/v4.11.0...v4.12.0) (2026-10-30)
+
+
+### Features
+
+* **sql:** check databases and keep one good backup ([#169](https://github.com/downerboy/LazyVM/issues/169)) ([ead216b](https://github.com/downerboy/LazyVM/commit/ead216bd5ef3e951961104b76619b2d7a48bdeeb))
+
 ## [4.11.0](https://github.com/downerboy/LazyVM/compare/v4.10.1...v4.11.0) (2026-10-30)
 
 
