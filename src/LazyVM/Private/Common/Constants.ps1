@@ -66,8 +66,12 @@ $script:ToolingCheckpointPrefix = 'Tooling'
 $script:ExpansionCheckpointPrefix = 'C: expansion'
 $script:StampFormat = 'yyyyMMdd-HHmmss'
 
-# The capture manifest in each VM's StateDir.
+# The capture manifest in each VM's StateDir: a copy of the newest capture's,
+# which restore reads. Each capture has a folder of its own, named by its
+# stamp, under StateDir\Captures; the newest few are kept (#21).
 $script:ManifestFileName = 'manifest.json'
+$script:CaptureFolderName = 'Captures'
+$script:CapturesToKeep = 3
 
 # The SQL Server edition every VM gets (#136): Standard Developer, so code
 # cannot come to depend on Enterprise-only features. The Enterprise Developer
