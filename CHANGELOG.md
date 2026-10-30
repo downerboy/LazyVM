@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.14.0](https://github.com/downerboy/LazyVM/compare/v4.13.0...v4.14.0) (2026-10-30)
+
+
+### Features
+
+* capture the VM's state when it changes ([#173](https://github.com/downerboy/LazyVM/issues/173)) ([ab73a93](https://github.com/downerboy/LazyVM/commit/ab73a93347c7b5749683432452f8bd91ff548501))
+* give each VM a User disk for its personal folders ([#177](https://github.com/downerboy/LazyVM/issues/177)) ([a5e425d](https://github.com/downerboy/LazyVM/commit/a5e425d4444f471720e67d7010c43f9854303a7f))
+
 ## [4.13.0](https://github.com/downerboy/LazyVM/compare/v4.12.0...v4.13.0) (2026-10-30)
 
 
