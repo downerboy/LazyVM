@@ -18,8 +18,9 @@ function Complete-GuestConfiguration {
 
     $run = Invoke-IsolatedStep -What 'Phase 8' -Steps @(
         # Run even when the disk was attached already: it is what finds the
-        # data disk's actual letter, which the later steps need.
-        [pscustomobject]@{ Name = '8a - SQL data disk'; Action = { Add-SqlDataDisk -VM $VM; Initialize-GuestSqlDisk -VM $VM } }
+        # data disk's actual letter, which the later steps need. A run from
+        # phase 8 may find the disk still locked by BitLocker (#175).
+        [pscustomobject]@{ Name = '8a - SQL data disk'; Action = { Add-SqlDataDisk -VM $VM; Unlock-GuestDataDisk -VM $VM; Initialize-GuestSqlDisk -VM $VM } }
         [pscustomobject]@{ Name = '8b - move SQL data files'; Action = { Move-GuestSqlDataFile -VM $VM } }
         [pscustomobject]@{ Name = '8c - Visual Studio settings'; Action = { Restore-GuestVisualStudioSetting -VM $VM } }
         [pscustomobject]@{ Name = '8d - database restore'; Action = { $null = Connect-GuestSqlInstance -VM $VM; Restore-SqlDatabase -VM $VM } }

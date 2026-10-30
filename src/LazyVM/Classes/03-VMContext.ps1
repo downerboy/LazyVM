@@ -20,6 +20,10 @@ class VMRuntime {
     [string]$DevDriveLetter
     [string]$GuestDataDriveLetter
 
+    # The data disks the guest formatted in this run, by their GUID setting
+    # (SQLDiskGuid, ...): BitLocker need encrypt only their used space.
+    [string[]]$FormattedDisks = @()
+
     # SQL Server folders on the data disk, following its actual letter.
     [string]$GuestSqlDataDir
     [string]$GuestSqlLogDir

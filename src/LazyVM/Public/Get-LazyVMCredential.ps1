@@ -1,7 +1,7 @@
 function Get-LazyVMCredential {
     <#
     .SYNOPSIS
-    Gets the administrator account LazyVM uses inside a VM.
+    Gets the administrator account LazyVM uses inside a VM, or its disks' BitLocker recovery passwords.
 
     .DESCRIPTION
     Returns the stored account as a PSCredential, ready to pass to commands
@@ -9,11 +9,20 @@ function Get-LazyVMCredential {
     and password as text instead, for signing in to the VM yourself: the
     password LazyVM generated is only ever shown this way.
 
+    With -RecoveryPassword, returns the BitLocker recovery password of each
+    disk LazyVM encrypted: C: and every earlier OS disk, the SQL data disk,
+    the Dev Drive and the User disk, each with its GPT disk GUID and when it
+    was recorded. Needed only when a disk asks for it, such as a retired OS
+    disk put back after a failed rebuild.
+
     .PARAMETER Name
     The VM. May be left out while there is only one.
 
     .PARAMETER AsPlainText
     Return the user name and the password as plain text.
+
+    .PARAMETER RecoveryPassword
+    Return the disks' BitLocker recovery passwords instead of the account.
 
     .EXAMPLE
     Enter-PSSession -VMName DevBox -Credential (Get-LazyVMCredential -Name DevBox)
@@ -23,22 +32,51 @@ function Get-LazyVMCredential {
 
     Shows the password to sign in to the VM with.
 
+    .EXAMPLE
+    Get-LazyVMCredential -Name DevBox -RecoveryPassword
+
+    Shows the BitLocker recovery password of each of the VM's disks.
+
     .OUTPUTS
-    System.Management.Automation.PSCredential, or LazyVM.PlainCredential with -AsPlainText.
+    System.Management.Automation.PSCredential, LazyVM.PlainCredential with
+    -AsPlainText, or LazyVM.RecoveryPassword with -RecoveryPassword.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Credential')]
     [OutputType([pscredential])]
     [OutputType('LazyVM.PlainCredential')]
+    [OutputType('LazyVM.RecoveryPassword')]
     param(
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
-        [switch]$AsPlainText
+        [Parameter(ParameterSetName = 'Credential')]
+        [switch]$AsPlainText,
+
+        [Parameter(ParameterSetName = 'RecoveryPassword', Mandatory)]
+        [switch]$RecoveryPassword
     )
 
     process {
         Assert-Administrator
         $configuration = Read-VMSetting -Root (Resolve-LazyVMRoot).Path -VMName $Name
+
+        if ($RecoveryPassword) {
+            $table = Get-StoredSecretTable -KeyPath $configuration.Settings.CredKeyFile -Path $configuration.Settings.BitLockerCredFile
+            if ($table.Count -eq 0) {
+                throw "No BitLocker recovery password is stored for '$($configuration.VMName)' yet. Build-LazyVM and the daily maintenance turn BitLocker on and store them."
+            }
+            return $table.Keys | ForEach-Object {
+                [pscustomobject]@{
+                    PSTypeName       = 'LazyVM.RecoveryPassword'
+                    Name             = $configuration.VMName
+                    Disk             = $table[$_]['Disk']
+                    DiskGuid         = $_
+                    Recorded         = $table[$_]['Recorded']
+                    RecoveryPassword = $table[$_]['RecoveryPassword']
+                }
+            } | Sort-Object -Property Disk, Recorded
+        }
+
         $credential = Get-StoredCredential -KeyPath $configuration.Settings.CredKeyFile -Path $configuration.Settings.GuestCredFile
 
         if (-not $credential) {

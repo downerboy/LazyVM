@@ -83,6 +83,8 @@ function Invoke-Rebuild {
         Write-LogEntry "  Remove-Item '$($retired.NewOsPath)' -Force" 'INFO'
         Write-LogEntry "  Rename-Item '$($retired.RetiredOsPath)' '$([IO.Path]::GetFileName($retired.NewOsPath))'" 'INFO'
         Write-LogEntry "  Build-LazyVM -Name '$($VM.Name)' -FromPhase 6" 'INFO'
+        Write-LogEntry '  The old C: is BitLocker-encrypted for the old VM''s TPM, so it asks for its recovery password once:' 'INFO'
+        Write-LogEntry "  the 'OS disk' one recorded before this rebuild, from: Get-LazyVMCredential -Name '$($VM.Name)' -RecoveryPassword" 'INFO'
         Write-LogEntry '' 'INFO'
         Write-LogEntry "Retired OS disk: $($retired.RetiredOsPath)" 'WARN'
     }

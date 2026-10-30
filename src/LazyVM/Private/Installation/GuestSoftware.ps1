@@ -49,9 +49,14 @@ function Install-GuestSoftware {
     Add-UserDataDisk -VM $VM
     Connect-Guest -VM $VM -Credential $credential | Out-Null
     Expand-GuestSystemDrive -VM $VM
+    # A rebuilt guest's C: cannot unlock the disks the old one encrypted;
+    # their stored recovery passwords can. One that stays locked stops the
+    # build here, before anything is restored onto it (#175).
+    Unlock-GuestDataDisk -VM $VM
     Initialize-GuestSqlDisk -VM $VM
     Initialize-GuestDevDrive -VM $VM
     Initialize-GuestUserDisk -VM $VM
+    Protect-GuestPersistentDisk -VM $VM -NewSystemDrive:$UsedUnattend
     Enable-GuestEnhancedSession -VM $VM
     Set-GuestCustomization -VM $VM
 

@@ -164,6 +164,7 @@ function Initialize-GuestDevDrive {
 
     Write-GuestNote -Notes $result.Notes
     Save-DataDiskGuid -VM $VM -GuidSetting 'DevDriveGuid' -Guid $result.Guid -Label 'Dev Drive disk'
+    if ($result.Formatted) { $VM.Runtime.FormattedDisks += 'DevDriveGuid' }
     $VM.Runtime.DevDriveLetter = $result.Letter
 
     if ($result.Trusted) {

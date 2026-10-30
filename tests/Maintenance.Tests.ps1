@@ -22,6 +22,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Open-GuestSession { $true }
         Mock -ModuleName $module Expand-GuestSystemDrive { 'stray' }
         Mock -ModuleName $module Install-UserDisk { 'stray' }
+        Mock -ModuleName $module Protect-GuestPersistentDisk { 'stray' }
         Mock -ModuleName $module Update-ToolingRecord { }
         Mock -ModuleName $module Update-GuestEnvironmentRecord { }
         Mock -ModuleName $module Update-GuestFirewallRecord { }
@@ -61,6 +62,16 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Install-UserDisk -Times 1
+    }
+
+    It 'turns BitLocker on for every persistent disk every day, and carries on when that fails (#175)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Protect-GuestPersistentDisk { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Protect-GuestPersistentDisk -Times 1 -Exactly
     }
 
     It 'captures the state when it changed and nothing else is due (#20)' {
@@ -144,5 +155,15 @@ Describe 'Invoke-Rebuild' {
         { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Rebuild -VM $VM } } | Should -Throw -ExpectedMessage '*robocopy failed*'
 
         Should -Invoke -ModuleName $module Invoke-RetireCurrentVM -Times 0
+    }
+
+    It 'restores nothing and keeps the old OS disk when a persistent disk cannot be unlocked (#175)' {
+        Mock -ModuleName $module Invoke-BuildPhase { throw 'The SQL data disk could not be unlocked with its stored recovery password.' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Rebuild -VM $VM })
+
+        $result[0] | Should -BeFalse
+        Should -Invoke -ModuleName $module Restore-GuestState -Times 0
+        Should -Invoke -ModuleName $module Remove-RetiredVM -Times 0
     }
 }
