@@ -385,6 +385,112 @@ function Find-GuestDataDisk {
     throw "The $Label was not found in the guest ($what). Nothing was initialised or formatted. Check that the disk is attached to the VM."
 }
 
+# ── BitLocker ────────────────────────────────────────────────────────────────
+#
+# C: is protected by the virtual TPM, and every persistent disk by a recovery
+# password the host stores, plus auto-unlock, which ties it to the C: that
+# turned it on (#175). Nothing here ever puts a recovery password in a note
+# or an error.
+
+function Get-GuestVolumeMountPoint {
+    <# The data volume on $Disk as BitLocker names it: its drive letter, else its volume GUID path; $null when the disk holds no volume yet. #>
+    param([Parameter(Mandatory)]$Disk)
+
+    $part = @(Get-Partition -DiskNumber $Disk.Number -ErrorAction SilentlyContinue | Where-Object { $_.Type -ne 'Reserved' -and $_.Size -gt 100MB }) | Select-Object -First 1
+    if (-not $part) { return $null }
+    $letter = "$($part.DriveLetter)".Trim()
+    if ($letter) { return "${letter}:" }
+    return @($part.AccessPaths | Where-Object { "$_" -like '\\?\Volume*' }) | Select-Object -First 1
+}
+
+function Protect-GuestVolume {
+    <#
+      Turns BitLocker on for $MountPoint with $RecoveryPassword, or, when it
+      is on already, makes sure the volume has that password and, for a data
+      volume, auto-unlock. -System is C:, which the TPM unlocks: it gets the
+      recovery password before it is encrypted, as Microsoft advises. A data
+      volume is encrypted only when C: is, since only then can it unlock
+      itself, and BitLocker is turned off again when auto-unlock cannot be
+      turned on. -UsedSpaceOnly is for a volume formatted in this run; any
+      other is encrypted whole. Encryption goes on in the background.
+      Returns notes (New-GuestNote); throws, leaving the volume as it was,
+      when it cannot be done.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'RecoveryPassword', Justification = 'The BitLocker cmdlets take a recovery password only as text.')]
+    param(
+        [Parameter(Mandatory)][string]$MountPoint,
+        [Parameter(Mandatory)][string]$RecoveryPassword,
+        [switch]$System,
+        [switch]$UsedSpaceOnly
+    )
+
+    $notes = @()
+    $volume = Get-BitLockerVolume -MountPoint $MountPoint
+    if ("$($volume.LockStatus)" -eq 'Locked') { throw "$MountPoint is locked, so BitLocker could not be checked; left as it was" }
+    $status = "$($volume.VolumeStatus)"
+    if ($status -eq 'DecryptionInProgress') {
+        return New-GuestNote -Level WARN -Text "$MountPoint is being decrypted; left as it is"
+    }
+    if (-not $System -and "$((Get-BitLockerVolume -MountPoint $env:SystemDrive).VolumeStatus)" -eq 'FullyDecrypted') {
+        throw "C: is not encrypted, so $MountPoint could not unlock itself; left as it was"
+    }
+    $hasPassword = @($volume.KeyProtector | Where-Object { "$($_.KeyProtectorType)" -eq 'RecoveryPassword' -and $_.RecoveryPassword -eq $RecoveryPassword }).Count -gt 0
+
+    if ($status -eq 'FullyDecrypted') {
+        $encryption = @{ EncryptionMethod = 'XtsAes256'; SkipHardwareTest = $true; UsedSpaceOnly = [bool]$UsedSpaceOnly }
+        if ($System) {
+            if (-not $hasPassword) { $null = Add-BitLockerKeyProtector -MountPoint $MountPoint -RecoveryPasswordProtector -RecoveryPassword $RecoveryPassword }
+            $null = Enable-BitLocker -MountPoint $MountPoint -TpmProtector @encryption
+        }
+        else {
+            $null = Enable-BitLocker -MountPoint $MountPoint -RecoveryPasswordProtector -RecoveryPassword $RecoveryPassword @encryption
+            try { $null = Enable-BitLockerAutoUnlock -MountPoint $MountPoint }
+            catch {
+                $reason = $_.Exception.Message
+                $null = Disable-BitLocker -MountPoint $MountPoint
+                throw "auto-unlock could not be turned on for $MountPoint ($reason), so BitLocker was turned off again"
+            }
+        }
+        $extent = if ($UsedSpaceOnly) { 'its used space' } else { 'the whole volume' }
+        return New-GuestNote -Level OK -Text "BitLocker turned on for ${MountPoint}: encrypting $extent in the background"
+    }
+
+    if (-not $hasPassword) {
+        $null = Add-BitLockerKeyProtector -MountPoint $MountPoint -RecoveryPasswordProtector -RecoveryPassword $RecoveryPassword
+        $notes += New-GuestNote -Level INFO -Text "gave $MountPoint the recovery password LazyVM stores"
+    }
+    if (-not $System -and -not $volume.AutoUnlockEnabled) {
+        $null = Enable-BitLockerAutoUnlock -MountPoint $MountPoint
+        $notes += New-GuestNote -Level OK -Text "turned on auto-unlock for $MountPoint"
+    }
+    return $notes
+}
+
+function Unlock-GuestVolume {
+    <#
+      Unlocks $MountPoint with $RecoveryPassword when BitLocker has it
+      locked, as it does in a rebuilt guest. Returns whether it unlocked it.
+      Throws when it is locked and stays so, so nothing is restored onto it.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'RecoveryPassword', Justification = 'The BitLocker cmdlets take a recovery password only as text.')]
+    param(
+        [Parameter(Mandatory)][string]$MountPoint,
+        [Parameter(Mandatory)][string]$Label,
+        [AllowEmptyString()][AllowNull()][string]$RecoveryPassword
+    )
+
+    if ("$((Get-BitLockerVolume -MountPoint $MountPoint).LockStatus)" -ne 'Locked') { return $false }
+    if (-not $RecoveryPassword) {
+        throw "The $Label is locked by BitLocker and LazyVM has no recovery password stored for it. Nothing was changed."
+    }
+    try { $null = Unlock-BitLocker -MountPoint $MountPoint -RecoveryPassword $RecoveryPassword }
+    catch { throw "The $Label could not be unlocked with its stored recovery password ($($_.Exception.Message)). Nothing was changed." }
+    if ("$((Get-BitLockerVolume -MountPoint $MountPoint).LockStatus)" -eq 'Locked') {
+        throw "The $Label could not be unlocked with its stored recovery password: it is still locked. Nothing was changed."
+    }
+    return $true
+}
+
 # ── The User disk ────────────────────────────────────────────────────────────
 #
 # Personal folders live on the User disk, which no rebuild touches (#137).

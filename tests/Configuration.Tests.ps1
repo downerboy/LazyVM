@@ -440,6 +440,7 @@ Describe 'Add-DerivedSetting' {
         $settings.CertCredFile | Should -Be "$root\Alpha\Credentials\certs.cred"
         $settings.EnvironmentCredFile | Should -Be "$root\Alpha\Credentials\environment.cred"
         $settings.AppSettingsCredFile | Should -Be "$root\Alpha\Credentials\appsettings.cred"
+        $settings.BitLockerCredFile | Should -Be "$root\Alpha\Credentials\bitlocker.cred"
         $settings.ResumeRegKey | Should -Be 'HKLM:\SOFTWARE\LazyVM\Alpha'
         $settings.ResumeTaskName | Should -Be 'LazyVM-ResumeAfterReboot-Alpha'
         $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'

@@ -126,6 +126,7 @@ function Initialize-GuestSqlDisk {
 
     Write-GuestNote -Notes $result.Notes
     Save-DataDiskGuid -VM $VM -GuidSetting 'SQLDiskGuid' -Guid $result.Guid -Label 'SQL data disk'
+    if ($result.Formatted) { $VM.Runtime.FormattedDisks += 'SQLDiskGuid' }
     $VM.SetDataDriveLetter($result.Letter)
 
     $state = if ($result.Formatted) { 'formatted as' } else { 'already prepared, mounted as' }

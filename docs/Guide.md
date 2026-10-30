@@ -29,7 +29,7 @@ The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyV
 ### The three jobs it does
 
 - **Build.** Create the VM and install Windows unattended. Then install everything in the VM's tooling list (Visual Studio, SSMS, SQL Server, winget packages) with no input from you.
-- **Configure.** Attach and prepare the SQL data disk, the Dev Drive and the User disk, and relocate databases onto the data disk.
+- **Configure.** Attach and prepare the SQL data disk, the Dev Drive and the User disk, encrypt them and `C:` with BitLocker, and relocate databases onto the data disk.
 - **Maintain.** Every day, record any tools you have added or removed in the VM, taking a checkpoint first so you can go back. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
 
 ### What survives a rebuild
@@ -151,7 +151,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Get-LazyVM` | Lists the VMs, their state in Hyper-V, and their maintenance time and task. |
 | `Get-LazyVMSetting` | Every setting as the VM uses it, where the value came from, and what it does. `-Setting Mem*` narrows it. |
 | `Set-LazyVMCredential` | Stores the administrator account LazyVM uses inside the VM. |
-| `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password. |
+| `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
 | `Save-LazyVMTooling` | Records tooling changes now, as the daily run does, with a checkpoint first. |
@@ -222,7 +222,7 @@ Expect it to take between five and thirty minutes, depending on database size. W
 
 `Build-LazyVM` schedules it when the build succeeds. If that step fails, the build still succeeds and warns you; fix the cause and run `Register-LazyVMMaintenance`. Running that again at any time is harmless.
 
-This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records in `VM.json` any change made to the VM's hardware in Hyper-V (processors, memory, disk sizes, switch) and any tooling change ([section 9](#9-tooling-and-going-back)). It checks every user database with `DBCC CHECKDB` and, only when the check passes, backs it up to `D:\SQLBackup`, keeping one good, verified backup of each: a database that fails its check keeps the backup it had, and the log says so with `[X]`. It then compares the VM's certificates and Visual Studio settings with the fingerprint the newest capture recorded, and takes a full capture when either has changed, so a change is captured the night after it is made, not only when the evaluation is about to expire. Then it reads the license. On almost every day it finds plenty of time remaining and finishes within a few minutes, depending on database size.
+This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records in `VM.json` any change made to the VM's hardware in Hyper-V (processors, memory, disk sizes, switch) and any tooling change ([section 9](#9-tooling-and-going-back)). It turns BitLocker on for `C:` and each persistent disk that does not have it yet ([BitLocker](#bitlocker)). It checks every user database with `DBCC CHECKDB` and, only when the check passes, backs it up to `D:\SQLBackup`, keeping one good, verified backup of each: a database that fails its check keeps the backup it had, and the log says so with `[X]`. It then compares the VM's certificates and Visual Studio settings with the fingerprint the newest capture recorded, and takes a full capture when either has changed, so a change is captured the night after it is made, not only when the evaluation is about to expire. Then it reads the license. On almost every day it finds plenty of time remaining and finishes within a few minutes, depending on database size.
 
 A daily task is used rather than a 90-day one on purpose. A task that fires exactly every 90 days drifts past the expiry date, and misses it entirely if the host happens to be off that day.
 
@@ -282,14 +282,15 @@ Windows allows an evaluation period to be reset a limited number of times. Each 
 2. Shuts the VM down gracefully.
 3. Renames the old Windows disk aside. It is never deleted at this stage.
 4. Builds a new VM and installs Windows unattended from a generated answer file.
-5. Installs everything in the VM's tooling list, and lists anything that has to be installed by hand.
-6. Runs post-configuration: data disk, SQL data, Visual Studio settings, databases.
-7. Restores the capture.
-8. Verifies the result against the capture.
-9. Deletes the retired disk only if verification passes.
+5. Unlocks the SQL data disk, the Dev Drive and the User disk with their stored BitLocker recovery passwords, and turns on auto-unlock for the new `C:`. If a disk stays locked, the rebuild stops here, before anything is restored onto it, and the old disk is kept.
+6. Installs everything in the VM's tooling list, and lists anything that has to be installed by hand.
+7. Runs post-configuration: data disk, SQL data, Visual Studio settings, databases.
+8. Restores the capture.
+9. Verifies the result against the capture.
+10. Deletes the retired disk only if verification passes.
 
 > **Important**
-> If verification fails, the old disk is kept, and the log gives the exact commands to roll back to it. A failed rebuild is recoverable.
+> If verification fails, the old disk is kept, and the log gives the exact commands to roll back to it. A failed rebuild is recoverable. The old disk's `C:` is BitLocker-encrypted for the old VM's TPM, so on the first start after rolling back it asks for its recovery password: the `OS disk` one recorded before the rebuild, from `Get-LazyVMCredential -Name DevBox -RecoveryPassword`.
 
 Verification checks that:
 - the VM exists, is running and can be reached;
@@ -320,7 +321,7 @@ It asks for confirmation first. Budget a couple of hours: the Windows install an
 | 5b | Dev Drive disk | Creates the Dev Drive disk if missing. An existing one is never overwritten. |
 | 5c | User disk | Creates the User disk if missing. An existing one is never overwritten. |
 | 6 | VM | A Generation 2 VM with Secure Boot, a TPM, 4 processors and dynamic memory, plus a disc carrying the unattended Setup answer file. |
-| 7 | Installs | In this order: <ol><li>Waits for Windows to finish installing.</li><li>Makes `C:` use the whole OS disk: moves the recovery partition to the end of the disk and extends `C:` up to it, after taking a checkpoint. This works with BitLocker on.</li><li>Attaches and prepares the data disk, the Dev Drive and the User disk, marks the Dev Drive as trusted again, puts the personal folders on the User disk, and turns on Enhanced Session Mode.</li><li>Installs the VM's tooling list: Visual Studio Installer products with their workloads, components and extensions, then SQL Server, then winget packages.</li></ol>Anything already present is skipped, and anything that must be installed by hand is listed. SQL Server is installed from its ISO, placed in the VM's DVD drive for the install. |
+| 7 | Installs | In this order: <ol><li>Waits for Windows to finish installing.</li><li>Makes `C:` use the whole OS disk: moves the recovery partition to the end of the disk and extends `C:` up to it, after taking a checkpoint. This works with BitLocker on.</li><li>Attaches and prepares the data disk, the Dev Drive and the User disk, marks the Dev Drive as trusted again, puts the personal folders on the User disk, and turns on Enhanced Session Mode. A disk BitLocker has locked, as after a rebuild, is unlocked first with its stored recovery password.</li><li>Turns BitLocker on for `C:`, then for the data disk, the Dev Drive and the User disk, with auto-unlock ([BitLocker](#bitlocker)).</li><li>Installs the VM's tooling list: Visual Studio Installer products with their workloads, components and extensions, then SQL Server, then winget packages.</li></ol>Anything already present is skipped, and anything that must be installed by hand is listed. SQL Server is installed from its ISO, placed in the VM's DVD drive for the install. |
 | 8 | Configuration | Relocates SQL data onto the data disk, restores Visual Studio settings, and attaches the databases (or restores them from their backups). |
 
 Capture (`Save-LazyVMState`) and restore (`Restore-LazyVMState`) run on their own, and as part of a rebuild.
@@ -343,7 +344,7 @@ D:\DevVM\
     Disks\          DevBox-OS.vhdx, DevBox-SQL.vhdx, DevBox-DevDrive.vhdx, DevBox-Seed.iso
     State\          manifest.json, Captures\<stamp>\ (the newest three)
     Backups\        VisualStudio.vssettings
-    Credentials\    guest.cred, certs.cred, environment.cred
+    Credentials\    guest.cred, certs.cred, environment.cred, appsettings.cred, bitlocker.cred
     Logs\           DevBox.log
 ```
 
@@ -360,7 +361,7 @@ D:\DevVM\
 | `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive, the 20 GB User disk and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk, the Dev Drive and the User disk persist across rebuilds: they carry the databases and their backups, your working source, and your personal folders. |
 | `D:\DevVM\DevBox\State` | Captured state: each capture in a folder of its own, `Captures\<stamp>`, with its own manifest, and the newest three kept. `manifest.json` is a copy of the newest capture's manifest, the one a restore reads. Also application settings, `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
 | `D:\DevVM\DevBox\Backups` | The Visual Studio settings backup. |
-| `D:\DevVM\DevBox\Credentials` | The VM's encrypted account and certificate credentials. |
+| `D:\DevVM\DevBox\Credentials` | The VM's encrypted account and certificate credentials, and its disks' BitLocker recovery passwords. |
 | `D:\DevVM\DevBox\Logs` | `DevBox.log`: every run for that VM appends here. Set aside at 5 MB. |
 
 `Shared` cannot be used as a VM name.
@@ -382,6 +383,24 @@ The module itself is installed in `C:\Program Files\PowerShell\Modules\LazyVM`. 
 Account and certificate passwords are encrypted with a 256-bit key in `D:\DevVM\Shared\Credentials\.lazyvm.key`, which only SYSTEM and Administrators can read.
 
 A key file is used rather than Windows DPAPI on purpose. The scheduled task runs as SYSTEM and has to read credentials stored by an interactive administrator, which DPAPI would prevent. The trade-off is that any local administrator on the host can recover these passwords. That is acceptable for a disposable lab VM, and not appropriate for anything holding real secrets.
+
+### BitLocker
+
+Every persistent disk is encrypted with BitLocker, so each VM's data stays its own, except when it is handed to the VM that replaces it in a rebuild.
+
+- `C:` is encrypted with the VM's virtual TPM, so it unlocks itself when the VM starts. It has to be: a data disk can unlock itself only once `C:` is encrypted.
+- The SQL data disk, the Dev Drive and the User disk are each protected by a recovery password and unlock themselves once `C:` is unlocked (auto-unlock).
+- A disk formatted in the same run, such as a new VM's, has only its used space encrypted. A disk that already holds data, such as an older VM's on its first maintenance run after LazyVM gained BitLocker, is encrypted whole. Either way, encryption runs in the background in the VM, and nothing needs editing in `VM.json`.
+- Auto-unlock belongs to the `C:` that turned it on, so a rebuilt VM cannot unlock the disks by itself. It unlocks each one with its stored recovery password, then turns auto-unlock on for its own `C:`. If a disk stays locked, the rebuild stops before restoring anything onto it.
+- If BitLocker cannot be turned on for a disk, the disk is left as it was, the log says why, and the next run tries again. Nothing else stops. While `C:` cannot be encrypted, for example in a VM without a TPM, the data disks are left unencrypted.
+
+Each recovery password is made on the host and stored, encrypted, in `Credentials\bitlocker.cred` before the disk is encrypted with it, keyed by the disk's GPT disk GUID. The passwords of earlier OS disks are kept too, so a retired disk can still be opened. They are never written to `VM.json` or the log. To read them, as an administrator:
+
+```powershell
+Get-LazyVMCredential -Name DevBox -RecoveryPassword
+```
+
+Windows keeps its recovery tools (Windows RE) on a partition of their own after `C:`, because it refuses them on a BitLocker-encrypted volume. Extending `C:` keeps it that way.
 
 ## 8. Settings
 

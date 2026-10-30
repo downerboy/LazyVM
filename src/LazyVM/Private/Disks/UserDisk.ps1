@@ -116,6 +116,7 @@ function Initialize-GuestUserDisk {
 
     Write-GuestNote -Notes $result.Notes
     Save-DataDiskGuid -VM $VM -GuidSetting 'UserDiskGuid' -Guid $result.Guid -Label 'User disk'
+    if ($result.Formatted) { $VM.Runtime.FormattedDisks += 'UserDiskGuid' }
 
     $state = if ($result.Formatted) { 'formatted as' } else { 'ready at' }
     Write-LogEntry "User disk $state $($result.Letter): ($($result.FreeGB) GB free of $($result.SizeGB) GB); personal folders are on it" 'OK'

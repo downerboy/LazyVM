@@ -129,7 +129,8 @@ function Get-LicenseReport {
 function Invoke-Maintenance {
     <#
       The scheduled task's daily work: extends C: into any new space, puts
-      the personal folders on the User disk, records
+      the personal folders on the User disk, turns BitLocker on for C: and
+      the persistent disks, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
       the databases, then does nothing more until the evaluation is close to
@@ -157,6 +158,10 @@ function Invoke-Maintenance {
     # An older VM gets its User disk, and what C: holds since yesterday is copied to it (#137).
     try { $null = Install-UserDisk -VM $VM }
     catch { Write-LogError 'User disk set-up failed (non-fatal)' $_ }
+
+    # BitLocker on C: and every persistent disk; an older VM's disks are encrypted whole, in the background (#175).
+    try { $null = Protect-GuestPersistentDisk -VM $VM }
+    catch { Write-LogError 'BitLocker check failed (non-fatal)' $_ }
 
     # Tooling every day. A failure here must not stop the license work below.
     try { $null = Update-ToolingRecord -VM $VM }
