@@ -53,7 +53,7 @@ Build a VM includes:
 - Create the data disk and Dev Drive (phase 5). Existing disks are never overwritten.
 - Create the VM and install Windows unattended (phase 6). Extended by **Generate the guest account** when no credential is stored.
 - Install the tooling list (phase 7), which includes **Extend C: to the whole disk**. Tooling comes from the `Tooling` section of the VM's `VM.json`, which a new VM gets from the shared template (by default the module's `Tooling.Default.json`).
-- Configure the guest (phase 8): SQL data files to D:, Visual Studio settings, databases restored from D:\SQLBackup.
+- Configure the guest (phase 8): SQL data files to D:, Visual Studio settings. A rebuild puts the databases back afterwards (phase 10).
 - Schedule daily maintenance.
 
 Build a VM is extended by:
