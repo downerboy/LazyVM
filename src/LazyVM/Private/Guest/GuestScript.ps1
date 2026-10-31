@@ -42,7 +42,8 @@ function Invoke-GuestScript {
 function Invoke-GuestTask {
     <#
       Runs $Work in the guest as a one-shot scheduled task, as SYSTEM or, with
-      -AsGuestUser, as the signed-in guest account, and checks on it every 30
+      -AsGuestUser, as the signed-in guest account (with -Elevated, under its
+      full administrator token), and checks on it every 30
       seconds until it writes its result. The check reconnects whenever the
       session drops. When the task stops without a result, as it does if the
       guest restarts, it is started again up to $RestartAttempts times.
@@ -54,6 +55,7 @@ function Invoke-GuestTask {
         [Parameter(Mandatory)][scriptblock]$Work,
         [object[]]$ArgumentList = @(),
         [switch]$AsGuestUser,
+        [switch]$Elevated,
         [Parameter(Mandatory)][int]$TimeoutMinutes,
         [Parameter(Mandatory)][string]$Activity,
         [int]$RestartAttempts = 0
@@ -61,10 +63,10 @@ function Invoke-GuestTask {
 
     $setupDir = $VM.Settings.GuestSetupDir
     $userName = if ($AsGuestUser) { $VM.Runtime.GuestAdminUser } else { '' }
-    $startArguments = @($TaskName, $setupDir, $Work.ToString(), $ArgumentList, $userName, ($TimeoutMinutes * 60))
+    $startArguments = @($TaskName, $setupDir, $Work.ToString(), $ArgumentList, $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
     $start = {
-        param($taskName, $setupDir, $work, $argumentList, $userName, $timeoutSeconds)
-        Start-GuestTask -TaskName $taskName -SetupDir $setupDir -Work $work -ArgumentList $argumentList -UserName $userName -TimeoutSeconds $timeoutSeconds
+        param($taskName, $setupDir, $work, $argumentList, $userName, $elevated, $timeoutSeconds)
+        Start-GuestTask -TaskName $taskName -SetupDir $setupDir -Work $work -ArgumentList $argumentList -UserName $userName -Elevated:$elevated -TimeoutSeconds $timeoutSeconds
     }
 
     $progress = @{
