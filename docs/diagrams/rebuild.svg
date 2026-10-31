@@ -381,7 +381,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="335" y1="1866" x2="640" y2="1866"/>
 <g class="sn"><circle cx="351" cy="1850" r="10"/><text x="351" y="1854" text-anchor="middle">12</text></g>
 <text class="at" x="345" y="1881">phase 8: SQL files to D:,</text>
-<text class="at" x="345" y="1898">VS settings, databases</text>
+<text class="at" x="345" y="1898">VS settings</text>
 </g>
 <g class="bx-store"><rect x="20" y="1829" width="255" height="67" rx="3"/>
 <text class="st" x="147.5" y="1843" text-anchor="middle">«file»</text>

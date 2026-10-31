@@ -169,7 +169,7 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
    - Reads D24, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
    - Writes D25, installed tooling: Guest (D: data disk, W: Dev Drive, U: User disk, VS + SSMS, extensions, SQL Server 2025, winget apps)
    - Writes D26, what needs a manual install: <VM>\ (Config\VM.json, State\reinstall-by-hand.txt)
-14. `Complete-GuestConfiguration` (Installation, called by Invoke-VMBuild): phase 8: SQL files to D:, VS settings, databases
+14. `Complete-GuestConfiguration` (Installation, called by Invoke-VMBuild): phase 8: SQL files to D:, VS settings
    - Reads D27, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
    - Reads D28, database backups: D:\SQLBackup\ (<database>.bak)
    - Writes D29, configured guest: Guest (SQL data on D:\SQLData, VS settings imported, databases restored)
@@ -283,7 +283,7 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left).
    - Reads D21, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
    - Writes D22, installed tooling: Guest (D: data disk, W: Dev Drive, U: User disk, VS + SSMS, extensions, SQL Server 2025, winget apps)
    - Writes D23, what needs a manual install: <VM>\State\ (reinstall-by-hand.txt)
-12. `Complete-GuestConfiguration` (Installation, called by Invoke-Rebuild): phase 8: SQL files to D:, VS settings, databases
+12. `Complete-GuestConfiguration` (Installation, called by Invoke-Rebuild): phase 8: SQL files to D:, VS settings
    - Reads D24, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
    - Reads D25, database backups: D:\SQLBackup\ (<database>.bak)
    - Writes D26, configured guest: Guest (SQL data on D:\SQLData, VS settings imported, databases restored)
