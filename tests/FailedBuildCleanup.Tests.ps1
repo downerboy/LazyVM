@@ -1,6 +1,6 @@
 # FailedBuildCleanup.Tests.ps1
 # What a build leaves behind when it stops, and what it says about why
-# (#227): the answer-file disc holds the guest password, a guest task that
+# (#227, #247): the answer-file disc holds the guest password, a guest task that
 # timed out stays registered, and the reason given must be the real one.
 # Nothing here needs Hyper-V or a guest.
 
@@ -44,32 +44,46 @@ Describe 'Wait-GuestReady' {
     }
 }
 
-Describe 'Install-GuestSoftware when the guest never gets ready' {
+Describe 'Invoke-BuildPhase when a phase fails' {
+    # Phase 6 builds the answer-file disc and phase 7 removes it once the
+    # guest is ready; a build that stops anywhere in between must not leave
+    # it on disk (#247).
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
-        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
-        Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('lazy', [securestring]::new()) }
-        Mock -ModuleName $module Wait-GuestReady { throw 'The guest did not become ready within 90 minutes.' }
+        Mock -ModuleName $module Initialize-InstallationIso { }
         Mock -ModuleName $module Remove-UnattendSeedDisk { }
+        $seedDisk = 'D:\DevVM\Alpha\Disks\Alpha-Seed.iso'
+        $disc = @{ Exists = $true }
+        Mock -ModuleName $module Test-Path { $disc.Exists } -ParameterFilter { $LiteralPath -eq $seedDisk }
 
-        $install = {
-            param([switch]$UsedUnattend)
-            InModuleScope $module -Parameters @{ Settings = $settings; UsedUnattend = [bool]$UsedUnattend } {
-                param($Settings, $UsedUnattend)
-                Install-GuestSoftware -VM ([VMContext]::new($Settings)) -UsedUnattend:$UsedUnattend
+        $build = {
+            InModuleScope $module -Parameters @{ SeedDisk = $seedDisk } {
+                param($SeedDisk)
+                Invoke-BuildPhase -VM ([VMContext]::new(@{ VMName = 'Alpha'; SeedDiskPath = $SeedDisk }))
             }
         }
     }
 
-    It 'still deletes the answer-file disc, which holds the guest password, and stops the build' {
-        { & $install -UsedUnattend } | Should -Throw -ExpectedMessage '*did not become ready*'
+    It 'deletes the answer-file disc, which holds the guest password, and still stops the build' {
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 6; Name = 'VM Build'; Action = { throw 'New-VM failed.' } } }
 
+        $build | Should -Throw -ExpectedMessage 'New-VM failed.'
         Should -Invoke -ModuleName $module Remove-UnattendSeedDisk -Times 1 -Exactly
     }
 
-    It 'touches no answer-file disc when the build did not use one' {
-        { & $install } | Should -Throw
+    It 'leaves the answer-file disc to phase 7 when no phase fails' {
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 6; Name = 'VM Build'; Action = { } } }
 
+        $null = & $build
+
+        Should -Invoke -ModuleName $module Remove-UnattendSeedDisk -Times 0 -Exactly
+    }
+
+    It 'does not look for the answer-file disc in Hyper-V when there is none' {
+        $disc.Exists = $false
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 1; Name = 'Readiness'; Action = { throw 'Hyper-V is not available.' } } }
+
+        $build | Should -Throw -ExpectedMessage 'Hyper-V is not available.'
         Should -Invoke -ModuleName $module Remove-UnattendSeedDisk -Times 0 -Exactly
     }
 }
