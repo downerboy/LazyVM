@@ -104,6 +104,12 @@ class ToolingProduct {
         return [ToolingProduct]::KeyFor($this.ProductId, $this.ChannelId)
     }
 
+    # Visual Studio of any edition and version, rather than SSMS, which the
+    # Visual Studio Installer manages too.
+    static [bool] IsVisualStudio([string]$productId) {
+        return $productId -notlike '*.Ssms'
+    }
+
     # The edition, lower case: Microsoft.VisualStudio.Product.Community -> community.
     [string] Edition() {
         return ($this.ProductId -split '\.')[-1].ToLowerInvariant()

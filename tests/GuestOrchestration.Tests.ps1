@@ -198,6 +198,7 @@ Describe 'Set-GuestCustomization' {
             GuestShowFileExtensions = $false
             GuestTaskbarLeft        = $false
             GuestHideTaskbarSearch  = $false
+            GuestDeveloperMode      = $false
         }
     }
 
@@ -221,6 +222,16 @@ Describe 'Set-GuestCustomization' {
             ($ArgumentList[0] -join ',') -eq 'Microsoft.BingNews' -and @($ArgumentList[1]).Count -eq 2 -and -not $ArgumentList[2] -and -not $ArgumentList[3]
         }
         Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter { $Notes[0].Text -eq 'removed Microsoft.BingNews' }
+    }
+
+    It 'asks the guest to turn on Developer Mode when the settings say so (#238)' {
+        Mock -ModuleName $module Invoke-GuestScript { }
+        $asking = $plain.Clone()
+        $asking.GuestDeveloperMode = $true
+
+        InModuleScope $module -Parameters @{ Settings = $asking } { param($Settings) Set-GuestCustomization -VM ([VMContext]::new($Settings)) }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { $ArgumentList[4] -eq $true }
     }
 
     It 'logs a guest failure and lets the build carry on' {

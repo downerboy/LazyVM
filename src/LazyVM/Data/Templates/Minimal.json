@@ -1,0 +1,17 @@
+﻿{
+  "$schema": "../LazyVM.Settings.schema.json",
+  "InstallSqlServer": false,
+  "Tooling": {
+    "Version": 1,
+    "Description": "Minimal template: Windows with no Visual Studio Installer products (no Visual Studio, no SSMS) and no SQL Server, only the SQL Server client libraries and LINQPad.",
+    "Products": [],
+    "WingetPackages": [
+      { "Id": "LINQPad.LINQPad.9", "Source": "winget" },
+      { "Id": "Microsoft.CLRTypesSQLServer.2019", "Source": "winget" },
+      { "Id": "Microsoft.msodbcsql.17", "Source": "winget" },
+      { "Id": "Microsoft.msodbcsql.18", "Source": "winget" },
+      { "Id": "Microsoft.SQLServer.OLEDBDriver", "Source": "winget" }
+    ],
+    "Programs": []
+  }
+}

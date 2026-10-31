@@ -691,6 +691,63 @@ Describe 'New-VMProfile' {
             }
         } | Should -Throw -ExpectedMessage $Message
     }
+    It 'with -Template, applies the named template over the shared template' {
+        $root = New-TestRoot -HostSettings ('{ "MemMaxGB": 24, "Tooling":' + $toolingJson + ' }')
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -Root $Root -Name 'Alpha' -Template 'Minimal'
+        }
+        $vmProfile = Read-TestJson -Path $path
+
+        $vmProfile.MemMaxGB | Should -Be 24
+        $vmProfile.InstallSqlServer | Should -BeFalse
+        Get-TestWingetId -Settings $vmProfile | Should -Contain 'Microsoft.msodbcsql.18'
+        Get-TestWingetId -Settings $vmProfile | Should -Not -Contain 'Git.Git'
+    }
+
+    It 'refuses a template that does not exist, naming the ones there are' {
+        $root = New-TestRoot
+
+        {
+            InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                New-VMProfile -Root $Root -Name 'Alpha' -Template 'Nope'
+            }
+        } | Should -Throw -ExpectedMessage "*no template named 'Nope'*Minimal*"
+    }
+}
+
+Describe 'The built-in templates' {
+    BeforeDiscovery {
+        $templateDir = Join-Path -Path $PSScriptRoot -ChildPath '../src/LazyVM/Data/Templates'
+        $templateNames = @(Get-ChildItem -LiteralPath $templateDir -Filter '*.json' -File | ForEach-Object { $_.BaseName } | Sort-Object)
+    }
+
+    It 'are listed by name' -TestCases @{ Expected = $templateNames } {
+        InModuleScope $module { Get-VMTemplateName } | Should -Be $Expected
+    }
+
+    It '<_> loads cleanly and sets no setting that must differ between VMs' -ForEach $templateNames {
+        $values = InModuleScope $module -Parameters @{ Name = $_ } { param($Name) Read-VMTemplate -Name $Name }
+        $perVM = InModuleScope $module { Get-PerVMSettingName }
+
+        @($values.Keys | Where-Object { $perVM -contains $_ }) | Should -BeNullOrEmpty
+    }
+
+    It 'Minimal has no SQL Server and no Visual Studio Installer product, and only the SQL client packages' {
+        $values = InModuleScope $module { Read-VMTemplate -Name 'Minimal' }
+
+        $values.InstallSqlServer | Should -BeFalse
+        @($values.Tooling.Products) | Should -BeNullOrEmpty
+        @(Get-TestWingetId -Settings $values | Sort-Object) | Should -Be @(
+            'LINQPad.LINQPad.9'
+            'Microsoft.CLRTypesSQLServer.2019'
+            'Microsoft.msodbcsql.17'
+            'Microsoft.msodbcsql.18'
+            'Microsoft.SQLServer.OLEDBDriver'
+        )
+    }
 }
 
 Describe 'Read-VMSetting' {
