@@ -258,7 +258,7 @@ Describe 'Invoke-Rebuild verification' {
         Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
         Mock -ModuleName $module Install-UserDisk { }
         Mock -ModuleName $module Invoke-RetireCurrentVM { [pscustomobject]@{ RetiredOsPath = 'old.vhdx'; NewOsPath = 'new.vhdx' } }
-        Mock -ModuleName $module Invoke-BuildPhase { }
+        Mock -ModuleName $module Invoke-BuildPhase { $buildComplete }
         Mock -ModuleName $module Restore-GuestState { $true }
         Mock -ModuleName $module Remove-RetiredVM { }
         Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('admin', [securestring]::new()) }
