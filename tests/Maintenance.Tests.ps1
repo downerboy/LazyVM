@@ -23,6 +23,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Expand-GuestSystemDrive { 'stray' }
         Mock -ModuleName $module Install-UserDisk { 'stray' }
         Mock -ModuleName $module Protect-GuestPersistentDisk { 'stray' }
+        Mock -ModuleName $module Backup-UserDisk { 'stray' }
         Mock -ModuleName $module Update-ToolingRecord { }
         Mock -ModuleName $module Update-GuestEnvironmentRecord { }
         Mock -ModuleName $module Update-GuestFirewallRecord { }
@@ -72,6 +73,16 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Protect-GuestPersistentDisk -Times 1 -Exactly
+    }
+
+    It 'backs up the User disk every day, and carries on when that fails (#139)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Backup-UserDisk { throw 'the external disk was unplugged' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Backup-UserDisk -Times 1 -Exactly
     }
 
     It 'captures the state when it changed and nothing else is due (#20)' {
