@@ -127,6 +127,22 @@ Describe 'Invoke-GuestRearm' {
     }
 }
 
+Describe 'Remove-VMCheckpointTree' {
+    It 'deletes each root checkpoint with its children, so no checkpoint is deleted twice (#194)' {
+        Mock -ModuleName $module Get-VMSnapshot {
+            [pscustomobject]@{ Name = 'Tooling 20261030-030041'; ParentSnapshotName = $null }
+            [pscustomobject]@{ Name = 'Tooling 20261030-223746'; ParentSnapshotName = 'Tooling 20261030-030041' }
+        }
+        Mock -ModuleName $module Remove-VMSnapshot { }
+
+        InModuleScope $module { Remove-VMCheckpointTree -VMName 'testvm' }
+
+        Should -Invoke -ModuleName $module Remove-VMSnapshot -Times 1 -Exactly -ParameterFilter {
+            $VMName -eq 'testvm' -and @($Name).Count -eq 1 -and $Name[0] -eq 'Tooling 20261030-030041' -and $IncludeAllChildSnapshots
+        }
+    }
+}
+
 Describe 'Invoke-Rebuild' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
