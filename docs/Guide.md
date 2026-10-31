@@ -505,6 +505,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `UnsignedExtensions` | none | Marketplace extensions, by item name (`Publisher.Name`), that may be installed even though they are not signed. Any other unsigned extension is refused by the installer and named in the log; Visual Studio and its other extensions install anyway. |
 | `vCPU`, `MemStartGB`, `MemMaxGB` | 4, 8, 16 | VM sizing, applied when the VM is built. 8 GB to start is the Dev Drive minimum. |
 | `OSDiskSizeGB`, `SQLDiskSizeGB`, `DevDriveSizeGB`, `UserDiskSizeGB` | 120, 100, 250, 20 | Disk sizes, applied when each disk is created. All grow as needed up to this size. To give `C:` more room later, make the VM's OS disk bigger in Hyper-V Manager or with `Resize-VHD`; the next maintenance run extends `C:` into the new space, after taking a checkpoint it removes once all went well. If it fails, the checkpoint is kept, the log says how to go back to it, and `C:` is not extended again until you delete that checkpoint. |
+| `InstallVisualStudio` | true | Whether the VM gets Visual Studio and its settings. `false` installs no Visual Studio from the tooling list (SSMS still installs), applies no Visual Studio settings and leaves them out of captures. Set it in the VM's `VM.json`. |
 | `UseDevDrive` | true | Whether to create, attach and designate the Dev Drive. |
 | `DevDriveLetter` | W | Where the Dev Drive appears in the VM. |
 | `UserDiskLetter` | U | Where the User disk appears in the VM. |

@@ -29,6 +29,7 @@ BeforeAll {
         VSInstallMinutes       = 90
         InstallerBootstrappers = @{ 'VisualStudio.18.Release' = 'https://aka.ms/vs/stable/vs_{edition}.exe' }
         UnsignedExtensions     = @()
+        InstallVisualStudio    = $true
     }
 }
 
@@ -308,5 +309,67 @@ Describe 'Test-InstallSucceeded' {
         @{ Code = $null; Expected = $false }
     ) {
         InModuleScope $module -Parameters @{ Code = $Code } { param($Code) Test-InstallSucceeded -ExitCode $Code } | Should -Be $Expected
+    }
+}
+
+Describe 'Visual Studio only when VM.json says so (#221)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        # The boundary each Visual Studio step reaches when it runs.
+        Mock -ModuleName $module Get-GuestVisualStudio { throw 'stop here' }
+        Mock -ModuleName $module Read-VMTooling { $null }
+    }
+
+    It '<Step> reaches Get-GuestVisualStudio only when InstallVisualStudio is <Install>' -ForEach @(
+        foreach ($install in $true, $false) {
+            @{ Step = 'Restore-GuestVisualStudioSetting'; Extra = @{}; Install = $install }
+            @{ Step = 'Save-GuestVisualStudioState'; Extra = @{ CaptureDir = 'D:\State\Captures\1' }; Install = $install }
+            @{ Step = 'Restore-GuestVisualStudioState'; Extra = @{ Manifest = 'with Visual Studio' }; Install = $install }
+            @{ Step = 'Get-GuestStateFingerprint'; Extra = @{}; Install = $install }
+        }
+    ) {
+        $vmSettings = $settings.Clone()
+        $vmSettings.InstallVisualStudio = $Install
+        $vmSettings.UseDevDrive = $true
+        $vmSettings.DevDriveLetter = 'W'
+        $vmSettings.VSSettingsBackup = Join-Path $TestDrive 'missing.vssettings'
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Thumbprints = @(); VisualStudioSettingsHash = '' } }
+
+        try {
+            InModuleScope $module -Parameters @{ Settings = $vmSettings; Step = $Step; Extra = $Extra } {
+                param($Settings, $Step, $Extra)
+                $arguments = @{ VM = [VMContext]::new($Settings) }
+                foreach ($key in $Extra.Keys) { $arguments[$key] = $Extra[$key] }
+                if ($arguments.ContainsKey('Manifest')) {
+                    $arguments.Manifest = [CaptureManifest]::new()
+                    $arguments.Manifest.VisualStudio = [pscustomobject]@{ Files = @{} }
+                }
+                & $Step @arguments
+            }
+        }
+        catch { $null = $_ }
+
+        Should -Invoke -ModuleName $module Get-GuestVisualStudio -Times ([int]$Install) -Exactly
+    }
+
+    It 'builds from a tooling list <Outcome> when InstallVisualStudio is <Install>' -ForEach @(
+        @{ Install = $true; Outcome = 'with Visual Studio and SSMS'; Expected = @('Microsoft.VisualStudio.Product.Community', 'Microsoft.VisualStudio.Product.Ssms') }
+        @{ Install = $false; Outcome = 'with SSMS but not Visual Studio'; Expected = @('Microsoft.VisualStudio.Product.Ssms') }
+    ) {
+        $vmSettings = $settings.Clone()
+        $vmSettings.InstallVisualStudio = $Install
+        $vmSettings.Tooling = @{
+            Products = @(
+                @{ ProductId = 'Microsoft.VisualStudio.Product.Community'; ChannelId = 'VisualStudio.18.Release' }
+                @{ ProductId = 'Microsoft.VisualStudio.Product.Ssms'; ChannelId = 'SSMS.22.SSMS.Release' }
+            )
+        }
+
+        $products = @(InModuleScope $module -Parameters @{ Settings = $vmSettings } {
+                param($Settings)
+                (Get-BuildTooling -VM ([VMContext]::new($Settings))).Products | ForEach-Object { $_.ProductId }
+            })
+
+        $products | Should -Be $Expected
     }
 }

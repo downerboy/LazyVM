@@ -4,7 +4,8 @@
 function Get-BuildTooling {
     <#
       The tooling list a build installs: the one in this VM's VM.json, or,
-      while VM.json has none yet, the shared template's.
+      while VM.json has none yet, the shared template's. Without Visual
+      Studio when InstallVisualStudio is off; SSMS stays.
     #>
     [OutputType([ToolingRecord])]
     param(
@@ -15,11 +16,17 @@ function Get-BuildTooling {
     $record = Read-VMTooling -VM $VM
     if ($record) {
         if (-not $Quiet) { Write-LogEntry "Installing from this VM's tooling list, in VM.json" 'INFO' }
-        return $record
+    }
+    else {
+        if (-not $Quiet) { Write-LogEntry "This VM has no tooling list yet - installing the shared template's" 'INFO' }
+        $record = [ToolingRecord]::FromObject($VM.Settings[$script:ToolingSettingName])
     }
 
-    if (-not $Quiet) { Write-LogEntry "This VM has no tooling list yet - installing the shared template's" 'INFO' }
-    return [ToolingRecord]::FromObject($VM.Settings[$script:ToolingSettingName])
+    if (-not $VM.Settings.InstallVisualStudio) {
+        if (-not $Quiet) { Write-LogEntry 'Visual Studio turned off in the settings (InstallVisualStudio) - leaving it out' 'INFO' }
+        $record.Products = [ToolingProduct[]]@($record.Products | Where-Object { -not [ToolingProduct]::IsVisualStudio($_.ProductId) })
+    }
+    return $record
 }
 
 function Initialize-VMTooling {
