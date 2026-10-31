@@ -854,8 +854,9 @@ Describe 'Config templates' {
         }
         catch { $_.Exception.Message }
 
+        $builtIn = InModuleScope $module { Join-Path -Path (Get-BuiltInTemplateDir) -ChildPath 'PlainWindows.json' }
         $message | Should -BeLike '*One.json*Two.json*'
-        $message | Should -Not -BeLike '*Data*Templates*'
+        $message.Contains($builtIn) | Should -BeFalse
     }
 
     It 'use the same name rule in the module and the template schema' {
