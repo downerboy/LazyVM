@@ -8,6 +8,14 @@ function Install-WingetPackage {
       before DNS does, and without that wait installs fail with 0x80072EE7.
       Each package is independent: one that fails is reported and the rest
       carry on, and nothing here stops the build.
+
+      The installs run as a scheduled task in the guest (Invoke-GuestTask),
+      so a dropped session does not lose them or their report, and a guest
+      restart starts them again; packages already installed by then are
+      skipped (#27). The task runs as the guest account under its full
+      token, as the session did, so a per-user package still goes to that
+      account. It runs outside the session, without Guest.Helpers.ps1, so
+      winget is found first, and the report comes back as one line of JSON.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -19,8 +27,15 @@ function Install-WingetPackage {
 
     Write-LogEntry "Checking $($tools.Count) winget package(s) from the tooling list..." 'INFO'
     try {
-        $notes = Invoke-GuestScript -VM $VM -Activity 'winget packages' -TimeoutMinutes 60 -ArgumentList @(, $tools) -ScriptBlock {
-            param($tools)
+        $winget = Invoke-GuestScript -VM $VM -Activity 'finding winget' -TimeoutMinutes 5 -ScriptBlock { Find-GuestWinget }
+        if (-not $winget) {
+            Write-LogEntry 'Skipped every winget package: winget is not available in the guest - install App Installer from the Microsoft Store' 'WARN'
+            return
+        }
+
+        $report = Invoke-GuestTask -VM $VM -TaskName "${script:TaskPrefix}winget" -Activity 'winget packages' -TimeoutMinutes 60 `
+            -AsGuestUser -Elevated -RestartAttempts 3 -ArgumentList @($winget, $tools) -Work {
+            param($winget, $tools)
             $ErrorActionPreference = 'Continue'
 
             # A bare winget exit code says nothing. These are the ones that
@@ -42,21 +57,16 @@ function Install-WingetPackage {
             # Worth one retry; everything else is a real failure.
             $transientCodes = @(-2147012889, -2147012894, -2147012867, -2147012716)
 
-            $winget = Find-GuestWinget
-            if (-not $winget) {
-                return @(New-GuestNote -Level WARN -Text 'skipped every package: winget is not available in the guest - install App Installer from the Microsoft Store')
-            }
-
             $notes = @()
-            foreach ($tool in $tools) {
-                $id = "$($tool['Id'])"
+            foreach ($tool in @($tools)) {
+                $id = "$($tool.Id)"
                 $sourceArgs = @()
-                if ("$($tool['Source'])") { $sourceArgs = @('--source', "$($tool['Source'])") }
+                if ("$($tool.Source)") { $sourceArgs = @('--source', "$($tool.Source)") }
 
                 # Already present? winget list exits non-zero when nothing matches.
                 $listed = & $winget list --id $id --exact --accept-source-agreements 2>&1
                 if ($LASTEXITCODE -eq 0 -and ($listed -join ' ') -match [regex]::Escape($id)) {
-                    $notes += New-GuestNote -Level INFO -Text "present: $id"
+                    $notes += [pscustomobject]@{ Level = 'INFO'; Text = "present: $id" }
                     continue
                 }
 
@@ -69,22 +79,23 @@ function Install-WingetPackage {
                     $exit = $LASTEXITCODE
                     if ($exit -eq 0 -or $transientCodes -notcontains $exit) { break }
                     if ($attempt -eq 1) {
-                        $notes += New-GuestNote -Level INFO -Text "retrying $id after a network error"
+                        $notes += [pscustomobject]@{ Level = 'INFO'; Text = "retrying $id after a network error" }
                         Start-Sleep -Seconds 20
                     }
                 }
 
-                if ($exit -eq 0) { $notes += New-GuestNote -Level OK -Text "installed: $id" }
-                elseif ($exit -eq $alreadyInstalled) { $notes += New-GuestNote -Level INFO -Text "present: $id" }
+                if ($exit -eq 0) { $notes += [pscustomobject]@{ Level = 'OK'; Text = "installed: $id" } }
+                elseif ($exit -eq $alreadyInstalled) { $notes += [pscustomobject]@{ Level = 'INFO'; Text = "present: $id" } }
                 else {
                     $meaning = if ($exitMeanings.ContainsKey($exit)) { $exitMeanings[$exit] } else { 'see the winget documentation for this code' }
                     # An Int32 formats as its two's-complement hex, which is how winget documents its codes.
-                    $notes += New-GuestNote -Level WARN -Text ('failed: {0} - exit {1} [0x{1:X8}] {2}' -f $id, [int]$exit, $meaning)
+                    $notes += [pscustomobject]@{ Level = 'WARN'; Text = ('failed: {0} - exit {1} [0x{1:X8}] {2}' -f $id, [int]$exit, $meaning) }
                 }
             }
-            return $notes
+            # The task's result is one line of text, so the report goes back as JSON.
+            return (ConvertTo-Json -InputObject @($notes) -Compress)
         }
-        Write-GuestNote -Notes $notes
+        Write-GuestNote -Notes @(ConvertFrom-Json -InputObject $report)
     }
     catch {
         Write-LogError 'winget package installation failed (non-fatal)' $_
