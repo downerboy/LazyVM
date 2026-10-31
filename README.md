@@ -136,7 +136,7 @@ src/LazyVM/
   LazyVM.psd1, .psm1   the module
   Public/                          one file per command
   Private/<Area>/                  everything else, by area
-  Data/                            the settings schema and the default tooling list
+  Data/                            the settings schema, the default tooling list and the named templates
 tests/                             Pester tests
 Invoke-AnalyzerAndTest.ps1         check a change: assemble, analyze, test
 Install-FromRepository.cmd         double-click: check, then install if all passed

@@ -60,7 +60,9 @@ function Invoke-Rebuild {
 
     $verification = $null
     if ($rebuildOk) {
-        $expected = if ($manifest) { @($manifest.Databases) } else { @() }
+        # @() around the if: an if statement's output is unrolled, so an empty
+        # list would come out as $null (#208).
+        $expected = @(if ($manifest) { $manifest.Databases })
         try { $verification = Test-RebuiltVM -VM $VM -ExpectedDatabases $expected }
         catch {
             Write-LogError 'Verification failed' $_

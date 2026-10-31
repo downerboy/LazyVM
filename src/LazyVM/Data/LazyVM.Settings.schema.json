@@ -756,6 +756,11 @@
       "default": true,
       "description": "Turn off Widgets in the VM."
     },
+    "GuestDeveloperMode": {
+      "type": "boolean",
+      "default": true,
+      "description": "Turn on Developer Mode in the VM, which Visual Studio needs to build and run WinUI and other packaged apps. Set to false to leave it off."
+    },
     "GuestHideTaskbarSearch": {
       "type": "boolean",
       "default": true,
@@ -810,6 +815,11 @@
       "description": "How long to wait for the VM's network before downloads, in minutes.",
       "minimum": 1,
       "maximum": 120
+    },
+    "InstallVisualStudio": {
+      "type": "boolean",
+      "default": true,
+      "description": "Give the VM Visual Studio and bring its settings across. When false, the build installs no Visual Studio from the tooling list (SSMS still installs) and applies no Visual Studio settings, and capture and restore leave Visual Studio's settings, NuGet.Config, .gitconfig, snippets and templates out. Visual Studio already in the VM stays. Set it in the VM's VM.json; the shared settings file only supplies the default for new VMs."
     },
     "VSInstallMinutes": {
       "type": "integer",

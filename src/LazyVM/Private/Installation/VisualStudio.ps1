@@ -42,7 +42,7 @@ function Get-GuestVisualStudio {
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $products = @(Get-GuestInstallerProduct -VM $VM | Where-Object { $_.ProductId -notlike '*.Ssms' })
+    $products = @(Get-GuestInstallerProduct -VM $VM | Where-Object { [ToolingProduct]::IsVisualStudio($_.ProductId) })
     if ($products.Count -eq 0) { return $null }
     return ($products | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1)
 }
@@ -403,6 +403,10 @@ function Restore-GuestVisualStudioSetting {
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
+    if (-not $VM.Settings.InstallVisualStudio) {
+        Write-LogEntry 'Visual Studio turned off in the settings (InstallVisualStudio) - skipping its settings' 'INFO'
+        return
+    }
     $backup = $VM.Settings.VSSettingsBackup
     $hasBackup = Test-Path -LiteralPath $backup
     $projects = if ($VM.Settings.UseDevDrive) { "$($VM.Runtime.DevDriveLetter):\source\repos" } else { $null }
