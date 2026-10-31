@@ -40,6 +40,10 @@ function Install-SqlServerIfMissing {
     <# Installs SQL Server unless the guest has an instance. Installs nothing when the guest cannot be asked. #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
+    if (-not $VM.Settings.InstallSqlServer) {
+        Write-LogEntry 'SQL Server turned off in the settings (InstallSqlServer) - not installing it' 'INFO'
+        return
+    }
     try { $sql = Get-GuestSqlInstance -VM $VM }
     catch {
         Write-LogError 'Could not tell whether SQL Server is installed, so it was not installed' $_

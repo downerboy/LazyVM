@@ -220,7 +220,7 @@ Describe 'Recording a data disk''s identity' {
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
             Add-SqlDataDisk -VM $vm
         }
 
@@ -235,7 +235,7 @@ Describe 'Recording a data disk''s identity' {
 
         InModuleScope $module -Parameters @{ Root = $root; Path = $path } {
             param($Root, $Path)
-            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = $Path })
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = $Path })
             Add-SqlDataDisk -VM $vm
         }
 
@@ -276,7 +276,7 @@ Describe 'Recording a data disk''s identity' {
         InModuleScope $module -Parameters @{ Root = $root; Function = $Function } {
             param($Root, $Function)
             $vm = [VMContext]::new(@{
-                    VMName = 'Alpha'; Root = $Root; UseDevDrive = $true; DevDriveLetter = 'W'; DevDriveLabel = 'DevDrive'; DevDriveFilters = @()
+                    VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; UseDevDrive = $true; DevDriveLetter = 'W'; DevDriveLabel = 'DevDrive'; DevDriveFilters = @()
                     GuestDataDriveLetter = 'D'; SqlDataFolder = 'SQLData'; SqlLogFolder = 'SQLLog'; SqlTempFolder = 'SQLTemp'; SqlBackupFolder = 'SQLBackup'
                     SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx"; DevDrivePath = "$Root\Alpha\Disks\Alpha-DevDrive.vhdx"
                     UserDiskPath = "$Root\Alpha\Disks\Alpha-User.vhdx"; UserDiskLetter = 'U'
