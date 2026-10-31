@@ -19,6 +19,7 @@
         'Get-LazyVMSetting'
         'Get-LazyVMTooling'
         'Invoke-LazyVMMaintenance'
+        'Test-LazyVM'
         'Invoke-LazyVMRebuild'
         'New-LazyVM'
         'Register-LazyVMMaintenance'
