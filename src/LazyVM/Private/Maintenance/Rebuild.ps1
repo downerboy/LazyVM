@@ -4,8 +4,9 @@
 #   capture -> shut down -> retire the old OS disk by RENAME -> build phases
 #   3-8 -> restore -> check -> only then delete the retired disk.
 #
-# The old OS disk is never deleted until the new guest has passed the check,
-# so a failed rebuild can be undone. The SQL data disk, the Dev Drive and the
+# The old OS disk is never deleted until every build phase has completed
+# without problems and the new guest has passed the check, so a failed
+# rebuild can be undone. The SQL data disk, the Dev Drive and the
 # User disk are never touched.
 
 function Invoke-Rebuild {
@@ -45,8 +46,9 @@ function Invoke-Rebuild {
     $retired = if ($exists) { Invoke-RetireCurrentVM -VM $VM } else { $null }
 
     $rebuildOk = $false
+    $buildOutcome = $null
     try {
-        $null = Invoke-BuildPhase -VM $VM -FromPhase 3 -NoUnattend:$NoUnattend
+        $buildOutcome = Invoke-BuildPhase -VM $VM -FromPhase 3 -NoUnattend:$NoUnattend
         if ($manifest -and -not (Restore-GuestState -VM $VM)) {
             Write-LogEntry 'Some of the capture could not be restored; the log above says what' 'WARN'
         }
@@ -69,13 +71,15 @@ function Invoke-Rebuild {
     }
 
     $elapsed = [int]((Get-Date) - $started).TotalMinutes
-    if ($rebuildOk -and $verification.Passed) {
+    $builtCleanly = $buildOutcome -eq [BuildOutcome]::Complete
+    if ($rebuildOk -and $builtCleanly -and $verification.Passed) {
         Write-LogEntry "Rebuild verified in $elapsed minutes" 'OK'
         if ($retired) { $null = Remove-RetiredVM -VM $VM -Retired $retired }
         return $true
     }
 
     Write-LogEntry "Rebuild did NOT complete cleanly (after $elapsed minutes)" 'ERROR'
+    if ($buildOutcome -eq [BuildOutcome]::CompleteWithProblems) { Write-LogEntry '  Some build steps failed; the log above says which' 'ERROR' }
     if ($verification) { foreach ($failure in @($verification.Failures)) { Write-LogEntry "  $failure" 'ERROR' } }
     if ($retired) {
         Write-LogEntry '' 'INFO'
