@@ -88,6 +88,15 @@ function Protect-GuestSystemDrive {
     if (-not $guid) { throw 'the OS disk has no GPT disk GUID to store its recovery password under' }
 
     $password = Get-OrNewRecoveryPassword -VM $VM -Guid $guid -Disk 'OS disk'
+
+    # BitLocker will not use the TPM while bootable media, such as the
+    # Windows ISO the build attached, is in a DVD drive (#188). The drives
+    # stay: the SQL Server install mounts its ISO in one.
+    foreach ($drive in @(Get-VMDvdDrive -VMName $VM.Name -ErrorAction Stop | Where-Object { $_.Path })) {
+        Set-VMDvdDrive -VMName $VM.Name -ControllerNumber $drive.ControllerNumber -ControllerLocation $drive.ControllerLocation -Path $null -ErrorAction Stop
+        Write-LogEntry "  ejected $($drive.Path) from the DVD drive, since BitLocker will not use the TPM while it is there" 'INFO'
+    }
+
     $notes = Invoke-GuestScript -VM $VM -Activity 'BitLocker on C:' -TimeoutMinutes 10 -ArgumentList @($password, [bool]$UsedSpaceOnly) -ScriptBlock {
         param($password, $usedSpaceOnly)
         $ErrorActionPreference = 'Stop'

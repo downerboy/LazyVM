@@ -388,7 +388,7 @@ A key file is used rather than Windows DPAPI on purpose. The scheduled task runs
 
 Every persistent disk is encrypted with BitLocker, so each VM's data stays its own, except when it is handed to the VM that replaces it in a rebuild.
 
-- `C:` is encrypted with the VM's virtual TPM, so it unlocks itself when the VM starts. It has to be: a data disk can unlock itself only once `C:` is encrypted.
+- `C:` is encrypted with the VM's virtual TPM, so it unlocks itself when the VM starts. It has to be: a data disk can unlock itself only once `C:` is encrypted. BitLocker will not use the TPM while a DVD drive holds bootable media, so LazyVM first ejects the Windows ISO the build attached, and the log says so. The drive itself stays.
 - The SQL data disk, the Dev Drive and the User disk are each protected by a recovery password and unlock themselves once `C:` is unlocked (auto-unlock).
 - Windows 11 may have encrypted the disks already, with its protection left off ("waiting for activation"). LazyVM then gives each disk its recovery password, adds the TPM to `C:`, and turns protection on, and the log says so for each disk. A `C:` that Windows Update has suspended until the next restart is left for Windows to resume.
 - A disk formatted in the same run, such as a new VM's, has only its used space encrypted. A disk that already holds data, such as an older VM's on its first maintenance run after LazyVM gained BitLocker, is encrypted whole. Either way, encryption runs in the background in the VM, and nothing needs editing in `VM.json`.
