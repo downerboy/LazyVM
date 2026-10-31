@@ -187,6 +187,24 @@ Describe 'Add-VMScsiHardDisk' {
     }
 }
 
+Describe 'Add-VMDataDisk' {
+    It 'takes a disk a checkpoint has wrapped in a differencing disk as attached already (#191)' {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Add-VMScsiHardDisk { 5 }
+        Mock -ModuleName $module Update-VMProfile { }
+        Mock -ModuleName $module Start-Sleep { }
+        Mock -ModuleName $module Get-VMHardDiskDrive { [pscustomobject]@{ ControllerType = 'SCSI'; ControllerNumber = 0; ControllerLocation = 4; Path = 'C:\VM\User_3F0A.avhdx' } }
+        Mock -ModuleName $module Get-VHD { [pscustomobject]@{ Path = $Path; ParentPath = 'C:\VM\User.vhdx' } } -ParameterFilter { $Path -eq 'C:\VM\User_3F0A.avhdx' }
+        Mock -ModuleName $module Get-VHD { [pscustomobject]@{ Path = $Path; ParentPath = '' } } -ParameterFilter { $Path -eq 'C:\VM\User.vhdx' }
+
+        InModuleScope $module {
+            Add-VMDataDisk -VM ([VMContext]::new(@{ VMName = 'testvm'; Root = 'C:\LazyVM' })) -Path 'C:\VM\User.vhdx' -Label 'User disk' -LocationSetting 'UserDiskScsiLocation'
+        }
+
+        Should -Invoke -ModuleName $module Add-VMScsiHardDisk -Times 0
+    }
+}
+
 Describe 'Recording a data disk''s identity' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
