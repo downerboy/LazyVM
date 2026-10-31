@@ -38,13 +38,13 @@ function Set-GuestCustomization {
     $settings = $VM.Settings
     $userValues = @(Get-GuestUserSetting -Settings $settings)
     $apps = @($settings.GuestRemoveApps)
-    if ($apps.Count -eq 0 -and $userValues.Count -eq 0 -and -not $settings.GuestRemoveOneDrive -and -not $settings.GuestHideWidgets) { return }
+    if ($apps.Count -eq 0 -and $userValues.Count -eq 0 -and -not $settings.GuestRemoveOneDrive -and -not $settings.GuestHideWidgets -and -not $settings.GuestDeveloperMode) { return }
 
     Write-LogEntry 'Removing built-in apps and applying Windows settings in the guest...' 'INFO'
     try {
         $notes = Invoke-GuestScript -VM $VM -Activity 'Windows clean-up' -TimeoutMinutes 20 `
-            -ArgumentList @($apps, $userValues, [bool]$settings.GuestRemoveOneDrive, [bool]$settings.GuestHideWidgets) -ScriptBlock {
-            param($apps, $userValues, $removeOneDrive, $hideWidgets)
+            -ArgumentList @($apps, $userValues, [bool]$settings.GuestRemoveOneDrive, [bool]$settings.GuestHideWidgets, [bool]$settings.GuestDeveloperMode) -ScriptBlock {
+            param($apps, $userValues, $removeOneDrive, $hideWidgets, $developerMode)
             $notes = @()
 
             foreach ($app in $apps) {
@@ -82,6 +82,16 @@ function Set-GuestCustomization {
                 New-Item -Path $policy -Force | Out-Null
                 New-ItemProperty -Path $policy -Name AllowNewsAndInterests -Value 0 -PropertyType DWord -Force | Out-Null
                 $notes += New-GuestNote -Level OK -Text 'Widgets turned off'
+            }
+
+            # What Settings > System > For developers > Developer Mode sets.
+            # Visual Studio needs it to build and run WinUI and other packaged
+            # apps. The key already holds other values, so it is not recreated.
+            if ($developerMode) {
+                $unlock = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
+                if (-not (Test-Path $unlock)) { New-Item -Path $unlock -Force | Out-Null }
+                New-ItemProperty -Path $unlock -Name AllowDevelopmentWithoutDevLicense -Value 1 -PropertyType DWord -Force | Out-Null
+                $notes += New-GuestNote -Level OK -Text 'Developer Mode turned on'
             }
 
             # Every profile, and the default profile new users are copied from.

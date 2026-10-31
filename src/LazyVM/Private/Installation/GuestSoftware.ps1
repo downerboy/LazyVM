@@ -8,7 +8,10 @@ function Install-GuestSoftware {
       guest, then installs everything in the VM's tooling list that the guest
       does not have yet: Visual Studio Installer products, SQL Server and
       winget packages.
+      Returns CompleteWithProblems when the phase could not run or something
+      in the tooling list is still missing.
     #>
+    [OutputType([BuildOutcome])]
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [switch]$UsedUnattend
@@ -18,7 +21,7 @@ function Install-GuestSoftware {
     $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
     if (-not $machine) {
         Write-LogEntry "VM '$($VM.Name)' not found - skipping Phase 7" 'WARN'
-        return
+        return [BuildOutcome]::CompleteWithProblems
     }
     $credential = Assert-GuestCredential -VM $VM
 
@@ -36,10 +39,19 @@ function Install-GuestSoftware {
         Write-LogEntry "  administrator named '$($VM.Runtime.GuestAdminUser)' with the stored password." 'INFO'
     }
 
-    Wait-GuestReady -VM $VM -Credential $credential -TimeoutMinutes $settings.GuestWaitMinutes -RequireProvisioned:$UsedUnattend
-
     # The answer-file disc holds the guest password in clear text, so it goes
-    # before anything else runs.
+    # before anything else runs, and goes even when the guest never got
+    # ready: a stopped build must not leave the password on disk (#227).
+    try {
+        Wait-GuestReady -VM $VM -Credential $credential -TimeoutMinutes $settings.GuestWaitMinutes -RequireProvisioned:$UsedUnattend
+    }
+    catch {
+        if ($UsedUnattend) {
+            Remove-UnattendSeedDisk -VM $VM
+            Write-LogEntry 'The answer-file disc is gone, so Windows Setup cannot finish unattended: finish it by hand in the VM console, or remove the VM and build it again.' 'WARN'
+        }
+        throw
+    }
     if ($UsedUnattend) { Remove-UnattendSeedDisk -VM $VM }
 
     # The data disks go on before SQL Server is installed, so its data
@@ -85,7 +97,7 @@ function Install-GuestSoftware {
     }
 
     Initialize-VMTooling -VM $VM
-    Write-ToolingReinstallReport -VM $VM -Tooling $tooling
+    if (-not (Write-ToolingReinstallReport -VM $VM -Tooling $tooling)) { return [BuildOutcome]::CompleteWithProblems }
 }
 
 function Wait-GuestNetwork {

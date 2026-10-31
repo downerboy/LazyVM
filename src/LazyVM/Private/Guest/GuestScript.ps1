@@ -39,6 +39,24 @@ function Invoke-GuestScript {
     }
 }
 
+function ConvertTo-GuestTaskArgument {
+    <#
+      The arguments for a guest task, with each string made a plain string.
+      A string that came back from the guest carries the properties remoting
+      adds (PSComputerName and the rest), and Start-GuestTask writes the
+      arguments as JSON in the guest's Windows PowerShell 5.1, which writes
+      such a string as an object: the task then got @{value=...} instead of
+      the string. Anything else is passed on as it is, arrays included.
+    #>
+    param([object[]]$ArgumentList = @())
+
+    $plain = [System.Collections.Generic.List[object]]::new()
+    foreach ($argument in $ArgumentList) {
+        if ($argument -is [string]) { $plain.Add([string]$argument) } else { $plain.Add($argument) }
+    }
+    return , $plain.ToArray()
+}
+
 function Invoke-GuestTask {
     <#
       Runs $Work in the guest as a one-shot scheduled task, as SYSTEM or, with
@@ -63,7 +81,7 @@ function Invoke-GuestTask {
 
     $setupDir = $VM.Settings.GuestSetupDir
     $userName = if ($AsGuestUser) { $VM.Runtime.GuestAdminUser } else { '' }
-    $startArguments = @($TaskName, $setupDir, $Work.ToString(), $ArgumentList, $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
+    $startArguments = @($TaskName, $setupDir, $Work.ToString(), (ConvertTo-GuestTaskArgument -ArgumentList $ArgumentList), $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
     $start = {
         param($taskName, $setupDir, $work, $argumentList, $userName, $elevated, $timeoutSeconds)
         Start-GuestTask -TaskName $taskName -SetupDir $setupDir -Work $work -ArgumentList $argumentList -UserName $userName -Elevated:$elevated -TimeoutSeconds $timeoutSeconds
@@ -75,44 +93,54 @@ function Invoke-GuestTask {
         Failures = 0
     }
 
-    $done = Wait-Until -Activity $Activity -Timeout ([timespan]::FromMinutes($TimeoutMinutes)) -Interval ([timespan]::FromSeconds(30)) -State $progress -Condition {
-        param($p)
-        try {
-            $status = Invoke-GuestScript -VM $VM -Activity "checking on $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName, $setupDir) -ScriptBlock {
-                param($taskName, $setupDir) Get-GuestTaskStatus -TaskName $taskName -SetupDir $setupDir
+    # Removed however the wait ends, so a task that timed out does not stay
+    # registered in the guest (#227).
+    try {
+        $done = Wait-Until -Activity $Activity -Timeout ([timespan]::FromMinutes($TimeoutMinutes)) -Interval ([timespan]::FromSeconds(30)) -State $progress -Condition {
+            param($p)
+            try {
+                $status = Invoke-GuestScript -VM $VM -Activity "checking on $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName, $setupDir) -ScriptBlock {
+                    param($taskName, $setupDir) Get-GuestTaskStatus -TaskName $taskName -SetupDir $setupDir
+                }
+                $p.Failures = 0
             }
-            $p.Failures = 0
-        }
-        catch {
-            # A dropped session means the guest is restarting; the next try
-            # reconnects. Anything else that keeps failing is a real problem.
-            if (Test-GuestSessionOpen -VM $VM) {
-                $p.Failures++
-                if ($p.Failures -ge 10) { throw "Could not check on $Activity in the guest: $($_.Exception.Message)" }
+            catch {
+                # A dropped session means the guest is restarting; the next try
+                # reconnects. Anything else that keeps failing is a real problem.
+                if (Test-GuestSessionOpen -VM $VM) {
+                    $p.Failures++
+                    if ($p.Failures -ge 10) { throw "Could not check on $Activity in the guest: $($_.Exception.Message)" }
+                }
+                else {
+                    Remove-GuestSession -VM $VM -KeepCredential
+                }
+                return $null
             }
-            else {
-                Remove-GuestSession -VM $VM -KeepCredential
+
+            if ($status.Done) { return $status.Done }
+
+            if ($status.BootTime -ne $p.BootTime) {
+                Write-LogEntry "  The VM restarted at $($status.BootTime) during $Activity" 'WARN'
+                $p.BootTime = $status.BootTime
+            }
+            if ($status.TaskState -ne 'Running') {
+                if ($p.Restarts -ge $RestartAttempts) { throw "$Activity stopped before finishing, $($p.Restarts + 1) time(s)" }
+                $p.Restarts++
+                Write-LogEntry "  $Activity stopped before finishing - starting it again (attempt $($p.Restarts + 1))" 'WARN'
+                $p.BootTime = Invoke-GuestScript -VM $VM -Activity "restarting $Activity" -TimeoutMinutes 5 -ArgumentList $startArguments -ScriptBlock $start
             }
             return $null
         }
-
-        if ($status.Done) { return $status.Done }
-
-        if ($status.BootTime -ne $p.BootTime) {
-            Write-LogEntry "  The VM restarted at $($status.BootTime) during $Activity" 'WARN'
-            $p.BootTime = $status.BootTime
-        }
-        if ($status.TaskState -ne 'Running') {
-            if ($p.Restarts -ge $RestartAttempts) { throw "$Activity stopped before finishing, $($p.Restarts + 1) time(s)" }
-            $p.Restarts++
-            Write-LogEntry "  $Activity stopped before finishing - starting it again (attempt $($p.Restarts + 1))" 'WARN'
-            $p.BootTime = Invoke-GuestScript -VM $VM -Activity "restarting $Activity" -TimeoutMinutes 5 -ArgumentList $startArguments -ScriptBlock $start
-        }
-        return $null
     }
-
-    $null = Invoke-GuestScript -VM $VM -Activity "tidying up after $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName) -ScriptBlock {
-        param($taskName) Remove-GuestTask -TaskName $taskName
+    finally {
+        try {
+            $null = Invoke-GuestScript -VM $VM -Activity "tidying up after $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName) -ScriptBlock {
+                param($taskName) Remove-GuestTask -TaskName $taskName
+            }
+        }
+        catch {
+            Write-LogEntry "  Could not remove the guest task $TaskName after ${Activity}: $($_.Exception.Message)" 'WARN'
+        }
     }
     if ($done -like 'FAILED:*') { throw "$Activity failed in the guest: $($done.Substring(7).Trim())" }
     return $done

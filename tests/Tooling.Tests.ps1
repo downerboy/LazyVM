@@ -501,6 +501,47 @@ Describe 'Merge-AwaitingReinstall' {
     }
 }
 
+Describe 'Write-ToolingReinstallReport' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-LogList { }
+        Mock -ModuleName $module Read-VMTooling { $null }
+        Mock -ModuleName $module Get-GuestToolingInventory {
+            [pscustomobject]@{ Products = @(); Programs = @(); WingetPackages = @([pscustomobject]@{ Id = 'Git.Git'; Source = 'winget' }) }
+        }
+
+        $report = {
+            param([string[]]$WingetIds, [string[]]$Exclude = @())
+            InModuleScope $module -Parameters @{ Record = (New-TestRecord -WingetIds $WingetIds); StateDir = $TestDrive; Exclude = $Exclude } {
+                param($Record, $StateDir, $Exclude)
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; StateDir = $StateDir; ToolingWingetExclude = $Exclude })
+                Write-ToolingReinstallReport -VM $vm -Tooling ([ToolingRecord]::FromObject($Record))
+            }
+        }
+    }
+
+    It 'says everything is installed, and returns $true, when it is' {
+        $complete = & $report -WingetIds 'Git.Git'
+
+        $complete | Should -BeTrue
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -eq 'Everything in the tooling list is installed' }
+    }
+
+    It 'names the winget packages that are not installed, and returns $false (#226)' {
+        $complete = & $report -WingetIds 'Git.Git', 'LINQPad.LINQPad.9'
+
+        $complete | Should -BeFalse
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { $Message -eq 'Everything in the tooling list is installed' }
+        Should -Invoke -ModuleName $module Write-LogList -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and @($Items) -contains 'LINQPad.LINQPad.9' -and @($Items) -notcontains 'Git.Git' }
+    }
+
+    It 'does not count a package excluded from the tooling list as missing' {
+        $complete = & $report -WingetIds 'Git.Git', 'Microsoft.Edge' -Exclude 'Microsoft.Edge'
+
+        $complete | Should -BeTrue
+    }
+}
+
 Describe 'The tooling list in VM.json (#130)' {
     BeforeAll {
         function New-TestVM {

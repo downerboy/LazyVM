@@ -146,6 +146,15 @@ Describe 'Build-LazyVM' {
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*restarting*' }
     }
 
+    It 'does not call the VM ready when a phase finished with problems (#226)' {
+        Mock -ModuleName $module Invoke-VMBuild { 'CompleteWithProblems' }
+
+        Build-LazyVM -Name Alpha
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { $Message -like '*is ready*' }
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*some steps failed*' -and $Level -eq 'WARN' }
+    }
+
     It 'brings the VM''s configuration up to date before building' {
         Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
 
@@ -304,6 +313,16 @@ Describe 'New-LazyVM' {
 
     It 'refuses a name Windows cannot use' {
         { New-LazyVM -Name 'Not Valid' } | Should -Throw -ExpectedMessage "*cannot be used as a VM name*"
+    }
+
+    It 'starts the profile from a named template with -Template' {
+        $vm = New-LazyVM -Name Beta -Template Minimal 6> $null
+
+        (Get-Content -LiteralPath $vm.ProfilePath -Raw | ConvertFrom-Json).InstallSqlServer | Should -BeFalse
+    }
+
+    It 'refuses -Template together with -From' {
+        { New-LazyVM -Name Gamma -From Beta -Template Minimal } | Should -Throw -ExpectedMessage '*Parameter set cannot be resolved*'
     }
 }
 

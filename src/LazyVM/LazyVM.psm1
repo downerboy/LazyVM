@@ -51,4 +51,10 @@ $vmCommands = @(Get-ChildItem -Path function: |
         Where-Object { $_.Name -like '*-LazyVM*' -and $_.Verb -ne 'New' -and $_.Parameters.ContainsKey('Name') } |
         ForEach-Object { $_.Name })
 Register-ArgumentCompleter -CommandName $vmCommands -ParameterName 'Name' -ScriptBlock $vmNameCompleter
+Register-ArgumentCompleter -CommandName 'New-LazyVM' -ParameterName 'Template' -ScriptBlock {
+    $wordToComplete = $args[2]
+    Get-VMTemplateName |
+        Where-Object { $_ -like "$wordToComplete*" } |
+        ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
+}
 Remove-Variable -Name vmNameCompleter, vmCommands

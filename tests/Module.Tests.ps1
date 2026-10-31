@@ -60,6 +60,13 @@ Describe 'The module' {
 
         $completions.CompletionText | Should -Be @('Alpha', 'Beta')
     }
+
+    It 'completes New-LazyVM -Template with the built-in templates' {
+        $line = 'New-LazyVM -Name Beta -Template '
+        $completions = (TabExpansion2 -inputScript $line -cursorColumn $line.Length).CompletionMatches
+
+        $completions.CompletionText | Should -Contain 'Minimal'
+    }
 }
 
 Describe '<Command>' -ForEach $commands {
