@@ -359,19 +359,57 @@ function Invoke-ProductModify {
     }
 }
 
+function ConvertTo-ProjectsLocationSetting {
+    <#
+      A .vssettings file's text with Visual Studio's projects location
+      (Projects and Solutions > Locations) set to $Path. With no $Settings,
+      the file holds that one setting.
+    #>
+    [OutputType([string])]
+    param(
+        [AllowEmptyString()][string]$Settings = '',
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    $document = [xml]$(if ($Settings) { $Settings } else { '<UserSettings/>' })
+    $parent = $document.DocumentElement
+    foreach ($step in @(
+            @{ Element = 'ToolsOptions'; Attributes = [ordered]@{} }
+            @{ Element = 'ToolsOptionsCategory'; Attributes = [ordered]@{ name = 'Environment'; RegisteredName = 'Environment' } }
+            @{ Element = 'ToolsOptionsSubCategory'; Attributes = [ordered]@{ name = 'ProjectsAndSolution'; RegisteredName = 'ProjectsAndSolution'; PackageName = 'Visual Studio Environment Package' } }
+            @{ Element = 'PropertyValue'; Attributes = [ordered]@{ name = 'ProjectsLocation' } }
+        )) {
+        $node = $parent.ChildNodes | Where-Object { $_.LocalName -eq $step.Element -and (-not $step.Attributes.Contains('name') -or $_.GetAttribute('name') -eq $step.Attributes['name']) } | Select-Object -First 1
+        if (-not $node) {
+            $node = $parent.AppendChild($document.CreateElement($step.Element))
+            foreach ($attribute in $step.Attributes.GetEnumerator()) { $node.SetAttribute($attribute.Key, $attribute.Value) }
+        }
+        $parent = $node
+    }
+    $parent.InnerText = $Path
+    return $document.OuterXml
+}
+
 function Restore-GuestVisualStudioSetting {
     <#
       Applies the Visual Studio settings in VSSettingsBackup, which a capture
       refreshes, in the guest user's desktop session: the settings store is
-      per-user, and devenv needs a real session to write it.
+      per-user, and devenv needs a real session to write it. With a Dev
+      Drive, the projects location is pointed at source\repos on it, so new
+      projects outlive the Windows evaluation (#176); the setting lives on
+      C:, so every restore sets it again. With no backup, the file applied
+      holds only that setting, and the reset leaves the rest at the defaults
+      a new install has anyway.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $backup = $VM.Settings.VSSettingsBackup
-    if (-not (Test-Path -LiteralPath $backup)) {
-        Write-LogEntry "No Visual Studio settings backup at $backup - skipping" 'INFO'
+    $hasBackup = Test-Path -LiteralPath $backup
+    $projects = if ($VM.Settings.UseDevDrive) { "$($VM.Runtime.DevDriveLetter):\source\repos" } else { $null }
+    if (-not $hasBackup) {
+        Write-LogEntry "No Visual Studio settings backup at $backup$(if (-not $projects) { ' - skipping' })" 'INFO'
         Write-LogEntry '  A capture saves one, or export one: Visual Studio -> Tools -> Import and Export Settings -> Export all settings' 'INFO'
-        return
+        if (-not $projects) { return }
     }
 
     $vs = Get-GuestVisualStudio -VM $VM
@@ -382,14 +420,31 @@ function Restore-GuestVisualStudioSetting {
     Write-LogEntry "Found $($vs.DisplayName) at $($vs.DevEnvPath)" 'INFO'
 
     $guestPath = Join-Path $VM.Settings.GuestSetupDir 'VisualStudio.vssettings'
-    Copy-ToGuest -VM $VM -HostPath $backup -GuestPath $guestPath
+    if ($projects) {
+        $staging = Join-Path -Path ([IO.Path]::GetTempPath()) -ChildPath ("LazyVM-" + [guid]::NewGuid().ToString('N'))
+        try {
+            New-Folder -Path $staging
+            $settings = ConvertTo-ProjectsLocationSetting -Settings $(if ($hasBackup) { Get-Content -LiteralPath $backup -Raw }) -Path $projects
+            $staged = Join-Path -Path $staging -ChildPath 'VisualStudio.vssettings'
+            [IO.File]::WriteAllText($staged, $settings, [Text.UTF8Encoding]::new($false))
+            Copy-ToGuest -VM $VM -HostPath $staged -GuestPath $guestPath
+        }
+        finally {
+            Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    else {
+        Copy-ToGuest -VM $VM -HostPath $backup -GuestPath $guestPath
+    }
 
     Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName "${script:TaskPrefix}VSSettings" -Activity 'Visual Studio settings restore' -TimeoutMinutes 25 `
-        -ArgumentList @($vs.DevEnvPath, $guestPath) -ScriptBlock {
-        param($devenv, $settingsPath)
+        -ArgumentList @($vs.DevEnvPath, $guestPath, $projects) -ScriptBlock {
+        param($devenv, $settingsPath, $projects)
         if (-not (Test-Path $devenv)) { throw "devenv.exe not found at $devenv" }
+        if ($projects) { $null = New-Item -ItemType Directory -Path $projects -Force }
         $process = Start-Process -FilePath $devenv -ArgumentList '/NoSplash', '/ResetSettings', "`"$settingsPath`"", '/Command', 'Exit' -Wait -PassThru
         if ($process.ExitCode -ne 0) { throw "devenv exited with $($process.ExitCode)" }
     }
-    Write-LogEntry 'Visual Studio settings restored' 'OK'
+    if ($hasBackup) { Write-LogEntry 'Visual Studio settings restored' 'OK' }
+    if ($projects) { Write-LogEntry "Visual Studio creates new projects in $projects, on the Dev Drive" 'OK' }
 }
