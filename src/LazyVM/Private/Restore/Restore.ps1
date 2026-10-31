@@ -328,6 +328,10 @@ function Restore-GuestVisualStudioState {
         [Parameter(Mandatory)][CaptureManifest]$Manifest
     )
 
+    if (-not $VM.Settings.InstallVisualStudio) {
+        Write-LogEntry '  Visual Studio turned off in the settings (InstallVisualStudio) - skipping' 'INFO'
+        return
+    }
     if (-not $Manifest.VisualStudio) {
         Write-LogEntry '  no Visual Studio capture - skipping' 'INFO'
         return

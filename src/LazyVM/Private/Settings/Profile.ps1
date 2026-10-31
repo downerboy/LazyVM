@@ -225,13 +225,15 @@ function Get-PerVMSettingName {
 function New-VMProfile {
     <#
       Creates <Name>\Config\VM.json holding every setting: the shared
-      template's values, or with -From the source VM's, except the settings
-      that must differ between VMs, which come from the shared template.
+      template's values, with -Template the named template's over them, or
+      with -From the source VM's, except the settings that must differ
+      between VMs, which come from the shared template.
     #>
     param(
         [Parameter(Mandatory)][string]$Root,
         [Parameter(Mandatory)][string]$Name,
-        [string]$From
+        [string]$From,
+        [string]$Template
     )
 
     if (-not (Test-VMName $Name)) {
@@ -246,6 +248,10 @@ function New-VMProfile {
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $Root)
 
     $settings = (Get-SharedTemplateSetting -Root $Root).Values
+    if ($Template) {
+        $templateValues = Read-VMTemplate -Name $Template
+        foreach ($key in $templateValues.Keys) { $settings[$key] = $templateValues[$key] }
+    }
     if ($From) {
         $source = $existing | Where-Object { $_ -eq $From } | Select-Object -First 1
         if (-not $source) { throw "There is no VM named '$From' to copy." }

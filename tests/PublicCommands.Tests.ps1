@@ -314,6 +314,16 @@ Describe 'New-LazyVM' {
     It 'refuses a name Windows cannot use' {
         { New-LazyVM -Name 'Not Valid' } | Should -Throw -ExpectedMessage "*cannot be used as a VM name*"
     }
+
+    It 'starts the profile from a named template with -Template' {
+        $vm = New-LazyVM -Name Beta -Template Minimal 6> $null
+
+        (Get-Content -LiteralPath $vm.ProfilePath -Raw | ConvertFrom-Json).InstallSqlServer | Should -BeFalse
+    }
+
+    It 'refuses -Template together with -From' {
+        { New-LazyVM -Name Gamma -From Beta -Template Minimal } | Should -Throw -ExpectedMessage '*Parameter set cannot be resolved*'
+    }
 }
 
 Describe 'Get-ModuleImportCommand' {

@@ -150,7 +150,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 |---|---|
 | `LazyVM` | Shows the installed version, the LazyVM folder and each VM in it, the folder the module is installed in, and every command with its synopsis. The same as `Show-LazyVM`. |
 | `Set-LazyVMRoot -Path D:\DevVM` | Chooses the LazyVM folder. |
-| `New-LazyVM -Name DevBox` | Creates the VM's profile, ready to build. `-From OtherVM` starts from another VM's settings and tooling list. |
+| `New-LazyVM -Name DevBox` | Creates the VM's profile, ready to build. `-From OtherVM` starts from another VM's settings and tooling list; `-Template Minimal` starts from a named template. |
 | `Build-LazyVM` | Runs phases 0 to 8. Builds the VM if it does not exist. Otherwise it brings an existing VM up to spec: it installs anything missing from its tooling list, attaches and prepares the SQL data disk, and relocates databases. Safe to run again. |
 | `Build-LazyVM -FromPhase 7` | Starts at a phase, skipping earlier ones, after fixing what stopped a build. |
 | `Build-LazyVM -NoUnattend` | No answer file: Windows Setup has to be completed by hand in VMConnect. |
@@ -415,6 +415,7 @@ Windows keeps its recovery tools (Windows RE) on a partition of their own after 
 Settings live in two kinds of JSON file:
 
 - **The shared template**, `Shared\Config\LazyVM.Settings.json`. Every setting has a default; list here only the ones you want to change. It is used only to create a VM: changing it never affects a VM that already exists.
+- **Named templates**, in the module's `Data\Templates` folder, which ship with LazyVM. `New-LazyVM -Template <Name>` applies one over the shared template. See [Starting from a named template](#starting-from-a-named-template).
 - **Each VM's configuration**, `<Name>\Config\VM.json`. It holds every setting for that one VM, filled in from the shared template when the VM is created, and is the VM's one source of truth from then on. A rebuild uses it, and `New-LazyVM -From` copies it. To change a setting for an existing VM, change it here.
 
 A shared template changing two settings looks like this:
@@ -505,6 +506,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `UnsignedExtensions` | none | Marketplace extensions, by item name (`Publisher.Name`), that may be installed even though they are not signed. Any other unsigned extension is refused by the installer and named in the log; Visual Studio and its other extensions install anyway. |
 | `vCPU`, `MemStartGB`, `MemMaxGB` | 4, 8, 16 | VM sizing, applied when the VM is built. 8 GB to start is the Dev Drive minimum. |
 | `OSDiskSizeGB`, `SQLDiskSizeGB`, `DevDriveSizeGB`, `UserDiskSizeGB` | 120, 100, 250, 20 | Disk sizes, applied when each disk is created. All grow as needed up to this size. To give `C:` more room later, make the VM's OS disk bigger in Hyper-V Manager or with `Resize-VHD`; the next maintenance run extends `C:` into the new space, after taking a checkpoint it removes once all went well. If it fails, the checkpoint is kept, the log says how to go back to it, and `C:` is not extended again until you delete that checkpoint. |
+| `InstallVisualStudio` | true | Whether the VM gets Visual Studio and its settings. `false` installs no Visual Studio from the tooling list (SSMS still installs), applies no Visual Studio settings and leaves them out of captures. Set it in the VM's `VM.json`. |
 | `UseDevDrive` | true | Whether to create, attach and designate the Dev Drive. |
 | `DevDriveLetter` | W | Where the Dev Drive appears in the VM. |
 | `UserDiskLetter` | U | Where the User disk appears in the VM. |
@@ -648,6 +650,21 @@ Build-LazyVM -Name WebDev
 ```
 
 `-From` copies the existing VM's `VM.json` and its tooling list, so the new VM is built the same way with the same tools. The settings that must differ between VMs (file locations, the computer name, the maintenance time and the recorded identity of its disks) come from the shared template instead. From then on, each list follows its own VM. Leave out `New-LazyVM` and just run `Build-LazyVM -Name WebDev` to start from the defaults and the default tooling list.
+
+### Starting from a named template
+
+```powershell
+New-LazyVM -Name Lean -Template Minimal
+Build-LazyVM -Name Lean
+```
+
+A named template is a settings file that ships with LazyVM, in the module's `Data\Templates` folder. Like `LazyVM.Settings.json`, it lists only the settings it changes. The new VM starts from the defaults, then `LazyVM.Settings.json`, then the template, so the template wins where they differ. Press Tab after `-Template` to list the templates. `-Template` and `-From` cannot be used together.
+
+| Template | What the VM gets |
+|---|---|
+| `Minimal` | Windows with no Visual Studio, no SSMS and no SQL Server (`InstallSqlServer` is `false`). Its tooling list holds only the SQL Server client libraries (CLR types, ODBC drivers 17 and 18, the OLE DB driver) and LINQPad. |
+
+As with any VM, the template is used only to create the VM's `VM.json`. Anything you install afterwards is added to the VM's own tooling list by maintenance.
 
 Once there is more than one VM, every command needs `-Name`. LazyVM will not guess, because a wrong guess would maintain or rebuild the wrong machine.
 
