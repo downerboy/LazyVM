@@ -239,18 +239,20 @@ function Import-SettingsFile {
       file. When the file cannot be used and nobody is there to fix it
       (-Unattended), that copy is used instead and a warning returned for the
       log, so a typo never stops the scheduled maintenance. Run by a person,
-      the problem is reported straight away so it can be fixed.
+      the problem is reported straight away so it can be fixed. With
+      -ReadOnly, for a command that must change nothing, no copy is kept.
     #>
     param(
         [Parameter(Mandatory)][string]$Path,
-        [switch]$Unattended
+        [switch]$Unattended,
+        [switch]$ReadOnly
     )
 
     $lastGood = Get-LastGoodPath -Path $Path
     try {
         $values = Read-SettingsFile -Path $Path
         $text = [IO.File]::ReadAllText($Path)
-        if (-not (Test-Path -LiteralPath $lastGood) -or [IO.File]::ReadAllText($lastGood) -ne $text) {
+        if (-not $ReadOnly -and (-not (Test-Path -LiteralPath $lastGood) -or [IO.File]::ReadAllText($lastGood) -ne $text)) {
             Write-TextFileAtomic -Path $lastGood -Text $text
         }
         return [pscustomobject]@{ Values = $values; Warning = $null }
