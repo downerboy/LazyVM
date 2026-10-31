@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.15.5](https://github.com/downerboy/LazyVM/compare/v4.15.4...v4.15.5) (2026-10-31)
+
+
+### Bug Fixes
+
+* delete each checkpoint once when retiring a VM ([#195](https://github.com/downerboy/LazyVM/issues/195)) ([cee56fb](https://github.com/downerboy/LazyVM/commit/cee56fb7ffd483aca51803e15c52eca1ff5efdfb))
+
 ## [4.15.4](https://github.com/downerboy/LazyVM/compare/v4.15.3...v4.15.4) (2026-10-31)
 
 
