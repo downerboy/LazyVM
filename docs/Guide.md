@@ -164,7 +164,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Register-LazyVMMaintenance` | Schedules the VM's daily maintenance, or schedules it again. |
 | `Remove-LazyVM` | Deletes the VM and everything created for it ([section 10](#removing-a-vm)). |
 
-Commands that change something support `-WhatIf`, to see what would happen without doing it, and `-Confirm`. The ones that cannot be undone (`Remove-LazyVM`, `Restore-LazyVMTooling`, `Restore-LazyVMState`, `Invoke-LazyVMRebuild`) ask before acting; `-Force` skips the question.
+Commands that change something support `-WhatIf`, to see what would happen without doing it, and `-Confirm`. `Invoke-LazyVMMaintenance -WhatIf` reads the VM's evaluation and says whether the run would only do the daily checks, rearm, rebuild, or build the VM, without starting a VM that is off. The ones that cannot be undone (`Remove-LazyVM`, `Restore-LazyVMTooling`, `Restore-LazyVMState`, `Invoke-LazyVMRebuild`) ask before acting; `-Force` skips the question.
 
 Get commands return objects, so they work with the rest of PowerShell:
 

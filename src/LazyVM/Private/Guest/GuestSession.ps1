@@ -77,7 +77,8 @@ function Remove-GuestSession {
     )
 
     if ($VM.Runtime.Session) {
-        Remove-PSSession -Session $VM.Runtime.Session -ErrorAction SilentlyContinue
+        # LazyVM's own session, so it is closed even under -WhatIf (#18).
+        Remove-PSSession -Session $VM.Runtime.Session -ErrorAction SilentlyContinue -WhatIf:$false
         $VM.Runtime.Session = $null
     }
     if (-not $KeepCredential) { $VM.Runtime.Credential = $null }
@@ -157,7 +158,7 @@ function Wait-GuestReady {
                     return [bool]($value -and $value.Provisioned -eq 1)
                 }
             }
-            finally { Remove-PSSession -Session $session -ErrorAction SilentlyContinue }
+            finally { Remove-PSSession -Session $session -ErrorAction SilentlyContinue -WhatIf:$false }
         }
         catch {
             if ($_.Exception.Message -ne $p.LastError) {
