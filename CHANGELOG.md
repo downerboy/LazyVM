@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.15.4](https://github.com/downerboy/LazyVM/compare/v4.15.3...v4.15.4) (2026-10-31)
+
+
+### Bug Fixes
+
+* see a checkpointed data disk as already attached ([#192](https://github.com/downerboy/LazyVM/issues/192)) ([21865c6](https://github.com/downerboy/LazyVM/commit/21865c6cfa133ed3c09386290d83d84602764f70))
+
 ## [4.15.3](https://github.com/downerboy/LazyVM/compare/v4.15.2...v4.15.3) (2026-10-31)
 
 
