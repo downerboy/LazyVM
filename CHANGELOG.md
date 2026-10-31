@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.18.0](https://github.com/downerboy/LazyVM/compare/v4.17.0...v4.18.0) (2026-10-31)
+
+
+### Features
+
+* -WhatIf for Invoke-LazyVMMaintenance and Build-LazyVM ([#206](https://github.com/downerboy/LazyVM/issues/206)) ([80e7c62](https://github.com/downerboy/LazyVM/commit/80e7c625fabfe177fb3ef39d4aed5a6cb8273104))
+* Get-LazyVMCredential -ToClipboard for VMConnect's sign-in box ([#199](https://github.com/downerboy/LazyVM/issues/199)) ([2e1e76d](https://github.com/downerboy/LazyVM/commit/2e1e76dca5ccbbc59b8344d289a8dbe7309f38d4))
+* install SQL Server only when the VM's VM.json says so ([#205](https://github.com/downerboy/LazyVM/issues/205)) ([3dc8bb7](https://github.com/downerboy/LazyVM/commit/3dc8bb76c7305f1aef7112105a78458b514d3a21))
+* point Visual Studio's projects folder at the Dev Drive ([#203](https://github.com/downerboy/LazyVM/issues/203)) ([6e8d1bb](https://github.com/downerboy/LazyVM/commit/6e8d1bbb0a9e7a84c0be3a033c0586b57c3abf76))
+* run winget package installs detached, as a guest task ([#209](https://github.com/downerboy/LazyVM/issues/209)) ([90af52a](https://github.com/downerboy/LazyVM/commit/90af52acfd6b32c5c2505f66bc2166007234bd98))
+* Test-LazyVM, a read-only check of what a VM depends on ([#211](https://github.com/downerboy/LazyVM/issues/211)) ([a847db8](https://github.com/downerboy/LazyVM/commit/a847db846a2507062a58bbed6db88927f903e106))
+
 ## [4.17.0](https://github.com/downerboy/LazyVM/compare/v4.16.0...v4.17.0) (2026-10-31)
 
 
