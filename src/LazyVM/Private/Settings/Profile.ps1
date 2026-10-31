@@ -124,19 +124,22 @@ function ConvertTo-SettingsJson {
 
 function Initialize-ConfigFolder {
     <#
-      Makes sure the Config folder has an up-to-date copy of the schema, for
-      the editor, and a settings file to open, so there is always somewhere
-      obvious to change a setting.
+      Makes sure the Config folder has up-to-date copies of the schemas, for
+      the editor (the settings schema, and the template schema the user's
+      config templates in Shared\Templates point at), and a settings file to
+      open, so there is always somewhere obvious to change a setting.
     #>
     param([Parameter(Mandatory)][string]$ConfigDir)
 
     New-Folder -Path $ConfigDir
 
-    $source = Join-Path -Path $script:DataDir -ChildPath $script:SchemaFileName
-    $copy = Join-Path -Path $ConfigDir -ChildPath $script:SchemaFileName
-    $schemaText = [IO.File]::ReadAllText($source)
-    if (-not (Test-Path -LiteralPath $copy) -or [IO.File]::ReadAllText($copy) -ne $schemaText) {
-        Write-TextFileAtomic -Path $copy -Text $schemaText
+    foreach ($schemaFileName in $script:SchemaFileName, $script:TemplateSchemaFileName) {
+        $source = Join-Path -Path $script:DataDir -ChildPath $schemaFileName
+        $copy = Join-Path -Path $ConfigDir -ChildPath $schemaFileName
+        $schemaText = [IO.File]::ReadAllText($source)
+        if (-not (Test-Path -LiteralPath $copy) -or [IO.File]::ReadAllText($copy) -ne $schemaText) {
+            Write-TextFileAtomic -Path $copy -Text $schemaText
+        }
     }
 
     $settingsFile = Join-Path -Path $ConfigDir -ChildPath $script:SettingsFileName
@@ -213,13 +216,17 @@ function Get-SharedTemplateSetting {
 
 function Get-PerVMSettingName {
     <#
-      Settings that must differ between VMs: file locations, the guest
-      computer name, the maintenance time and the recorded identity of its
-      disks. A VM copied with -From takes these from the shared template,
-      which names everything after the VM and records no disk, rather than
-      from the VM it copies.
+      Settings that belong to one VM: file locations, the guest computer
+      name, the maintenance time, the recorded identity of its disks and
+      what LazyVM recorded inside it. A VM copied with -From takes these
+      from the shared template, which names everything after the VM and
+      records nothing, rather than from the VM it copies; a config template
+      cannot hold them.
     #>
-    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime') + @($script:DataDiskIdentitySettings)
+    [OutputType([string[]])]
+    param()
+
+    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime') + @($script:DataDiskIdentitySettings) + @($script:RecordedGuestStateSettings)
 }
 
 function New-VMProfile {

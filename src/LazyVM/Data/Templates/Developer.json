@@ -1,5 +1,10 @@
 ﻿{
   "$schema": "../LazyVM.Template.schema.json",
   "Name": "Developer",
-  "Settings": {}
+  "Settings": {
+    "InstallVisualStudio": true,
+    "InstallSqlServer": true,
+    "UseDevDrive": true,
+    "GuestDeveloperMode": true
+  }
 }

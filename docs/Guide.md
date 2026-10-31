@@ -650,7 +650,7 @@ New-LazyVM -Name WebDev -From DevBox
 Build-LazyVM -Name WebDev
 ```
 
-`-From` copies the existing VM's `VM.json` and its tooling list, so the new VM is built the same way with the same tools. The settings that must differ between VMs (file locations, the computer name, the maintenance time and the recorded identity of its disks) come from the shared template instead. From then on, each list follows its own VM. Leave out `New-LazyVM` and just run `Build-LazyVM -Name WebDev` to start from the defaults and the default tooling list.
+`-From` copies the existing VM's `VM.json` and its tooling list, so the new VM is built the same way with the same tools. The settings each VM has its own of (file locations, the computer name, the maintenance time, the recorded identity of its disks, and what LazyVM recorded inside the VM: its environment, firewall rules, scheduled tasks, SQL logins and app settings) come from the shared template instead. From then on, each list follows its own VM. Leave out `New-LazyVM` and just run `Build-LazyVM -Name WebDev` to start from the defaults and the default tooling list.
 
 ### Starting from a config template
 
@@ -675,7 +675,7 @@ Each template is a JSON file with a `Name`, which is what `-ConfigTemplate` take
 
 ```json
 {
-  "$schema": "../LazyVM.Template.schema.json",
+  "$schema": "../Config/LazyVM.Template.schema.json",
   "Name": "WebDev",
   "Settings": {
     "InstallSqlServer": false,
@@ -684,11 +684,15 @@ Each template is a JSON file with a `Name`, which is what `-ConfigTemplate` take
 }
 ```
 
-`Name` belongs to the template: it is never written into a VM's `VM.json`. Settings that must differ between VMs (file locations, the computer name, the maintenance time and the recorded identity of its disks) do not belong in a template. If two templates have the same `Name`, LazyVM refuses to choose between them and names both files. A template file that cannot be read is left out of the list, and the error for a template that is not found says why.
+The `$schema` line points VS Code at the copy of the template schema LazyVM keeps in `Shared\Config`, so it completes and checks the settings as it does in `LazyVM.Settings.json`.
+
+`Name` belongs to the template: it is never written into a VM's `VM.json`. A template cannot hold the settings each VM has its own of: file locations, the computer name, the maintenance time, the recorded identity of its disks, and what LazyVM recorded inside a VM (`GuestEnvironment`, `GuestFirewallRules`, `GuestScheduledTasks`, `GuestSql`, `GuestAppSettings`). A template that lists one is refused, with the setting named.
+
+One of your own templates with the same `Name` as a built-in one replaces it, as `LazyVM.Settings.json` replaces the defaults; Tab lists the name once. If two of your own have the same `Name`, LazyVM refuses to choose between them and names both files. A template file that cannot be read is left out of the list, and the error for a template that is not found says why.
 
 | Template | What the VM gets |
 |---|---|
-| `Developer` | The full developer set-up: Visual Studio, SQL Server with its SQL data disk, a Dev Drive, Developer Mode and the default tooling list. It changes nothing, because that is what the defaults are. |
+| `Developer` | The full developer set-up: `InstallVisualStudio`, `InstallSqlServer` (with its SQL data disk), `UseDevDrive` and `GuestDeveloperMode` are `true`, whatever `LazyVM.Settings.json` says. The tooling list is the shared template's: the default one unless `LazyVM.Settings.json` has its own. |
 | `PlainWindows` | Plain Windows with no developer tools: `InstallVisualStudio`, `InstallSqlServer` (so no SQL data disk), `UseDevDrive` and `GuestDeveloperMode` are `false`, and the tooling list is empty. Build it, then install and set up the apps you want by hand. |
 
 As with any VM, the template is used only to create the VM's `VM.json`. Anything you install afterwards is added to the VM's own tooling list by maintenance.

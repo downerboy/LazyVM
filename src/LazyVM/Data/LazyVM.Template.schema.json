@@ -20,7 +20,7 @@
     },
     "Settings": {
       "$ref": "LazyVM.Settings.schema.json",
-      "description": "The settings the template changes, like LazyVM.Settings.json: list only what differs from the defaults."
+      "description": "The settings the template changes, like LazyVM.Settings.json. It cannot hold the settings each VM has its own of: file locations, the computer name, the maintenance time, disk identities and what LazyVM recorded inside a VM."
     }
   }
 }

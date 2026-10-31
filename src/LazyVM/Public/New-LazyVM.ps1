@@ -11,8 +11,9 @@
 
     With -From, the new VM starts from an existing VM's VM.json and tooling
     list, so it is built the same way with the same tools. Settings that
-    must differ between VMs (file locations, the computer name, the
-    maintenance time) come from the shared template instead.
+    belong to one VM (file locations, the computer name, the maintenance
+    time, its disks and what LazyVM recorded inside it) come from the
+    shared template instead.
 
     With -ConfigTemplate, the new VM starts from a config template, applied
     over the shared template: a built-in one (Developer, the full developer
