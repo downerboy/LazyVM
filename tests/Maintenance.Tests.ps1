@@ -152,27 +152,38 @@ Describe 'Invoke-GuestRearm' {
 Describe 'Start-GuestStoreAppUpdate (#233)' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Invoke-GuestScript { throw 'the WMI bridge needs SYSTEM, not the guest account' }
     }
 
-    It 'asks the Store in the guest to scan for app updates' {
-        Mock -ModuleName $module Invoke-GuestScript { 0 }
+    It 'asks the Store to scan for app updates from a task running as SYSTEM' {
+        Mock -ModuleName $module Invoke-GuestTask { '0' }
 
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM }
 
-        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { "$ScriptBlock" -match 'UpdateScanMethod' }
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
+            $TaskName -like '*store-app-update' -and -not $AsGuestUser -and "$Work" -match 'UpdateScanMethod'
+        }
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'OK' }
     }
 
     It 'warns, with the code, when the Store refuses the scan' {
-        Mock -ModuleName $module Invoke-GuestScript { 5 }
+        Mock -ModuleName $module Invoke-GuestTask { '5' }
 
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM }
 
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -match '\b5\b' }
     }
 
+    It 'warns, without failing, when the guest has no Store app management' {
+        Mock -ModuleName $module Invoke-GuestTask { 'unavailable' }
+
+        { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM } } | Should -Not -Throw
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -match 'not available' }
+    }
+
     It 'emits nothing' {
-        Mock -ModuleName $module Invoke-GuestScript { 0 }
+        Mock -ModuleName $module Invoke-GuestTask { '0' }
 
         $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM })
 

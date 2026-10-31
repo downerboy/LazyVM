@@ -162,8 +162,9 @@ function Invoke-Maintenance {
       the persistent disks, copies the User disk when it changed, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
-      the databases, asks the Store to update its apps, then does nothing more until the evaluation is close to
-      expiry, when it captures state and rearms.
+      the databases, asks the Store to update its apps, then does nothing
+      more until the evaluation is close to expiry, when it captures state
+      and rearms.
       Returns what the caller does next.
     #>
     [OutputType([MaintenanceStep])]
