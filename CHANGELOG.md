@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.21.0](https://github.com/downerboy/LazyVM/compare/v4.20.0...v4.21.0) (2026-10-31)
+
+
+### Features
+
+* add named templates and a Minimal template without Visual Studio or SQL Server ([#242](https://github.com/downerboy/LazyVM/issues/242)) ([5c2b4f0](https://github.com/downerboy/LazyVM/commit/5c2b4f046bc11f930acecdc085619804281ba0c3))
+* ask the Store to update its apps during nightly maintenance ([#240](https://github.com/downerboy/LazyVM/issues/240)) ([4da2de4](https://github.com/downerboy/LazyVM/commit/4da2de48f68c61b686809b799dfba2927d098bcb))
+* install Visual Studio only when the VM's VM.json says so ([#241](https://github.com/downerboy/LazyVM/issues/241)) ([e800935](https://github.com/downerboy/LazyVM/commit/e800935a32d5e208a4c8ba9cc81d52698bf93a54))
+
+
+### Bug Fixes
+
+* pass an empty database list to rebuild verification, not $null ([#244](https://github.com/downerboy/LazyVM/issues/244)) ([1e6b078](https://github.com/downerboy/LazyVM/commit/1e6b07845573d2d5978db17ae463a7318d315e96))
+
 ## [4.20.0](https://github.com/downerboy/LazyVM/compare/v4.19.1...v4.20.0) (2026-10-31)
 
 
