@@ -309,7 +309,8 @@ function Save-GuestSqlState {
 
     $backups = @(Backup-GuestUserDatabase -VM $VM)
 
-    $total = ($backups | Measure-Object -Property SizeBytes -Sum).Sum
+    # Measure-Object gives no Sum for no input, which StrictMode will not read (#180).
+    $total = if ($backups.Count -gt 0) { ($backups | Measure-Object -Property SizeBytes -Sum).Sum } else { 0 }
     Write-LogEntry "  SQL $($state.Version) ($($state.Edition)): $($backups.Count) database(s), $(Format-Size ([double]$total)) of backups" 'OK'
     Write-LogEntry "  Backups stay on the data disk ($backupDir), which survives the rebuild" 'INFO'
     foreach ($item in @($state.NotMigrated)) { Write-LogEntry "  NOT migrated automatically - $item" 'WARN' }
