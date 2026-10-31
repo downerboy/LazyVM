@@ -11,13 +11,15 @@
 
     With -From, the new VM starts from an existing VM's VM.json and tooling
     list, so it is built the same way with the same tools. Settings that
-    must differ between VMs (file locations, the computer name, the
-    maintenance time) come from the shared template instead.
+    belong to one VM (file locations, the computer name, the maintenance
+    time, its disks and what LazyVM recorded inside it) come from the
+    shared template instead.
 
-    With -Template, the new VM starts from a named template that ships with
-    LazyVM, applied over the shared template. Minimal is Windows with no
-    Visual Studio, SSMS or SQL Server, only the SQL Server client libraries
-    and LINQPad. Press Tab after -Template to list the templates.
+    With -ConfigTemplate, the new VM starts from a config template, applied
+    over the shared template: a built-in one (Developer, the full developer
+    set-up, or PlainWindows, Windows with no developer tools) or one of your
+    own in <Root>\Shared\Templates. Press Tab after -ConfigTemplate to list
+    them.
 
     Each new VM's daily maintenance is set an hour after the latest existing
     one, so two VMs are never maintained at the same time.
@@ -28,11 +30,11 @@
 
     .PARAMETER From
     An existing VM whose settings and tooling list the new VM starts from.
-    Cannot be used with -Template.
+    Cannot be used with -ConfigTemplate.
 
-    .PARAMETER Template
-    A named template, such as Minimal, whose settings and tooling list the
-    new VM starts from. Cannot be used with -From.
+    .PARAMETER ConfigTemplate
+    The name of a config template, such as PlainWindows, whose settings and
+    tooling list the new VM starts from. Cannot be used with -From.
 
     .EXAMPLE
     New-LazyVM -Name DevBox
@@ -41,7 +43,7 @@
     New-LazyVM -Name DevBox2 -From DevBox
 
     .EXAMPLE
-    New-LazyVM -Name Lean -Template Minimal
+    New-LazyVM -Name Lean -ConfigTemplate PlainWindows
 
     .OUTPUTS
     LazyVM.VM
@@ -56,8 +58,8 @@
         [Parameter(Mandatory, ParameterSetName = 'From')]
         [string]$From,
 
-        [Parameter(Mandatory, ParameterSetName = 'Template')]
-        [string]$Template
+        [Parameter(Mandatory, ParameterSetName = 'ConfigTemplate')]
+        [string]$ConfigTemplate
     )
 
     $root = (Resolve-LazyVMRoot).Path
@@ -66,7 +68,7 @@
         return
     }
 
-    $null = New-VMProfile -Root $root -Name $Name -From $From -Template $Template
+    $null = New-VMProfile -Root $root -Name $Name -From $From -ConfigTemplate $ConfigTemplate
     Get-LazyVM -Name $Name
     Write-Information "Next: Set-LazyVMCredential -Name $Name (optional), then Build-LazyVM -Name $Name" -InformationAction Continue
 }

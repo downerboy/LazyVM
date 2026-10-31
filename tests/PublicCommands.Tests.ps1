@@ -205,6 +205,14 @@ Describe 'Build-LazyVM' {
         Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 0
     }
 
+    It 'passes -ConfigTemplate on to the first-use set-up' {
+        Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
+
+        Build-LazyVM -Name Alpha -ConfigTemplate PlainWindows
+
+        Should -Invoke -ModuleName $module Initialize-BuildTarget -ParameterFilter { $Name -eq 'Alpha' -and $ConfigTemplate -eq 'PlainWindows' }
+    }
+
     It 'refuses a phase that does not exist' {
         { Build-LazyVM -Name Alpha -FromPhase 9 } | Should -Throw -ExpectedMessage '*There is no build phase 9*'
     }
@@ -315,14 +323,14 @@ Describe 'New-LazyVM' {
         { New-LazyVM -Name 'Not Valid' } | Should -Throw -ExpectedMessage "*cannot be used as a VM name*"
     }
 
-    It 'starts the profile from a named template with -Template' {
-        $vm = New-LazyVM -Name Beta -Template Minimal 6> $null
+    It 'starts the profile from a config template with -ConfigTemplate' {
+        $vm = New-LazyVM -Name Beta -ConfigTemplate PlainWindows 6> $null
 
         (Get-Content -LiteralPath $vm.ProfilePath -Raw | ConvertFrom-Json).InstallSqlServer | Should -BeFalse
     }
 
-    It 'refuses -Template together with -From' {
-        { New-LazyVM -Name Gamma -From Beta -Template Minimal } | Should -Throw -ExpectedMessage '*Parameter set cannot be resolved*'
+    It 'refuses -ConfigTemplate together with -From' {
+        { New-LazyVM -Name Gamma -From Beta -ConfigTemplate PlainWindows } | Should -Throw -ExpectedMessage '*Parameter set cannot be resolved*'
     }
 }
 
@@ -377,6 +385,25 @@ Describe 'Initialize-BuildTarget' {
 
         Should -Invoke -ModuleName $module Set-RegisteredRoot -Times 0
         (Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'DevBox/Config/VM.json') -Raw).Trim() | Should -Be '{ "vCPU": 6 }'
+    }
+
+    It 'creates the profile from the config template given' {
+        Mock -ModuleName $module Get-RegisteredRoot { $root }.GetNewClosure()
+
+        InModuleScope $module { Initialize-BuildTarget -Name 'DevBox' -ConfigTemplate 'PlainWindows' } 6> $null
+
+        (Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'DevBox/Config/VM.json') -Raw | ConvertFrom-Json).InstallVisualStudio | Should -BeFalse
+    }
+
+    It 'leaves an existing profile alone, and warns that the config template was not used' {
+        Mock -ModuleName $module Get-RegisteredRoot { $root }.GetNewClosure()
+        New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'DevBox/Config') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'DevBox/Config/VM.json') -Value '{ "vCPU": 6 }'
+
+        $warnings = InModuleScope $module { Initialize-BuildTarget -Name 'DevBox' -ConfigTemplate 'PlainWindows' 3>&1 6> $null }
+
+        (Get-Content -LiteralPath (Join-Path -Path $root -ChildPath 'DevBox/Config/VM.json') -Raw).Trim() | Should -Be '{ "vCPU": 6 }'
+        $warnings | Should -BeLike "*already has a profile*PlainWindows*not used*"
     }
 
     It 'asks for a name when there are no VMs yet' {

@@ -8,7 +8,8 @@
 
       - chooses the LazyVM folder, if none has been: <drive>:\LazyVM on the
         local drive with the most free space (Set-LazyVMRoot chooses another)
-      - creates the VM's profile, if it has none (New-LazyVM is optional)
+      - creates the VM's profile, if it has none (New-LazyVM is optional),
+        from -ConfigTemplate when given
       - finds the Windows ISO, including in your Downloads folder, and moves
         it into the LazyVM folder; with no ISO anywhere it opens the download
         page and stops, so you download it and run the same command again
@@ -40,6 +41,11 @@
     The VM to build. Created if it does not exist yet. May be left out while
     there is only one.
 
+    .PARAMETER ConfigTemplate
+    The config template a new VM's profile is created from, such as
+    PlainWindows. Press Tab to list them. Used only when the VM has no
+    profile yet: an existing VM's VM.json decides how it is built.
+
     .PARAMETER FromPhase
     Start at this phase, skipping the earlier ones. Mostly for picking up
     after fixing a problem in a later phase.
@@ -54,6 +60,11 @@
     Builds DevBox, setting up everything it needs on first use.
 
     .EXAMPLE
+    Build-LazyVM -Name Clean -ConfigTemplate PlainWindows
+
+    Builds a new VM with plain Windows and no developer tools.
+
+    .EXAMPLE
     Build-LazyVM -Name DevBox -FromPhase 7
 
     Carries on with the installs after fixing what stopped them.
@@ -63,6 +74,8 @@
     param(
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
+
+        [string]$ConfigTemplate,
 
         [ValidateScript({ Test-BuildPhaseNumber -Number $_ }, ErrorMessage = "There is no build phase {0}. Get-Help Build-LazyVM lists the phases.")]
         [int]$FromPhase = 0,
@@ -74,8 +87,9 @@
         # Before anything, even the first-use set-up: with -WhatIf nothing is created or moved.
         $target = if ($Name) { $Name } else { 'the VM' }
         $setup = if ($NoUnattend) { ', with Windows Setup completed by hand' } else { '' }
-        if (-not $PSCmdlet.ShouldProcess($target, "Build from phase $FromPhase$setup, first setting up the LazyVM folder, profile and Windows ISO if they are missing")) { return }
-        Initialize-BuildTarget -Name $Name
+        $vmProfile = if ($ConfigTemplate) { "profile (from the config template '$ConfigTemplate')" } else { 'profile' }
+        if (-not $PSCmdlet.ShouldProcess($target, "Build from phase $FromPhase$setup, first setting up the LazyVM folder, $vmProfile and Windows ISO if they are missing")) { return }
+        Initialize-BuildTarget -Name $Name -ConfigTemplate $ConfigTemplate
         Invoke-CommandRun -Title 'Build' -Name $Name -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
             Sync-VMProfile -VM $VM

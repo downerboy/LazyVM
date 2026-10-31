@@ -549,6 +549,8 @@ Describe 'Initialize-ConfigFolder' {
         InModuleScope $module -Parameters @{ ConfigDir = $configDir } { param($ConfigDir) Initialize-ConfigFolder -ConfigDir $ConfigDir }
 
         Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.schema.json' | Should -Exist
+        # User config templates in Shared\Templates point at this copy.
+        Join-Path -Path $configDir -ChildPath 'LazyVM.Template.schema.json' | Should -Exist
         $settings = Read-TestJson -Path (Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.json')
         $settings['$schema'] | Should -Be './LazyVM.Settings.schema.json'
     }
@@ -662,6 +664,22 @@ Describe 'New-VMProfile' {
         Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'Tooling.json' | Should -Not -Exist
     }
 
+    It 'with -From, leaves out what was recorded inside the source VM: it belongs to that VM alone' {
+        $root = New-TestRoot -Profiles @{
+            Alpha = '{ "GuestEnvironment": { "MachineVariables": { "TEAM": "alpha" } }, "GuestFirewallRules": [], "GuestScheduledTasks": [], "GuestAppSettings": [] }'
+        }
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -Root $Root -Name 'Beta' -From 'Alpha'
+        }
+        $vmProfile = Read-TestJson -Path $path
+
+        foreach ($setting in 'GuestSql', 'GuestAppSettings', 'GuestEnvironment', 'GuestScheduledTasks', 'GuestFirewallRules') {
+            $vmProfile[$setting] | Should -BeNullOrEmpty -Because "-From must not copy $setting"
+        }
+    }
+
     It 'with -From, first folds an older source VM''s Tooling.json into its VM.json' {
         $root = New-TestRoot -Profiles @{ Alpha = '{ "MemMaxGB": 32 }' }
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value $toolingJson
@@ -691,62 +709,209 @@ Describe 'New-VMProfile' {
             }
         } | Should -Throw -ExpectedMessage $Message
     }
-    It 'with -Template, applies the named template over the shared template' {
+
+    It 'with -ConfigTemplate, applies the config template''s settings over the shared template, and never its Name' {
         $root = New-TestRoot -HostSettings ('{ "MemMaxGB": 24, "Tooling":' + $toolingJson + ' }')
 
         $path = InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            New-VMProfile -Root $Root -Name 'Alpha' -Template 'Minimal'
+            New-VMProfile -Root $Root -Name 'Alpha' -ConfigTemplate 'PlainWindows'
         }
         $vmProfile = Read-TestJson -Path $path
 
         $vmProfile.MemMaxGB | Should -Be 24
+        $vmProfile.InstallVisualStudio | Should -BeFalse
         $vmProfile.InstallSqlServer | Should -BeFalse
-        Get-TestWingetId -Settings $vmProfile | Should -Contain 'Microsoft.msodbcsql.18'
-        Get-TestWingetId -Settings $vmProfile | Should -Not -Contain 'Git.Git'
+        Get-TestWingetId -Settings $vmProfile | Should -BeNullOrEmpty
+        # Name and Settings are the template's own fields, not settings.
+        $vmProfile.Keys | Should -Not -Contain 'Name'
+        $vmProfile.Keys | Should -Not -Contain 'Settings'
     }
 
-    It 'refuses a template that does not exist, naming the ones there are' {
+    It 'refuses a config template that does not exist, naming the ones there are' {
         $root = New-TestRoot
 
         {
             InModuleScope $module -Parameters @{ Root = $root } {
                 param($Root)
-                New-VMProfile -Root $Root -Name 'Alpha' -Template 'Nope'
+                New-VMProfile -Root $Root -Name 'Alpha' -ConfigTemplate 'Nope'
             }
-        } | Should -Throw -ExpectedMessage "*no template named 'Nope'*Minimal*"
+        } | Should -Throw -ExpectedMessage "*no config template named 'Nope'*Developer, PlainWindows*"
     }
 }
 
-Describe 'The built-in templates' {
+Describe 'Config templates' {
+    BeforeAll {
+        function New-UserTemplate {
+            <# A file in <Root>\Shared\Templates with the given text. #>
+            param(
+                [Parameter(Mandatory)][string]$Root,
+                [Parameter(Mandatory)][string]$FileName,
+                [Parameter(Mandatory)][string]$Text
+            )
+
+            $folder = Join-Path -Path $Root -ChildPath 'Shared/Templates'
+            New-Item -ItemType Directory -Path $folder -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path -Path $folder -ChildPath $FileName) -Value $Text
+        }
+    }
+
+    It 'are named by their Name field, not their file name, built-in and in Shared\Templates alike' {
+        $root = New-TestRoot
+        New-UserTemplate -Root $root -FileName 'whatever.json' -Text '{ "Name": "WebDev", "Settings": { "vCPU": 6 } }'
+
+        $names = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Get-VMTemplateName -Root $Root }
+        $settings = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMTemplate -Root $Root -Name 'webdev' }
+
+        $names | Should -Be @('Developer', 'PlainWindows', 'WebDev')
+        $settings.vCPU | Should -Be 6
+        $settings.Keys | Should -Not -Contain 'Name'
+    }
+
+    It 'are only the built-in ones when there is no LazyVM folder yet' {
+        InModuleScope $module { Get-VMTemplateName -Root '' } | Should -Be @('Developer', 'PlainWindows')
+    }
+
+    It 'leave out a file that cannot be read, and say why when a template is not found' {
+        $root = New-TestRoot
+        New-UserTemplate -Root $root -FileName 'Broken.json' -Text '{ "Name": "Broken", "Settings": { "vCPU": "many" } }'
+
+        InModuleScope $module -Parameters @{ Root = $root } { param($Root) Get-VMTemplateName -Root $Root } | Should -Not -Contain 'Broken'
+        {
+            InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMTemplate -Root $Root -Name 'Broken' }
+        } | Should -Throw -ExpectedMessage "*no config template named 'Broken'*could not be read*Broken.json*vCPU*"
+    }
+
+    It 'refuses <Case>' -ForEach @(
+        @{ Case = 'a setting outside Settings'; Text = '{ "Name": "Mine", "vCPU": 6, "Settings": {} }'; Message = "*'vCPU'*Settings*" }
+        @{ Case = 'a file with no Name'; Text = '{ "Settings": {} }'; Message = '*needs a Name*' }
+        @{ Case = 'a name that is not a single word'; Text = '{ "Name": "My template", "Settings": {} }'; Message = "*'My template'*" }
+        @{ Case = 'a file with no Settings'; Text = '{ "Name": "Mine" }'; Message = '*needs a Settings table*' }
+        @{ Case = 'a setting that must differ between VMs'; Text = '{ "Name": "Mine", "Settings": { "logfile": "x.log" } }'; Message = "*'LogFile'*cannot be in a config template*" }
+        @{ Case = 'state recorded inside a VM'; Text = '{ "Name": "Mine", "Settings": { "GuestEnvironment": null } }'; Message = "*'GuestEnvironment'*cannot be in a config template*" }
+    ) {
+        $path = New-TestFile -Text $Text
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-VMTemplateFile -Path $Path } } | Should -Throw -ExpectedMessage $Message
+    }
+
+    It 'read Name and Settings whatever their case' {
+        $path = New-TestFile -Text '{ "name": "Mine", "SETTINGS": { "vCPU": 6 } }'
+
+        $template = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-VMTemplateFile -Path $Path }
+
+        $template.Name | Should -Be 'Mine'
+        $template.Settings.vCPU | Should -Be 6
+    }
+
+    It 'each have a Problem, empty when the file is fine' {
+        $root = New-TestRoot
+        New-UserTemplate -Root $root -FileName 'Broken.json' -Text 'not json'
+
+        $templates = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Get-VMTemplate -Root $Root }
+
+        foreach ($template in $templates) { $template.PSObject.Properties.Name | Should -Contain 'Problem' }
+        @($templates | Where-Object { $_.Name -eq 'Developer' })[0].Problem | Should -BeNullOrEmpty
+        @($templates | Where-Object { $_.Path -like '*Broken.json' })[0].Problem | Should -Not -BeNullOrEmpty
+    }
+
+    It 'of the user''s own replace a built-in one of the same name, listed once' {
+        $root = New-TestRoot
+        New-UserTemplate -Root $root -FileName 'MyDeveloper.json' -Text '{ "Name": "developer", "Settings": { "vCPU": 6 } }'
+
+        $settings = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMTemplate -Root $Root -Name 'Developer' }
+        $names = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Get-VMTemplateName -Root $Root }
+
+        $settings.vCPU | Should -Be 6
+        @($names | Where-Object { $_ -eq 'Developer' }).Count | Should -Be 1
+    }
+
+    It 'are read once when the one asked for is not found' {
+        InModuleScope $module {
+            Mock Get-VMTemplate { @([pscustomobject]@{ Name = 'Developer'; Path = 'x'; BuiltIn = $true; Settings = @{}; Problem = $null }) }
+            { Read-VMTemplate -Root '' -Name 'Nope' } | Should -Throw -ExpectedMessage '*Config templates: Developer.*'
+            Should -Invoke Get-VMTemplate -Times 1 -Exactly
+        }
+    }
+
+    It 'refuse a name two templates share, naming both files' {
+        $root = New-TestRoot
+        New-UserTemplate -Root $root -FileName 'One.json' -Text '{ "Name": "Twin", "Settings": {} }'
+        New-UserTemplate -Root $root -FileName 'Two.json' -Text '{ "Name": "Twin", "Settings": {} }'
+
+        {
+            InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMTemplate -Root $Root -Name 'Twin' }
+        } | Should -Throw -ExpectedMessage '*Twin*One.json*Two.json*'
+    }
+
+    It 'refuse a built-in name two of the user''s templates share, naming only the user''s files' {
+        $root = New-TestRoot
+        New-UserTemplate -Root $root -FileName 'One.json' -Text '{ "Name": "PlainWindows", "Settings": {} }'
+        New-UserTemplate -Root $root -FileName 'Two.json' -Text '{ "Name": "PlainWindows", "Settings": {} }'
+
+        $message = try {
+            InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMTemplate -Root $Root -Name 'PlainWindows' }
+        }
+        catch { $_.Exception.Message }
+
+        $builtIn = InModuleScope $module { Join-Path -Path (Get-BuiltInTemplateDir) -ChildPath 'PlainWindows.json' }
+        $message | Should -BeLike '*One.json*Two.json*'
+        $message.Contains($builtIn) | Should -BeFalse
+    }
+
+    It 'use the same name rule in the module and the template schema' {
+        $schemaPath = Join-Path -Path $PSScriptRoot -ChildPath '../src/LazyVM/Data/LazyVM.Template.schema.json'
+        $schema = Get-Content -LiteralPath $schemaPath -Raw | ConvertFrom-Json -AsHashtable
+
+        $schema.properties.Name.pattern | Should -Be (InModuleScope $module { $script:TemplateNamePattern })
+    }
+}
+
+Describe 'The built-in config templates' {
     BeforeDiscovery {
         $templateDir = Join-Path -Path $PSScriptRoot -ChildPath '../src/LazyVM/Data/Templates'
-        $templateNames = @(Get-ChildItem -LiteralPath $templateDir -Filter '*.json' -File | ForEach-Object { $_.BaseName } | Sort-Object)
+        $templateFiles = @(Get-ChildItem -LiteralPath $templateDir -Filter '*.json' -File | ForEach-Object { $_.FullName })
     }
 
-    It 'are listed by name' -TestCases @{ Expected = $templateNames } {
-        InModuleScope $module { Get-VMTemplateName } | Should -Be $Expected
+    It 'are Developer and PlainWindows' {
+        InModuleScope $module { Get-VMTemplateName -Root '' } | Should -Be @('Developer', 'PlainWindows')
     }
 
-    It '<_> loads cleanly and sets no setting that must differ between VMs' -ForEach $templateNames {
-        $values = InModuleScope $module -Parameters @{ Name = $_ } { param($Name) Read-VMTemplate -Name $Name }
+    It '<_> matches the template schema, loads cleanly and sets no setting that must differ between VMs' -ForEach $templateFiles {
+        # Test-Json on Windows does not follow the template schema's file
+        # reference to the settings schema, so the test puts it in place.
+        $dataDir = Join-Path -Path $PSScriptRoot -ChildPath '../src/LazyVM/Data'
+        $templateSchema = Get-Content -LiteralPath (Join-Path -Path $dataDir -ChildPath 'LazyVM.Template.schema.json') -Raw | ConvertFrom-Json -AsHashtable
+        $settingsSchema = Get-Content -LiteralPath (Join-Path -Path $dataDir -ChildPath 'LazyVM.Settings.schema.json') -Raw | ConvertFrom-Json -AsHashtable
+        $templateSchema.properties.Settings['$ref'] | Should -Be 'LazyVM.Settings.schema.json'
+        $templateSchema['definitions'] = $settingsSchema['definitions']
+        foreach ($key in 'definitions', '$id', '$schema') { $settingsSchema.Remove($key) }
+        $templateSchema.properties['Settings'] = $settingsSchema
+
+        Test-Json -Json (Get-Content -LiteralPath $_ -Raw) -Schema (ConvertTo-Json -InputObject $templateSchema -Depth 50) | Should -BeTrue
+
+        $template = InModuleScope $module -Parameters @{ Path = $_ } { param($Path) Read-VMTemplateFile -Path $Path }
         $perVM = InModuleScope $module { Get-PerVMSettingName }
-
-        @($values.Keys | Where-Object { $perVM -contains $_ }) | Should -BeNullOrEmpty
+        @($template.Settings.Keys | Where-Object { $perVM -contains $_ }) | Should -BeNullOrEmpty
     }
 
-    It 'Minimal has no SQL Server and no Visual Studio Installer product, and only the SQL client packages' {
-        $values = InModuleScope $module { Read-VMTemplate -Name 'Minimal' }
+    It 'Developer turns on Visual Studio, SQL Server and its SQL drive, the Dev Drive and Developer Mode, whatever LazyVM.Settings.json says' {
+        $values = InModuleScope $module { Read-VMTemplate -Root '' -Name 'Developer' }
 
+        @($values.Keys | Sort-Object) | Should -Be @('GuestDeveloperMode', 'InstallSqlServer', 'InstallVisualStudio', 'UseDevDrive')
+        foreach ($setting in $values.Keys) { $values[$setting] | Should -BeTrue -Because $setting }
+    }
+
+    It 'PlainWindows has no Visual Studio, no SQL Server or SQL drive, no Dev Drive, no Developer Mode and no tooling' {
+        $values = InModuleScope $module { Read-VMTemplate -Root '' -Name 'PlainWindows' }
+
+        $values.InstallVisualStudio | Should -BeFalse
         $values.InstallSqlServer | Should -BeFalse
+        $values.UseDevDrive | Should -BeFalse
+        $values.GuestDeveloperMode | Should -BeFalse
         @($values.Tooling.Products) | Should -BeNullOrEmpty
-        @(Get-TestWingetId -Settings $values | Sort-Object) | Should -Be @(
-            'LINQPad.LINQPad.9'
-            'Microsoft.CLRTypesSQLServer.2019'
-            'Microsoft.msodbcsql.17'
-            'Microsoft.msodbcsql.18'
-            'Microsoft.SQLServer.OLEDBDriver'
-        )
+        @($values.Tooling.WingetPackages) | Should -BeNullOrEmpty
+        @($values.Tooling.Programs) | Should -BeNullOrEmpty
     }
 }
 

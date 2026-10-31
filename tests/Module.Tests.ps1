@@ -61,11 +61,19 @@ Describe 'The module' {
         $completions.CompletionText | Should -Be @('Alpha', 'Beta')
     }
 
-    It 'completes New-LazyVM -Template with the built-in templates' {
-        $line = 'New-LazyVM -Name Beta -Template '
+    It 'completes <Command> -ConfigTemplate with the built-in and the user''s config templates' -ForEach @(
+        @{ Command = 'New-LazyVM' }
+        @{ Command = 'Build-LazyVM' }
+    ) {
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $templates = New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'Shared/Templates') -Force
+        Set-Content -LiteralPath (Join-Path -Path $templates.FullName -ChildPath 'web.json') -Value '{ "Name": "WebDev", "Settings": {} }'
+        Mock -ModuleName 'LazyVM' Get-RegisteredRoot { $root }.GetNewClosure()
+
+        $line = "$Command -Name Beta -ConfigTemplate "
         $completions = (TabExpansion2 -inputScript $line -cursorColumn $line.Length).CompletionMatches
 
-        $completions.CompletionText | Should -Contain 'Minimal'
+        $completions.CompletionText | Should -Be @('Developer', 'PlainWindows', 'WebDev')
     }
 }
 

@@ -21,8 +21,13 @@ $script:ProfileFileName = 'VM.json'
 # The VM.json a VM was first built from, kept beside it to diff against it.
 $script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'
-# The module's Data folder that holds the named templates (Template.ps1).
+# Describes a config template file; refers to the settings schema beside it.
+$script:TemplateSchemaFileName = 'LazyVM.Template.schema.json'
+# The folder of config templates (Template.ps1): the built-in ones in the
+# module's Data folder, the user's own in <Root>\Shared. A template's name
+# is the Name field in its file; LazyVM.Template.schema.json has the same rule.
 $script:TemplatesFolderName = 'Templates'
+$script:TemplateNamePattern = '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$'
 # The setting in VM.json that holds the VM's tooling list.
 $script:ToolingSettingName = 'Tooling'
 # What a winget package identifier looks like (WingetMatch.ps1); anything
@@ -38,6 +43,16 @@ $script:GuestScheduledTaskSettingName = 'GuestScheduledTasks'
 $script:GuestSqlSettingName = 'GuestSql'
 # The setting in VM.json that holds the values under the AppSettings keys (GuestAppSetting.ps1).
 $script:GuestAppSettingName = 'GuestAppSettings'
+# What LazyVM records from inside a VM: it belongs to that VM alone (and the
+# VM that replaces it on a rebuild), so it is never copied to another VM or
+# put in a config template. GuestSql holds logins with password hashes.
+$script:RecordedGuestStateSettings = @(
+    $script:GuestEnvironmentSettingName
+    $script:GuestFirewallSettingName
+    $script:GuestScheduledTaskSettingName
+    $script:GuestSqlSettingName
+    $script:GuestAppSettingName
+)
 
 # Environment variables Windows sets itself: a fresh install has its own, so
 # they are neither recorded nor put back.

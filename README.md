@@ -87,8 +87,8 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `LazyVM` (`Show-LazyVM`)                                    | The version, the LazyVM folder and its VMs, where the module is installed, and the command list.      |
 | `Set-LazyVMRoot`                                            | Chooses your own folder for LazyVM instead of the automatic one.                                       |
-| `New-LazyVM`                                                | Creates a VM's profile without building it. `-From` starts from another VM's settings and tools.     |
-| `Build-LazyVM`                                              | Builds the VM, setting up whatever is missing first, and schedules its maintenance. Safe to run again. |
+| `New-LazyVM`                                                | Creates a VM's profile without building it. `-From` starts from another VM's settings and tools; `-ConfigTemplate` from a config template. |
+| `Build-LazyVM`                                              | Builds the VM, setting up whatever is missing first, and schedules its maintenance. Safe to run again. `-ConfigTemplate` picks a new VM's config template. |
 | `Get-LazyVM`                                                | Lists the VMs, their state and their maintenance.                                                      |
 | `Get-LazyVMSetting`                                         | Every setting as a VM uses it, where the value came from, and what it does.                            |
 | `Set-LazyVMCredential` / `Get-LazyVMCredential`           | The administrator account LazyVM uses inside the VM.                                                   |
@@ -110,6 +110,7 @@ Your settings are JSON files in the LazyVM folder. An update never touches them:
 
 - `Shared\Config\LazyVM.Settings.json` is the shared template for new VMs. List only what you want to change from the defaults.
 - `<Name>\Config\VM.json` is one VM's complete, living configuration: created from the shared template, kept up to date by LazyVM, and used to rebuild the VM or copy it with `New-LazyVM -From`.
+- Config templates are named starting points for new VMs: `Build-LazyVM -Name Clean -ConfigTemplate PlainWindows`. LazyVM comes with `Developer` (Visual Studio, SQL Server, Dev Drive) and `PlainWindows` (no developer tools); your own go in `Shared\Templates`. Press Tab after `-ConfigTemplate` to list them.
 
 A shared template looks like this:
 
@@ -136,7 +137,7 @@ src/LazyVM/
   LazyVM.psd1, .psm1   the module
   Public/                          one file per command
   Private/<Area>/                  everything else, by area
-  Data/                            the settings schema, the default tooling list and the named templates
+  Data/                            the settings and template schemas, the default tooling list and the built-in config templates
 tests/                             Pester tests
 Invoke-AnalyzerAndTest.ps1         check a change: assemble, analyze, test
 Install-FromRepository.cmd         double-click: check, then install if all passed
