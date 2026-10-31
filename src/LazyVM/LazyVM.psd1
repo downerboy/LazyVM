@@ -30,6 +30,7 @@
         'Set-LazyVMCredential'
         'Set-LazyVMRoot'
         'Show-LazyVM'
+        'Test-LazyVM'
     )
     CmdletsToExport      = @()
     VariablesToExport    = @()
