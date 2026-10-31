@@ -644,6 +644,12 @@
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
+    "BackupDir": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Where the copy of the User disk goes, such as a folder on an external disk: a full path (like 'F:\\LazyVMBackup'). Empty keeps it in the VM's Backups folder. When the folder is not there, the copy is skipped with a warning.",
+      "pattern": "^([A-Za-z]:[\\\\/]|\\\\\\\\[^\\\\/]+[\\\\/]).+"
+    },
     "LogFile": {
       "type": "string",
       "default": "{VM}\\Logs\\{VM}.log",
