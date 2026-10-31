@@ -22,7 +22,10 @@ function Get-PersistentDataDisk {
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $settings = $VM.Settings
-    $disks = @([pscustomobject]@{ Label = 'SQL data disk'; GuidSetting = 'SQLDiskGuid'; LocationSetting = 'SQLDiskScsiLocation'; Path = $settings.SQLDiskPath })
+    $disks = @()
+    if ($settings.InstallSqlServer) {
+        $disks += [pscustomobject]@{ Label = 'SQL data disk'; GuidSetting = 'SQLDiskGuid'; LocationSetting = 'SQLDiskScsiLocation'; Path = $settings.SQLDiskPath }
+    }
     if ($settings.UseDevDrive) {
         $disks += [pscustomobject]@{ Label = 'Dev Drive disk'; GuidSetting = 'DevDriveGuid'; LocationSetting = 'DevDriveScsiLocation'; Path = $settings.DevDrivePath }
     }

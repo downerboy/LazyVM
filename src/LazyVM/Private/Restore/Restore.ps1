@@ -398,6 +398,10 @@ function Restore-GuestSqlState {
         [Parameter(Mandatory)][CaptureManifest]$Manifest
     )
 
+    if (-not $VM.Settings.InstallSqlServer) {
+        Write-LogEntry '  SQL Server turned off in the settings (InstallSqlServer) - skipping' 'INFO'
+        return
+    }
     $sql = $Manifest.Sql
     $recorded = Get-GuestSqlRestore -VM $VM
     if (-not $sql -and -not $recorded) {
