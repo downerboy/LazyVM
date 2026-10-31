@@ -160,6 +160,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password, and `-ToClipboard` puts it on the clipboard for VMConnect's sign-in box. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
+| `Test-LazyVM` | Checks what a build or maintenance run depends on: the LazyVM folder, the ISOs, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only. `-ReportPath` also writes a text report. |
 | `Save-LazyVMTooling` | Records tooling changes now, as the daily run does, with a checkpoint first. |
 | `Get-LazyVMRestorePoint` | The recorded tooling versions that can be returned to. |
 | `Restore-LazyVMTooling -RestorePoint 20261008-201746` | Returns the VM to a recorded tooling version. All its disks go back, the Dev Drive included. |
@@ -715,6 +716,7 @@ The log is the first place to look: `D:\DevVM\DevBox\Logs\DevBox.log`. Every lin
 | A path like `S:SourceLazyVM` appears, or "No such file or directory", after cloning or running commands in Git Bash | Git Bash (MINGW) treats `\` as an escape character, so `S:\Source\LazyVM` loses its backslashes. Run the commands in PowerShell 7 instead, or in Git Bash write the path as `/s/Source/LazyVM`. |
 | "LazyVM needs an elevated PowerShell" | Start PowerShell 7 with Run as administrator. |
 | "No stored guest credential" | Store one with `Set-LazyVMCredential`, for an account that is a local administrator inside the VM. |
+| Not sure what is wrong | Run `Test-LazyVM -Name DevBox`. It checks the folder, the ISOs, the VM, PowerShell Direct, the guest's set-up and the maintenance task, and says which one failed. |
 | The VM never becomes reachable | Open the VM's console. Windows Setup may be waiting on something, or the stored password may not match the account. Check by signing in at the console with the password `Get-LazyVMCredential -AsPlainText` shows. |
 | The password cannot be pasted into the VM's sign-in box | A basic VMConnect session has no clipboard. Copy the password on the host, then in VMConnect choose Clipboard > Type clipboard text: it types the text as keystrokes, so the VM's keyboard layout must match the host's. Or connect with an [enhanced session](#enhanced-session-mode), whose sign-in dialog accepts a paste. |
 | "No valid Windows installation ISO" | The file at the configured path is not a real ISO, most often the registration page saved with an `.iso` name. Download the image by hand and save it in the `Shared\ISO` folder. |
