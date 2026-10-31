@@ -177,6 +177,97 @@ Describe 'Add-ProductExtension' {
     }
 }
 
+# New projects go on the Dev Drive, so they outlive the Windows evaluation
+# (#176). The setting lives on C:, so every settings restore sets it again.
+Describe 'ConvertTo-ProjectsLocationSetting' {
+    BeforeAll {
+        $projectsLocation = {
+            param([string]$Settings)
+            ([xml]$Settings).SelectSingleNode("/UserSettings/ToolsOptions/ToolsOptionsCategory[@name='Environment']/ToolsOptionsSubCategory[@name='ProjectsAndSolution']/PropertyValue[@name='ProjectsLocation']").InnerText
+        }
+    }
+
+    It 'replaces the projects location in a settings file, keeping its other settings' {
+        $backup = @'
+<UserSettings>
+  <ApplicationIdentity version="18.0"/>
+  <ToolsOptions>
+    <ToolsOptionsCategory name="Environment" RegisteredName="Environment">
+      <ToolsOptionsSubCategory name="ProjectsAndSolution" RegisteredName="ProjectsAndSolution" PackageName="Visual Studio Environment Package">
+        <PropertyValue name="ProjectsLocation">C:\Users\dev\source\repos</PropertyValue>
+        <PropertyValue name="ShowOutputWindowBeforeBuild">true</PropertyValue>
+      </ToolsOptionsSubCategory>
+    </ToolsOptionsCategory>
+  </ToolsOptions>
+</UserSettings>
+'@
+
+        $settings = InModuleScope $module -Parameters @{ Backup = $backup } { param($Backup) ConvertTo-ProjectsLocationSetting -Settings $Backup -Path 'W:\source\repos' }
+
+        & $projectsLocation $settings | Should -Be 'W:\source\repos'
+        ([xml]$settings).SelectSingleNode("//PropertyValue[@name='ShowOutputWindowBeforeBuild']").InnerText | Should -Be 'true'
+    }
+
+    It 'adds the projects location to a settings file that has none' {
+        $backup = '<UserSettings><ApplicationIdentity version="18.0"/><Category name="Environment_Group" RegisteredName="Environment_Group"/></UserSettings>'
+
+        $settings = InModuleScope $module -Parameters @{ Backup = $backup } { param($Backup) ConvertTo-ProjectsLocationSetting -Settings $Backup -Path 'W:\source\repos' }
+
+        & $projectsLocation $settings | Should -Be 'W:\source\repos'
+        ([xml]$settings).SelectSingleNode("//Category[@name='Environment_Group']") | Should -Not -BeNullOrEmpty
+    }
+
+    It 'makes a settings file holding only the projects location when there is no backup' {
+        $settings = InModuleScope $module { ConvertTo-ProjectsLocationSetting -Settings '' -Path 'W:\source\repos' }
+
+        & $projectsLocation $settings | Should -Be 'W:\source\repos'
+    }
+}
+
+Describe 'Restore-GuestVisualStudioSetting' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe' } }
+        $copied = @{ Settings = $null }
+        Mock -ModuleName $module Copy-ToGuest { $copied.Settings = Get-Content -LiteralPath $HostPath -Raw }
+        Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { }
+        $devDrive = $settings.Clone()
+        $devDrive.UseDevDrive = $true
+        $devDrive.DevDriveLetter = 'W'
+        $devDrive.VSSettingsBackup = Join-Path $TestDrive 'missing.vssettings'
+    }
+
+    It 'points the projects location at the letter the Dev Drive actually got, even with no settings backup' {
+        InModuleScope $module -Parameters @{ Settings = $devDrive } {
+            param($Settings)
+            $vm = [VMContext]::new($Settings)
+            $vm.Runtime.DevDriveLetter = 'X'
+            Restore-GuestVisualStudioSetting -VM $vm
+        }
+
+        $copied.Settings | Should -BeLike '*X:\source\repos*'
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $ArgumentList -contains 'X:\source\repos' }
+    }
+
+    It 'carries the settings backup with the projects location changed' {
+        $devDrive.VSSettingsBackup = Join-Path $TestDrive 'VisualStudio.vssettings'
+        Set-Content -LiteralPath $devDrive.VSSettingsBackup -Value '<UserSettings><Category name="Environment_Group" RegisteredName="Environment_Group"/></UserSettings>'
+
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        $copied.Settings | Should -BeLike '*Environment_Group*'
+        $copied.Settings | Should -BeLike '*W:\source\repos*'
+    }
+
+    It 'skips the restore with no settings backup when the Dev Drive is turned off' {
+        $devDrive.UseDevDrive = $false
+
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 0 -Exactly
+    }
+}
+
 Describe 'The default tooling list' {
     It 'loads, and holds none of the extensions the installer refused as unsigned (#112)' {
         $links = InModuleScope $module {
