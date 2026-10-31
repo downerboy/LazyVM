@@ -804,8 +804,17 @@ Describe 'The built-in config templates' {
     }
 
     It '<_> matches the template schema, loads cleanly and sets no setting that must differ between VMs' -ForEach $templateFiles {
-        $schemaPath = Join-Path -Path $PSScriptRoot -ChildPath '../src/LazyVM/Data/LazyVM.Template.schema.json'
-        Test-Json -Json (Get-Content -LiteralPath $_ -Raw) -SchemaFile $schemaPath | Should -BeTrue
+        # Test-Json on Windows does not follow the template schema's file
+        # reference to the settings schema, so the test puts it in place.
+        $dataDir = Join-Path -Path $PSScriptRoot -ChildPath '../src/LazyVM/Data'
+        $templateSchema = Get-Content -LiteralPath (Join-Path -Path $dataDir -ChildPath 'LazyVM.Template.schema.json') -Raw | ConvertFrom-Json -AsHashtable
+        $settingsSchema = Get-Content -LiteralPath (Join-Path -Path $dataDir -ChildPath 'LazyVM.Settings.schema.json') -Raw | ConvertFrom-Json -AsHashtable
+        $templateSchema.properties.Settings['$ref'] | Should -Be 'LazyVM.Settings.schema.json'
+        $templateSchema['definitions'] = $settingsSchema['definitions']
+        foreach ($key in 'definitions', '$id', '$schema') { $settingsSchema.Remove($key) }
+        $templateSchema.properties['Settings'] = $settingsSchema
+
+        Test-Json -Json (Get-Content -LiteralPath $_ -Raw) -Schema (ConvertTo-Json -InputObject $templateSchema -Depth 50) | Should -BeTrue
 
         $template = InModuleScope $module -Parameters @{ Path = $_ } { param($Path) Read-VMTemplateFile -Path $Path }
         $perVM = InModuleScope $module { Get-PerVMSettingName }
