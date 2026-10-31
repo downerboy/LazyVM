@@ -33,6 +33,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Update-GuestSqlRecord { }
         Mock -ModuleName $module Update-GuestAppSettingRecord { }
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
+        Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
         Mock -ModuleName $module Save-GuestState { 'stray' }
         Mock -ModuleName $module Test-GuestStateChanged { $false }
@@ -87,6 +88,16 @@ Describe 'Invoke-Maintenance' {
         Should -Invoke -ModuleName $module Backup-UserDisk -Times 1 -Exactly
     }
 
+    It 'asks the Store to update its apps every day, and carries on when that fails (#233)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Start-GuestStoreAppUpdate { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Start-GuestStoreAppUpdate -Times 1 -Exactly
+    }
+
     It 'captures the state when it changed and nothing else is due (#20)' {
         Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
         Mock -ModuleName $module Test-GuestStateChanged { $true }
@@ -137,6 +148,48 @@ Describe 'Invoke-GuestRearm' {
 
         $result.Count | Should -Be 1
         $result[0] | Should -BeTrue
+    }
+}
+
+Describe 'Start-GuestStoreAppUpdate (#233)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Invoke-GuestScript { throw 'the WMI bridge needs SYSTEM, not the guest account' }
+    }
+
+    It 'asks the Store to scan for app updates from a task running as SYSTEM' {
+        Mock -ModuleName $module Invoke-GuestTask { '0' }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
+            $TaskName -like '*store-app-update' -and -not $AsGuestUser -and "$Work" -match 'UpdateScanMethod'
+        }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'OK' }
+    }
+
+    It 'warns, with the code, when the Store refuses the scan' {
+        Mock -ModuleName $module Invoke-GuestTask { '5' }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM }
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -match '\b5\b' }
+    }
+
+    It 'warns, without failing, when the guest has no Store app management' {
+        Mock -ModuleName $module Invoke-GuestTask { 'unavailable' }
+
+        { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM } } | Should -Not -Throw
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -match 'not available' }
+    }
+
+    It 'emits nothing' {
+        Mock -ModuleName $module Invoke-GuestTask { '0' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM })
+
+        $result.Count | Should -Be 0
     }
 }
 
