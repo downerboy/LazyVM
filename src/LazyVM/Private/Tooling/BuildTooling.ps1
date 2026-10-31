@@ -22,6 +22,23 @@ function Get-BuildTooling {
     return [ToolingRecord]::FromObject($VM.Settings[$script:ToolingSettingName])
 }
 
+function Initialize-VMTooling {
+    <#
+      After a build: records what the guest has as the VM's tooling list,
+      while VM.json has none yet, so the VM has its own list from the start
+      rather than from the first daily run (#30). No checkpoint: there is no
+      earlier list to go back to.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    if (Read-VMTooling -VM $VM) { return }
+
+    $current = ConvertTo-ToolingRecord -Inventory (Get-GuestToolingInventory -VM $VM) -WingetExclude $VM.Settings.ToolingWingetExclude
+    Add-MarketplaceItem -Record $current -Previous $null
+    Save-VMTooling -VM $VM -Record $current -Reason 'first tooling list recorded at the end of the build'
+    Write-LogEntry "This VM's tooling list recorded in VM.json" 'OK'
+}
+
 function Write-ToolingReinstallReport {
     <#
       After a build: what the tooling list has that the guest still lacks,

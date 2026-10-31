@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.16.0](https://github.com/downerboy/LazyVM/compare/v4.15.5...v4.16.0) (2026-10-31)
+
+
+### Features
+
+* refuse to attach a persistent disk that belongs to another VM ([#198](https://github.com/downerboy/LazyVM/issues/198)) ([76701c1](https://github.com/downerboy/LazyVM/commit/76701c12dddb76c74b34f24dd5fc42fa071a811e))
+
 ## [4.15.5](https://github.com/downerboy/LazyVM/compare/v4.15.4...v4.15.5) (2026-10-31)
 
 
