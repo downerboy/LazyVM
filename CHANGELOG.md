@@ -1,5 +1,22 @@
 # Changelog
 
+## [5.0.0](https://github.com/downerboy/LazyVM/compare/v4.21.1...v5.0.0) (2026-10-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* `New-LazyVM -Template` is renamed `-ConfigTemplate`, and the built-in `Minimal` template is removed (use `PlainWindows`, or your own template).
+
+### Features
+
+* add Export-LazyVMTemplate to save a VM's configuration as a config template ([#253](https://github.com/downerboy/LazyVM/issues/253)) ([3a5ca8d](https://github.com/downerboy/LazyVM/commit/3a5ca8d76da6b1dd283e0f417e067612d72aa523))
+* config templates with a Name, -ConfigTemplate on Build-LazyVM, Developer and PlainWindows ([#252](https://github.com/downerboy/LazyVM/issues/252)) ([0102a72](https://github.com/downerboy/LazyVM/commit/0102a721fd2975d70e40e373a52c4a5300cb945d))
+
+
+### Bug Fixes
+
+* remove the answer-file disc whenever a build phase fails ([#251](https://github.com/downerboy/LazyVM/issues/251)) ([5b2b908](https://github.com/downerboy/LazyVM/commit/5b2b9084cfcdc460a6f378416506759ebcdff1a3))
+
 ## [4.21.1](https://github.com/downerboy/LazyVM/compare/v4.21.0...v4.21.1) (2026-10-31)
 
 
