@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.19.0](https://github.com/downerboy/LazyVM/compare/v4.18.0...v4.19.0) (2026-10-31)
+
+
+### Features
+
+* install programs and extensions from official installers ([#217](https://github.com/downerboy/LazyVM/issues/217)) ([111522b](https://github.com/downerboy/LazyVM/commit/111522bce23a8aba85c07ccd34d946dd0c1fbbf7))
+
+
+### Bug Fixes
+
+* keep Test-LazyVM from writing a lastgood copy of the settings ([#219](https://github.com/downerboy/LazyVM/issues/219)) ([94ca342](https://github.com/downerboy/LazyVM/commit/94ca3422dc57b8b059ad48b4e7b3cc4c7616f674))
+
 ## [4.18.0](https://github.com/downerboy/LazyVM/compare/v4.17.0...v4.18.0) (2026-10-31)
 
 
