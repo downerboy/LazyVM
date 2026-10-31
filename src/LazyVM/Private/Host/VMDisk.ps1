@@ -120,7 +120,9 @@ function Add-VMDataDisk {
         [Parameter(Mandatory)][string]$LocationSetting
     )
 
-    if (@(Get-VMHardDiskDrive -VMName $VM.Name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Path }).Count -gt 0) {
+    # After a checkpoint the VM holds the disk through a differencing disk
+    # (.avhdx) whose chain leads back to $Path (#191).
+    if (@(Get-VMHardDiskDrive -VMName $VM.Name -ErrorAction SilentlyContinue | Where-Object { $_.Path -and (Get-DiskChain -Path $_.Path) -contains $Path }).Count -gt 0) {
         Write-LogEntry "$Label already attached" 'OK'
         return
     }
