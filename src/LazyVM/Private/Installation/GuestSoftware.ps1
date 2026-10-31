@@ -39,19 +39,11 @@ function Install-GuestSoftware {
         Write-LogEntry "  administrator named '$($VM.Runtime.GuestAdminUser)' with the stored password." 'INFO'
     }
 
+    Wait-GuestReady -VM $VM -Credential $credential -TimeoutMinutes $settings.GuestWaitMinutes -RequireProvisioned:$UsedUnattend
+
     # The answer-file disc holds the guest password in clear text, so it goes
-    # before anything else runs, and goes even when the guest never got
-    # ready: a stopped build must not leave the password on disk (#227).
-    try {
-        Wait-GuestReady -VM $VM -Credential $credential -TimeoutMinutes $settings.GuestWaitMinutes -RequireProvisioned:$UsedUnattend
-    }
-    catch {
-        if ($UsedUnattend) {
-            Remove-UnattendSeedDisk -VM $VM
-            Write-LogEntry 'The answer-file disc is gone, so Windows Setup cannot finish unattended: finish it by hand in the VM console, or remove the VM and build it again.' 'WARN'
-        }
-        throw
-    }
+    # before anything else runs. If the build stops before this,
+    # Invoke-BuildPhase removes it (#247).
     if ($UsedUnattend) { Remove-UnattendSeedDisk -VM $VM }
 
     # The data disks go on before SQL Server is installed, so its data

@@ -9,7 +9,9 @@
 # LazyVM.Template.schema.json describes the file.
 # New-LazyVM -ConfigTemplate (and Build-LazyVM -ConfigTemplate, for a VM with
 # no profile yet) applies a template's Settings over the shared template.
-# Name belongs to the template, so it never becomes a setting in VM.json.
+# Name belongs to the template, so it never becomes a setting in VM.json, and
+# a template cannot hold the settings each VM has its own of. One of the
+# user's own replaces a built-in one of the same name.
 
 function Get-BuiltInTemplateDir {
     <# The module's folder of built-in config templates. #>
@@ -43,56 +45,83 @@ function Assert-TemplateName {
 function Read-VMTemplateFile {
     <#
       One config template file: its Name, its path and the settings it
-      changes, checked against the schema. Throws, saying what is wrong, when
-      it cannot be used.
+      changes, checked against the schema. Field names match whatever their
+      case. Throws, saying what is wrong, when it cannot be used.
     #>
     [OutputType([pscustomobject])]
     param([Parameter(Mandatory)][string]$Path)
 
+    $name = $null
+    $settings = $null
+    $misplaced = [System.Collections.Generic.List[string]]::new()
     $document = Read-SettingsJson -Path $Path
-    $misplaced = @($document.Keys | Where-Object { @('$schema', 'Name', 'Settings') -notcontains $_ })
-    if ($misplaced.Count -gt 0) {
-        throw "This config template has $(($misplaced | ForEach-Object { "'$_'" }) -join ', ') outside its Settings; settings go inside `"Settings`": { }:`n  $Path"
+    foreach ($key in $document.Keys) {
+        switch ($key) {
+            '$schema' { break }
+            'Name' { $name = $document[$key]; break }
+            'Settings' { $settings = $document[$key]; break }
+            default { $misplaced.Add("'$key'") }
+        }
     }
-    $name = $document['Name']
+    if ($misplaced.Count -gt 0) {
+        throw "This config template has $($misplaced -join ', ') outside its Settings; settings go inside `"Settings`": { }:`n  $Path"
+    }
     if ($name -isnot [string] -or [string]::IsNullOrWhiteSpace($name)) {
         throw "This config template needs a Name, such as `"Name`": `"WebDev`":`n  $Path"
     }
     Assert-TemplateName -Name $name -Path $Path
-    if ($document['Settings'] -isnot [System.Collections.IDictionary]) {
+    if ($settings -isnot [System.Collections.IDictionary]) {
         throw "This config template needs a Settings table holding the settings it changes, such as `"Settings`": { `"vCPU`": 8 }:`n  $Path"
+    }
+
+    $checked = ConvertTo-CheckedSetting -Values $settings -Path $Path
+    $perVM = Get-PerVMSettingName
+    $belongToVM = @($checked.Keys | Where-Object { $perVM -contains $_ } | Sort-Object)
+    if ($belongToVM.Count -gt 0) {
+        throw "$(($belongToVM | ForEach-Object { "'$_'" }) -join ', ') cannot be in a config template: each VM has its own (file locations, the computer name, the maintenance time, its disks and what was recorded inside it). Remove it from Settings:`n  $Path"
     }
 
     return [pscustomobject]@{
         Name     = $name
         Path     = $Path
-        Settings = ConvertTo-CheckedSetting -Values $document['Settings'] -Path $Path
+        Settings = $checked
+        Problem  = $null
     }
 }
 
 function Get-VMTemplate {
     <#
       Every config template file: the built-in ones, then, with -Root, the
-      user's. Each comes back as Read-VMTemplateFile reads it, or, when it
-      cannot be read, with its Path and the Problem.
+      user's. Each has its Name, Path, Settings, BuiltIn and Problem; a file
+      that cannot be read has only its Path, BuiltIn and the Problem.
     #>
     [OutputType([pscustomobject[]])]
     param([string]$Root)
 
-    $folders = @(Get-BuiltInTemplateDir)
-    if ($Root) { $folders += Get-UserTemplateDir -Root $Root }
+    $folders = @([pscustomobject]@{ Path = Get-BuiltInTemplateDir; BuiltIn = $true })
+    if ($Root) { $folders += [pscustomobject]@{ Path = Get-UserTemplateDir -Root $Root; BuiltIn = $false } }
 
-    $files = @($folders | Where-Object { Test-Path -LiteralPath $_ -PathType Container } |
-            ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter '*.json' -File | Sort-Object -Property Name })
-    $templates = foreach ($file in $files) {
-        try {
-            Read-VMTemplateFile -Path $file.FullName
-        }
-        catch {
-            [pscustomobject]@{ Name = $null; Path = $file.FullName; Settings = $null; Problem = $_.Exception.Message }
+    $templates = foreach ($folder in $folders) {
+        if (-not (Test-Path -LiteralPath $folder.Path -PathType Container)) { continue }
+        foreach ($file in @(Get-ChildItem -LiteralPath $folder.Path -Filter '*.json' -File | Sort-Object -Property Name)) {
+            try {
+                $template = Read-VMTemplateFile -Path $file.FullName
+            }
+            catch {
+                $template = [pscustomobject]@{ Name = $null; Path = $file.FullName; Settings = $null; Problem = $_.Exception.Message }
+            }
+            $template | Add-Member -NotePropertyName 'BuiltIn' -NotePropertyValue $folder.BuiltIn -PassThru
         }
     }
     return @($templates)
+}
+
+function Select-VMTemplateName {
+    <# The names of the usable templates among $Template, sorted, each once. #>
+    [OutputType([string[]])]
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Template)
+
+    return @($Template | Where-Object { -not $_.Problem } | ForEach-Object { $_.Name } | Sort-Object -Unique)
 }
 
 function Get-VMTemplateName {
@@ -100,14 +129,17 @@ function Get-VMTemplateName {
     [OutputType([string[]])]
     param([string]$Root)
 
-    return @(Get-VMTemplate -Root $Root | Where-Object { $_.Name } | ForEach-Object { $_.Name } | Sort-Object -Unique)
+    return Select-VMTemplateName -Template @(Get-VMTemplate -Root $Root)
 }
 
 function Read-VMTemplate {
     <#
-      The settings the config template of that name changes. Throws, naming
-      the templates there are and any file that could not be read, when
-      there is none of that name, and naming the files when several share it.
+      The settings the config template of that name changes. One of the
+      user's own replaces a built-in one of the same name, as
+      LazyVM.Settings.json replaces the defaults. Throws, naming the
+      templates there are and any file that could not be read, when there is
+      none of that name, and naming the files when several of the user's
+      share it.
     #>
     [OutputType([hashtable])]
     param(
@@ -116,7 +148,9 @@ function Read-VMTemplate {
     )
 
     $templates = @(Get-VMTemplate -Root $Root)
-    $found = @($templates | Where-Object { $_.Name -eq $Name })
+    $named = @($templates | Where-Object { -not $_.Problem -and $_.Name -eq $Name })
+    $found = @($named | Where-Object { -not $_.BuiltIn })
+    if ($found.Count -eq 0) { $found = $named }
     if ($found.Count -eq 1) {
         return $found[0].Settings
     }
@@ -124,20 +158,52 @@ function Read-VMTemplate {
         throw "Several config templates are named '$Name', so LazyVM cannot tell which to use. Change the Name in all but one:`n$(($found | ForEach-Object { "  $($_.Path)" }) -join "`n")"
     }
 
-    $message = "There is no config template named '$Name'. Config templates: $((Get-VMTemplateName -Root $Root) -join ', ')."
-    $unreadable = @($templates | Where-Object { -not $_.Name })
+    $message = "There is no config template named '$Name'. Config templates: $((Select-VMTemplateName -Template $templates) -join ', ')."
+    $unreadable = @($templates | Where-Object { $_.Problem })
     if ($unreadable.Count -gt 0) {
         $message += "`nThese template files could not be read:`n$(($unreadable | ForEach-Object { $_.Problem }) -join "`n")"
     }
     throw $message
 }
 
+function Get-UserTemplatePath {
+    <# Where Export-LazyVMTemplate saves the config template named $TemplateName. #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$TemplateName
+    )
+
+    return Join-Path -Path (Get-UserTemplateDir -Root $Root) -ChildPath "$TemplateName.json"
+}
+
+function Assert-TemplateNameAvailable {
+    <#
+      Throws unless a new config template can be saved as $TemplateName: a
+      valid name that no template has, built-in or the user's, and no file
+      of that name to write over.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$TemplateName
+    )
+
+    Assert-TemplateName -Name $TemplateName
+    if (@(Get-VMTemplateName -Root $Root) -contains $TemplateName) {
+        throw "There is already a config template named '$TemplateName'. Choose another name with -TemplateName."
+    }
+    $path = Get-UserTemplatePath -Root $Root -TemplateName $TemplateName
+    if (Test-Path -LiteralPath $path) {
+        throw "$path already exists. Move it, or choose another name with -TemplateName."
+    }
+}
+
 function Export-VMTemplate {
     <#
-      Saves a VM's settings and tooling list, without the ones that must
-      differ between VMs, as a config template named $TemplateName in
-      <Root>\Shared\Templates. Refuses a name another template has, and never
-      writes over a file. Returns the template file's path.
+      Saves a VM's settings and tooling list, without the ones each VM has
+      its own of, as a config template named $TemplateName in
+      <Root>\Shared\Templates. The caller checks the name first
+      (Assert-TemplateNameAvailable). Returns the template file's path.
     #>
     [OutputType([string])]
     param(
@@ -146,18 +212,12 @@ function Export-VMTemplate {
         [Parameter(Mandatory)][string]$TemplateName
     )
 
-    Assert-TemplateName -Name $TemplateName
-    if (@(Get-VMTemplateName -Root $Root) -contains $TemplateName) {
-        throw "There is already a config template named '$TemplateName'. Choose another name with -TemplateName."
-    }
-    $folder = Get-UserTemplateDir -Root $Root
-    $path = Join-Path -Path $folder -ChildPath "$TemplateName.json"
-    if (Test-Path -LiteralPath $path) {
-        throw "$path already exists. Move it, or choose another name with -TemplateName."
-    }
-
+    $path = Get-UserTemplatePath -Root $Root -TemplateName $TemplateName
     # The template points at the schema copies in Shared\Config, for the editor.
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $Root)
+    # The tooling list goes in the template, so an older VM's Tooling.json
+    # must be in its VM.json first.
+    $null = Move-ToolingIntoProfile -Root $Root -Name $Name
     $settings = Get-ShareableSetting -Root $Root -Name $Name
     $document = [ordered]@{
         '$schema' = "../$script:ConfigFolderName/$script:TemplateSchemaFileName"
@@ -166,7 +226,7 @@ function Export-VMTemplate {
     }
     foreach ($key in @($settings.Keys | Sort-Object)) { $document.Settings[$key] = $settings[$key] }
 
-    New-Folder -Path $folder
+    New-Folder -Path (Split-Path -Path $path -Parent)
     Write-TextFileAtomic -Path $path -Text ((ConvertTo-Json -InputObject $document -Depth 20) + [Environment]::NewLine)
     return $path
 }

@@ -43,6 +43,16 @@ $script:GuestScheduledTaskSettingName = 'GuestScheduledTasks'
 $script:GuestSqlSettingName = 'GuestSql'
 # The setting in VM.json that holds the values under the AppSettings keys (GuestAppSetting.ps1).
 $script:GuestAppSettingName = 'GuestAppSettings'
+# What LazyVM records from inside a VM: it belongs to that VM alone (and the
+# VM that replaces it on a rebuild), so it is never copied to another VM or
+# put in a config template. GuestSql holds logins with password hashes.
+$script:RecordedGuestStateSettings = @(
+    $script:GuestEnvironmentSettingName
+    $script:GuestFirewallSettingName
+    $script:GuestScheduledTaskSettingName
+    $script:GuestSqlSettingName
+    $script:GuestAppSettingName
+)
 
 # Environment variables Windows sets itself: a fresh install has its own, so
 # they are neither recorded nor put back.

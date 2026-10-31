@@ -358,6 +358,10 @@ Describe 'Export-LazyVMTemplate (#250)' {
 
         Join-Path -Path $root -ChildPath 'Shared/Templates' | Should -Not -Exist
     }
+
+    It 'refuses a name already taken even with -WhatIf' {
+        { Export-LazyVMTemplate -Name Alpha -TemplateName Developer -WhatIf } | Should -Throw -ExpectedMessage "*already a config template named 'Developer'*"
+    }
 }
 
 Describe 'Get-ModuleImportCommand' {

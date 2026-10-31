@@ -126,8 +126,8 @@ function Initialize-ConfigFolder {
     <#
       Makes sure the Config folder has up-to-date copies of the schemas, for
       the editor (the settings schema, and the template schema the user's
-      config templates point at), and a settings file to open, so there is
-      always somewhere obvious to change a setting.
+      config templates in Shared\Templates point at), and a settings file to
+      open, so there is always somewhere obvious to change a setting.
     #>
     param([Parameter(Mandatory)][string]$ConfigDir)
 
@@ -216,20 +216,25 @@ function Get-SharedTemplateSetting {
 
 function Get-PerVMSettingName {
     <#
-      Settings that must differ between VMs: file locations, the guest
-      computer name, the maintenance time and the recorded identity of its
-      disks. A VM copied with -From takes these from the shared template,
-      which names everything after the VM and records no disk, rather than
-      from the VM it copies.
+      Settings that belong to one VM: file locations, the guest computer
+      name, the maintenance time, the recorded identity of its disks and
+      what LazyVM recorded inside it. A VM copied with -From takes these
+      from the shared template, which names everything after the VM and
+      records nothing, rather than from the VM it copies; a config template
+      cannot hold them.
     #>
-    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime') + @($script:DataDiskIdentitySettings)
+    [OutputType([string[]])]
+    param()
+
+    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime') + @($script:DataDiskIdentitySettings) + @($script:RecordedGuestStateSettings)
 }
 
 function Get-ShareableSetting {
     <#
-      A VM's settings, tooling list included, without the ones that must
-      differ between VMs (Get-PerVMSettingName): what New-LazyVM -From copies
-      and Export-LazyVMTemplate saves.
+      A VM's settings, tooling list included, without the ones each VM has
+      its own of (Get-PerVMSettingName): what New-LazyVM -From copies and
+      Export-LazyVMTemplate saves. Only reads: a caller that needs an older
+      VM's Tooling.json folds it in first (Move-ToolingIntoProfile).
     #>
     [OutputType([hashtable])]
     param(
@@ -237,10 +242,6 @@ function Get-ShareableSetting {
         [Parameter(Mandatory)][string]$Name
     )
 
-    # The tooling list goes with the other settings, so an older VM's
-    # Tooling.json must be in its VM.json first. Its history and checkpoints
-    # belong to the VM and stay there.
-    $null = Move-ToolingIntoProfile -Root $Root -Name $Name
     $perVM = Get-PerVMSettingName
     $settings = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $Name)
     $shareable = @{}
@@ -283,6 +284,10 @@ function New-VMProfile {
     if ($From) {
         $source = $existing | Where-Object { $_ -eq $From } | Select-Object -First 1
         if (-not $source) { throw "There is no VM named '$From' to copy." }
+        # The tooling list is copied with the other settings, so an older
+        # source VM's Tooling.json must be in its VM.json first. Its history
+        # and checkpoints belong to the source VM and stay there.
+        $null = Move-ToolingIntoProfile -Root $Root -Name $source
         $sourceSettings = Get-ShareableSetting -Root $Root -Name $source
         foreach ($key in $sourceSettings.Keys) { $settings[$key] = $sourceSettings[$key] }
     }

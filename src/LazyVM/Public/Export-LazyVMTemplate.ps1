@@ -48,6 +48,8 @@
     $root = (Resolve-LazyVMRoot).Path
     $vmName = Resolve-VMSelection -Root $root -Requested $Name
     if (-not $TemplateName) { $TemplateName = $vmName }
+    # Before asking, so -WhatIf and -Confirm report a name that cannot be used.
+    Assert-TemplateNameAvailable -Root $root -TemplateName $TemplateName
 
     if (-not $PSCmdlet.ShouldProcess($vmName, "Save its configuration as the config template '$TemplateName'")) {
         return
