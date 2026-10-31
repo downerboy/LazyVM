@@ -34,7 +34,9 @@ function Initialize-VMTooling {
     if (Read-VMTooling -VM $VM) { return }
 
     $current = ConvertTo-ToolingRecord -Inventory (Get-GuestToolingInventory -VM $VM) -WingetExclude $VM.Settings.ToolingWingetExclude
-    Add-MarketplaceItem -Record $current -Previous $null
+    # The list the build installed from (the shared template's) keeps its
+    # official installers and earlier answers.
+    Add-ToolingSource -VM $VM -Record $current -Previous (Get-BuildTooling -VM $VM -Quiet)
     Save-VMTooling -VM $VM -Record $current -Reason 'first tooling list recorded at the end of the build'
     Write-LogEntry "This VM's tooling list recorded in VM.json" 'OK'
 }
