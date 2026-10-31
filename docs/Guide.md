@@ -501,6 +501,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `UseDevDrive` | true | Whether to create, attach and designate the Dev Drive. |
 | `DevDriveLetter` | W | Where the Dev Drive appears in the VM. |
 | `UserDiskLetter` | U | Where the User disk appears in the VM. |
+| `BackupDir` | none | Where the daily maintenance keeps its one copy of the User disk, such as a folder on an external disk. Unset, the copy is `<VM>\Backups\<VM>-User.vhdx`. The copy is made from a checkpoint while the VM runs, only when the files on the disk changed and once BitLocker has encrypted all of it, so it is still encrypted. When the folder is not there, the copy is skipped with a warning. To restore, swap the copy for the User disk's VHDX while the VM is off. |
 | `SQLIsoUrl` | SQL Server 2025 Enterprise Developer | Where the SQL Server ISO is downloaded from. LazyVM installs the Standard Developer edition from it, so code can't come to depend on Enterprise-only features. |
 | `SwitchName` | Default Switch | The virtual switch. See the note below. |
 | `GuestRemoveApps` | News, Microsoft 365, Xbox | Built-in apps removed at every build, so they stay gone after a rebuild. Your list replaces the default, so copy it and add to it. |

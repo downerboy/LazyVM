@@ -130,7 +130,7 @@ function Invoke-Maintenance {
     <#
       The scheduled task's daily work: extends C: into any new space, puts
       the personal folders on the User disk, turns BitLocker on for C: and
-      the persistent disks, records
+      the persistent disks, copies the User disk when it changed, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
       the databases, then does nothing more until the evaluation is close to
@@ -162,6 +162,10 @@ function Invoke-Maintenance {
     # BitLocker on C: and every persistent disk; an older VM's disks are encrypted whole, in the background (#175).
     try { $null = Protect-GuestPersistentDisk -VM $VM }
     catch { Write-LogError 'BitLocker check failed (non-fatal)' $_ }
+
+    # One copy of the User disk, still encrypted, made only when its files changed (#139).
+    try { $null = Backup-UserDisk -VM $VM }
+    catch { Write-LogError 'User disk copy failed (non-fatal)' $_ }
 
     # Tooling every day. A failure here must not stop the license work below.
     try { $null = Update-ToolingRecord -VM $VM }
