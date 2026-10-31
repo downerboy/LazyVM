@@ -151,6 +151,38 @@ Describe 'Invoke-GuestInstaller' {
     }
 }
 
+Describe 'Invoke-GuestTask' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Start-Sleep { }
+        Mock -ModuleName $module Invoke-GuestScript {
+            switch -Wildcard ($Activity) {
+                'starting *' { 'boot1' }
+                'checking on *' { New-TaskStatus -Done 'OK' -TaskState 'Ready' }
+            }
+        }
+    }
+
+    It 'sends a string that came back from the guest as a plain string' {
+        # As remoting returns it. Windows PowerShell 5.1 in the guest writes
+        # such a string to JSON as an object, so the task got @{value=...}.
+        $fromGuest = Add-Member -InputObject 'C:\winget.exe' -NotePropertyName PSComputerName -NotePropertyValue 'Alpha' -PassThru
+
+        InModuleScope $module -Parameters @{ Settings = $settings; FromGuest = $fromGuest } {
+            param($Settings, $FromGuest)
+            Invoke-GuestTask -VM ([VMContext]::new($Settings)) -TaskName 'LazyVM-test' -Work { 'OK' } -ArgumentList @($FromGuest, @('a', 'b')) -TimeoutMinutes 5 -Activity 'test'
+        }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $sent = @($ArgumentList[3])
+            $Activity -like 'starting *' -and
+            $sent.Count -eq 2 -and
+            $sent[0] -eq 'C:\winget.exe' -and -not $sent[0].PSObject.Properties['PSComputerName'] -and
+            @($sent[1]).Count -eq 2
+        }
+    }
+}
+
 Describe 'Set-GuestCustomization' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }

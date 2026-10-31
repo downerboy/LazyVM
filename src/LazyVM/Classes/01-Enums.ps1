@@ -23,6 +23,8 @@ enum BuildOutcome {
     Complete
     # The host is restarting to finish turning on Hyper-V; the resume task carries on.
     RestartPending
+    # Every phase ran, but a step in one of them failed; the log says which (#226).
+    CompleteWithProblems
 }
 
 enum RemovalOutcome {
