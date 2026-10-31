@@ -22,7 +22,8 @@ BeforeAll {
     $stubs = [ordered]@{
         'Get-BitLockerVolume'        = '$MountPoint'
         'Enable-BitLocker'           = '$MountPoint, [switch]$TpmProtector, [switch]$RecoveryPasswordProtector, $RecoveryPassword, $EncryptionMethod, [switch]$UsedSpaceOnly, [switch]$SkipHardwareTest'
-        'Add-BitLockerKeyProtector'  = '$MountPoint, [switch]$RecoveryPasswordProtector, $RecoveryPassword'
+        'Add-BitLockerKeyProtector'  = '$MountPoint, [switch]$RecoveryPasswordProtector, $RecoveryPassword, [switch]$TpmProtector'
+        'Resume-BitLocker'           = '$MountPoint'
         'Enable-BitLockerAutoUnlock' = '$MountPoint'
         'Disable-BitLocker'          = '$MountPoint'
         'Unlock-BitLocker'           = '$MountPoint, $RecoveryPassword'
@@ -30,19 +31,24 @@ BeforeAll {
     foreach ($name in $stubs.Keys) { Set-Item -Path "function:script:$name" -Value ([scriptblock]::Create("param($($stubs[$name]))")) }
 
     function New-TestVolume {
-        <# A volume as Get-BitLockerVolume reports it, with a recovery password protector for each of $Protectors. #>
+        <# A volume as Get-BitLockerVolume reports it, with a recovery password protector for each of $Protectors, and a TPM protector with -Tpm. #>
         param(
             [string]$Status = 'FullyDecrypted',
             [string]$Lock = 'Unlocked',
             [string[]]$Protectors = @(),
-            [bool]$AutoUnlock = $false
+            [bool]$AutoUnlock = $false,
+            [string]$Protection = 'On',
+            [switch]$Tpm
         )
 
+        $keys = @($Protectors | ForEach-Object { [pscustomobject]@{ KeyProtectorType = 'RecoveryPassword'; RecoveryPassword = $_ } })
+        if ($Tpm) { $keys += [pscustomobject]@{ KeyProtectorType = 'Tpm'; RecoveryPassword = '' } }
         return [pscustomobject]@{
             VolumeStatus      = $Status
             LockStatus        = $Lock
+            ProtectionStatus  = $Protection
             AutoUnlockEnabled = $AutoUnlock
-            KeyProtector      = @($Protectors | ForEach-Object { [pscustomobject]@{ KeyProtectorType = 'RecoveryPassword'; RecoveryPassword = $_ } })
+            KeyProtector      = $keys
         }
     }
 
@@ -116,6 +122,42 @@ Describe 'Protect-GuestVolume' {
         Mock Add-BitLockerKeyProtector { }
         Mock Enable-BitLockerAutoUnlock { }
         Mock Disable-BitLocker { }
+        Mock Resume-BitLocker { }
+    }
+
+    Context 'when Windows encrypted the volume itself and left protection off (#185)' {
+        It 'gives C: a TPM protector, then turns its protection on' {
+            Mock Get-BitLockerVolume { New-TestVolume -Status 'FullyEncrypted' -Protection 'Off' -Protectors $password } -ParameterFilter { $MountPoint -eq 'C:' }
+            $script:order = @()
+            Mock Add-BitLockerKeyProtector { $script:order += 'tpm' } -ParameterFilter { $TpmProtector }
+            Mock Resume-BitLocker { $script:order += 'resume' }
+
+            $notes = @(Protect-GuestVolume -MountPoint 'C:' -RecoveryPassword $password -System)
+
+            $script:order | Should -Be @('tpm', 'resume')
+            @($notes | Where-Object { $_.Level -eq 'OK' -and $_.Text -like '*protection*on*C:*' }).Count | Should -Be 1
+        }
+
+        It 'leaves C: suspended when it already has a TPM protector, since Windows resumes it after the next restart' {
+            Mock Get-BitLockerVolume { New-TestVolume -Status 'FullyEncrypted' -Protection 'Off' -Protectors $password -Tpm } -ParameterFilter { $MountPoint -eq 'C:' }
+
+            $null = Protect-GuestVolume -MountPoint 'C:' -RecoveryPassword $password -System
+
+            Should -Invoke Resume-BitLocker -Times 0
+            Should -Invoke Add-BitLockerKeyProtector -Times 0
+        }
+
+        It 'turns a data volume''s protection on once it has the password and auto-unlock' {
+            Mock Get-BitLockerVolume { New-TestVolume -Status 'FullyEncrypted' -Protection 'Off' } -ParameterFilter { $MountPoint -eq 'D:' }
+            $script:order = @()
+            Mock Add-BitLockerKeyProtector { $script:order += 'password' }
+            Mock Enable-BitLockerAutoUnlock { $script:order += 'auto-unlock' }
+            Mock Resume-BitLocker { $script:order += 'resume' } -ParameterFilter { $MountPoint -eq 'D:' }
+
+            $null = Protect-GuestVolume -MountPoint 'D:' -RecoveryPassword $password
+
+            $script:order | Should -Be @('password', 'auto-unlock', 'resume')
+        }
     }
 
     It 'encrypts a new data volume''s used space with the recovery password, then turns on auto-unlock' {

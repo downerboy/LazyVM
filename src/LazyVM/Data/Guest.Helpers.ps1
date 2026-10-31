@@ -406,8 +406,8 @@ function Get-GuestVolumeMountPoint {
 function Protect-GuestVolume {
     <#
       Turns BitLocker on for $MountPoint with $RecoveryPassword, or, when it
-      is on already, makes sure the volume has that password and, for a data
-      volume, auto-unlock. -System is C:, which the TPM unlocks: it gets the
+      is on already, makes sure the volume has that password, for a data
+      volume auto-unlock, and that its protection is on. -System is C:, which the TPM unlocks: it gets the
       recovery password before it is encrypted, as Microsoft advises. A data
       volume is encrypted only when C: is, since only then can it unlock
       itself, and BitLocker is turned off again when auto-unlock cannot be
@@ -462,6 +462,22 @@ function Protect-GuestVolume {
     if (-not $System -and -not $volume.AutoUnlockEnabled) {
         $null = Enable-BitLockerAutoUnlock -MountPoint $MountPoint
         $notes += New-GuestNote -Level OK -Text "turned on auto-unlock for $MountPoint"
+    }
+
+    # Windows' own device encryption leaves a volume encrypted with a clear
+    # key and protection off (#185). C: needs the TPM before protection can go
+    # on. A C: that has the TPM already was suspended by Windows Update, which
+    # resumes it after the next restart; resuming it sooner can make that
+    # restart ask for the recovery password.
+    if ("$($volume.ProtectionStatus)" -eq 'Off') {
+        $hasTpm = @($volume.KeyProtector | Where-Object { "$($_.KeyProtectorType)" -eq 'Tpm' }).Count -gt 0
+        if ($System -and $hasTpm) {
+            $notes += New-GuestNote -Level INFO -Text "BitLocker on $MountPoint is suspended until Windows restarts; left as it is"
+            return $notes
+        }
+        if ($System) { $null = Add-BitLockerKeyProtector -MountPoint $MountPoint -TpmProtector }
+        $null = Resume-BitLocker -MountPoint $MountPoint
+        $notes += New-GuestNote -Level OK -Text "turned BitLocker protection on for $MountPoint"
     }
     return $notes
 }
