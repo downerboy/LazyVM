@@ -124,19 +124,22 @@ function ConvertTo-SettingsJson {
 
 function Initialize-ConfigFolder {
     <#
-      Makes sure the Config folder has an up-to-date copy of the schema, for
-      the editor, and a settings file to open, so there is always somewhere
-      obvious to change a setting.
+      Makes sure the Config folder has up-to-date copies of the schemas, for
+      the editor (the settings schema, and the template schema the user's
+      config templates point at), and a settings file to open, so there is
+      always somewhere obvious to change a setting.
     #>
     param([Parameter(Mandatory)][string]$ConfigDir)
 
     New-Folder -Path $ConfigDir
 
-    $source = Join-Path -Path $script:DataDir -ChildPath $script:SchemaFileName
-    $copy = Join-Path -Path $ConfigDir -ChildPath $script:SchemaFileName
-    $schemaText = [IO.File]::ReadAllText($source)
-    if (-not (Test-Path -LiteralPath $copy) -or [IO.File]::ReadAllText($copy) -ne $schemaText) {
-        Write-TextFileAtomic -Path $copy -Text $schemaText
+    foreach ($schemaFileName in $script:SchemaFileName, $script:TemplateSchemaFileName) {
+        $source = Join-Path -Path $script:DataDir -ChildPath $schemaFileName
+        $copy = Join-Path -Path $ConfigDir -ChildPath $schemaFileName
+        $schemaText = [IO.File]::ReadAllText($source)
+        if (-not (Test-Path -LiteralPath $copy) -or [IO.File]::ReadAllText($copy) -ne $schemaText) {
+            Write-TextFileAtomic -Path $copy -Text $schemaText
+        }
     }
 
     $settingsFile = Join-Path -Path $ConfigDir -ChildPath $script:SettingsFileName
@@ -222,6 +225,31 @@ function Get-PerVMSettingName {
     return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime') + @($script:DataDiskIdentitySettings)
 }
 
+function Get-ShareableSetting {
+    <#
+      A VM's settings, tooling list included, without the ones that must
+      differ between VMs (Get-PerVMSettingName): what New-LazyVM -From copies
+      and Export-LazyVMTemplate saves.
+    #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    # The tooling list goes with the other settings, so an older VM's
+    # Tooling.json must be in its VM.json first. Its history and checkpoints
+    # belong to the VM and stay there.
+    $null = Move-ToolingIntoProfile -Root $Root -Name $Name
+    $perVM = Get-PerVMSettingName
+    $settings = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $Name)
+    $shareable = @{}
+    foreach ($key in $settings.Keys) {
+        if ($perVM -notcontains $key) { $shareable[$key] = $settings[$key] }
+    }
+    return $shareable
+}
+
 function New-VMProfile {
     <#
       Creates <Name>\Config\VM.json holding every setting: the shared
@@ -255,15 +283,8 @@ function New-VMProfile {
     if ($From) {
         $source = $existing | Where-Object { $_ -eq $From } | Select-Object -First 1
         if (-not $source) { throw "There is no VM named '$From' to copy." }
-        # The tooling list is copied with the other settings, so an older
-        # source VM's Tooling.json must be in its VM.json first. Its history
-        # and checkpoints belong to the source VM and stay there.
-        $null = Move-ToolingIntoProfile -Root $Root -Name $source
-        $perVM = Get-PerVMSettingName
-        $sourceSettings = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $source)
-        foreach ($key in $sourceSettings.Keys) {
-            if ($perVM -notcontains $key) { $settings[$key] = $sourceSettings[$key] }
-        }
+        $sourceSettings = Get-ShareableSetting -Root $Root -Name $source
+        foreach ($key in $sourceSettings.Keys) { $settings[$key] = $sourceSettings[$key] }
     }
 
     $maintenanceTime = Get-NextMaintenanceTime -Root $Root -VMNames $existing

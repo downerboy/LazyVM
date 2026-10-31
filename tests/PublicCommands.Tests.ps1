@@ -334,6 +334,32 @@ Describe 'New-LazyVM' {
     }
 }
 
+Describe 'Export-LazyVMTemplate (#250)' {
+    BeforeEach {
+        $root = New-TestRoot -VMs 'Alpha'
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $root; Source = 'a test' } }.GetNewClosure()
+    }
+
+    It 'names the template after the VM unless told otherwise, and returns the file' {
+        $file = Export-LazyVMTemplate -Name Alpha
+
+        $file.FullName | Should -Be (Join-Path -Path $root -ChildPath 'Shared/Templates/Alpha.json')
+        (Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json).Name | Should -Be 'Alpha'
+    }
+
+    It 'uses -TemplateName' {
+        $file = Export-LazyVMTemplate -Name Alpha -TemplateName WebDev
+
+        (Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json).Name | Should -Be 'WebDev'
+    }
+
+    It 'writes nothing with -WhatIf' {
+        Export-LazyVMTemplate -Name Alpha -WhatIf
+
+        Join-Path -Path $root -ChildPath 'Shared/Templates' | Should -Not -Exist
+    }
+}
+
 Describe 'Get-ModuleImportCommand' {
     It 'imports by name when the module is installed where PowerShell looks for modules' {
         InModuleScope $module {

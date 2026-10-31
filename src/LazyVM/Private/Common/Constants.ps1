@@ -21,6 +21,8 @@ $script:ProfileFileName = 'VM.json'
 # The VM.json a VM was first built from, kept beside it to diff against it.
 $script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'
+# Describes a config template file; refers to the settings schema beside it.
+$script:TemplateSchemaFileName = 'LazyVM.Template.schema.json'
 # The folder of config templates (Template.ps1): the built-in ones in the
 # module's Data folder, the user's own in <Root>\Shared. A template's name
 # is the Name field in its file; LazyVM.Template.schema.json has the same rule.

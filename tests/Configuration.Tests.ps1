@@ -549,6 +549,8 @@ Describe 'Initialize-ConfigFolder' {
         InModuleScope $module -Parameters @{ ConfigDir = $configDir } { param($ConfigDir) Initialize-ConfigFolder -ConfigDir $ConfigDir }
 
         Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.schema.json' | Should -Exist
+        # The template schema refers to the settings schema beside it (#250).
+        Join-Path -Path $configDir -ChildPath 'LazyVM.Template.schema.json' | Should -Exist
         $settings = Read-TestJson -Path (Join-Path -Path $configDir -ChildPath 'LazyVM.Settings.json')
         $settings['$schema'] | Should -Be './LazyVM.Settings.schema.json'
     }
@@ -842,6 +844,80 @@ Describe 'The built-in config templates' {
         @($values.Tooling.Products) | Should -BeNullOrEmpty
         @($values.Tooling.WingetPackages) | Should -BeNullOrEmpty
         @($values.Tooling.Programs) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Export-VMTemplate (#250)' {
+    BeforeAll {
+        $sourceJson = '{ "MemMaxGB": 32, "LogFile": "Logs\\Alpha-Old.log", "GuestComputerName": "ALPHA",
+                         "SQLDiskGuid": "{11111111-2222-3333-4444-555555555555}", "SQLDiskScsiLocation": 1,
+                         "Tooling":' + $toolingJson + ' }'
+    }
+
+    It 'saves the VM''s settings and tooling list, without the per-VM ones, as a config template in Shared\Templates' {
+        $root = New-TestRoot -Profiles @{ Alpha = $sourceJson }
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Export-VMTemplate -Root $Root -Name 'Alpha' -TemplateName 'WebDev'
+        }
+        $template = Read-TestJson -Path $path
+
+        $path | Should -Be (Join-Path -Path $root -ChildPath 'Shared/Templates/WebDev.json')
+        $template['$schema'] | Should -Be '../Config/LazyVM.Template.schema.json'
+        $template.Name | Should -Be 'WebDev'
+        $template.Settings.MemMaxGB | Should -Be 32
+        Get-TestWingetId -Settings $template.Settings | Should -Be @('Git.Git')
+        $perVM = InModuleScope $module { Get-PerVMSettingName }
+        @($template.Settings.Keys | Where-Object { $perVM -contains $_ }) | Should -BeNullOrEmpty
+        Join-Path -Path $root -ChildPath 'Shared/Config/LazyVM.Template.schema.json' | Should -Exist
+    }
+
+    It 'makes a template that new VMs are built from, without its Name' {
+        $root = New-TestRoot -Profiles @{ Alpha = $sourceJson }
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            $null = Export-VMTemplate -Root $Root -Name 'Alpha' -TemplateName 'WebDev'
+            New-VMProfile -Root $Root -Name 'Beta' -ConfigTemplate 'WebDev'
+        }
+        $vmProfile = Read-TestJson -Path $path
+
+        $vmProfile.MemMaxGB | Should -Be 32
+        $vmProfile.GuestComputerName | Should -Be '{VM}'
+        $vmProfile.SQLDiskGuid | Should -BeNullOrEmpty
+        $vmProfile.Keys | Should -Not -Contain 'Name'
+    }
+
+    It 'refuses <Case>' -ForEach @(
+        @{ Case = 'the name of a built-in template'; TemplateName = 'developer'; Message = "*already a config template named 'developer'*" }
+        @{ Case = 'the name of one of the user''s templates'; TemplateName = 'Mine'; Message = "*already a config template named 'Mine'*" }
+        @{ Case = 'a name that is not a single word'; TemplateName = 'My template'; Message = "*'My template' cannot be used as a config template name*" }
+    ) {
+        $root = New-TestRoot -Profiles @{ Alpha = $sourceJson }
+        $folder = New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'Shared/Templates') -Force
+        Set-Content -LiteralPath (Join-Path -Path $folder.FullName -ChildPath 'other.json') -Value '{ "Name": "Mine", "Settings": {} }'
+
+        {
+            InModuleScope $module -Parameters @{ Root = $root; TemplateName = $TemplateName } {
+                param($Root, $TemplateName)
+                Export-VMTemplate -Root $Root -Name 'Alpha' -TemplateName $TemplateName
+            }
+        } | Should -Throw -ExpectedMessage $Message
+    }
+
+    It 'never writes over a file of the same name' {
+        $root = New-TestRoot -Profiles @{ Alpha = $sourceJson }
+        $folder = New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'Shared/Templates') -Force
+        Set-Content -LiteralPath (Join-Path -Path $folder.FullName -ChildPath 'WebDev.json') -Value 'not json'
+
+        {
+            InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                Export-VMTemplate -Root $Root -Name 'Alpha' -TemplateName 'WebDev'
+            }
+        } | Should -Throw -ExpectedMessage '*WebDev.json already exists*'
+        (Get-Content -LiteralPath (Join-Path -Path $folder.FullName -ChildPath 'WebDev.json') -Raw).Trim() | Should -Be 'not json'
     }
 }
 

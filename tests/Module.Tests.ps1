@@ -55,10 +55,11 @@ Describe 'The module' {
         }
         Mock -ModuleName 'LazyVM' Get-RegisteredRoot { $root }.GetNewClosure()
 
-        $line = 'Get-LazyVM -Name '
-        $completions = (TabExpansion2 -inputScript $line -cursorColumn $line.Length).CompletionMatches
+        foreach ($line in 'Get-LazyVM -Name ', 'Export-LazyVMTemplate -Name ') {
+            $completions = (TabExpansion2 -inputScript $line -cursorColumn $line.Length).CompletionMatches
 
-        $completions.CompletionText | Should -Be @('Alpha', 'Beta')
+            $completions.CompletionText | Should -Be @('Alpha', 'Beta') -Because $line
+        }
     }
 
     It 'completes <Command> -ConfigTemplate with the built-in and the user''s config templates' -ForEach @(

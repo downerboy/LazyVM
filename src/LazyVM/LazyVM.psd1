@@ -12,6 +12,7 @@
 
     FunctionsToExport    = @(
         'Build-LazyVM'
+        'Export-LazyVMTemplate'
         'Get-LazyVM'
         'Get-LazyVMCredential'
         'Get-LazyVMLicense'

@@ -89,6 +89,7 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | `Set-LazyVMRoot`                                            | Chooses your own folder for LazyVM instead of the automatic one.                                       |
 | `New-LazyVM`                                                | Creates a VM's profile without building it. `-From` starts from another VM's settings and tools; `-ConfigTemplate` from a config template. |
 | `Build-LazyVM`                                              | Builds the VM, setting up whatever is missing first, and schedules its maintenance. Safe to run again. `-ConfigTemplate` picks a new VM's config template. |
+| `Export-LazyVMTemplate`                                     | Saves a VM's configuration as a config template that new VMs can start from.                          |
 | `Get-LazyVM`                                                | Lists the VMs, their state and their maintenance.                                                      |
 | `Get-LazyVMSetting`                                         | Every setting as a VM uses it, where the value came from, and what it does.                            |
 | `Set-LazyVMCredential` / `Get-LazyVMCredential`           | The administrator account LazyVM uses inside the VM.                                                   |
@@ -110,7 +111,7 @@ Your settings are JSON files in the LazyVM folder. An update never touches them:
 
 - `Shared\Config\LazyVM.Settings.json` is the shared template for new VMs. List only what you want to change from the defaults.
 - `<Name>\Config\VM.json` is one VM's complete, living configuration: created from the shared template, kept up to date by LazyVM, and used to rebuild the VM or copy it with `New-LazyVM -From`.
-- Config templates are named starting points for new VMs: `Build-LazyVM -Name Clean -ConfigTemplate PlainWindows`. LazyVM comes with `Developer` (Visual Studio, SQL Server, Dev Drive) and `PlainWindows` (no developer tools); your own go in `Shared\Templates`. Press Tab after `-ConfigTemplate` to list them.
+- Config templates are named starting points for new VMs: `Build-LazyVM -Name Clean -ConfigTemplate PlainWindows`. LazyVM comes with `Developer` (Visual Studio, SQL Server, Dev Drive) and `PlainWindows` (no developer tools); your own go in `Shared\Templates`, where `Export-LazyVMTemplate` saves a VM's configuration as one. Press Tab after `-ConfigTemplate` to list them.
 
 A shared template looks like this:
 
