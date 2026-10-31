@@ -295,6 +295,14 @@ Describe 'Import-SettingsFile' {
         Get-Content -LiteralPath $lastGood -Raw | Should -Be '{ "vCPU": 8 }'
     }
 
+    It 'keeps no copy with -ReadOnly' {
+        $path = New-TestFile -Text '{ "vCPU": 8 }' -Name 'VM.json'
+
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path -ReadOnly } | Out-Null
+
+        Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath 'VM.lastgood.json' | Should -Not -Exist
+    }
+
     It 'reports a broken file straight away when run by a person' {
         $path = New-TestFile -Text '{ "vCPU": 8 }' -Name 'VM.json'
         InModuleScope $module -Parameters @{ Path = $path } { param($Path) Import-SettingsFile -Path $Path } | Out-Null

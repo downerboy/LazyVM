@@ -126,3 +126,29 @@ Describe 'Test-LazyVM' {
         $text | Should -BeLike '*FAIL*PowerShell Direct*credential is invalid*'
     }
 }
+
+Describe 'Test-LazyVM against real settings files' {
+    BeforeEach {
+        # A root with one VM profile and a shared settings file, read for real.
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $vmConfig = Join-Path -Path $root -ChildPath 'Alpha/Config'
+        $sharedConfig = Join-Path -Path $root -ChildPath 'Shared/Config'
+        New-Item -ItemType Directory -Path $vmConfig, $sharedConfig -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $vmConfig -ChildPath 'VM.json') -Value '{ "vCPU": 6 }'
+        Set-Content -LiteralPath (Join-Path -Path $sharedConfig -ChildPath 'LazyVM.Settings.json') -Value '{ "vCPU": 4 }'
+
+        Mock -ModuleName $module Assert-Administrator { }
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $root; Source = 'a test' } }.GetNewClosure()
+        Mock -ModuleName $module Get-VM { }
+        Mock -ModuleName $module Get-ScheduledTask { }
+    }
+
+    It 'adds or changes no file in the LazyVM folder' {
+        $snapshot = { @(Get-ChildItem -LiteralPath $root -Recurse -Force -File | ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)" }) }
+        $before = & $snapshot
+
+        $null = Test-LazyVM -Name Alpha
+
+        & $snapshot | Should -Be $before
+    }
+}

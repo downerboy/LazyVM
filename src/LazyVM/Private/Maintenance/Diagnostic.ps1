@@ -47,7 +47,7 @@ function Get-LazyVMDiagnostic {
         New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder' -Status FAIL -Detail $_.Exception.Message
         return
     }
-    try { $configuration = Read-VMSetting -Root $root.Path -VMName $Name }
+    try { $configuration = Read-VMSetting -Root $root.Path -VMName $Name -ReadOnly }
     catch {
         New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder' -Status OK -Detail "$($root.Path) (from $($root.Source))"
         New-DiagnosticCheck -Name $Name -Area Host -Check 'VM settings' -Status FAIL -Detail $_.Exception.Message
