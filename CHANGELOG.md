@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.17.0](https://github.com/downerboy/LazyVM/compare/v4.16.0...v4.17.0) (2026-10-31)
+
+
+### Features
+
+* back up the User disk when it changes ([#204](https://github.com/downerboy/LazyVM/issues/204)) ([e122593](https://github.com/downerboy/LazyVM/commit/e1225936162bc6be08445f822714ad9bad99e06d))
+* record the VM's tooling list at the end of a build ([#197](https://github.com/downerboy/LazyVM/issues/197)) ([6be0458](https://github.com/downerboy/LazyVM/commit/6be0458621a6229614eb7a28a6e82dbe4c127ffd))
+
+
+### Bug Fixes
+
+* set the guest's language and keyboard from GuestLocale ([#200](https://github.com/downerboy/LazyVM/issues/200)) ([ec837c0](https://github.com/downerboy/LazyVM/commit/ec837c08ec423f240a895cd01870088817f6c28f))
+
 ## [4.16.0](https://github.com/downerboy/LazyVM/compare/v4.15.5...v4.16.0) (2026-10-31)
 
 
