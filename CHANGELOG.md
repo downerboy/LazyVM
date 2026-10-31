@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.15.1](https://github.com/downerboy/LazyVM/compare/v4.15.0...v4.15.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* no "Sum cannot be found" when there is nothing to add up ([#181](https://github.com/downerboy/LazyVM/issues/181)) ([6a5791a](https://github.com/downerboy/LazyVM/commit/6a5791aaaf04a5d393dc10a638fef9d8dd21a229))
+* resume a VM that a failed tooling checkpoint left paused ([#183](https://github.com/downerboy/LazyVM/issues/183)) ([eba9400](https://github.com/downerboy/LazyVM/commit/eba94002fe0f58339f594457adf093b5f23b523e))
+
 ## [4.15.0](https://github.com/downerboy/LazyVM/compare/v4.14.0...v4.15.0) (2026-10-30)
 
 
