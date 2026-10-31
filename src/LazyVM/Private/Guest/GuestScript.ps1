@@ -34,7 +34,8 @@ function Invoke-GuestScript {
         return $result
     }
     finally {
-        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        # LazyVM's own job, so it is removed even under -WhatIf (#18).
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue -WhatIf:$false
     }
 }
 

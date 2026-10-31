@@ -111,6 +111,19 @@ Describe 'Invoke-LazyVMMaintenance' {
 
         { Invoke-LazyVMMaintenance -Name Alpha } | Should -Throw -ExpectedMessage '*did not complete cleanly*'
     }
+
+    It 'says what a run would do and changes nothing with -WhatIf (#18)' {
+        Mock -ModuleName $module Get-MaintenancePreview { 'Run the daily checks' }
+        Mock -ModuleName $module Invoke-Maintenance { 'None' }
+
+        $result = @(Invoke-LazyVMMaintenance -Name Alpha -WhatIf)
+
+        $result.Count | Should -Be 0
+        Should -Invoke -ModuleName $module Get-MaintenancePreview -Times 1 -Exactly
+        Should -Invoke -ModuleName $module Invoke-Maintenance -Times 0
+        Should -Invoke -ModuleName $module Sync-VMProfile -Times 0
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { -not $RecordHardware }
+    }
 }
 
 Describe 'Build-LazyVM' {
@@ -170,6 +183,16 @@ Describe 'Build-LazyVM' {
 
         Build-LazyVM -Name Alpha
 
+        Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 0
+    }
+
+    It 'sets up nothing and builds nothing with -WhatIf (#18)' {
+        Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
+
+        Build-LazyVM -Name Alpha -FromPhase 7 -WhatIf
+
+        Should -Invoke -ModuleName $module Initialize-BuildTarget -Times 0
+        Should -Invoke -ModuleName $module Invoke-VMBuild -Times 0
         Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 0
     }
 
