@@ -267,7 +267,7 @@ Build-LazyVM
 
 ## 5. The 90-day cycle
 
-Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, then does this:
+Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), then does this:
 
 | Situation | What happens |
 |---|---|

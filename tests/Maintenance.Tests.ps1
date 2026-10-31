@@ -31,6 +31,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Update-GuestSqlRecord { }
         Mock -ModuleName $module Update-GuestAppSettingRecord { }
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
+        Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
         Mock -ModuleName $module Save-GuestState { 'stray' }
         Mock -ModuleName $module Test-GuestStateChanged { $false }
@@ -85,6 +86,16 @@ Describe 'Invoke-Maintenance' {
         Should -Invoke -ModuleName $module Backup-UserDisk -Times 1 -Exactly
     }
 
+    It 'asks the Store to update its apps every day, and carries on when that fails (#233)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Start-GuestStoreAppUpdate { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Start-GuestStoreAppUpdate -Times 1 -Exactly
+    }
+
     It 'captures the state when it changed and nothing else is due (#20)' {
         Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
         Mock -ModuleName $module Test-GuestStateChanged { $true }
@@ -135,6 +146,37 @@ Describe 'Invoke-GuestRearm' {
 
         $result.Count | Should -Be 1
         $result[0] | Should -BeTrue
+    }
+}
+
+Describe 'Start-GuestStoreAppUpdate (#233)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+    }
+
+    It 'asks the Store in the guest to scan for app updates' {
+        Mock -ModuleName $module Invoke-GuestScript { 0 }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { "$ScriptBlock" -match 'UpdateScanMethod' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'OK' }
+    }
+
+    It 'warns, with the code, when the Store refuses the scan' {
+        Mock -ModuleName $module Invoke-GuestScript { 5 }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM }
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -match '\b5\b' }
+    }
+
+    It 'emits nothing' {
+        Mock -ModuleName $module Invoke-GuestScript { 0 }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Start-GuestStoreAppUpdate -VM $VM })
+
+        $result.Count | Should -Be 0
     }
 }
 

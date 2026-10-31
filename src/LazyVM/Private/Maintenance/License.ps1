@@ -162,7 +162,7 @@ function Invoke-Maintenance {
       the persistent disks, copies the User disk when it changed, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
-      the databases, then does nothing more until the evaluation is close to
+      the databases, asks the Store to update its apps, then does nothing more until the evaluation is close to
       expiry, when it captures state and rearms.
       Returns what the caller does next.
     #>
@@ -215,6 +215,10 @@ function Invoke-Maintenance {
     # Every user database checked with DBCC CHECKDB and, when it passes, backed up: one good backup of each (#133).
     try { $null = Backup-GuestUserDatabase -VM $VM }
     catch { Write-LogError 'Database check and backup failed (non-fatal)' $_ }
+
+    # The Store updates its apps only while the VM is on, so it is asked to check every night (#233).
+    try { $null = Start-GuestStoreAppUpdate -VM $VM }
+    catch { Write-LogError 'Store app update check failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM
     Write-LogEntry "License: $($license.Status); $($license.DaysLeft) day(s) left; $($license.RearmsLeft) rearm(s) remaining" 'INFO'
