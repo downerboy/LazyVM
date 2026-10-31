@@ -125,6 +125,12 @@ For a VM LazyVM builds, there is nothing to do. `Build-LazyVM` creates the admin
 Get-LazyVMCredential -Name DevBox -AsPlainText
 ```
 
+VMConnect does not let you paste into the Windows sign-in box. To sign in without typing the password by hand:
+
+1. Put it on the clipboard: `Get-LazyVMCredential -Name DevBox -ToClipboard`. It is left out of clipboard history (Win+V) and never synced to your other devices.
+2. In a basic session, click the password box, then choose **Clipboard > Type clipboard text** in VMConnect's menu. VMConnect types it for you, which also works with a screen reader. In an enhanced session, press Ctrl+V.
+3. Once you are signed in, clear the clipboard: `Set-Clipboard -Value $null`.
+
 To choose the account name or the password before the first build, or to tell LazyVM about a VM you set up by hand:
 
 ```powershell
@@ -151,7 +157,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Get-LazyVM` | Lists the VMs, their state in Hyper-V, and their maintenance time and task. |
 | `Get-LazyVMSetting` | Every setting as the VM uses it, where the value came from, and what it does. `-Setting Mem*` narrows it. |
 | `Set-LazyVMCredential` | Stores the administrator account LazyVM uses inside the VM. |
-| `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
+| `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password, and `-ToClipboard` puts it on the clipboard for VMConnect's sign-in box. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
 | `Save-LazyVMTooling` | Records tooling changes now, as the daily run does, with a checkpoint first. |
@@ -501,6 +507,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `UseDevDrive` | true | Whether to create, attach and designate the Dev Drive. |
 | `DevDriveLetter` | W | Where the Dev Drive appears in the VM. |
 | `UserDiskLetter` | U | Where the User disk appears in the VM. |
+| `BackupDir` | none | Where the daily maintenance keeps its one copy of the User disk, such as a folder on an external disk. Unset, the copy is `<VM>\Backups\<VM>-User.vhdx`. The copy is made from a checkpoint while the VM runs, only when the files on the disk changed and once BitLocker has encrypted all of it, so it is still encrypted. When the folder is not there, the copy is skipped with a warning. To restore, swap the copy for the User disk's VHDX while the VM is off. |
 | `SQLIsoUrl` | SQL Server 2025 Enterprise Developer | Where the SQL Server ISO is downloaded from. LazyVM installs the Standard Developer edition from it, so code can't come to depend on Enterprise-only features. |
 | `SwitchName` | Default Switch | The virtual switch. See the note below. |
 | `GuestRemoveApps` | News, Microsoft 365, Xbox | Built-in apps removed at every build, so they stay gone after a rebuild. Your list replaces the default, so copy it and add to it. |
@@ -704,9 +711,12 @@ The log is the first place to look: `D:\DevVM\DevBox\Logs\DevBox.log`. Every lin
 |---|---|
 | "LazyVM does not know which folder to keep its VMs in yet" | Run `Build-LazyVM -Name DevBox`, which chooses one, or `Set-LazyVMRoot -Path D:\DevVM`. |
 | "The term 'Build-LazyVM' is not recognized" | You are in Windows PowerShell 5.1, or the module is not installed. Open PowerShell 7 (`pwsh`) as administrator; if it persists, run `./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out` again. |
+| "The token '&&' is not a valid statement separator in this version" | You are in Windows PowerShell 5.1, which has no `&&`. The title bar says "Windows PowerShell" and `$PSVersionTable.PSVersion` shows 5.1. Open PowerShell 7 (`pwsh`) as administrator and run the command there. |
+| A path like `S:SourceLazyVM` appears, or "No such file or directory", after cloning or running commands in Git Bash | Git Bash (MINGW) treats `\` as an escape character, so `S:\Source\LazyVM` loses its backslashes. Run the commands in PowerShell 7 instead, or in Git Bash write the path as `/s/Source/LazyVM`. |
 | "LazyVM needs an elevated PowerShell" | Start PowerShell 7 with Run as administrator. |
 | "No stored guest credential" | Store one with `Set-LazyVMCredential`, for an account that is a local administrator inside the VM. |
 | The VM never becomes reachable | Open the VM's console. Windows Setup may be waiting on something, or the stored password may not match the account. Check by signing in at the console with the password `Get-LazyVMCredential -AsPlainText` shows. |
+| The password cannot be pasted into the VM's sign-in box | A basic VMConnect session has no clipboard. Copy the password on the host, then in VMConnect choose Clipboard > Type clipboard text: it types the text as keystrokes, so the VM's keyboard layout must match the host's. Or connect with an [enhanced session](#enhanced-session-mode), whose sign-in dialog accepts a paste. |
 | "No valid Windows installation ISO" | The file at the configured path is not a real ISO, most often the registration page saved with an `.iso` name. Download the image by hand and save it in the `Shared\ISO` folder. |
 | "SQL Server ISO - download failed" | The download address may have changed. Download the SQL Server 2025 Enterprise Developer ISO by hand and save it as the path the message gives, or set `SQLIsoUrl`. |
 | "This settings file has N problem(s), so none of it was used" | The message lists every problem, with the file and the setting. Open the file in VS Code: the same problems are underlined. |
