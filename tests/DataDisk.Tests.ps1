@@ -242,7 +242,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         { InModuleScope $module -Parameters @{ Root = $root } {
                 param($Root)
-                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Beta\Disks\Beta-SQL.vhdx" })
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Beta\Disks\Beta-SQL.vhdx" })
                 Add-SqlDataDisk -VM $vm
             } } | Should -Throw -ExpectedMessage "*belongs to the VM 'Beta'*"
 
@@ -256,7 +256,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
             Add-SqlDataDisk -VM $vm
         }
 
@@ -270,7 +270,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
             Add-SqlDataDisk -VM $vm
         }
 
@@ -283,7 +283,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         { InModuleScope $module -Parameters @{ Root = $root } {
                 param($Root)
-                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
                 Add-SqlDataDisk -VM $vm
             } } | Should -Throw
 
@@ -296,7 +296,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         { InModuleScope $module -Parameters @{ Root = $root } {
                 param($Root)
-                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
                 Add-SqlDataDisk -VM $vm
             } } | Should -Throw
 
@@ -323,7 +323,7 @@ Describe 'Recording a data disk''s identity' {
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
             Add-SqlDataDisk -VM $vm
         }
 
@@ -338,7 +338,7 @@ Describe 'Recording a data disk''s identity' {
 
         InModuleScope $module -Parameters @{ Root = $root; Path = $path } {
             param($Root, $Path)
-            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = $Path })
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = $Path })
             Add-SqlDataDisk -VM $vm
         }
 
@@ -379,7 +379,7 @@ Describe 'Recording a data disk''s identity' {
         InModuleScope $module -Parameters @{ Root = $root; Function = $Function } {
             param($Root, $Function)
             $vm = [VMContext]::new(@{
-                    VMName = 'Alpha'; Root = $Root; UseDevDrive = $true; DevDriveLetter = 'W'; DevDriveLabel = 'DevDrive'; DevDriveFilters = @()
+                    VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; UseDevDrive = $true; DevDriveLetter = 'W'; DevDriveLabel = 'DevDrive'; DevDriveFilters = @()
                     GuestDataDriveLetter = 'D'; SqlDataFolder = 'SQLData'; SqlLogFolder = 'SQLLog'; SqlTempFolder = 'SQLTemp'; SqlBackupFolder = 'SQLBackup'
                     SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx"; DevDrivePath = "$Root\Alpha\Disks\Alpha-DevDrive.vhdx"
                     UserDiskPath = "$Root\Alpha\Disks\Alpha-User.vhdx"; UserDiskLetter = 'U'

@@ -109,3 +109,59 @@ Describe 'Install-SqlServer' {
         Should -Invoke -ModuleName $module Invoke-GuestInstaller -Times 1 -ParameterFilter { $ArgumentList -contains '/CONFIGURATIONFILE="C:\LazyVM\Setup\ConfigurationFile.ini"' }
     }
 }
+
+Describe 'SQL Server only when VM.json says so (#36)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        # The boundaries each SQL step reaches when it runs.
+        Mock -ModuleName $module Test-IsoFile { $true }
+        Mock -ModuleName $module Get-Item { [pscustomobject]@{ Length = 1GB } }
+        Mock -ModuleName $module Initialize-DataVhd { }
+        Mock -ModuleName $module Add-VMDataDisk { }
+        Mock -ModuleName $module Get-DataDiskIdentity { [pscustomobject]@{ Guid = $null; Location = 1; FileLocation = 1 } }
+        Mock -ModuleName $module Invoke-GuestScript { throw 'stop here' }
+        Mock -ModuleName $module Get-GuestSqlInstance { [pscustomobject]@{ Instance = 'MSSQLSERVER'; Edition = 'Developer' } }
+        Mock -ModuleName $module Connect-GuestSqlInstance { $null }
+        Mock -ModuleName $module Get-GuestSqlRestore { $null }
+    }
+
+    It '<Step> reaches <Boundary> only when InstallSqlServer is <Install>' -ForEach @(
+        foreach ($install in $true, $false) {
+            @{ Step = 'Initialize-SqlServerIso'; Boundary = 'Test-IsoFile'; Install = $install }
+            @{ Step = 'Initialize-SqlDataVhd'; Boundary = 'Initialize-DataVhd'; Install = $install }
+            @{ Step = 'Add-SqlDataDisk'; Boundary = 'Add-VMDataDisk'; Install = $install }
+            @{ Step = 'Initialize-GuestSqlDisk'; Boundary = 'Get-DataDiskIdentity'; Install = $install }
+            @{ Step = 'Install-SqlServerIfMissing'; Boundary = 'Get-GuestSqlInstance'; Install = $install }
+            @{ Step = 'Save-GuestSqlState'; Boundary = 'Connect-GuestSqlInstance'; Install = $install }
+        }
+    ) {
+        $vm = New-TestVM -Override @{ InstallSqlServer = $Install; SQLIsoPath = 'D:\ISO\sql.iso'; SQLDiskPath = 'D:\Disks\Alpha-SQL.vhdx'; SQLDiskSizeGB = 10 }
+
+        try { InModuleScope $module -Parameters @{ VM = $vm; Step = $Step } { param($VM, $Step) & $Step -VM $VM } } catch { $null = $_ }
+
+        Should -Invoke -ModuleName $module $Boundary -Times ([int]$Install) -Exactly
+    }
+
+    It 'Restore-GuestSqlState reaches the instance only when InstallSqlServer is <Install>' -ForEach @(
+        @{ Install = $true }
+        @{ Install = $false }
+    ) {
+        $vm = New-TestVM -Override @{ InstallSqlServer = $Install }
+        $manifest = InModuleScope $module { $m = [CaptureManifest]::new(); $m.Sql = [pscustomobject]@{ Databases = @() }; $m }
+
+        InModuleScope $module -Parameters @{ VM = $vm; Manifest = $manifest } { param($VM, $Manifest) Restore-GuestSqlState -VM $VM -Manifest $Manifest }
+
+        Should -Invoke -ModuleName $module Connect-GuestSqlInstance -Times ([int]$Install) -Exactly
+    }
+
+    It 'counts the SQL data disk among the persistent disks only when InstallSqlServer is <Install>' -ForEach @(
+        @{ Install = $true }
+        @{ Install = $false }
+    ) {
+        $vm = New-TestVM -Override @{ InstallSqlServer = $Install; UseDevDrive = $false; SQLDiskPath = 'D:\Disks\Alpha-SQL.vhdx'; UserDiskPath = 'D:\Disks\Alpha-User.vhdx' }
+
+        $labels = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-PersistentDataDisk -VM $VM } | ForEach-Object { $_.Label })
+
+        ($labels -contains 'SQL data disk') | Should -Be $Install
+    }
+}
