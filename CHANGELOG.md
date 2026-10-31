@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.20.0](https://github.com/downerboy/LazyVM/compare/v4.19.1...v4.20.0) (2026-10-31)
+
+
+### Features
+
+* turn on Developer Mode in the VM ([#239](https://github.com/downerboy/LazyVM/issues/239)) ([5d65277](https://github.com/downerboy/LazyVM/commit/5d652778105bd920a1ee3958fbd8843280e3ca70))
+
+
+### Bug Fixes
+
+* clean up after a failed build and give the real reason it stopped ([#237](https://github.com/downerboy/LazyVM/issues/237)) ([bb9367c](https://github.com/downerboy/LazyVM/commit/bb9367cd2e470eea3803c85f0f7de3b2c2da6606))
+
 ## [4.19.1](https://github.com/downerboy/LazyVM/compare/v4.19.0...v4.19.1) (2026-10-31)
 
 
