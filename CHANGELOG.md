@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.19.1](https://github.com/downerboy/LazyVM/compare/v4.19.0...v4.19.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* do not report success after build steps failed ([#230](https://github.com/downerboy/LazyVM/issues/230)) ([25faaf7](https://github.com/downerboy/LazyVM/commit/25faaf7bcd6a436bb5f305b85b7c64482e5e31de))
+* drop Phase 8's database step, which called a removed command ([#229](https://github.com/downerboy/LazyVM/issues/229)) ([6acf9cc](https://github.com/downerboy/LazyVM/commit/6acf9cc36966fca2e01b053d5d8809facdfd7dc8))
+* send winget the path, not @{value=...} ([#228](https://github.com/downerboy/LazyVM/issues/228)) ([b48fbc5](https://github.com/downerboy/LazyVM/commit/b48fbc5a158e96b879f77964c3cb049aad5f1729))
+
 ## [4.19.0](https://github.com/downerboy/LazyVM/compare/v4.18.0...v4.19.0) (2026-10-31)
 
 
