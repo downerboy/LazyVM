@@ -284,3 +284,38 @@ Describe 'Invoke-Rebuild' {
         Should -Invoke -ModuleName $module Remove-RetiredVM -Times 0
     }
 }
+
+Describe 'Invoke-Rebuild verification' {
+    # The real checks run here, with only the guest and Hyper-V stood in for.
+    BeforeAll {
+        $noDevDriveVM = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; UseDevDrive = $false }) }
+    }
+
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-LogError { }
+        Mock -ModuleName $module Get-Module { [pscustomobject]@{ Name = 'Hyper-V' } } -ParameterFilter { $ListAvailable -and $Name -eq 'Hyper-V' }
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
+        Mock -ModuleName $module Install-UserDisk { }
+        Mock -ModuleName $module Invoke-RetireCurrentVM { [pscustomobject]@{ RetiredOsPath = 'old.vhdx'; NewOsPath = 'new.vhdx' } }
+        Mock -ModuleName $module Invoke-BuildPhase { }
+        Mock -ModuleName $module Restore-GuestState { $true }
+        Mock -ModuleName $module Remove-RetiredVM { }
+        Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('admin', [securestring]::new()) }
+        Mock -ModuleName $module Connect-Guest { }
+        Mock -ModuleName $module Get-GuestInstallerProduct { }
+        Mock -ModuleName $module Get-BuildTooling { [pscustomobject]@{ Products = @() } }
+        Mock -ModuleName $module Connect-GuestSqlInstance { [pscustomobject]@{ Instance = 'MSSQLSERVER'; Edition = 'Developer Edition' } }
+        Mock -ModuleName $module Invoke-GuestScript { $true }
+    }
+
+    It 'reports a good rebuild as clean when the capture has no user databases (#208)' {
+        Mock -ModuleName $module Save-GuestState { [pscustomobject]@{ Databases = @() } }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $noDevDriveVM } { param($VM) Invoke-Rebuild -VM $VM })
+
+        $result[0] | Should -BeTrue
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { $Message -like '*FAIL*' }
+        Should -Invoke -ModuleName $module Remove-RetiredVM -Times 1
+    }
+}
