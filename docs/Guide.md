@@ -125,6 +125,12 @@ For a VM LazyVM builds, there is nothing to do. `Build-LazyVM` creates the admin
 Get-LazyVMCredential -Name DevBox -AsPlainText
 ```
 
+VMConnect does not let you paste into the Windows sign-in box. To sign in without typing the password by hand:
+
+1. Put it on the clipboard: `Get-LazyVMCredential -Name DevBox -ToClipboard`. It is left out of clipboard history (Win+V) and never synced to your other devices.
+2. In a basic session, click the password box, then choose **Clipboard > Type clipboard text** in VMConnect's menu. VMConnect types it for you, which also works with a screen reader. In an enhanced session, press Ctrl+V.
+3. Once you are signed in, clear the clipboard: `Set-Clipboard -Value $null`.
+
 To choose the account name or the password before the first build, or to tell LazyVM about a VM you set up by hand:
 
 ```powershell
@@ -151,7 +157,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Get-LazyVM` | Lists the VMs, their state in Hyper-V, and their maintenance time and task. |
 | `Get-LazyVMSetting` | Every setting as the VM uses it, where the value came from, and what it does. `-Setting Mem*` narrows it. |
 | `Set-LazyVMCredential` | Stores the administrator account LazyVM uses inside the VM. |
-| `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
+| `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password, and `-ToClipboard` puts it on the clipboard for VMConnect's sign-in box. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
 | `Save-LazyVMTooling` | Records tooling changes now, as the daily run does, with a checkpoint first. |
@@ -164,7 +170,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Register-LazyVMMaintenance` | Schedules the VM's daily maintenance, or schedules it again. |
 | `Remove-LazyVM` | Deletes the VM and everything created for it ([section 10](#removing-a-vm)). |
 
-Commands that change something support `-WhatIf`, to see what would happen without doing it, and `-Confirm`. The ones that cannot be undone (`Remove-LazyVM`, `Restore-LazyVMTooling`, `Restore-LazyVMState`, `Invoke-LazyVMRebuild`) ask before acting; `-Force` skips the question.
+Commands that change something support `-WhatIf`, to see what would happen without doing it, and `-Confirm`. `Invoke-LazyVMMaintenance -WhatIf` reads the VM's evaluation and says whether the run would only do the daily checks, rearm, rebuild, or build the VM, without starting a VM that is off. The ones that cannot be undone (`Remove-LazyVM`, `Restore-LazyVMTooling`, `Restore-LazyVMState`, `Invoke-LazyVMRebuild`) ask before acting; `-Force` skips the question.
 
 Get commands return objects, so they work with the rest of PowerShell:
 

@@ -32,7 +32,9 @@
          packages
       8  SQL data moved to the data disk, Visual Studio settings restored
 
-    Progress is shown as it goes and written to the VM's log.
+    Progress is shown as it goes and written to the VM's log. With -WhatIf,
+    says what would be built and changes nothing, not even the first-use
+    set-up.
 
     .PARAMETER Name
     The VM to build. Created if it does not exist yet. May be left out while
@@ -56,7 +58,7 @@
 
     Carries on with the installs after fixing what stopped them.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     [OutputType([void])]
     param(
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
@@ -69,6 +71,10 @@
     )
 
     process {
+        # Before anything, even the first-use set-up: with -WhatIf nothing is created or moved.
+        $target = if ($Name) { $Name } else { 'the VM' }
+        $setup = if ($NoUnattend) { ', with Windows Setup completed by hand' } else { '' }
+        if (-not $PSCmdlet.ShouldProcess($target, "Build from phase $FromPhase$setup, first setting up the LazyVM folder, profile and Windows ISO if they are missing")) { return }
         Initialize-BuildTarget -Name $Name
         Invoke-CommandRun -Title 'Build' -Name $Name -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
