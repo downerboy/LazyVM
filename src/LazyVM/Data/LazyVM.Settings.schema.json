@@ -756,6 +756,11 @@
       "default": true,
       "description": "Turn off Widgets in the VM."
     },
+    "GuestDeveloperMode": {
+      "type": "boolean",
+      "default": true,
+      "description": "Turn on Developer Mode in the VM, which Visual Studio needs to build and run WinUI and other packaged apps. Set to false to leave it off."
+    },
     "GuestHideTaskbarSearch": {
       "type": "boolean",
       "default": true,

@@ -4,19 +4,21 @@
 function Complete-GuestConfiguration {
     <#
       Phase 8. Each step is isolated: one that fails is logged and the rest
-      still run. Databases are not restored here: a rebuild and
-      Restore-LazyVMState put them back with Restore-GuestSqlState (#225).
+      still run, and the phase returns CompleteWithProblems. Databases are
+      not restored here: a rebuild and Restore-LazyVMState put them back with
+      Restore-GuestSqlState (#225).
     #>
+    [OutputType([BuildOutcome])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
     if (-not $machine) {
         Write-LogEntry "VM '$($VM.Name)' not found - skipping Phase 8" 'WARN'
-        return
+        return [BuildOutcome]::CompleteWithProblems
     }
     if ($machine.State -ne 'Running') {
         Write-LogEntry "VM is '$($machine.State)' - skipping Phase 8 (start the VM and re-run with -FromPhase 8)" 'WARN'
-        return
+        return [BuildOutcome]::CompleteWithProblems
     }
     Connect-Guest -VM $VM -Credential (Assert-GuestCredential -VM $VM) | Out-Null
 
@@ -28,5 +30,5 @@ function Complete-GuestConfiguration {
         [pscustomobject]@{ Name = '8b - move SQL data files'; Action = { Move-GuestSqlDataFile -VM $VM } }
         [pscustomobject]@{ Name = '8c - Visual Studio settings'; Action = { Restore-GuestVisualStudioSetting -VM $VM } }
     )
-    if ($run.Failures.Count -eq 0) { Write-LogEntry 'Phase 8 complete' 'OK' }
+    if ($run.Failures.Count -gt 0) { return [BuildOutcome]::CompleteWithProblems }
 }
