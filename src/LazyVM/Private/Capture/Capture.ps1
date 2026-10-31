@@ -105,11 +105,12 @@ function Get-GuestStateFingerprint {
     <#
       A cheap fingerprint of what a capture keeps that the daily records in
       VM.json do not (#20): the certificates a capture would export, by
-      thumbprint, and the live Visual Studio settings, by hash.
+      thumbprint, and the live Visual Studio settings, by hash, unless
+      InstallVisualStudio is off.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $vs = Get-GuestVisualStudio -VM $VM
+    $vs = if ($VM.Settings.InstallVisualStudio) { Get-GuestVisualStudio -VM $VM } else { $null }
     $instanceId = if ($vs) { "$($vs.InstanceId)" } else { '' }
     $snapshot = Invoke-GuestScript -VM $VM -Activity 'state fingerprint' -TimeoutMinutes 5 -ArgumentList @($instanceId) -ScriptBlock {
         param($instanceId)
@@ -183,6 +184,10 @@ function Save-GuestVisualStudioState {
         [Parameter(Mandatory)][string]$CaptureDir
     )
 
+    if (-not $VM.Settings.InstallVisualStudio) {
+        Write-LogEntry '  Visual Studio turned off in the settings (InstallVisualStudio) - skipping' 'INFO'
+        return $null
+    }
     $vs = Get-GuestVisualStudio -VM $VM
     if (-not $vs) {
         Write-LogEntry '  Visual Studio is not installed - skipping' 'INFO'

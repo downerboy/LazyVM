@@ -816,6 +816,11 @@
       "minimum": 1,
       "maximum": 120
     },
+    "InstallVisualStudio": {
+      "type": "boolean",
+      "default": true,
+      "description": "Give the VM Visual Studio and bring its settings across. When false, the build installs no Visual Studio from the tooling list (SSMS still installs) and applies no Visual Studio settings, and capture and restore leave Visual Studio's settings, NuGet.Config, .gitconfig, snippets and templates out. Visual Studio already in the VM stays. Set it in the VM's VM.json; the shared settings file only supplies the default for new VMs."
+    },
     "VSInstallMinutes": {
       "type": "integer",
       "default": 90,
