@@ -129,6 +129,20 @@ function Get-GuestToolingInventory {
                     $wingetPackages += [ordered]@{ Id = $id; Version = ''; Source = 'winget' }
                 }
             }
+
+            # Programs winget's source has although they were installed some
+            # other way: winget matches them in its list, so a rebuild can
+            # install them with winget (#24). UTF-8, so a name cut short with
+            # an ellipsis keeps the columns where the header says.
+            try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { $notes.Add("could not set the console to UTF-8: $($_.Exception.Message)") }
+            $listed = @(& $winget list --source winget --accept-source-agreements --disable-interactivity 2>&1 | ForEach-Object { "$_" })
+            if ($LASTEXITCODE -eq 0) {
+                foreach ($id in @(ConvertFrom-GuestWingetList -Lines $listed)) {
+                    if (@($wingetPackages | Where-Object { $_.Id -eq $id }).Count -gt 0) { continue }
+                    $wingetPackages += [ordered]@{ Id = $id; Version = ''; Source = 'winget' }
+                }
+            }
+            else { $notes.Add("winget list found no packages from its source (exit $LASTEXITCODE)") }
         }
         else { $notes.Add('winget is not available in the guest') }
 

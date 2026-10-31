@@ -206,6 +206,7 @@ function Update-ToolingRecord {
     $previous = Read-VMTooling -VM $VM
     Add-MarketplaceItem -Record $current -Previous $previous
     Merge-AwaitingReinstall -Record $current -Previous $previous
+    Add-ProgramInstaller -Record $current -Previous $previous
 
     if ($previous) {
         $changes = @(Compare-ToolingRecord -Old $previous -New $current)

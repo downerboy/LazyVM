@@ -338,7 +338,18 @@
       "required": ["Name"],
       "properties": {
         "Name": { "type": "string", "minLength": 1 },
-        "Publisher": { "type": "string" }
+        "Publisher": { "type": "string" },
+        "Installer": {
+          "type": "object",
+          "description": "An official installer a rebuild downloads and runs when winget does not install this program. Kept from one recording to the next. The file must have a valid Authenticode signature from SignedBy, or it is not run.",
+          "additionalProperties": false,
+          "required": ["Url", "SignedBy"],
+          "properties": {
+            "Url": { "type": "string", "pattern": "^https://", "description": "The vendor's https address of an .exe or .msi installer." },
+            "Arguments": { "type": "string", "description": "The installer's silent-install arguments. An .msi is run with msiexec /i and these." },
+            "SignedBy": { "type": "string", "minLength": 1, "description": "The name the installer's signing certificate is issued to, as Windows shows it under Digital Signatures, for example 'JetBrains s.r.o.'." }
+          }
+        }
       }
     },
     "AwaitingExtension": {

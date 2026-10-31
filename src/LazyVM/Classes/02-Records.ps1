@@ -167,19 +167,46 @@ class WingetPackage {
     }
 }
 
+class ToolingInstaller {
+    # Where a rebuild downloads a program winget does not install (#24): an
+    # https address, the silent-install arguments, and the name the file's
+    # Authenticode signature must be from. Only ever set by hand.
+    [string]$Url
+    [string]$Arguments
+    [string]$SignedBy
+
+    static [ToolingInstaller] FromObject([object]$item) {
+        $installer = [ToolingInstaller]::new()
+        $installer.Url = [RecordReader]::Text($item, 'Url')
+        $installer.Arguments = [RecordReader]::Text($item, 'Arguments')
+        $installer.SignedBy = [RecordReader]::Text($item, 'SignedBy')
+        return $installer
+    }
+
+    [System.Collections.Specialized.OrderedDictionary] ToDictionary() {
+        return [ordered]@{ Url = $this.Url; Arguments = $this.Arguments; SignedBy = $this.SignedBy }
+    }
+}
+
 class ToolingProgram {
     [string]$Name
     [string]$Publisher
+    # $null for a program with no installer of its own named.
+    [ToolingInstaller]$Installer
 
     static [ToolingProgram] FromObject([object]$item) {
         $program = [ToolingProgram]::new()
         $program.Name = [RecordReader]::Text($item, 'Name')
         $program.Publisher = [RecordReader]::Text($item, 'Publisher')
+        $installerItem = [RecordReader]::Field($item, 'Installer')
+        if ($null -ne $installerItem) { $program.Installer = [ToolingInstaller]::FromObject($installerItem) }
         return $program
     }
 
     [System.Collections.Specialized.OrderedDictionary] ToDictionary() {
-        return [ordered]@{ Name = $this.Name; Publisher = $this.Publisher }
+        $dictionary = [ordered]@{ Name = $this.Name; Publisher = $this.Publisher }
+        if ($this.Installer) { $dictionary['Installer'] = $this.Installer.ToDictionary() }
+        return $dictionary
     }
 }
 

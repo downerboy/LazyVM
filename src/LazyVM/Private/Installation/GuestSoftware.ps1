@@ -80,6 +80,7 @@ function Install-GuestSoftware {
 
     if ($networkReady) {
         Install-WingetPackage -VM $VM -Packages @($tooling.WingetPackages)
+        Install-ToolingProgram -VM $VM -Tooling $tooling
     }
 
     Initialize-VMTooling -VM $VM

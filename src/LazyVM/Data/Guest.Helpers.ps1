@@ -663,6 +663,64 @@ function Find-GuestWinget {
     return $null
 }
 
+function ConvertFrom-GuestWingetList {
+    <#
+      The package ids in the table `winget list` prints: each row's text
+      under the Id heading, which also says where the column ends. A row
+      whose id winget cut short (it ends in an ellipsis) is left out. Nothing
+      when there is no table.
+    #>
+    param([AllowEmptyCollection()][string[]]$Lines = @())
+
+    # winget draws a spinner ahead of the table, with carriage returns.
+    $rows = @($Lines | ForEach-Object { ("$_" -split "`r")[-1] })
+    $header = $rows | Where-Object { $_ -match '^Name\s+Id\s+Version\b' } | Select-Object -First 1
+    if (-not $header) { return }
+    $idStart = [regex]::Match($header, '\bId\b').Index
+    $idEnd = [regex]::Match($header, '\bVersion\b').Index
+
+    foreach ($row in @($rows | Select-Object -Skip ([array]::IndexOf($rows, $header) + 1))) {
+        if ($row.Length -le $idStart -or $row -match '^-+$') { continue }
+        $id = $row.Substring($idStart, [math]::Min($idEnd, $row.Length) - $idStart).Trim()
+        if ($id -match '^[A-Za-z0-9][\w.+-]*$') { $id }
+    }
+}
+
+function Save-GuestVerifiedInstaller {
+    <#
+      Downloads an installer from an https address to $Path, and keeps it
+      only when it has a valid Authenticode signature from $SignedBy, the
+      name its signing certificate is issued to (#24). Throws otherwise,
+      leaving no file behind, so nothing unchecked is ever run.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$SignedBy
+    )
+
+    $address = $null
+    if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$address) -or $address.Scheme -ne 'https') {
+        throw "the installer address is not https: $Url"
+    }
+
+    New-GuestFolder -Path (Split-Path -Path $Path -Parent)
+    Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    try {
+        # The progress bar slows a large download to a crawl.
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $address -OutFile $Path -UseBasicParsing -ErrorAction Stop
+        $signature = Get-AuthenticodeSignature -LiteralPath $Path
+        if ("$($signature.Status)" -ne 'Valid') { throw "the downloaded installer's signature is not valid ($($signature.Status))" }
+        $signer = $signature.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+        if ($signer -ne $SignedBy) { throw "the downloaded installer is signed by '$signer', not '$SignedBy'" }
+    }
+    catch {
+        Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+        throw
+    }
+}
+
 function Get-GuestInstallerInstance {
     <#
       Every product the Visual Studio Installer manages (Visual Studio, SSMS,

@@ -576,6 +576,31 @@ Describe 'The tooling list in VM.json (#130)' {
         }
     }
 
+    It 'keeps the installer the list names for a program when maintenance records a change (#24)' {
+        Mock -ModuleName $module Get-GuestToolingInventory {
+            [pscustomobject]@{
+                Products       = @()
+                WingetPackages = @([pscustomobject]@{ Id = 'Notepad++.Notepad++'; Source = 'winget' })
+                Programs       = @([pscustomobject]@{ Name = 'JetBrains ReSharper'; Publisher = 'JetBrains s.r.o.' })
+            }
+        }
+        Mock -ModuleName $module Add-MarketplaceItem {}
+        Mock -ModuleName $module Get-ToolingStamp { '20261031-120000' }
+        Mock -ModuleName $module New-ToolingCheckpoint {}
+        $list = New-TestRecord -ProgramNames @('JetBrains ReSharper')
+        $list.Programs[0].Installer = [ordered]@{ Url = 'https://download.jetbrains.com/resharper/ReSharper.exe'; Arguments = '/Silent=True'; SignedBy = 'JetBrains s.r.o.' }
+        $root = New-TestVM -Settings @{ vCPU = 4; Tooling = $list }
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Update-ToolingRecord -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) 6>$null
+        }
+
+        $vmProfile = Read-TestProfile -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
+        @($vmProfile.Tooling.WingetPackages | ForEach-Object { $_.Id }) | Should -Contain 'Notepad++.Notepad++'
+        $vmProfile.Tooling.Programs[0].Installer.Url | Should -Be 'https://download.jetbrains.com/resharper/ReSharper.exe'
+    }
+
     Context 'when a build ends (#30)' {
         BeforeEach {
             Mock -ModuleName $module Get-GuestToolingInventory {
