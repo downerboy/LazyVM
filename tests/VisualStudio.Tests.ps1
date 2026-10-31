@@ -161,6 +161,23 @@ Describe 'Add-ProductExtension' {
         }
     }
 
+    It 'runs each modify in the guest and takes a failing installer exit code as a refusal' {
+        # The guest's installer exits 1 for any batch holding an unsigned theme.
+        Mock -ModuleName $module Write-LogError { }
+        $guest = @{ Config = '' }
+        Mock -ModuleName $module Invoke-GuestScript { $guest.Config = $ArgumentList[1]; [pscustomobject]@{ FilePath = 'C:\Installer\setup.exe'; Arguments = @('modify') } }
+        Mock -ModuleName $module Invoke-GuestInstaller { if ($guest.Config -like '*Theme*') { 1 } else { 0 } }
+
+        $refused = InModuleScope $module -Parameters @{ Product = $product; Settings = $settings } {
+            param($Product, $Settings)
+            $p = [ToolingProduct]::FromObject($Product)
+            Add-ProductExtension -VM ([VMContext]::new($Settings)) -Product $p -InstallPath 'C:\VS' -Links $p.ExtensionLinks()
+        }
+
+        @($refused) | Sort-Object | Should -Be @($themeA, $themeB)
+        Should -Invoke -ModuleName $module Invoke-GuestInstaller -Times 4 -Exactly -ParameterFilter { $FilePath -eq 'C:\Installer\setup.exe' }
+    }
+
     It 'gives only the extensions listed in UnsignedExtensions --allowUnsignedExtensions, in a batch of their own' {
         Mock -ModuleName $module Invoke-ProductModify { $true }
         $allowing = $settings.Clone()
