@@ -46,8 +46,11 @@ function Write-ToolingReinstallReport {
       After a build: what the tooling list has that the guest still lacks,
       because it cannot be installed automatically. Recorded as
       AwaitingReinstall in the VM's tooling list, logged, and written to
-      <StateDir>\reinstall-by-hand.txt.
+      <StateDir>\reinstall-by-hand.txt. The winget packages it lacks are
+      logged too: those failed to install, and the next build tries them
+      again (#226). Returns $true when nothing is missing.
     #>
+    [OutputType([bool])]
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][ToolingRecord]$Tooling
@@ -64,11 +67,17 @@ function Write-ToolingReinstallReport {
             }
         })
 
+    $missingWinget = @(Get-MissingWingetPackage -Tooling $Tooling -Observed $observed -WingetExclude $VM.Settings.ToolingWingetExclude)
+    if ($missingWinget.Count -gt 0) {
+        Write-LogList -Heading "$($missingWinget.Count) winget package(s) in the tooling list are not installed - run Phase 7 again with -FromPhase 7:" -Items @($missingWinget | ForEach-Object { $_.Id }) -Level WARN
+    }
+
+    $allInstalled = ($awaiting.Count() -eq 0) -and ($missingWinget.Count -eq 0)
     $reportPath = Join-Path $VM.Settings.StateDir 'reinstall-by-hand.txt'
     if ($awaiting.Count() -eq 0) {
-        Write-LogEntry 'Everything in the tooling list is installed' 'OK'
+        if ($allInstalled) { Write-LogEntry 'Everything in the tooling list is installed' 'OK' }
         Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
-        return
+        return $allInstalled
     }
 
     $lines = @($awaiting.Programs | ForEach-Object { "program    $($_.Name)  ($($_.Publisher))" }) +
@@ -85,4 +94,24 @@ function Write-ToolingReinstallReport {
         $record.AwaitingReinstall = $awaiting
         Save-VMTooling -VM $VM -Record $record -Reason 'items to reinstall by hand recorded'
     }
+    return $allInstalled
+}
+
+function Get-MissingWingetPackage {
+    <#
+      The winget packages in $Tooling that $Observed, the guest's tooling as
+      it is now, does not have. Packages the tooling list excludes are never
+      missing: the observed list leaves them out as well.
+    #>
+    [OutputType([WingetPackage])]
+    param(
+        [Parameter(Mandatory)][ToolingRecord]$Tooling,
+        [Parameter(Mandatory)][ToolingRecord]$Observed,
+        [AllowEmptyCollection()][string[]]$WingetExclude = @()
+    )
+
+    $installed = [System.Collections.Generic.HashSet[string]]::new([string[]]@($Observed.WingetPackages | ForEach-Object { $_.Id }), [StringComparer]::OrdinalIgnoreCase)
+    return [WingetPackage[]]@($Tooling.WingetPackages | Where-Object {
+            $_ -and $_.Id -and -not $installed.Contains($_.Id) -and -not (Test-ToolingExcluded -PackageId $_.Id -Patterns $WingetExclude)
+        })
 }
