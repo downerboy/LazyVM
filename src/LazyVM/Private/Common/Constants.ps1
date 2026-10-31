@@ -64,6 +64,7 @@ $script:TaskPrefix = 'LazyVM-'
 # Checkpoint names: '<prefix> <yyyyMMdd-HHmmss>[ <note>]'.
 $script:ToolingCheckpointPrefix = 'Tooling'
 $script:ExpansionCheckpointPrefix = 'C: expansion'
+$script:UserDiskBackupCheckpointPrefix = 'User disk backup'
 $script:StampFormat = 'yyyyMMdd-HHmmss'
 
 # The capture manifest in each VM's StateDir: a copy of the newest capture's,
@@ -84,6 +85,10 @@ $script:UserDiskFolders = @(
     @{ Name = '.ssh'; Link = '.ssh' }
     @{ Name = 'repos'; Link = 'source\repos' }
 )
+
+# The User disk's copy (#139) warns when its files fill more than this share
+# of UserDiskSizeGB: a disk that full is slow to copy and close to running out.
+$script:UserDiskLargeShare = 0.75
 
 # The SQL Server edition every VM gets (#136): Standard Developer, so code
 # cannot come to depend on Enterprise-only features. The Enterprise Developer

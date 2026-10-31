@@ -632,6 +632,12 @@
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
+    "BackupDir": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Where the copy of the User disk goes, such as a folder on an external disk: a full path (like 'F:\\LazyVMBackup'). Empty keeps it in the VM's Backups folder. When the folder is not there, the copy is skipped with a warning.",
+      "pattern": "^([A-Za-z]:[\\\\/]|\\\\\\\\[^\\\\/]+[\\\\/]).+"
+    },
     "LogFile": {
       "type": "string",
       "default": "{VM}\\Logs\\{VM}.log",
@@ -677,6 +683,18 @@
       "default": "Pacific Standard Time",
       "description": "The VM's time zone, as Windows names it (Get-TimeZone -ListAvailable).",
       "minLength": 1
+    },
+    "GuestLocale": {
+      "type": "string",
+      "default": "en-US",
+      "description": "The VM's display language, region and formats, as a language tag like 'en-GB' or 'de-DE'. The display language must be one the Windows ISO contains; Setup stops if it is not.",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$"
+    },
+    "GuestInputLocale": {
+      "type": "string",
+      "default": "",
+      "description": "The VM's keyboard layout, as a language tag like 'en-GB' or a keyboard id like '0809:00000809'; several are separated by ';'. Empty uses the keyboard of GuestLocale.",
+      "pattern": "^([A-Za-z0-9{}:-]+(;[A-Za-z0-9{}:-]+)*)?$"
     },
     "GuestRemoveApps": {
       "type": "array",
