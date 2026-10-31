@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.15.0](https://github.com/downerboy/LazyVM/compare/v4.14.0...v4.15.0) (2026-10-30)
+
+
+### Features
+
+* BitLocker on every persistent disk, unlockable after a rebuild ([#178](https://github.com/downerboy/LazyVM/issues/178)) ([86aeb2d](https://github.com/downerboy/LazyVM/commit/86aeb2df7e7c2b09185432ab0885d440869ce956))
+
 ## [4.14.0](https://github.com/downerboy/LazyVM/compare/v4.13.0...v4.14.0) (2026-10-30)
 
 
