@@ -12,6 +12,8 @@ BeforeAll {
 
     # Classes defined in a module are only visible inside it.
     $testVM = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; RebuildThresholdDays = 10 }) }
+    $buildComplete = InModuleScope $module { [BuildOutcome]::Complete }
+    $buildWithProblems = InModuleScope $module { [BuildOutcome]::CompleteWithProblems }
 }
 
 Describe 'Invoke-Maintenance' {
@@ -200,7 +202,7 @@ Describe 'Invoke-Rebuild' {
         Mock -ModuleName $module Install-UserDisk { 'stray' }
         Mock -ModuleName $module Save-GuestState { [pscustomobject]@{ Databases = @() } }
         Mock -ModuleName $module Invoke-RetireCurrentVM { [pscustomobject]@{ RetiredOsPath = 'old.vhdx'; NewOsPath = 'new.vhdx' } }
-        Mock -ModuleName $module Invoke-BuildPhase { 'stray' }
+        Mock -ModuleName $module Invoke-BuildPhase { $buildComplete }
         Mock -ModuleName $module Restore-GuestState { $true }
         Mock -ModuleName $module Test-RebuiltVM { [pscustomobject]@{ Passed = $true; Failures = @() } }
         Mock -ModuleName $module Remove-RetiredVM { 'stray' }
@@ -228,6 +230,17 @@ Describe 'Invoke-Rebuild' {
 
         $result[0] | Should -BeFalse
         Should -Invoke -ModuleName $module Restore-GuestState -Times 0
+        Should -Invoke -ModuleName $module Remove-RetiredVM -Times 0
+    }
+
+    It 'keeps the old OS disk and reports failure when the build finished with problems (#232)' {
+        Mock -ModuleName $module Invoke-BuildPhase { $buildWithProblems }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Rebuild -VM $VM })
+
+        $result.Count | Should -Be 1
+        $result[0] | Should -BeFalse
+        Should -Invoke -ModuleName $module Restore-GuestState -Times 1 -Exactly
         Should -Invoke -ModuleName $module Remove-RetiredVM -Times 0
     }
 }
