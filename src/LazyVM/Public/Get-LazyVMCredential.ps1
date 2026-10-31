@@ -9,6 +9,12 @@ function Get-LazyVMCredential {
     and password as text instead, for signing in to the VM yourself: the
     password LazyVM generated is only ever shown this way.
 
+    With -ToClipboard, puts the password on the clipboard instead, for
+    signing in through VMConnect, which blocks paste in the Windows sign-in
+    box: use its Clipboard > Type clipboard text. The password is left out of
+    clipboard history and never synced to other devices; clear the clipboard
+    once you have signed in.
+
     With -RecoveryPassword, returns the BitLocker recovery password of each
     disk LazyVM encrypted: C: and every earlier OS disk, the SQL data disk,
     the Dev Drive and the User disk, each with its GPT disk GUID and when it
@@ -24,6 +30,9 @@ function Get-LazyVMCredential {
     .PARAMETER RecoveryPassword
     Return the disks' BitLocker recovery passwords instead of the account.
 
+    .PARAMETER ToClipboard
+    Put the password on the clipboard, out of clipboard history, and return nothing.
+
     .EXAMPLE
     Enter-PSSession -VMName DevBox -Credential (Get-LazyVMCredential -Name DevBox)
 
@@ -31,6 +40,12 @@ function Get-LazyVMCredential {
     Get-LazyVMCredential -Name DevBox -AsPlainText
 
     Shows the password to sign in to the VM with.
+
+    .EXAMPLE
+    Get-LazyVMCredential -Name DevBox -ToClipboard
+
+    Puts the password on the clipboard, to type into VMConnect's sign-in box
+    with Clipboard > Type clipboard text.
 
     .EXAMPLE
     Get-LazyVMCredential -Name DevBox -RecoveryPassword
@@ -53,7 +68,10 @@ function Get-LazyVMCredential {
         [switch]$AsPlainText,
 
         [Parameter(ParameterSetName = 'RecoveryPassword', Mandatory)]
-        [switch]$RecoveryPassword
+        [switch]$RecoveryPassword,
+
+        [Parameter(ParameterSetName = 'Clipboard', Mandatory)]
+        [switch]$ToClipboard
     )
 
     process {
@@ -83,6 +101,11 @@ function Get-LazyVMCredential {
             throw "No credential is stored for '$($configuration.VMName)' yet. Build-LazyVM creates one, or store one with: Set-LazyVMCredential -Name $($configuration.VMName)"
         }
 
+        if ($ToClipboard) {
+            Set-ClipboardSecret -Text $credential.GetNetworkCredential().Password
+            Write-Warning "The password for $($credential.UserName) is on the clipboard, left out of clipboard history and sync. Clear it once you have signed in: Set-Clipboard -Value `$null"
+            return
+        }
         if (-not $AsPlainText) { return $credential }
         return [pscustomobject]@{
             PSTypeName = 'LazyVM.PlainCredential'
