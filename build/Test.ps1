@@ -17,6 +17,8 @@ function Invoke-Test {
     $configuration = New-PesterConfiguration
     $configuration.Run.Path = Join-Path -Path $Root -ChildPath 'tests'
     $configuration.Run.PassThru = $true
+    # Acceptance tests need a real Hyper-V VM; they run only when asked for (tests\Acceptance).
+    $configuration.Filter.ExcludeTag = 'Acceptance'
     $configuration.Output.Verbosity = 'Normal'
     $configuration.TestResult.Enabled = $true
     $configuration.TestResult.OutputFormat = 'JUnitXml'
