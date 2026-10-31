@@ -13,7 +13,7 @@
         it into the LazyVM folder; with no ISO anywhere it opens the download
         page and stops, so you download it and run the same command again
       - creates the administrator account inside the VM
-      - schedules the daily maintenance, once the build has succeeded
+      - schedules the daily maintenance, once every phase has run
 
     The build runs these phases, skipping whatever is already done, so it is
     safe to run again after a failure:
@@ -98,8 +98,8 @@
             Write-LogEntry '' 'INFO'
             Write-LogEntry '========================================================' 'INFO'
             if ($outcome -eq [BuildOutcome]::CompleteWithProblems) {
-                Write-LogEntry "  All phases ran, but some steps failed. $($VM.Name) can be used; fix what the log reports," 'WARN'
-                Write-LogEntry '  then run that phase again with -FromPhase.' 'WARN'
+                Write-LogEntry "  All phases ran, but some steps failed. $($VM.Name) can be used; fix what the log reports" 'WARN'
+                Write-LogEntry '  (install by hand, or re-run the phase it names with -FromPhase).' 'WARN'
             }
             else {
                 Write-LogEntry "  All phases complete. $($VM.Name) is ready." 'OK'

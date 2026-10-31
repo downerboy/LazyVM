@@ -1,4 +1,4 @@
-# BuildPhases.Tests.ps1
+﻿# BuildPhases.Tests.ps1
 # How the build reports a phase whose steps did not all succeed (#226): the
 # phase is not called complete, and neither is the build. Nothing here needs
 # Hyper-V or a guest.
@@ -42,6 +42,17 @@ Describe 'Invoke-BuildPhase' {
 
         $outcome | Should -Be 'Complete'
     }
+
+    It 'names the phases with problems and the phase to re-run from' {
+        Mock -ModuleName $module Get-BuildPhase {
+            [pscustomobject]@{ Number = 7; Name = 'Installs'; Action = { [BuildOutcome]::CompleteWithProblems } }
+            [pscustomobject]@{ Number = 8; Name = 'Settings'; Action = { [BuildOutcome]::CompleteWithProblems } }
+        }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) $null = Invoke-BuildPhase -VM $VM }
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -eq 'Phases with problems: 7, 8 - re-run with -FromPhase 7 once the cause is fixed' -and $Level -eq 'WARN' }
+    }
 }
 
 Describe 'Invoke-VMBuild' {
@@ -79,6 +90,41 @@ Describe 'Complete-GuestConfiguration' {
         Mock -ModuleName $module Restore-GuestVisualStudioSetting { throw 'Visual Studio settings restore did not finish within 25 minute(s).' }
 
         $outcome = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) @(Complete-GuestConfiguration -VM $VM) | Where-Object { $_ -is [BuildOutcome] } | ForEach-Object { "$_" } }
+
+        $outcome | Should -Be 'CompleteWithProblems'
+    }
+
+    It 'returns CompleteWithProblems when the VM is not running, because Phase 8 did not run' {
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Off' } }
+
+        $outcome = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) @(Complete-GuestConfiguration -VM $VM) | Where-Object { $_ -is [BuildOutcome] } | ForEach-Object { "$_" } }
+
+        $outcome | Should -Be 'CompleteWithProblems'
+    }
+
+    It 'returns CompleteWithProblems when the VM does not exist' {
+        Mock -ModuleName $module Get-VM { }
+
+        $outcome = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) @(Complete-GuestConfiguration -VM $VM) | Where-Object { $_ -is [BuildOutcome] } | ForEach-Object { "$_" } }
+
+        $outcome | Should -Be 'CompleteWithProblems'
+    }
+
+    It 'leaves reporting a completed phase to Invoke-BuildPhase' {
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) $null = Complete-GuestConfiguration -VM $VM }
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { $Message -eq 'Phase 8 complete' }
+    }
+}
+
+Describe 'Install-GuestSoftware' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Get-VM { }
+    }
+
+    It 'returns CompleteWithProblems when the VM does not exist, because Phase 7 did not run' {
+        $outcome = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) @(Install-GuestSoftware -VM $VM) | Where-Object { $_ -is [BuildOutcome] } | ForEach-Object { "$_" } }
 
         $outcome | Should -Be 'CompleteWithProblems'
     }

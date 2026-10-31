@@ -50,6 +50,7 @@ function Write-ToolingReinstallReport {
       logged too: those failed to install, and the next build tries them
       again (#226). Returns $true when nothing is missing.
     #>
+    [OutputType([bool])]
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][ToolingRecord]$Tooling
@@ -71,11 +72,12 @@ function Write-ToolingReinstallReport {
         Write-LogList -Heading "$($missingWinget.Count) winget package(s) in the tooling list are not installed - run Phase 7 again with -FromPhase 7:" -Items @($missingWinget | ForEach-Object { $_.Id }) -Level WARN
     }
 
+    $allInstalled = ($awaiting.Count() -eq 0) -and ($missingWinget.Count -eq 0)
     $reportPath = Join-Path $VM.Settings.StateDir 'reinstall-by-hand.txt'
     if ($awaiting.Count() -eq 0) {
-        if ($missingWinget.Count -eq 0) { Write-LogEntry 'Everything in the tooling list is installed' 'OK' }
+        if ($allInstalled) { Write-LogEntry 'Everything in the tooling list is installed' 'OK' }
         Remove-Item -LiteralPath $reportPath -Force -ErrorAction SilentlyContinue
-        return ($missingWinget.Count -eq 0)
+        return $allInstalled
     }
 
     $lines = @($awaiting.Programs | ForEach-Object { "program    $($_.Name)  ($($_.Publisher))" }) +
@@ -92,7 +94,7 @@ function Write-ToolingReinstallReport {
         $record.AwaitingReinstall = $awaiting
         Save-VMTooling -VM $VM -Record $record -Reason 'items to reinstall by hand recorded'
     }
-    return $false
+    return $allInstalled
 }
 
 function Get-MissingWingetPackage {
@@ -101,6 +103,7 @@ function Get-MissingWingetPackage {
       it is now, does not have. Packages the tooling list excludes are never
       missing: the observed list leaves them out as well.
     #>
+    [OutputType([WingetPackage])]
     param(
         [Parameter(Mandatory)][ToolingRecord]$Tooling,
         [Parameter(Mandatory)][ToolingRecord]$Observed,

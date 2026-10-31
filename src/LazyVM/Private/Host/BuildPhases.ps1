@@ -97,7 +97,10 @@ function Invoke-BuildPhase {
             Write-LogEntry "Phase $($phase.Number) complete" 'OK'
         }
     }
-    if ($withProblems.Count -gt 0) { return [BuildOutcome]::CompleteWithProblems }
+    if ($withProblems.Count -gt 0) {
+        Write-LogEntry "Phases with problems: $($withProblems -join ', ') - re-run with -FromPhase $($withProblems[0]) once the cause is fixed" 'WARN'
+        return [BuildOutcome]::CompleteWithProblems
+    }
     return [BuildOutcome]::Complete
 }
 
