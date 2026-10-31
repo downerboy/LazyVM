@@ -308,6 +308,29 @@ Describe 'Get-OrNewRecoveryPassword' {
     }
 }
 
+Describe 'Protect-GuestSystemDrive' {
+    It 'ejects the install ISO from the DVD drive before BitLocker uses the TPM, keeping the drive (#188)' {
+        $script:order = @()
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-GuestNote { }
+        Mock -ModuleName $module Get-OrNewRecoveryPassword { $password }
+        Mock -ModuleName $module Get-VMDvdDrive {
+            [pscustomobject]@{ ControllerNumber = 0; ControllerLocation = 1; Path = 'C:\LazyVM\Shared\ISO\Win11.iso' }
+            [pscustomobject]@{ ControllerNumber = 0; ControllerLocation = 5; Path = $null }
+        }
+        Mock -ModuleName $module Set-VMDvdDrive { $script:order += "eject $ControllerLocation" }
+        Mock -ModuleName $module Invoke-GuestScript { $script:order += $Activity; if ($Activity -eq 'OS disk identity') { $sqlGuid } }
+
+        InModuleScope $module -Parameters @{ Settings = (New-TestSetting -Root (New-TestRoot)) } {
+            param($Settings)
+            Protect-GuestSystemDrive -VM ([VMContext]::new($Settings))
+        }
+
+        $script:order | Should -Be @('OS disk identity', 'eject 1', 'BitLocker on C:')
+        Should -Invoke -ModuleName $module Set-VMDvdDrive -Times 1 -Exactly -ParameterFilter { [string]::IsNullOrEmpty($Path) -and $VMName -eq 'Alpha' }
+    }
+}
+
 Describe 'Protect-GuestPersistentDisk' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
