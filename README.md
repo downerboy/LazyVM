@@ -95,6 +95,7 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | `Get-LazyVMLicense`                                         | Evaluation days and rearms left, and what maintenance will do.                                         |
 | `Get-LazyVMTooling`                                         | What is installed in the VM, and what the next maintenance run would record.                           |
 | `Save-LazyVMTooling`                                        | Records tooling changes now, with a checkpoint.                                                        |
+| `Test-LazyVM`                                               | Checks the folder, ISOs, VM, PowerShell Direct, guest set-up and maintenance task. Read-only.         |
 | `Get-LazyVMRestorePoint` / `Restore-LazyVMTooling`        | Lists recorded tooling versions, and restore to specified version.                                    |
 | `Save-LazyVMState` / `Restore-LazyVMState`                | Captures the VM's state to the host, and puts it back.                                                 |
 | `Invoke-LazyVMRebuild`                                      | Rebuilds the VM from scratch, keeping your work.                                                       |
