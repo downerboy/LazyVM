@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.15.3](https://github.com/downerboy/LazyVM/compare/v4.15.2...v4.15.3) (2026-10-31)
+
+
+### Bug Fixes
+
+* eject the install ISO before BitLocker uses the TPM ([#189](https://github.com/downerboy/LazyVM/issues/189)) ([beb1c00](https://github.com/downerboy/LazyVM/commit/beb1c00a6f6b06e0e533d12b78f78a899eeeed31))
+
 ## [4.15.2](https://github.com/downerboy/LazyVM/compare/v4.15.1...v4.15.2) (2026-10-31)
 
 
