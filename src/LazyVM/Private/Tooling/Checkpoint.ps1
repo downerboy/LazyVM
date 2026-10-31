@@ -124,7 +124,17 @@ function New-ToolingCheckpoint {
     )
 
     Enable-ToolingCheckpoint -VM $VM
-    Checkpoint-VM -Name $VM.Name -SnapshotName $Name -ErrorAction Stop
+    $stateBefore = (Get-VM -Name $VM.Name -ErrorAction Stop).State
+    try { Checkpoint-VM -Name $VM.Name -SnapshotName $Name -ErrorAction Stop }
+    catch {
+        # Hyper-V pauses the VM when a device, such as an open enhanced
+        # session, cannot resume after a failed checkpoint (#182).
+        if ("$stateBefore" -eq 'Running' -and "$((Get-VM -Name $VM.Name -ErrorAction SilentlyContinue).State)" -eq 'Paused') {
+            Resume-VM -Name $VM.Name -ErrorAction Stop
+            Write-LogEntry "The failed checkpoint left '$($VM.Name)' paused; resumed it" 'WARN'
+        }
+        throw
+    }
     Write-LogEntry "Checkpoint taken: '$Name'" 'OK'
     if ($SkipPrune) { return }
 
