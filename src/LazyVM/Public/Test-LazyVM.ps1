@@ -53,7 +53,7 @@ function Test-LazyVM {
         $vm = $null
         try {
             $root = Resolve-LazyVMRoot
-            $configuration = Read-VMSetting -Root $root.Path -VMName $Name -Unattended:(Test-Unattended)
+            $configuration = Read-VMSetting -Root $root.Path -VMName $Name -Unattended:(Test-Unattended) -ReadOnly
             $vm = [VMContext]::new($configuration.Settings)
             $diagnostic = Get-VMDiagnostic -VM $vm -Root $root
 

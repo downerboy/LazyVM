@@ -163,6 +163,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Invoke-LazyVMMaintenance` | What the scheduled task runs. Not usually run by hand. |
 | `Register-LazyVMMaintenance` | Schedules the VM's daily maintenance, or schedules it again. |
 | `Remove-LazyVM` | Deletes the VM and everything created for it ([section 10](#removing-a-vm)). |
+| `Test-LazyVM` | Reports what LazyVM can see of a VM, to find out why it is not working: the LazyVM folder and where it was found, the ISO paths and whether each is a valid image, the VM's state and heartbeat, whether PowerShell Direct works with the stored account, the guest's boot time, OOBE state and provisioning marker, automatic sign-in, and the maintenance task's last result. Never starts the VM. Read-only; `-ReportPath report.txt` also writes it as a text report. |
 
 Commands that change something support `-WhatIf`, to see what would happen without doing it, and `-Confirm`. The ones that cannot be undone (`Remove-LazyVM`, `Restore-LazyVMTooling`, `Restore-LazyVMState`, `Invoke-LazyVMRebuild`) ask before acting; `-Force` skips the question.
 

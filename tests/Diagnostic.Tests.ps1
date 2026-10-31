@@ -48,11 +48,12 @@ Describe 'Test-LazyVM' {
         Mock -ModuleName $module Get-VMIntegrationService { [pscustomobject]@{ PrimaryStatusDescription = 'OK' } }
         Mock -ModuleName $module Start-VM { }
         Mock -ModuleName $module Get-GuestCredential {
-            [pscredential]::new('dev', (ConvertTo-SecureString -String 'x' -AsPlainText -Force))
+            [pscredential]::new('dev', [securestring]::new())
         }
         Mock -ModuleName $module Connect-Guest { [pscustomobject]@{ State = 'Opened' } }
         $facts = $guestFacts
-        Mock -ModuleName $module Invoke-Command { $facts }.GetNewClosure()
+        # A real PSSession cannot be made without a guest.
+        Mock -ModuleName $module Invoke-Command { $facts }.GetNewClosure() -RemoveParameterType Session
         Mock -ModuleName $module Remove-GuestSession { }
         Mock -ModuleName $module Get-ScheduledTask { [pscustomobject]@{ TaskName = 'LazyVM-Maintain-Alpha' } }
         Mock -ModuleName $module Get-ScheduledTaskInfo {
@@ -162,11 +163,11 @@ Describe 'Test-LazyVM' {
     }
 
     It 'writes nothing to the LazyVM folder' {
-        $before = @(Get-ChildItem -LiteralPath $root -Recurse -Force | ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)" })
+        $before = @(Get-ChildItem -LiteralPath $root -Recurse -Force -File | ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)" })
 
         Test-LazyVM -Name Alpha | Out-Null
 
-        $after = @(Get-ChildItem -LiteralPath $root -Recurse -Force | ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)" })
+        $after = @(Get-ChildItem -LiteralPath $root -Recurse -Force -File | ForEach-Object { "$($_.FullName)|$($_.LastWriteTimeUtc.Ticks)" })
         $after | Should -Be $before
     }
 

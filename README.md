@@ -100,6 +100,7 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | `Invoke-LazyVMRebuild`                                      | Rebuilds the VM from scratch, keeping your work.                                                       |
 | `Invoke-LazyVMMaintenance` / `Register-LazyVMMaintenance` | The daily maintenance run, and scheduling it.                                                          |
 | `Remove-LazyVM`                                             | Deletes a VM and everything created for it. `-WhatIf` lists it all first.                            |
+| `Test-LazyVM`                                               | Diagnoses a VM that is not working: folder, ISOs, state, guest session, sign-in, maintenance. Read-only. |
 
 Commands that change something support `-WhatIf` and `-Confirm`.
 

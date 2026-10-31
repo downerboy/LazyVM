@@ -64,11 +64,11 @@ function Get-GuestDiagnostic {
 
     try {
         $session = Connect-Guest -VM $VM -Credential $credential -TimeoutMinutes 1
-        $facts = Invoke-Command -Session $session -ArgumentList $script:GuestMarkerKey -ScriptBlock {
-            param($markerKey)
+        $markerKey = $script:GuestMarkerKey
+        $facts = Invoke-Command -Session $session -ScriptBlock {
             $os = Get-CimInstance -ClassName Win32_OperatingSystem
             $setup = Get-ItemProperty -Path 'HKLM:\SYSTEM\Setup\State' -Name 'ImageState' -ErrorAction SilentlyContinue
-            $marker = Get-ItemProperty -Path $markerKey -Name 'Provisioned' -ErrorAction SilentlyContinue
+            $marker = Get-ItemProperty -Path $using:markerKey -Name 'Provisioned' -ErrorAction SilentlyContinue
             $winlogon = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -ErrorAction SilentlyContinue
             [pscustomobject]@{
                 LastBootTime  = $os.LastBootUpTime
@@ -97,7 +97,7 @@ function Get-MaintenanceTaskDiagnostic {
 
     $name = $VM.Settings['ScheduleTaskName']
     $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
-    $info = if ($task) { $task | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue }
+    $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name -ErrorAction SilentlyContinue }
     return [pscustomobject]@{
         MaintenanceTask           = $name
         MaintenanceTaskRegistered = [bool]$task

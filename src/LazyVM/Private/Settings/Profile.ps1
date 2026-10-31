@@ -184,7 +184,8 @@ function Get-SharedTemplateSetting {
     #>
     param(
         [Parameter(Mandatory)][string]$Root,
-        [switch]$Unattended
+        [switch]$Unattended,
+        [switch]$ReadOnly
     )
 
     $values = Get-DefaultSetting
@@ -194,7 +195,7 @@ function Get-SharedTemplateSetting {
 
     $hostFile = Join-Path -Path (Get-ConfigDir -Root $Root) -ChildPath $script:SettingsFileName
     if (Test-Path -LiteralPath $hostFile -PathType Leaf) {
-        $loaded = Import-SettingsFile -Path $hostFile -Unattended:$Unattended
+        $loaded = Import-SettingsFile -Path $hostFile -Unattended:$Unattended -ReadOnly:$ReadOnly
         $warning = $loaded.Warning
         foreach ($key in $loaded.Values.Keys) {
             $values[$key] = $loaded.Values[$key]

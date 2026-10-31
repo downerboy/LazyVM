@@ -106,17 +106,19 @@ function Read-VMSetting {
       added by a newer LazyVM) come from the shared template until
       Sync-VMProfile writes them in. Then names everything after the VM,
       resolves every host path against the root and adds the derived values.
-      Returns them with where each value came from. Writes nothing, and
-      nothing is shared between calls, so several VMs can be read at once.
+      Returns them with where each value came from. Writes nothing but the
+      settings files' last-good copies (none with -ReadOnly), and nothing is
+      shared between calls, so several VMs can be read at once.
     #>
     param(
         [Parameter(Mandatory)][string]$Root,
         [string]$VMName,
-        [switch]$Unattended
+        [switch]$Unattended,
+        [switch]$ReadOnly
     )
 
     $configDir = Get-ConfigDir -Root $Root
-    $template = Get-SharedTemplateSetting -Root $Root -Unattended:$Unattended
+    $template = Get-SharedTemplateSetting -Root $Root -Unattended:$Unattended -ReadOnly:$ReadOnly
     $settings = $template.Values
     $sources = $template.Sources
     $warnings = [System.Collections.Generic.List[string]]::new()
@@ -124,7 +126,7 @@ function Read-VMSetting {
 
     $vm = Resolve-VMSelection -Root $Root -Requested $VMName
     $profilePath = Get-VMProfilePath -Root $Root -Name $vm
-    $loaded = Import-SettingsFile -Path $profilePath -Unattended:$Unattended
+    $loaded = Import-SettingsFile -Path $profilePath -Unattended:$Unattended -ReadOnly:$ReadOnly
     if ($loaded.Warning) { $warnings.Add($loaded.Warning) }
     $profileSource = "$vm\$script:ConfigFolderName\$script:ProfileFileName"
     foreach ($key in $loaded.Values.Keys) {
