@@ -152,6 +152,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Set-LazyVMRoot -Path D:\DevVM` | Chooses the LazyVM folder. |
 | `New-LazyVM -Name DevBox` | Creates the VM's profile, ready to build. `-From OtherVM` starts from another VM's settings and tooling list; `-ConfigTemplate PlainWindows` starts from a config template. |
 | `Build-LazyVM` | Runs phases 0 to 8. Builds the VM if it does not exist. Otherwise it brings an existing VM up to spec: it installs anything missing from its tooling list, attaches and prepares the SQL data disk, and relocates databases. Safe to run again. |
+| `Export-LazyVMTemplate -Name Clean -TemplateName Office` | Saves a VM's configuration, tooling list included, as a config template in `Shared\Templates`, for new VMs to start from. See [Making your own config template](#making-your-own-config-template). |
 | `Build-LazyVM -Name Clean -ConfigTemplate PlainWindows` | Creates a new VM's profile from a config template, then builds it. Ignored, with a warning, for a VM that already has a profile. |
 | `Build-LazyVM -FromPhase 7` | Starts at a phase, skipping earlier ones, after fixing what stopped a build. |
 | `Build-LazyVM -NoUnattend` | No answer file: Windows Setup has to be completed by hand in VMConnect. |
@@ -695,7 +696,20 @@ One of your own templates with the same `Name` as a built-in one replaces it, as
 | `Developer` | The full developer set-up: `InstallVisualStudio`, `InstallSqlServer` (with its SQL data disk), `UseDevDrive` and `GuestDeveloperMode` are `true`, whatever `LazyVM.Settings.json` says. The tooling list is the shared template's: the default one unless `LazyVM.Settings.json` has its own. |
 | `PlainWindows` | Plain Windows with no developer tools: `InstallVisualStudio`, `InstallSqlServer` (so no SQL data disk), `UseDevDrive` and `GuestDeveloperMode` are `false`, and the tooling list is empty. Build it, then install and set up the apps you want by hand. |
 
-As with any VM, the template is used only to create the VM's `VM.json`. Anything you install afterwards is added to the VM's own tooling list by maintenance.
+### Making your own config template
+
+```powershell
+Build-LazyVM -Name Clean -ConfigTemplate PlainWindows
+# install and set up the apps you want in Clean, then:
+Export-LazyVMTemplate -Name Clean -TemplateName Office
+Build-LazyVM -Name Office2 -ConfigTemplate Office
+```
+
+`Export-LazyVMTemplate` writes the VM's `VM.json`, tooling list included, to `Shared\Templates\<TemplateName>.json`, with `Name` set to `-TemplateName` (the VM's name if you leave it out). Like `New-LazyVM -From`, it leaves out the settings that must differ between VMs. Press Tab after `-Name` to list the VMs. A name another template already has, built-in or your own, is refused, and an existing file is never written over.
+
+The difference from `-From`: `-From` copies a VM once and saves nothing, while the template stays and appears after `-ConfigTemplate` for as many VMs as you like. It does not follow the VM afterwards; export again under a new name to save a newer version. To change or remove a template, edit or delete its file.
+
+ to create the VM's `VM.json`. Anything you install afterwards is added to the VM's own tooling list by maintenance.
 
 Once there is more than one VM, every command needs `-Name`. LazyVM will not guess, because a wrong guess would maintain or rebuild the wrong machine.
 

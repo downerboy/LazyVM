@@ -229,6 +229,28 @@ function Get-PerVMSettingName {
     return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime') + @($script:DataDiskIdentitySettings) + @($script:RecordedGuestStateSettings)
 }
 
+function Get-ShareableSetting {
+    <#
+      A VM's settings, tooling list included, without the ones each VM has
+      its own of (Get-PerVMSettingName): what New-LazyVM -From copies and
+      Export-LazyVMTemplate saves. Only reads: a caller that needs an older
+      VM's Tooling.json folds it in first (Move-ToolingIntoProfile).
+    #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    $perVM = Get-PerVMSettingName
+    $settings = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $Name)
+    $shareable = @{}
+    foreach ($key in $settings.Keys) {
+        if ($perVM -notcontains $key) { $shareable[$key] = $settings[$key] }
+    }
+    return $shareable
+}
+
 function New-VMProfile {
     <#
       Creates <Name>\Config\VM.json holding every setting: the shared
@@ -266,11 +288,8 @@ function New-VMProfile {
         # source VM's Tooling.json must be in its VM.json first. Its history
         # and checkpoints belong to the source VM and stay there.
         $null = Move-ToolingIntoProfile -Root $Root -Name $source
-        $perVM = Get-PerVMSettingName
-        $sourceSettings = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $source)
-        foreach ($key in $sourceSettings.Keys) {
-            if ($perVM -notcontains $key) { $settings[$key] = $sourceSettings[$key] }
-        }
+        $sourceSettings = Get-ShareableSetting -Root $Root -Name $source
+        foreach ($key in $sourceSettings.Keys) { $settings[$key] = $sourceSettings[$key] }
     }
 
     $maintenanceTime = Get-NextMaintenanceTime -Root $Root -VMNames $existing

@@ -5,7 +5,8 @@
 #   Name       what it is called, which -ConfigTemplate takes; not the file name
 #   Settings   the settings it changes, like LazyVM.Settings.json
 # The built-in ones are in the module's Data\Templates folder, the user's own
-# in <Root>\Shared\Templates. LazyVM.Template.schema.json describes the file.
+# in <Root>\Shared\Templates, where Export-LazyVMTemplate saves them.
+# LazyVM.Template.schema.json describes the file.
 # New-LazyVM -ConfigTemplate (and Build-LazyVM -ConfigTemplate, for a VM with
 # no profile yet) applies a template's Settings over the shared template.
 # Name belongs to the template, so it never becomes a setting in VM.json, and
@@ -26,6 +27,19 @@ function Get-UserTemplateDir {
     param([Parameter(Mandatory)][string]$Root)
 
     return Join-Path -Path (Join-Path -Path $Root -ChildPath $script:SharedFolderName) -ChildPath $script:TemplatesFolderName
+}
+
+function Assert-TemplateName {
+    <# Throws unless $Name can name a config template; -Path says which file it came from. #>
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [string]$Path
+    )
+
+    if ($Name -notmatch $script:TemplateNamePattern) {
+        $where = if ($Path) { ":`n  $Path" } else { '.' }
+        throw "'$Name' cannot be used as a config template name: use 1-64 letters, digits or hyphens, starting with a letter or digit$where"
+    }
 }
 
 function Read-VMTemplateFile {
@@ -55,9 +69,7 @@ function Read-VMTemplateFile {
     if ($name -isnot [string] -or [string]::IsNullOrWhiteSpace($name)) {
         throw "This config template needs a Name, such as `"Name`": `"WebDev`":`n  $Path"
     }
-    if ($name -notmatch $script:TemplateNamePattern) {
-        throw "'$name' cannot be used as a config template name: use 1-64 letters, digits or hyphens, starting with a letter or digit:`n  $Path"
-    }
+    Assert-TemplateName -Name $name -Path $Path
     if ($settings -isnot [System.Collections.IDictionary]) {
         throw "This config template needs a Settings table holding the settings it changes, such as `"Settings`": { `"vCPU`": 8 }:`n  $Path"
     }
@@ -152,4 +164,69 @@ function Read-VMTemplate {
         $message += "`nThese template files could not be read:`n$(($unreadable | ForEach-Object { $_.Problem }) -join "`n")"
     }
     throw $message
+}
+
+function Get-UserTemplatePath {
+    <# Where Export-LazyVMTemplate saves the config template named $TemplateName. #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$TemplateName
+    )
+
+    return Join-Path -Path (Get-UserTemplateDir -Root $Root) -ChildPath "$TemplateName.json"
+}
+
+function Assert-TemplateNameAvailable {
+    <#
+      Throws unless a new config template can be saved as $TemplateName: a
+      valid name that no template has, built-in or the user's, and no file
+      of that name to write over.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$TemplateName
+    )
+
+    Assert-TemplateName -Name $TemplateName
+    if (@(Get-VMTemplateName -Root $Root) -contains $TemplateName) {
+        throw "There is already a config template named '$TemplateName'. Choose another name with -TemplateName."
+    }
+    $path = Get-UserTemplatePath -Root $Root -TemplateName $TemplateName
+    if (Test-Path -LiteralPath $path) {
+        throw "$path already exists. Move it, or choose another name with -TemplateName."
+    }
+}
+
+function Export-VMTemplate {
+    <#
+      Saves a VM's settings and tooling list, without the ones each VM has
+      its own of, as a config template named $TemplateName in
+      <Root>\Shared\Templates. The caller checks the name first
+      (Assert-TemplateNameAvailable). Returns the template file's path.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$TemplateName
+    )
+
+    $path = Get-UserTemplatePath -Root $Root -TemplateName $TemplateName
+    # The template points at the schema copies in Shared\Config, for the editor.
+    Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $Root)
+    # The tooling list goes in the template, so an older VM's Tooling.json
+    # must be in its VM.json first.
+    $null = Move-ToolingIntoProfile -Root $Root -Name $Name
+    $settings = Get-ShareableSetting -Root $Root -Name $Name
+    $document = [ordered]@{
+        '$schema' = "../$script:ConfigFolderName/$script:TemplateSchemaFileName"
+        Name      = $TemplateName
+        Settings  = [ordered]@{}
+    }
+    foreach ($key in @($settings.Keys | Sort-Object)) { $document.Settings[$key] = $settings[$key] }
+
+    New-Folder -Path (Split-Path -Path $path -Parent)
+    Write-TextFileAtomic -Path $path -Text ((ConvertTo-Json -InputObject $document -Depth 20) + [Environment]::NewLine)
+    return $path
 }
