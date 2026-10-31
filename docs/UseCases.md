@@ -128,7 +128,7 @@ Actor: Administrator. Systems: Guest Windows, Hyper-V.
 
 Actors: Host user, Administrator.
 
-- Create a VM profile (`New-LazyVM`), by any Host user. Extended by **Copy another VM's settings and tooling** with `-From`.
+- Create a VM profile (`New-LazyVM`), by any Host user. Extended by **Copy another VM's settings and tooling** with `-From`. Extended by **Start from a config template** with `-ConfigTemplate`, which `Build-LazyVM` also takes for a VM with no profile yet.
 - Choose the LazyVM folder (`Set-LazyVMRoot`).
 - Store the guest account (`Set-LazyVMCredential`). Extended by **Generate a password** when the password is left empty.
 

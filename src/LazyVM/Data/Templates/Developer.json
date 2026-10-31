@@ -1,0 +1,5 @@
+﻿{
+  "$schema": "../LazyVM.Template.schema.json",
+  "Name": "Developer",
+  "Settings": {}
+}

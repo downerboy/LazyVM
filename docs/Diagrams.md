@@ -85,7 +85,7 @@ Optional. Without it, Build-LazyVM picks LazyVM on the NTFS drive with the most 
 
 ## Create a VM profile without building
 
-`New-LazyVM` `-Name <VM>` `-From <OtherVM>  (optional)`
+`New-LazyVM` `-Name <VM>` `-From <OtherVM> | -ConfigTemplate <Template>  (optional)`
 
 Creates the profile only. Build-LazyVM does this by itself when the profile is missing.
 
@@ -93,8 +93,8 @@ Creates the profile only. Build-LazyVM does this by itself when the profile is m
 
 1. `Resolve-LazyVMRoot` (Settings)
    - Reads D1, LazyVM folder: HKLM:\SOFTWARE\LazyVM (Root)
-2. `New-VMProfile` (Settings): copies -From settings except paths, computer name, maintenance time and disk identity; schedules maintenance an hour after the latest existing VM
-   - Reads D2, settings and tooling to copy: <OtherVM>\Config\ (VM.json  (with -From))
+2. `New-VMProfile` (Settings): applies -ConfigTemplate's Settings, or copies -From settings except paths, computer name, maintenance time and disk identity; schedules maintenance an hour after the latest existing VM
+   - Reads D2, settings and tooling to copy: <OtherVM>\Config\ (VM.json  (with -From)), or the config template (Data\Templates\*.json, Shared\Templates\*.json  (with -ConfigTemplate))
    - Reads D3, maintenance times in use: *\Config\ (VM.json)
    - Writes D4, new profile: <VM>\Config\ (VM.json)
    - Writes D5, tooling list to build with: <VM>\Config\ (VM.json, its Tooling  (with -From))
@@ -124,13 +124,13 @@ Optional before a build: Build-LazyVM generates an account if none is stored. Th
 
 ## Build a VM
 
-`Build-LazyVM` `-Name <VM>` `-FromPhase 0-8  (optional)` `-NoUnattend  (optional)`
+`Build-LazyVM` `-Name <VM>` `-ConfigTemplate <Template>  (optional)` `-FromPhase 0-8  (optional)` `-NoUnattend  (optional)`
 
 Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then schedules maintenance. Running it again finishes an interrupted build.
 
 ![Build a VM: call order and data flow](diagrams/build.svg)
 
-1. `Initialize-BuildTarget` (Settings): first run: picks the root and creates the profile
+1. `Initialize-BuildTarget` (Settings): first run: picks the root and creates the profile, from -ConfigTemplate when given
    - Reads D1, LazyVM folder: HKLM:\SOFTWARE\LazyVM (Root, if already set)
    - Reads D2, drive with most free space: Fixed drives (NTFS, free space)
    - Writes D3, LazyVM folder, first run: HKLM:\SOFTWARE\LazyVM (Root = X:\LazyVM)

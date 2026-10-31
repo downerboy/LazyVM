@@ -21,8 +21,11 @@ $script:ProfileFileName = 'VM.json'
 # The VM.json a VM was first built from, kept beside it to diff against it.
 $script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'
-# The module's Data folder that holds the named templates (Template.ps1).
+# The folder of config templates (Template.ps1): the built-in ones in the
+# module's Data folder, the user's own in <Root>\Shared. A template's name
+# is the Name field in its file; LazyVM.Template.schema.json has the same rule.
 $script:TemplatesFolderName = 'Templates'
+$script:TemplateNamePattern = '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$'
 # The setting in VM.json that holds the VM's tooling list.
 $script:ToolingSettingName = 'Tooling'
 # What a winget package identifier looks like (WingetMatch.ps1); anything

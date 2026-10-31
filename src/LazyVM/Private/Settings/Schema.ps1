@@ -177,12 +177,12 @@ function Get-SchemaProblem {
     return @($problems)
 }
 
-function Read-SettingsFile {
+function Read-SettingsJson {
     <#
-      Reads one settings file, checks it against the schema and returns the
-      values it sets. Throws, listing every problem at once, if it cannot be
-      used; nothing from a file with problems is ever applied.
+      The table of values in one JSON settings file, as written: an empty
+      table for an empty file. Throws when it is not JSON or not a table.
     #>
+    [OutputType([System.Collections.IDictionary])]
     param([Parameter(Mandatory)][string]$Path)
 
     $text = Get-Content -LiteralPath $Path -Raw
@@ -199,29 +199,54 @@ function Read-SettingsFile {
     if ($parsed -isnot [System.Collections.IDictionary]) {
         throw "This settings file must be a table of settings in { }:`n  $Path"
     }
+    return $parsed
+}
 
-    # Names in any case take the schema's spelling, and a single value where
-    # a list belongs becomes a one-item list.
+function ConvertTo-CheckedSetting {
+    <#
+      A table of settings read from $Path, checked against the schema, with
+      names in the schema's spelling and a single value where a list belongs
+      made a one-item list. Throws, listing every problem at once, if it
+      cannot be used; nothing with problems is ever applied.
+    #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.IDictionary]$Values,
+        [Parameter(Mandatory)][string]$Path
+    )
+
     $schema = Get-SettingsSchema
-    $values = [ordered]@{}
-    foreach ($key in $parsed.Keys) {
+    $checked = [ordered]@{}
+    foreach ($key in $Values.Keys) {
         if ($key -eq '$schema') { continue }
         $name = Find-SettingName -Name $key
         if (-not $name) { $name = $key }
-        $value = $parsed[$key]
+        $value = $Values[$key]
         if ($schema.properties.Contains($name) -and $schema.properties[$name]['type'] -eq 'array' -and
             $null -ne $value -and $value -isnot [System.Collections.IList]) {
             $value = @($value)
         }
-        $values[$name] = $value
+        $checked[$name] = $value
     }
 
-    $problems = @(Get-SchemaProblem -Values $values)
+    $problems = @(Get-SchemaProblem -Values $checked)
     if ($problems.Count -gt 0) {
         throw (Format-ProblemList -Heading "This settings file has {0} problem(s), so none of it was used:`n  $Path" -Problems $problems)
     }
 
-    return ConvertTo-PlainValue -Value $values
+    return ConvertTo-PlainValue -Value $checked
+}
+
+function Read-SettingsFile {
+    <#
+      Reads one settings file, checks it against the schema and returns the
+      values it sets. Throws, listing every problem at once, if it cannot be
+      used; nothing from a file with problems is ever applied.
+    #>
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    return ConvertTo-CheckedSetting -Values (Read-SettingsJson -Path $Path) -Path $Path
 }
 
 function Get-LastGoodPath {

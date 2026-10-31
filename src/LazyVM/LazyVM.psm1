@@ -51,9 +51,11 @@ $vmCommands = @(Get-ChildItem -Path function: |
         Where-Object { $_.Name -like '*-LazyVM*' -and $_.Verb -ne 'New' -and $_.Parameters.ContainsKey('Name') } |
         ForEach-Object { $_.Name })
 Register-ArgumentCompleter -CommandName $vmCommands -ParameterName 'Name' -ScriptBlock $vmNameCompleter
-Register-ArgumentCompleter -CommandName 'New-LazyVM' -ParameterName 'Template' -ScriptBlock {
+# -ConfigTemplate completes with the config templates: built-in, and the
+# user's in the LazyVM folder once there is one.
+Register-ArgumentCompleter -CommandName 'New-LazyVM', 'Build-LazyVM' -ParameterName 'ConfigTemplate' -ScriptBlock {
     $wordToComplete = $args[2]
-    Get-VMTemplateName |
+    Get-VMTemplateName -Root (Get-RegisteredRoot) |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
 }

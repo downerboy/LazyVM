@@ -1,0 +1,26 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LazyVM config template",
+  "description": "A named starting point for a new VM: New-LazyVM -ConfigTemplate <Name> or Build-LazyVM -ConfigTemplate <Name> applies its Settings over the shared template (the defaults and LazyVM.Settings.json). The built-in templates are in the module's Data\\Templates folder, your own in <Root>\\Shared\\Templates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Name",
+    "Settings"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Points your editor at this schema, for autocomplete and checking. Leave it as it is."
+    },
+    "Name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,63}$",
+      "description": "The template's name, which -ConfigTemplate takes and Tab lists: 1-64 letters, digits or hyphens, starting with a letter or digit. It names the template, not the file, and is never a setting of the VMs built from it."
+    },
+    "Settings": {
+      "$ref": "LazyVM.Settings.schema.json",
+      "description": "The settings the template changes, like LazyVM.Settings.json: list only what differs from the defaults."
+    }
+  }
+}

@@ -225,15 +225,15 @@ function Get-PerVMSettingName {
 function New-VMProfile {
     <#
       Creates <Name>\Config\VM.json holding every setting: the shared
-      template's values, with -Template the named template's over them, or
-      with -From the source VM's, except the settings that must differ
+      template's values, with -ConfigTemplate the config template's over
+      them, or with -From the source VM's, except the settings that must differ
       between VMs, which come from the shared template.
     #>
     param(
         [Parameter(Mandatory)][string]$Root,
         [Parameter(Mandatory)][string]$Name,
         [string]$From,
-        [string]$Template
+        [string]$ConfigTemplate
     )
 
     if (-not (Test-VMName $Name)) {
@@ -248,8 +248,8 @@ function New-VMProfile {
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $Root)
 
     $settings = (Get-SharedTemplateSetting -Root $Root).Values
-    if ($Template) {
-        $templateValues = Read-VMTemplate -Name $Template
+    if ($ConfigTemplate) {
+        $templateValues = Read-VMTemplate -Name $ConfigTemplate -Root $Root
         foreach ($key in $templateValues.Keys) { $settings[$key] = $templateValues[$key] }
     }
     if ($From) {
@@ -390,9 +390,14 @@ function Initialize-BuildTarget {
     <#
       Everything Build-LazyVM needs before it can start, set up on first use
       so a single command is enough: the LazyVM folder, recorded once, and
-      the VM's profile. Says what it set up.
+      the VM's profile, from -ConfigTemplate when one is given. Says what it
+      set up. A VM that already has a profile keeps it: its VM.json, not a
+      config template, decides how it is built.
     #>
-    param([string]$Name)
+    param(
+        [string]$Name,
+        [string]$ConfigTemplate
+    )
 
     $root = Get-RegisteredRoot
     if (-not $root) {
@@ -405,13 +410,17 @@ function Initialize-BuildTarget {
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $root)
 
     $existing = @(Get-VMProfileName -Root $root)
-    if ($Name) {
-        if (-not ($existing | Where-Object { $_ -eq $Name })) {
-            $null = New-VMProfile -Root $root -Name $Name
-            Write-Information "Created the profile for '$Name'." -InformationAction Continue
-        }
-    }
-    elseif ($existing.Count -eq 0) {
+    if (-not $Name -and $existing.Count -eq 0) {
         throw 'Give the new VM a name, for example: Build-LazyVM -Name DevBox'
+    }
+    if ($Name -and -not ($existing | Where-Object { $_ -eq $Name })) {
+        $null = New-VMProfile -Root $root -Name $Name -ConfigTemplate $ConfigTemplate
+        $from = if ($ConfigTemplate) { " from the config template '$ConfigTemplate'" } else { '' }
+        Write-Information "Created the profile for '$Name'$from." -InformationAction Continue
+        return
+    }
+    if ($ConfigTemplate) {
+        $vm = if ($Name) { "'$Name'" } else { 'The VM' }
+        Write-Warning "$vm already has a profile, so -ConfigTemplate $ConfigTemplate was not used: its VM.json decides how it is built."
     }
 }
