@@ -1,8 +1,13 @@
-﻿# PostConfiguration.ps1 - Build phase 8: SQL data onto the data disk, settings, database restore.
+﻿# PostConfiguration.ps1 - Build phase 8: SQL data onto the data disk, Visual Studio settings.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 function Complete-GuestConfiguration {
-    <# Phase 8. Each step is isolated: one that fails is logged and the rest still run, and the phase returns CompleteWithProblems. #>
+    <#
+      Phase 8. Each step is isolated: one that fails is logged and the rest
+      still run, and the phase returns CompleteWithProblems. Databases are
+      not restored here: a rebuild and Restore-LazyVMState put them back with
+      Restore-GuestSqlState (#225).
+    #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
@@ -23,7 +28,6 @@ function Complete-GuestConfiguration {
         [pscustomobject]@{ Name = '8a - SQL data disk'; Action = { Add-SqlDataDisk -VM $VM; Unlock-GuestDataDisk -VM $VM; Initialize-GuestSqlDisk -VM $VM } }
         [pscustomobject]@{ Name = '8b - move SQL data files'; Action = { Move-GuestSqlDataFile -VM $VM } }
         [pscustomobject]@{ Name = '8c - Visual Studio settings'; Action = { Restore-GuestVisualStudioSetting -VM $VM } }
-        [pscustomobject]@{ Name = '8d - database restore'; Action = { $null = Connect-GuestSqlInstance -VM $VM; Restore-SqlDatabase -VM $VM } }
     )
     if ($run.Failures.Count -eq 0) { Write-LogEntry 'Phase 8 complete' 'OK' }
     else { return [BuildOutcome]::CompleteWithProblems }
