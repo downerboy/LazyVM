@@ -542,6 +542,7 @@ Describe 'The tooling list in VM.json (#130)' {
                 }
             }
             Mock -ModuleName $module Add-MarketplaceItem {}
+            Mock -ModuleName $module Add-ProgramWingetId {}
             Mock -ModuleName $module Get-ToolingStamp { '20261024-120000' }
             Mock -ModuleName $module New-ToolingCheckpoint {}
             Mock -ModuleName $module Get-ToolingCheckpointStamp { , @('20261024-120000') }
@@ -586,6 +587,7 @@ Describe 'The tooling list in VM.json (#130)' {
                 }
             }
             Mock -ModuleName $module Add-MarketplaceItem {}
+            Mock -ModuleName $module Add-ProgramWingetId {}
             Mock -ModuleName $module New-ToolingCheckpoint {}
         }
 

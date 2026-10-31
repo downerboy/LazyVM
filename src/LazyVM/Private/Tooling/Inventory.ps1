@@ -191,7 +191,7 @@ function Get-GuestToolingReport {
 
     $recorded = Read-VMTooling -VM $VM
     $observed = ConvertTo-ToolingRecord -Inventory $inventory -WingetExclude $VM.Settings.ToolingWingetExclude
-    Add-MarketplaceItem -Record $observed -Previous $recorded
+    Add-ToolingSource -VM $VM -Record $observed -Previous $recorded
 
     # Per-user extensions a rebuild cannot reinstall from the marketplace.
     $unmatched = @(

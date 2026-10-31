@@ -23,6 +23,9 @@ $script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'
 # The setting in VM.json that holds the VM's tooling list.
 $script:ToolingSettingName = 'Tooling'
+# What a winget package identifier looks like (WingetMatch.ps1); anything
+# else read back from the guest is not taken as one.
+$script:WingetIdPattern = '^[A-Za-z0-9][A-Za-z0-9._+-]*$'
 # The setting in VM.json that holds the guest's environment (GuestEnvironment.ps1).
 $script:GuestEnvironmentSettingName = 'GuestEnvironment'
 # The setting in VM.json that holds the guest's own firewall rules (GuestFirewall.ps1).
