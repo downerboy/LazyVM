@@ -39,6 +39,24 @@ function Invoke-GuestScript {
     }
 }
 
+function ConvertTo-GuestTaskArgument {
+    <#
+      The arguments for a guest task, with each string made a plain string.
+      A string that came back from the guest carries the properties remoting
+      adds (PSComputerName and the rest), and Start-GuestTask writes the
+      arguments as JSON in the guest's Windows PowerShell 5.1, which writes
+      such a string as an object: the task then got @{value=...} instead of
+      the string. Anything else is passed on as it is, arrays included.
+    #>
+    param([object[]]$ArgumentList = @())
+
+    $plain = [System.Collections.Generic.List[object]]::new()
+    foreach ($argument in $ArgumentList) {
+        if ($argument -is [string]) { $plain.Add([string]$argument) } else { $plain.Add($argument) }
+    }
+    return , $plain.ToArray()
+}
+
 function Invoke-GuestTask {
     <#
       Runs $Work in the guest as a one-shot scheduled task, as SYSTEM or, with
@@ -63,7 +81,7 @@ function Invoke-GuestTask {
 
     $setupDir = $VM.Settings.GuestSetupDir
     $userName = if ($AsGuestUser) { $VM.Runtime.GuestAdminUser } else { '' }
-    $startArguments = @($TaskName, $setupDir, $Work.ToString(), $ArgumentList, $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
+    $startArguments = @($TaskName, $setupDir, $Work.ToString(), (ConvertTo-GuestTaskArgument -ArgumentList $ArgumentList), $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
     $start = {
         param($taskName, $setupDir, $work, $argumentList, $userName, $elevated, $timeoutSeconds)
         Start-GuestTask -TaskName $taskName -SetupDir $setupDir -Work $work -ArgumentList $argumentList -UserName $userName -Elevated:$elevated -TimeoutSeconds $timeoutSeconds
