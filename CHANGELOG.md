@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.15.2](https://github.com/downerboy/LazyVM/compare/v4.15.1...v4.15.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* turn BitLocker protection on for disks Windows already encrypted ([#186](https://github.com/downerboy/LazyVM/issues/186)) ([8ff17e8](https://github.com/downerboy/LazyVM/commit/8ff17e863aa3903686f8abf4d7c58c6e3dce550e))
+
 ## [4.15.1](https://github.com/downerboy/LazyVM/compare/v4.15.0...v4.15.1) (2026-10-31)
 
 
