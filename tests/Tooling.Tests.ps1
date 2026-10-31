@@ -621,3 +621,31 @@ Describe 'The tooling list in VM.json (#130)' {
         }
     }
 }
+
+Describe 'New-ToolingCheckpoint when the checkpoint fails (#182)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry {}
+        Mock -ModuleName $module Enable-ToolingCheckpoint {}
+        Mock -ModuleName $module Resume-VM {}
+        # Hyper-V pauses the VM when a device cannot resume after the checkpoint.
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = $script:vmState } }
+        Mock -ModuleName $module Checkpoint-VM { $script:vmState = 'Paused'; throw 'Checkpoint operation failed.' }
+        $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha' }) }
+    }
+
+    It 'resumes a running VM the failed checkpoint left paused, and still reports the failure' {
+        $script:vmState = 'Running'
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) New-ToolingCheckpoint -VM $VM -Name 'Tooling 20261030-180000' } } | Should -Throw -ExpectedMessage '*Checkpoint operation failed*'
+
+        Should -Invoke -ModuleName $module Resume-VM -Times 1 -Exactly -ParameterFilter { $Name -eq 'Alpha' }
+    }
+
+    It 'leaves a VM paused that was already paused before the checkpoint' {
+        $script:vmState = 'Paused'
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) New-ToolingCheckpoint -VM $VM -Name 'Tooling 20261030-180000' } } | Should -Throw
+
+        Should -Invoke -ModuleName $module Resume-VM -Times 0 -Exactly
+    }
+}
