@@ -514,6 +514,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `GuestRemoveApps` | News, Microsoft 365, Xbox | Built-in apps removed at every build, so they stay gone after a rebuild. Your list replaces the default, so copy it and add to it. |
 | `GuestRemoveOneDrive` | true | Removes OneDrive and stops it installing for new users. |
 | `GuestDarkMode`, `GuestShowFileExtensions`, `GuestTaskbarLeft`, `GuestHideWidgets`, `GuestHideTaskbarSearch` | true | Windows appearance in the VM, applied for every user at every build. |
+| `GuestDeveloperMode` | true | Turns on Developer Mode in the VM at every build. Visual Studio needs it to build and run WinUI and other packaged apps. |
 
 ### Adding tools to a VM
 
