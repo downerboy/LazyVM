@@ -20,13 +20,22 @@
     .PARAMETER Name
     The VM. May be left out while there is only one.
 
+    With -WhatIf, says what a run would do without doing any of it: build
+    the VM, rearm, rebuild, or only the daily checks. It reads the VM's
+    evaluation while the VM is running, and starts nothing.
+
     .EXAMPLE
     Invoke-LazyVMMaintenance -Name DevBox
+
+    .EXAMPLE
+    Invoke-LazyVMMaintenance -Name DevBox -WhatIf
+
+    Says whether tonight's run would rearm or rebuild DevBox, changing nothing.
 
     .OUTPUTS
     System.String: what was done - None, Rearmed, Rebuilt or Built.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param(
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
@@ -34,8 +43,14 @@
     )
 
     process {
-        Invoke-CommandRun -Title 'Maintenance' -Name $Name -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware -ScriptBlock {
+        # -WhatIf reads, but records nothing: not even a hardware change in VM.json.
+        Invoke-CommandRun -Title 'Maintenance' -Name $Name -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
             param($VM)
+            if ($WhatIfPreference) {
+                $null = $PSCmdlet.ShouldProcess($VM.Name, (Get-MaintenancePreview -VM $VM))
+                return
+            }
+            if (-not $PSCmdlet.ShouldProcess($VM.Name, 'Run the daily maintenance')) { return }
             Sync-VMProfile -VM $VM
             $step = [MaintenanceStep](Invoke-Maintenance -VM $VM)
             switch ($step) {
