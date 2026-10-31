@@ -97,6 +97,35 @@ function Get-MaintenanceDecision {
     return [MaintenanceDecision]::Rebuild
 }
 
+function Get-MaintenancePreview {
+    <#
+      Invoke-LazyVMMaintenance -WhatIf (#18): what a run would do, as one
+      sentence. Reads the VM's state and, while it is running, its
+      evaluation; changes nothing, and does not start a VM that is off.
+    #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
+    if (-not $machine) { return "Build the VM: it does not exist yet" }
+    $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups)'
+    if ("$($machine.State)" -ne 'Running') {
+        return "Start the VM, which is $($machine.State), then $($daily.Substring(0, 1).ToLower())$($daily.Substring(1)) and act on its evaluation, which was not read while the VM is not running"
+    }
+
+    $null = Open-GuestSession -VM $VM -Purpose 'read the license'
+    $license = Get-GuestLicenseStatus -VM $VM
+    $threshold = $VM.Settings.RebuildThresholdDays
+    switch (Get-MaintenanceDecision -DaysLeft $license.DaysLeft -RearmsLeft $license.RearmsLeft -ThresholdDays $threshold) {
+        ([MaintenanceDecision]::None) {
+            if ($license.DaysLeft -lt 0) { return "$daily; no evaluation countdown, so nothing more" }
+            return "$daily, and capture the state if it changed; $($license.DaysLeft) day(s) of evaluation left, more than $threshold, so no rearm or rebuild"
+        }
+        ([MaintenanceDecision]::Rearm) { return "$daily, then capture the state and rearm Windows: $($license.DaysLeft) day(s) left, within $threshold, and $($license.RearmsLeft) rearm(s) left" }
+        ([MaintenanceDecision]::Rebuild) { return "$daily, then capture the state and rebuild the VM: $($license.DaysLeft) day(s) left and no rearms left" }
+    }
+}
+
 function Get-LicenseReport {
     <# Get-LazyVMLicense: the guest's evaluation license, with the last capture. Starts the VM if it is off. #>
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -130,7 +159,7 @@ function Invoke-Maintenance {
     <#
       The scheduled task's daily work: extends C: into any new space, puts
       the personal folders on the User disk, turns BitLocker on for C: and
-      the persistent disks, records
+      the persistent disks, copies the User disk when it changed, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
       the databases, then does nothing more until the evaluation is close to
@@ -162,6 +191,10 @@ function Invoke-Maintenance {
     # BitLocker on C: and every persistent disk; an older VM's disks are encrypted whole, in the background (#175).
     try { $null = Protect-GuestPersistentDisk -VM $VM }
     catch { Write-LogError 'BitLocker check failed (non-fatal)' $_ }
+
+    # One copy of the User disk, still encrypted, made only when its files changed (#139).
+    try { $null = Backup-UserDisk -VM $VM }
+    catch { Write-LogError 'User disk copy failed (non-fatal)' $_ }
 
     # Tooling every day. A failure here must not stop the license work below.
     try { $null = Update-ToolingRecord -VM $VM }

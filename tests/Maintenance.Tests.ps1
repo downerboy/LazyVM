@@ -23,6 +23,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Expand-GuestSystemDrive { 'stray' }
         Mock -ModuleName $module Install-UserDisk { 'stray' }
         Mock -ModuleName $module Protect-GuestPersistentDisk { 'stray' }
+        Mock -ModuleName $module Backup-UserDisk { 'stray' }
         Mock -ModuleName $module Update-ToolingRecord { }
         Mock -ModuleName $module Update-GuestEnvironmentRecord { }
         Mock -ModuleName $module Update-GuestFirewallRecord { }
@@ -72,6 +73,16 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Protect-GuestPersistentDisk -Times 1 -Exactly
+    }
+
+    It 'backs up the User disk every day, and carries on when that fails (#139)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Backup-UserDisk { throw 'the external disk was unplugged' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Backup-UserDisk -Times 1 -Exactly
     }
 
     It 'captures the state when it changed and nothing else is due (#20)' {
@@ -124,6 +135,43 @@ Describe 'Invoke-GuestRearm' {
 
         $result.Count | Should -Be 1
         $result[0] | Should -BeTrue
+    }
+}
+
+Describe 'Get-MaintenancePreview (#18)' {
+    BeforeEach {
+        Mock -ModuleName $module Open-GuestSession { $false }
+    }
+
+    It 'says the VM would be built when it does not exist' {
+        Mock -ModuleName $module Get-VM { }
+
+        $text = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Get-MaintenancePreview -VM $VM }
+
+        $text | Should -BeLike 'Build*'
+    }
+
+    It 'starts nothing when the VM is off, and says the evaluation was not read' {
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Off' } }
+
+        $text = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Get-MaintenancePreview -VM $VM }
+
+        $text | Should -BeLike '*Off*not read*'
+        Should -Invoke -ModuleName $module Open-GuestSession -Times 0
+    }
+
+    It 'says <Expected> with <DaysLeft> day(s) and <RearmsLeft> rearm(s) left' -ForEach @(
+        @{ DaysLeft = 50; RearmsLeft = 3; Expected = '*no rearm or rebuild*' }
+        @{ DaysLeft = -1; RearmsLeft = 3; Expected = '*no evaluation countdown*' }
+        @{ DaysLeft = 5; RearmsLeft = 2; Expected = '*rearm Windows*' }
+        @{ DaysLeft = 5; RearmsLeft = 0; Expected = '*rebuild the VM*' }
+    ) {
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = $DaysLeft; RearmsLeft = $RearmsLeft } }.GetNewClosure()
+
+        $text = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Get-MaintenancePreview -VM $VM }
+
+        $text | Should -BeLike $Expected
     }
 }
 
