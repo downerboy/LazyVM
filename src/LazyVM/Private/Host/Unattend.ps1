@@ -17,6 +17,10 @@ function New-UnattendXml {
         [Parameter(Mandatory)][securestring]$Password,
         [Parameter(Mandatory)][string]$ComputerName,
         [Parameter(Mandatory)][string]$TimeZone,
+        # Display language, region and formats (en-US). The display language must be on the ISO.
+        [Parameter(Mandatory)][string]$Locale,
+        # Keyboard layout; empty uses the keyboard of $Locale.
+        [string]$InputLocale = '',
         # Where the first-logon command marks the guest as provisioned, in reg.exe's form (HKLM\...).
         [Parameter(Mandatory)][string]$MarkerKey
     )
@@ -28,11 +32,11 @@ function New-UnattendXml {
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
   <settings pass="windowsPE">
     <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-      <SetupUILanguage><UILanguage>en-US</UILanguage></SetupUILanguage>
-      <InputLocale>en-US</InputLocale>
-      <SystemLocale>en-US</SystemLocale>
-      <UILanguage>en-US</UILanguage>
-      <UserLocale>en-US</UserLocale>
+      <SetupUILanguage><UILanguage>@@LOCALE@@</UILanguage></SetupUILanguage>
+      <InputLocale>@@INPUTLOCALE@@</InputLocale>
+      <SystemLocale>@@LOCALE@@</SystemLocale>
+      <UILanguage>@@LOCALE@@</UILanguage>
+      <UserLocale>@@LOCALE@@</UserLocale>
     </component>
     <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
       <DiskConfiguration>
@@ -86,10 +90,10 @@ function New-UnattendXml {
   <settings pass="oobeSystem">
     <!-- Without this, Windows 11 OOBE stops on the region and keyboard pages. -->
     <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-      <InputLocale>en-US</InputLocale>
-      <SystemLocale>en-US</SystemLocale>
-      <UILanguage>en-US</UILanguage>
-      <UserLocale>en-US</UserLocale>
+      <InputLocale>@@INPUTLOCALE@@</InputLocale>
+      <SystemLocale>@@LOCALE@@</SystemLocale>
+      <UILanguage>@@LOCALE@@</UILanguage>
+      <UserLocale>@@LOCALE@@</UserLocale>
     </component>
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
       <OOBE>
@@ -149,11 +153,15 @@ function New-UnattendXml {
     $escComputer = [Security.SecurityElement]::Escape($ComputerName)
     $escTimeZone = [Security.SecurityElement]::Escape($TimeZone)
     $escMarkerKey = [Security.SecurityElement]::Escape($MarkerKey)
+    $escLocale = [Security.SecurityElement]::Escape($Locale)
+    $escInputLocale = if ($InputLocale) { [Security.SecurityElement]::Escape($InputLocale) } else { $escLocale }
 
     $xml = $template.Replace('@@USER@@', $escUser).
     Replace('@@PASSWORD@@', $escPass).
     Replace('@@COMPUTER@@', $escComputer).
     Replace('@@TIMEZONE@@', $escTimeZone).
+    Replace('@@INPUTLOCALE@@', $escInputLocale).
+    Replace('@@LOCALE@@', $escLocale).
     Replace('@@MARKERKEY@@', $escMarkerKey)
 
     # Fail loudly here rather than letting Windows Setup silently ignore a
@@ -227,6 +235,7 @@ function New-UnattendSeedDisk {
 
     $xml = New-UnattendXml -UserName $VM.Runtime.GuestAdminUser -Password $GuestCredential.Password `
         -ComputerName $VM.Settings.GuestComputerName -TimeZone $VM.Settings.GuestTimeZone `
+        -Locale $VM.Settings.GuestLocale -InputLocale $VM.Settings.GuestInputLocale `
         -MarkerKey ($script:GuestMarkerKey -replace '^HKLM:', 'HKLM')
 
     # IMAPI2 builds an image from a folder, so the answer file is written to
