@@ -158,6 +158,21 @@ Describe 'Add-VMScsiHardDisk' {
         } -ParameterFilter { $null -eq $ControllerLocation }
     }
 
+    It 'chooses the gap a removed DVD drive left' {
+        # The DVD drive at 1 was removed; the Windows ISO is at 2 and a data disk at 3.
+        Mock -ModuleName $module Get-VMDvdDrive { [pscustomobject]@{ ControllerType = 'SCSI'; ControllerNumber = 0; ControllerLocation = 2; Path = 'C:\ISO\win.iso' } }
+        Mock -ModuleName $module Get-VMHardDiskDrive {
+            [pscustomobject]@{ ControllerType = 'SCSI'; ControllerNumber = 0; ControllerLocation = 0; Path = 'C:\VM\OS.vhdx' }
+            [pscustomobject]@{ ControllerType = 'SCSI'; ControllerNumber = 0; ControllerLocation = 3; Path = 'C:\VM\SQL.vhdx' }
+        } -ParameterFilter { $null -eq $ControllerLocation }
+        Mock -ModuleName $module Add-VMHardDiskDrive { }
+
+        $location = InModuleScope $module { Add-VMScsiHardDisk -VMName 'NewBox' -Path 'C:\VM\DevDrive.vhdx' }
+
+        $location | Should -Be 1
+        Should -Invoke -ModuleName $module Add-VMHardDiskDrive -Times 1 -Exactly -ParameterFilter { $ControllerLocation -eq 1 -and $Path -eq 'C:\VM\DevDrive.vhdx' }
+    }
+
     It 'goes on when Hyper-V attaches the disk but then fails to describe it' {
         Mock -ModuleName $module Add-VMHardDiskDrive { throw "Unable to cast object of type 'Microsoft.HyperV.PowerShell.DvdDrive' to type 'Microsoft.HyperV.PowerShell.HardDiskDrive'." }
         Mock -ModuleName $module Get-VMHardDiskDrive {
