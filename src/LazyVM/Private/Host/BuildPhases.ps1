@@ -71,7 +71,9 @@ function Invoke-BuildPhase {
       Runs the phases from $FromPhase on. The Windows ISO is found first,
       before anything changes on the host, while whoever started the run is
       still there to fetch it; a host restart would hand it to the resume
-      task, which runs as SYSTEM and can only log it. Returns a BuildOutcome.
+      task, which runs as SYSTEM and can only log it. Returns a BuildOutcome:
+      CompleteWithProblems when a phase returned it, because a step in it
+      failed and the phase carried on.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -82,12 +84,20 @@ function Invoke-BuildPhase {
     Initialize-InstallationIso -VM $VM
 
     $run = @{ NoUnattend = [bool]$NoUnattend; UseUnattend = $false }
+    $withProblems = [System.Collections.Generic.List[int]]::new()
     foreach ($phase in @(Get-BuildPhase | Where-Object { $_.Number -ge $FromPhase })) {
         Write-LogEntry "PHASE $($phase.Number) - $($phase.Name)" 'PHASE'
         $outcome = @(& $phase.Action $VM $run) | Where-Object { $_ -is [BuildOutcome] } | Select-Object -Last 1
         if ($outcome -eq [BuildOutcome]::RestartPending) { return [BuildOutcome]::RestartPending }
-        Write-LogEntry "Phase $($phase.Number) complete" 'OK'
+        if ($outcome -eq [BuildOutcome]::CompleteWithProblems) {
+            $withProblems.Add($phase.Number)
+            Write-LogEntry "Phase $($phase.Number) finished with problems - see the errors above" 'WARN'
+        }
+        else {
+            Write-LogEntry "Phase $($phase.Number) complete" 'OK'
+        }
     }
+    if ($withProblems.Count -gt 0) { return [BuildOutcome]::CompleteWithProblems }
     return [BuildOutcome]::Complete
 }
 
@@ -109,6 +119,6 @@ function Invoke-VMBuild {
     if ($startPhase -gt 0) { Write-LogEntry "Starting at Phase $startPhase" 'INFO' }
 
     $outcome = Invoke-BuildPhase -VM $VM -FromPhase $startPhase -NoUnattend:$NoUnattend
-    if ($outcome -eq [BuildOutcome]::Complete) { Unregister-ResumeTask -VM $VM }
+    if ($outcome -ne [BuildOutcome]::RestartPending) { Unregister-ResumeTask -VM $VM }
     return $outcome
 }

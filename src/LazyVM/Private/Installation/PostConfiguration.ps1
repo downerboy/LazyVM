@@ -2,7 +2,7 @@
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 function Complete-GuestConfiguration {
-    <# Phase 8. Each step is isolated: one that fails is logged and the rest still run. #>
+    <# Phase 8. Each step is isolated: one that fails is logged and the rest still run, and the phase returns CompleteWithProblems. #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
@@ -26,4 +26,5 @@ function Complete-GuestConfiguration {
         [pscustomobject]@{ Name = '8d - database restore'; Action = { $null = Connect-GuestSqlInstance -VM $VM; Restore-SqlDatabase -VM $VM } }
     )
     if ($run.Failures.Count -eq 0) { Write-LogEntry 'Phase 8 complete' 'OK' }
+    else { return [BuildOutcome]::CompleteWithProblems }
 }

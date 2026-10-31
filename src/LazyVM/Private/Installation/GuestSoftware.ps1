@@ -85,7 +85,7 @@ function Install-GuestSoftware {
     }
 
     Initialize-VMTooling -VM $VM
-    Write-ToolingReinstallReport -VM $VM -Tooling $tooling
+    if (-not (Write-ToolingReinstallReport -VM $VM -Tooling $tooling)) { return [BuildOutcome]::CompleteWithProblems }
 }
 
 function Wait-GuestNetwork {

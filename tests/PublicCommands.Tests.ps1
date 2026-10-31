@@ -146,6 +146,15 @@ Describe 'Build-LazyVM' {
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*restarting*' }
     }
 
+    It 'does not call the VM ready when a phase finished with problems (#226)' {
+        Mock -ModuleName $module Invoke-VMBuild { 'CompleteWithProblems' }
+
+        Build-LazyVM -Name Alpha
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { $Message -like '*is ready*' }
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*some steps failed*' -and $Level -eq 'WARN' }
+    }
+
     It 'brings the VM''s configuration up to date before building' {
         Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
 

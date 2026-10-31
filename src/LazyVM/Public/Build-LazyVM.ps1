@@ -97,7 +97,13 @@
 
             Write-LogEntry '' 'INFO'
             Write-LogEntry '========================================================' 'INFO'
-            Write-LogEntry "  All phases complete. $($VM.Name) is ready." 'OK'
+            if ($outcome -eq [BuildOutcome]::CompleteWithProblems) {
+                Write-LogEntry "  All phases ran, but some steps failed. $($VM.Name) can be used; fix what the log reports," 'WARN'
+                Write-LogEntry '  then run that phase again with -FromPhase.' 'WARN'
+            }
+            else {
+                Write-LogEntry "  All phases complete. $($VM.Name) is ready." 'OK'
+            }
             Write-LogEntry "  Log : $($VM.Settings.LogFile)" 'INFO'
             Write-LogEntry '========================================================' 'INFO'
         }
