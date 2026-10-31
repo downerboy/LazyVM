@@ -242,7 +242,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         { InModuleScope $module -Parameters @{ Root = $root } {
                 param($Root)
-                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Beta\Disks\Beta-SQL.vhdx" })
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Beta\Disks\Beta-SQL.vhdx" })
                 Add-SqlDataDisk -VM $vm
             } } | Should -Throw -ExpectedMessage "*belongs to the VM 'Beta'*"
 
@@ -256,7 +256,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
             Add-SqlDataDisk -VM $vm
         }
 
@@ -270,7 +270,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
             Add-SqlDataDisk -VM $vm
         }
 
@@ -283,7 +283,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         { InModuleScope $module -Parameters @{ Root = $root } {
                 param($Root)
-                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
                 Add-SqlDataDisk -VM $vm
             } } | Should -Throw
 
@@ -296,7 +296,7 @@ Describe 'Refusing a data disk another VM owns (#138)' {
 
         { InModuleScope $module -Parameters @{ Root = $root } {
                 param($Root)
-                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; InstallSqlServer = $true; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
                 Add-SqlDataDisk -VM $vm
             } } | Should -Throw
 
