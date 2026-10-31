@@ -91,6 +91,18 @@ function Invoke-Rebuild {
     return $false
 }
 
+function Remove-VMCheckpointTree {
+    <#
+      Deletes every checkpoint of the VM. Only the root checkpoints are
+      named, each with its children: naming a child too would delete it
+      twice, and Hyper-V fails the second delete (#194).
+    #>
+    param([Parameter(Mandatory)][string]$VMName)
+
+    $roots = @(Get-VMSnapshot -VMName $VMName -ErrorAction Stop | Where-Object { -not $_.ParentSnapshotName })
+    if ($roots.Count -gt 0) { Remove-VMSnapshot -VMName $VMName -Name @($roots.Name) -IncludeAllChildSnapshots -Confirm:$false -ErrorAction Stop }
+}
+
 function Invoke-RetireCurrentVM {
     <# Shuts the guest down and moves its OS disk and configuration folder aside under a dated name. Deletes nothing it cannot rebuild. #>
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -113,7 +125,7 @@ function Invoke-RetireCurrentVM {
     # make the rename meaningless.
     if (@(Get-VMSnapshot -VMName $VM.Name -ErrorAction SilentlyContinue).Count -gt 0) {
         Write-LogEntry 'Removing the checkpoints before retiring the disk...' 'WARN'
-        Remove-VMSnapshot -VMName $VM.Name -IncludeAllChildSnapshots -Confirm:$false
+        Remove-VMCheckpointTree -VMName $VM.Name
         $null = Wait-Until -Activity 'Merging the checkpoints' -Timeout ([timespan]::FromMinutes(30)) -NoThrow -Condition {
             @(Get-VMSnapshot -VMName $VM.Name -ErrorAction SilentlyContinue).Count -eq 0
         }
