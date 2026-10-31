@@ -77,6 +77,7 @@ BeforeAll {
             DevDrivePath      = "$Root\Alpha\Disks\Alpha-DevDrive.vhdx"
             UserDiskPath      = "$Root\Alpha\Disks\Alpha-User.vhdx"
             UseDevDrive       = $true
+            InstallSqlServer  = $true
         }
     }
 

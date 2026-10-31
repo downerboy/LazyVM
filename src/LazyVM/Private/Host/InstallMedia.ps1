@@ -142,6 +142,10 @@ function Initialize-SqlServerIso {
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $settings = $VM.Settings
+    if (-not $settings.InstallSqlServer) {
+        Write-LogEntry 'SQL Server turned off in the settings (InstallSqlServer) - skipping' 'INFO'
+        return
+    }
     if (Test-IsoFile -Path $settings.SQLIsoPath) {
         Write-LogEntry "SQL Server ISO - OK ($(Format-Size (Get-Item -LiteralPath $settings.SQLIsoPath).Length)) at $($settings.SQLIsoPath)" 'OK'
         return
