@@ -576,6 +576,45 @@ Describe 'The tooling list in VM.json (#130)' {
         }
     }
 
+    Context 'when a build ends (#30)' {
+        BeforeEach {
+            Mock -ModuleName $module Get-GuestToolingInventory {
+                [pscustomobject]@{
+                    Products       = @()
+                    WingetPackages = @([pscustomobject]@{ Id = 'Git.Git'; Source = 'winget' }, [pscustomobject]@{ Id = 'Notepad++.Notepad++'; Source = 'winget' })
+                    Programs       = @([pscustomobject]@{ Name = 'Git'; Publisher = 'Test Publisher' })
+                }
+            }
+            Mock -ModuleName $module Add-MarketplaceItem {}
+            Mock -ModuleName $module New-ToolingCheckpoint {}
+        }
+
+        It 'records what the guest has as the VM''s tooling list, with no checkpoint, when VM.json has none yet' {
+            $root = New-TestVM -Settings @{ vCPU = 4 }
+
+            InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                Initialize-VMTooling -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) 6>$null
+            }
+
+            $vmProfile = Read-TestProfile -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
+            @($vmProfile.Tooling.WingetPackages | ForEach-Object { $_.Id }) | Should -Be @('Git.Git', 'Notepad++.Notepad++')
+            Should -Invoke New-ToolingCheckpoint -ModuleName $module -Times 0 -Exactly
+        }
+
+        It 'leaves a tooling list VM.json already has as it is' {
+            $root = New-TestVM -Settings @{ vCPU = 4; Tooling = $buildList }
+
+            InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                Initialize-VMTooling -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)) 6>$null
+            }
+
+            $vmProfile = Read-TestProfile -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
+            @($vmProfile.Tooling.WingetPackages | ForEach-Object { $_.Id }) | Should -Be @('Git.Git')
+        }
+    }
+
     It 'refuses to read the list of a VM whose Tooling.json has not been folded into VM.json yet' {
         $root = New-TestVM -Settings @{ vCPU = 4 }
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value (ConvertTo-Json -InputObject $buildList -Depth 10)

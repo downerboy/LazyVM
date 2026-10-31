@@ -82,6 +82,7 @@ function Install-GuestSoftware {
         Install-WingetPackage -VM $VM -Packages @($tooling.WingetPackages)
     }
 
+    Initialize-VMTooling -VM $VM
     Write-ToolingReinstallReport -VM $VM -Tooling $tooling
 }
 

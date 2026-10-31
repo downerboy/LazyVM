@@ -710,9 +710,12 @@ The log is the first place to look: `D:\DevVM\DevBox\Logs\DevBox.log`. Every lin
 |---|---|
 | "LazyVM does not know which folder to keep its VMs in yet" | Run `Build-LazyVM -Name DevBox`, which chooses one, or `Set-LazyVMRoot -Path D:\DevVM`. |
 | "The term 'Build-LazyVM' is not recognized" | You are in Windows PowerShell 5.1, or the module is not installed. Open PowerShell 7 (`pwsh`) as administrator; if it persists, run `./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out` again. |
+| "The token '&&' is not a valid statement separator in this version" | You are in Windows PowerShell 5.1, which has no `&&`. The title bar says "Windows PowerShell" and `$PSVersionTable.PSVersion` shows 5.1. Open PowerShell 7 (`pwsh`) as administrator and run the command there. |
+| A path like `S:SourceLazyVM` appears, or "No such file or directory", after cloning or running commands in Git Bash | Git Bash (MINGW) treats `\` as an escape character, so `S:\Source\LazyVM` loses its backslashes. Run the commands in PowerShell 7 instead, or in Git Bash write the path as `/s/Source/LazyVM`. |
 | "LazyVM needs an elevated PowerShell" | Start PowerShell 7 with Run as administrator. |
 | "No stored guest credential" | Store one with `Set-LazyVMCredential`, for an account that is a local administrator inside the VM. |
 | The VM never becomes reachable | Open the VM's console. Windows Setup may be waiting on something, or the stored password may not match the account. Check by signing in at the console with the password `Get-LazyVMCredential -AsPlainText` shows. |
+| The password cannot be pasted into the VM's sign-in box | A basic VMConnect session has no clipboard. Copy the password on the host, then in VMConnect choose Clipboard > Type clipboard text: it types the text as keystrokes, so the VM's keyboard layout must match the host's. Or connect with an [enhanced session](#enhanced-session-mode), whose sign-in dialog accepts a paste. |
 | "No valid Windows installation ISO" | The file at the configured path is not a real ISO, most often the registration page saved with an `.iso` name. Download the image by hand and save it in the `Shared\ISO` folder. |
 | "SQL Server ISO - download failed" | The download address may have changed. Download the SQL Server 2025 Enterprise Developer ISO by hand and save it as the path the message gives, or set `SQLIsoUrl`. |
 | "This settings file has N problem(s), so none of it was used" | The message lists every problem, with the file and the setting. Open the file in VS Code: the same problems are underlined. |

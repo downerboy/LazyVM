@@ -107,6 +107,55 @@ function Add-VMScsiHardDisk {
     return $location
 }
 
+function Get-VhdDiskGuid {
+    <#
+      The GPT disk GUID inside the VHDX at $Path, read on the host by
+      mounting it read-only without a drive letter, then dismounting it.
+      $null for a disk not initialised yet. Throws when it cannot be read.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    $vhd = Mount-VHD -Path $Path -ReadOnly -NoDriveLetter -Passthru -ErrorAction Stop
+    try {
+        $guid = "$((Get-Disk -Number $vhd.DiskNumber -ErrorAction Stop).Guid)"
+    }
+    finally {
+        Dismount-VHD -Path $Path -ErrorAction SilentlyContinue
+    }
+    if (-not $guid) { return $null }
+    return $guid.ToUpperInvariant()
+}
+
+function Assert-DataDiskNotOwnedElsewhere {
+    <#
+      Throws when another VM's VM.json records the GPT disk GUID of the disk
+      at $Path, so one VM's data never reaches another (#138). A rebuild
+      keeps the VM's own VM.json, so its replacement owns the disks already.
+      Fails closed: a GUID that cannot be read, or a VM.json that cannot be
+      read, stops the attach too.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    try { $guid = Get-VhdDiskGuid -Path $Path }
+    catch { throw "Could not read the GPT disk GUID of the $Label at $Path to check that no other VM owns it, so it was not attached: $($_.Exception.Message)" }
+    if (-not $guid) { return }
+
+    $root = $VM.Settings.Root
+    $guidSettings = @($script:DataDiskIdentitySettings | Where-Object { $_ -like '*Guid' })
+    foreach ($other in @(Get-VMProfileName -Root $root | Where-Object { $_ -ne $VM.Name })) {
+        $recorded = Read-SettingsFile -Path (Get-VMProfilePath -Root $root -Name $other)
+        foreach ($setting in $guidSettings) {
+            if ("$($recorded[$setting])" -eq $guid) {
+                throw "The $Label at $Path belongs to the VM '$other' (its VM.json records GPT disk GUID $guid as its $setting), so it was not attached to '$($VM.Name)'. Each VM's disks stay its own: point $($VM.Name)'s setting at a disk of its own."
+            }
+        }
+    }
+}
+
 function Add-VMDataDisk {
     <#
       Attaches the disk at $Path to the VM unless it already is, records the
@@ -126,6 +175,7 @@ function Add-VMDataDisk {
         Write-LogEntry "$Label already attached" 'OK'
         return
     }
+    Assert-DataDiskNotOwnedElsewhere -VM $VM -Path $Path -Label $Label
     $location = Add-VMScsiHardDisk -VMName $VM.Name -Path $Path
     Write-LogEntry "$Label attached (SCSI 0:$location)" 'OK'
     $null = Update-VMProfile -Root $VM.Settings.Root -Name $VM.Name -Change @{ $LocationSetting = $location } -Reason "$Label attached"
