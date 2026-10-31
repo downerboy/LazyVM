@@ -7,12 +7,14 @@
 function Initialize-SqlDataVhd {
     param([Parameter(Mandatory)][VMContext]$VM)
 
+    if (-not $VM.Settings.InstallSqlServer) { return }
     Initialize-DataVhd -Path $VM.Settings.SQLDiskPath -SizeGB $VM.Settings.SQLDiskSizeGB -Label 'SQL data disk'
 }
 
 function Add-SqlDataDisk {
     param([Parameter(Mandatory)][VMContext]$VM)
 
+    if (-not $VM.Settings.InstallSqlServer) { return }
     Add-VMDataDisk -VM $VM -Path $VM.Settings.SQLDiskPath -Label 'SQL data disk' -LocationSetting 'SQLDiskScsiLocation'
 }
 
@@ -31,6 +33,7 @@ function Initialize-GuestSqlDisk {
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
+    if (-not $VM.Settings.InstallSqlServer) { return }
     Write-LogEntry 'Preparing the SQL data disk inside the guest...' 'INFO'
     $settings = $VM.Settings
     $identity = Get-DataDiskIdentity -VM $VM -GuidSetting 'SQLDiskGuid' -LocationSetting 'SQLDiskScsiLocation' -Path $settings.SQLDiskPath

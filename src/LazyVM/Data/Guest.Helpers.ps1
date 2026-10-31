@@ -835,8 +835,9 @@ function Start-GuestTask {
     <#
       Writes the wrapper, the work and its arguments to $SetupDir, registers
       the task and starts it. As SYSTEM, or with -UserName as that signed-in
-      user under their normal (limited) token. Returns the boot time, so the
-      host can tell when the guest restarted.
+      user under their normal (limited) token, or with -Elevated their full
+      one. Returns the boot time, so the host can tell when the guest
+      restarted.
     #>
     param(
         [Parameter(Mandatory)][string]$TaskName,
@@ -844,6 +845,7 @@ function Start-GuestTask {
         [Parameter(Mandatory)][string]$Work,
         [object[]]$ArgumentList = @(),
         [string]$UserName,
+        [switch]$Elevated,
         [Parameter(Mandatory)][int]$TimeoutSeconds
     )
 
@@ -857,7 +859,7 @@ function Start-GuestTask {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$base.ps1`""
     $principal = if ($UserName) {
-        New-ScheduledTaskPrincipal -UserId $UserName -LogonType Interactive -RunLevel Limited
+        New-ScheduledTaskPrincipal -UserId $UserName -LogonType Interactive -RunLevel $(if ($Elevated) { 'Highest' } else { 'Limited' })
     }
     else {
         New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest

@@ -530,6 +530,11 @@
       "minimum": 0,
       "maximum": 63
     },
+    "InstallSqlServer": {
+      "type": "boolean",
+      "default": true,
+      "description": "Give the VM SQL Server and its SQL data disk. When false, the build downloads no SQL Server media, creates and attaches no SQL data disk and installs no SQL Server, and capture and restore leave SQL out. Set it in the VM's VM.json; the shared settings file only supplies the default for new VMs."
+    },
     "MoveSqlDataToDataDisk": {
       "type": "boolean",
       "default": true,
