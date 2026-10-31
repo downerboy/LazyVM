@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.21.1](https://github.com/downerboy/LazyVM/compare/v4.21.0...v4.21.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* keep the retired OS disk when a rebuild finished with problems ([#245](https://github.com/downerboy/LazyVM/issues/245)) ([67a2008](https://github.com/downerboy/LazyVM/commit/67a2008d2a85255154563183973357d6a1a9d231))
+
 ## [4.21.0](https://github.com/downerboy/LazyVM/compare/v4.20.0...v4.21.0) (2026-10-31)
 
 
