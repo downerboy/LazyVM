@@ -112,7 +112,8 @@ function Wait-GuestReady {
       enough: the answer file's first-logon marker must be there too, because
       the account exists, and answers PowerShell Direct, while OOBE is still
       on screen. Each new reason the guest is not reachable yet is logged, and
-      the last one is given if the wait runs out.
+      if the wait runs out, the reason it was not ready at the last try is
+      given: an error from an earlier try can be long out of date (#227).
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -123,7 +124,7 @@ function Wait-GuestReady {
 
     Write-LogEntry "Waiting up to $TimeoutMinutes minutes for the guest to finish installing and reach the desktop..." 'INFO'
     $started = Get-Date
-    $progress = @{ Said = @{}; LastError = '' }
+    $progress = @{ Said = @{}; LastError = ''; NotReadyBecause = '' }
 
     # Logs a status line the first time it applies, not on every try.
     $sayOnce = {
@@ -136,6 +137,7 @@ function Wait-GuestReady {
         $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
         if (-not $machine) { throw "VM '$($VM.Name)' disappeared while waiting." }
         if ($machine.State -ne 'Running') {
+            $p.NotReadyBecause = "the VM was '$($machine.State)'"
             & $sayOnce $p 'start' "VM state is '$($machine.State)' - starting it"
             Start-VM -Name $VM.Name -ErrorAction SilentlyContinue | Out-Null
             return $null
@@ -144,6 +146,7 @@ function Wait-GuestReady {
         # Heartbeat first: cheap, and it says the OS is actually up.
         $heartbeat = Get-VMIntegrationService -VMName $VM.Name -Name 'Heartbeat' -ErrorAction SilentlyContinue
         if (-not $heartbeat -or $heartbeat.PrimaryStatusDescription -ne 'OK') {
+            $p.NotReadyBecause = 'the guest never reported a heartbeat, so Windows did not start'
             & $sayOnce $p 'heartbeat' 'guest is still installing (no heartbeat yet)'
             return $null
         }
@@ -161,6 +164,7 @@ function Wait-GuestReady {
             finally { Remove-PSSession -Session $session -ErrorAction SilentlyContinue -WhatIf:$false }
         }
         catch {
+            $p.NotReadyBecause = "the guest could not be reached: $($_.Exception.Message)"
             if ($_.Exception.Message -ne $p.LastError) {
                 $p.LastError = $_.Exception.Message
                 Write-LogEntry "  guest not reachable yet: $($p.LastError)" 'INFO'
@@ -169,6 +173,7 @@ function Wait-GuestReady {
         }
 
         if ($RequireProvisioned -and -not $provisioned) {
+            $p.NotReadyBecause = 'the guest was reachable, but the first-logon marker never appeared, so Windows Setup or the first logon did not finish'
             & $sayOnce $p 'oobe' 'guest is reachable but Windows is still finishing setup (OOBE)'
             return $null
         }
@@ -176,8 +181,8 @@ function Wait-GuestReady {
     }
 
     if (-not $ready) {
-        $reason = if ($progress.LastError) { " The last error was: $($progress.LastError)" } else { '' }
-        throw "The guest did not become reachable within $TimeoutMinutes minutes. Open the VM console to see where Setup stopped.$reason"
+        $reason = if ($progress.NotReadyBecause) { ": $($progress.NotReadyBecause)" } else { '' }
+        throw "The guest was not ready within $TimeoutMinutes minutes$reason. Open the VM console to see where Setup stopped."
     }
 
     $elapsed = [int]((Get-Date) - $started).TotalMinutes
