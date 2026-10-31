@@ -470,7 +470,7 @@ Describe 'Install-OfficialInstaller' {
             [pscustomobject]@{ Products = @($observedProduct); WingetPackages = @(); Programs = @([pscustomobject]@{ Name = 'Git'; Publisher = 'P' }) }
         }.GetNewClosure()
         # The guest returns the file it checked, inside the folder it was given.
-        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ FilePath = "$($ArgumentList[3])\installer.exe"; Kind = 'exe'; Sha256 = ('b' * 64) } }
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ FilePath = "C:\Windows\Temp\$($ArgumentList[3])\installer.exe"; Kind = 'exe'; Sha256 = ('b' * 64) } }
         Mock -ModuleName $module Invoke-GuestTask { '0' }
     }
 
@@ -491,7 +491,7 @@ Describe 'Install-OfficialInstaller' {
     }
 
     It 'runs an .msi through msiexec' {
-        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ FilePath = "$($ArgumentList[3])\installer.msi"; Kind = 'msi'; Sha256 = ('b' * 64) } }
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ FilePath = "C:\Windows\Temp\$($ArgumentList[3])\installer.msi"; Kind = 'msi'; Sha256 = ('b' * 64) } }
         $tooling = New-TestRecord -Programs @([ordered]@{ Name = 'Tool'; Publisher = 'P' }) -Installers @(New-TestInstaller -Name 'Tool' -Arguments @('/qn'))
 
         InModuleScope $module -Parameters @{ Tooling = $tooling } {
@@ -500,7 +500,7 @@ Describe 'Install-OfficialInstaller' {
         }
 
         Should -Invoke Invoke-GuestTask -ModuleName $module -Times 1 -Exactly -ParameterFilter {
-            $ArgumentList[2] -eq 'msiexec.exe' -and $ArgumentList[3] -like '/i C:\LazyVM\installers\*\installer.msi /qn'
+            $ArgumentList[2] -eq 'msiexec.exe' -and $ArgumentList[3] -like '/i C:\Windows\Temp\LazyVM-*\installer.msi /qn'
         }
     }
 
@@ -552,6 +552,18 @@ Describe 'Install-OfficialInstaller' {
         }
 
         Should -Invoke Invoke-GuestScript -ModuleName $module -Times 0 -Exactly
+        Should -Invoke Invoke-GuestTask -ModuleName $module -Times 0 -Exactly
+    }
+
+    It 'never runs a file the guest reports outside the folder made for it' {
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ FilePath = "C:\Windows\Temp\$($ArgumentList[3])\..\..\..\Users\Public\installer.exe"; Kind = 'exe'; Sha256 = ('b' * 64) } }
+        $tooling = New-TestRecord -Programs @([ordered]@{ Name = 'JetBrains ReSharper'; Publisher = 'P' }) -Installers @(New-TestInstaller)
+
+        InModuleScope $module -Parameters @{ Tooling = $tooling } {
+            param($Tooling)
+            Install-OfficialInstaller -VM ([VMContext]::new(@{ VMName = 'Alpha'; GuestSetupDir = 'C:\LazyVM'; ToolingWingetExclude = @() })) -Tooling ([ToolingRecord]::FromObject($Tooling))
+        }
+
         Should -Invoke Invoke-GuestTask -ModuleName $module -Times 0 -Exactly
     }
 

@@ -773,19 +773,20 @@ function Get-GuestInstallerProblem {
 function New-GuestPrivateFolder {
     <#
       A new, empty folder only administrators and SYSTEM can change, for a
-      download that is checked and then run. Whatever was at $Path goes.
+      download that is checked and then run. Created with its ACL in one
+      step, so no one else can put anything in it first. Fails if anything
+      is already at $Path.
     #>
     param([Parameter(Mandatory)][string]$Path)
 
-    if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Recurse -Force }
-    $null = New-Item -ItemType Directory -Path $Path -Force
+    if (Test-Path -LiteralPath $Path) { throw "$Path already exists" }
     $acl = New-Object System.Security.AccessControl.DirectorySecurity
     $acl.SetAccessRuleProtection($true, $false)
     foreach ($sid in 'S-1-5-32-544', 'S-1-5-18') {
         $identity = New-Object System.Security.Principal.SecurityIdentifier($sid)
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
     }
-    Set-Acl -LiteralPath $Path -AclObject $acl
+    $null = [IO.Directory]::CreateDirectory($Path, $acl)
 }
 
 function Get-GuestInstallerInstance {

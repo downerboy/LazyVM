@@ -125,13 +125,18 @@ function Install-OfficialInstallerItem {
         return
     }
 
-    $folder = Join-Path -Path $VM.Settings.GuestSetupDir -ChildPath ('installers\{0}' -f [guid]::NewGuid().ToString('N'))
+    # The download folder is in the guest's Windows\Temp, where other users
+    # can neither rename nor replace it (unlike GuestSetupDir, which inherits
+    # C:\'s Modify for Authenticated Users), so the file the task runs is
+    # always in the folder that was checked.
+    $folderName = 'LazyVM-{0}' -f [guid]::NewGuid().ToString('N')
     try {
         $prepared = Invoke-GuestScript -VM $VM -Activity "$label download" -TimeoutMinutes 45 `
-            -ArgumentList @($Installer.Url, $Installer.Publisher, $Installer.Sha256, $folder) -ScriptBlock {
-            param($url, $publisher, $sha256, $folder)
+            -ArgumentList @($Installer.Url, $Installer.Publisher, $Installer.Sha256, $folderName) -ScriptBlock {
+            param($url, $publisher, $sha256, $folderName)
             $ErrorActionPreference = 'Stop'
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            $folder = Join-Path (Join-Path $env:SystemRoot 'Temp') $folderName
             New-GuestPrivateFolder -Path $folder
             try {
                 $download = Join-Path $folder 'download'
@@ -163,7 +168,8 @@ function Install-OfficialInstallerItem {
     $kind = [RecordReader]::Text($prepared, 'Kind')
     $filePath = [RecordReader]::Text($prepared, 'FilePath')
     $sha256 = [RecordReader]::Text($prepared, 'Sha256')
-    if ($kind -notin 'exe', 'msi' -or $sha256 -notmatch '^[0-9A-Fa-f]{64}$' -or -not $filePath.StartsWith("$folder\", [StringComparison]::OrdinalIgnoreCase)) {
+    $expected = '^[A-Za-z]:\\Windows\\Temp\\{0}\\installer\.{1}$' -f [regex]::Escape($folderName), $kind
+    if ($kind -notin 'exe', 'msi' -or $sha256 -notmatch '^[0-9A-Fa-f]{64}$' -or $filePath -notmatch $expected) {
         Write-LogEntry "$label - not installed: the guest's check of the download returned something unexpected" 'WARN'
         return
     }
@@ -188,10 +194,10 @@ function Install-OfficialInstallerItem {
     }
     finally {
         try {
-            $null = Invoke-GuestScript -VM $VM -Activity "tidying up after $label" -TimeoutMinutes 2 -ArgumentList @($folder) -ScriptBlock {
-                param($folder) Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
+            $null = Invoke-GuestScript -VM $VM -Activity "tidying up after $label" -TimeoutMinutes 2 -ArgumentList @($folderName) -ScriptBlock {
+                param($folderName) Remove-Item -LiteralPath (Join-Path (Join-Path $env:SystemRoot 'Temp') $folderName) -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
-        catch { Write-LogEntry "  could not remove $folder in the guest: $($_.Exception.Message)" 'INFO' }
+        catch { Write-LogEntry "  could not remove Windows\Temp\$folderName in the guest: $($_.Exception.Message)" 'INFO' }
     }
 }
