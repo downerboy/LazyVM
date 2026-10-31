@@ -205,12 +205,115 @@ Describe 'Add-VMDataDisk' {
     }
 }
 
+Describe 'Refusing a data disk another VM owns (#138)' {
+    BeforeAll {
+        function Add-TestVM {
+            <# Adds a VM named $Name, whose VM.json is $VMJson, to the root folder. #>
+            param(
+                [Parameter(Mandatory)][string]$Root,
+                [Parameter(Mandatory)][string]$Name,
+                [string]$VMJson = '{}'
+            )
+
+            $configDir = Join-Path -Path $Root -ChildPath "$Name/Config"
+            New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path -Path $configDir -ChildPath 'VM.json') -Value $VMJson
+        }
+    }
+
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Test-Unattended { $false }
+        Mock -ModuleName $module Start-Sleep { }
+        Mock -ModuleName $module Get-VMHardDiskDrive { }
+        Mock -ModuleName $module Add-VMScsiHardDisk { 3 }
+        Mock -ModuleName $module Mount-VHD { [pscustomobject]@{ Path = $Path; DiskNumber = 7 } }
+        Mock -ModuleName $module Dismount-VHD { }
+    }
+
+    It 'refuses a disk whose GPT disk GUID another VM records as its <Setting>, and does not attach it' -ForEach @(
+        @{ Setting = 'SQLDiskGuid' }
+        @{ Setting = 'DevDriveGuid' }
+        @{ Setting = 'UserDiskGuid' }
+    ) {
+        $root = New-TestRoot
+        Add-TestVM -Root $root -Name 'Beta' -VMJson "{ `"$Setting`": `"$sqlGuid`" }"
+        Mock -ModuleName $module Get-Disk { [pscustomobject]@{ Number = 7; Guid = $sqlGuid.ToLowerInvariant() } }
+
+        { InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Beta\Disks\Beta-SQL.vhdx" })
+                Add-SqlDataDisk -VM $vm
+            } } | Should -Throw -ExpectedMessage "*belongs to the VM 'Beta'*"
+
+        Should -Invoke -ModuleName $module Add-VMScsiHardDisk -Times 0
+    }
+
+    It 'attaches a disk whose GPT disk GUID only this VM records, as after a rebuild' {
+        $root = New-TestRoot -VMJson "{ `"SQLDiskGuid`": `"$sqlGuid`" }"
+        Add-TestVM -Root $root -Name 'Beta' -VMJson "{ `"SQLDiskGuid`": `"$otherGuid`" }"
+        Mock -ModuleName $module Get-Disk { [pscustomobject]@{ Number = 7; Guid = $sqlGuid } }
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+            Add-SqlDataDisk -VM $vm
+        }
+
+        Should -Invoke -ModuleName $module Add-VMScsiHardDisk -Times 1
+    }
+
+    It 'attaches a new disk that has no GPT disk GUID yet' {
+        $root = New-TestRoot
+        Add-TestVM -Root $root -Name 'Beta' -VMJson "{ `"SQLDiskGuid`": `"$otherGuid`" }"
+        Mock -ModuleName $module Get-Disk { [pscustomobject]@{ Number = 7; Guid = '' } }
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+            Add-SqlDataDisk -VM $vm
+        }
+
+        Should -Invoke -ModuleName $module Add-VMScsiHardDisk -Times 1
+    }
+
+    It 'dismounts the disk on the host once its GPT disk GUID is read' {
+        $root = New-TestRoot
+        Mock -ModuleName $module Get-Disk { throw 'the disk vanished' }
+
+        { InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+                Add-SqlDataDisk -VM $vm
+            } } | Should -Throw
+
+        Should -Invoke -ModuleName $module Dismount-VHD -Times 1
+    }
+
+    It 'refuses to attach a disk whose GPT disk GUID cannot be read' {
+        $root = New-TestRoot
+        Mock -ModuleName $module Mount-VHD { throw 'The process cannot access the file because it is being used by another process.' }
+
+        { InModuleScope $module -Parameters @{ Root = $root } {
+                param($Root)
+                $vm = [VMContext]::new(@{ VMName = 'Alpha'; Root = $Root; SQLDiskPath = "$Root\Alpha\Disks\Alpha-SQL.vhdx" })
+                Add-SqlDataDisk -VM $vm
+            } } | Should -Throw
+
+        Should -Invoke -ModuleName $module Add-VMScsiHardDisk -Times 0
+    }
+}
+
 Describe 'Recording a data disk''s identity' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Write-GuestNote { }
         Mock -ModuleName $module Test-Unattended { $false }
         Mock -ModuleName $module Start-Sleep { }
+        # A new disk, which has no GPT disk GUID for another VM to own.
+        Mock -ModuleName $module Mount-VHD { [pscustomobject]@{ Path = $Path; DiskNumber = 7 } }
+        Mock -ModuleName $module Get-Disk { [pscustomobject]@{ Number = 7; Guid = '' } }
+        Mock -ModuleName $module Dismount-VHD { }
     }
 
     It 'records the SCSI location the host attached the disk at' {
