@@ -245,10 +245,10 @@ function Get-PathSize {
     param([Parameter(Mandatory)][string]$Path)
 
     if (Test-Path -LiteralPath $Path -PathType Leaf) { return (Get-Item -LiteralPath $Path -Force).Length }
-    $sum = (Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue |
-            Measure-Object -Property Length -Sum).Sum
-    if ($sum) { return [double]$sum }
-    return 0
+    # Measure-Object gives no Sum for no input, which StrictMode will not read (#180).
+    $files = @(Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) { return 0 }
+    return [double]($files | Measure-Object -Property Length -Sum).Sum
 }
 
 function Remove-PathWithRetry {

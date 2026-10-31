@@ -166,3 +166,19 @@ Describe 'Test-GuestStateChanged (#20)' {
         Invoke-TestCheck -Recorded ([pscustomobject]@{ Certificates = 'AA11'; VisualStudioSettings = 'HASH1' }) -Current $same | Should -BeFalse
     }
 }
+
+Describe 'Save-GuestSqlState (#180)' {
+    It 'records no databases, rather than failing, when SQL Server has no user databases' {
+        $result = InModuleScope $module {
+            Mock Write-LogEntry {}
+            Mock Connect-GuestSqlInstance { $true }
+            Mock Update-GuestSqlRecord {}
+            Mock Invoke-GuestScript { [pscustomobject]@{ Instance = 'MSSQLSERVER'; Version = '17.0'; Edition = 'Developer'; NotMigrated = @() } }
+            Mock Backup-GuestUserDatabase {}
+
+            Save-GuestSqlState -VM ([VMContext]::new(@{ VMName = 'Alpha' }))
+        }
+
+        @($result.Databases).Count | Should -Be 0
+    }
+}

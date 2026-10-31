@@ -295,3 +295,14 @@ Describe 'Invoke-VMRemoval' {
         Test-Path -LiteralPath $iso | Should -BeTrue
     }
 }
+
+Describe 'Get-PathSize (#180)' {
+    It 'counts an empty folder as 0, rather than failing' {
+        $folder = Join-Path $TestDrive 'Empty'
+        New-Item -ItemType Directory -Path $folder | Out-Null
+
+        $size = InModuleScope $module -Parameters @{ Path = $folder } { param($Path) Get-PathSize -Path $Path }
+
+        $size | Should -Be 0
+    }
+}
