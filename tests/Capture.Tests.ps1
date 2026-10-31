@@ -176,7 +176,7 @@ Describe 'Save-GuestSqlState (#180)' {
             Mock Invoke-GuestScript { [pscustomobject]@{ Instance = 'MSSQLSERVER'; Version = '17.0'; Edition = 'Developer'; NotMigrated = @() } }
             Mock Backup-GuestUserDatabase {}
 
-            Save-GuestSqlState -VM ([VMContext]::new(@{ VMName = 'Alpha' }))
+            Save-GuestSqlState -VM ([VMContext]::new(@{ VMName = 'Alpha'; InstallSqlServer = $true }))
         }
 
         @($result.Databases).Count | Should -Be 0

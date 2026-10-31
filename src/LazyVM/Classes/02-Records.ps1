@@ -171,15 +171,51 @@ class ToolingProgram {
     [string]$Name
     [string]$Publisher
 
+    # $null: not looked up yet; '': winget has no package for it; otherwise
+    # the winget package that installs it (#24). [object], as MarketplaceItem.
+    [object]$WingetId
+
     static [ToolingProgram] FromObject([object]$item) {
         $program = [ToolingProgram]::new()
         $program.Name = [RecordReader]::Text($item, 'Name')
         $program.Publisher = [RecordReader]::Text($item, 'Publisher')
+        $value = [RecordReader]::Field($item, 'WingetId')
+        $program.WingetId = if ($null -eq $value) { $null } else { "$value" }
         return $program
     }
 
     [System.Collections.Specialized.OrderedDictionary] ToDictionary() {
-        return [ordered]@{ Name = $this.Name; Publisher = $this.Publisher }
+        $dictionary = [ordered]@{ Name = $this.Name; Publisher = $this.Publisher }
+        if ($null -ne $this.WingetId) { $dictionary['WingetId'] = $this.WingetId }
+        return $dictionary
+    }
+}
+
+class OfficialInstaller {
+    # The program name or per-user extension id it reinstalls, as the tooling list has it.
+    [string]$Name
+    [string]$Url
+    [string[]]$Arguments = @()
+    # Who must have signed the download: its Authenticode signer's name.
+    [string]$Publisher
+    # Optional: the download's SHA-256, pinned.
+    [string]$Sha256
+
+    static [OfficialInstaller] FromObject([object]$item) {
+        $installer = [OfficialInstaller]::new()
+        $installer.Name = [RecordReader]::Text($item, 'Name')
+        $installer.Url = [RecordReader]::Text($item, 'Url')
+        $value = [RecordReader]::Field($item, 'Arguments')
+        $installer.Arguments = if ($null -eq $value) { [string[]]@() } else { [string[]]@(@($value) | ForEach-Object { "$_" }) }
+        $installer.Publisher = [RecordReader]::Text($item, 'Publisher')
+        $installer.Sha256 = [RecordReader]::Text($item, 'Sha256')
+        return $installer
+    }
+
+    [System.Collections.Specialized.OrderedDictionary] ToDictionary() {
+        $dictionary = [ordered]@{ Name = $this.Name; Url = $this.Url; Arguments = @($this.Arguments); Publisher = $this.Publisher }
+        if ($this.Sha256) { $dictionary['Sha256'] = $this.Sha256 }
+        return $dictionary
     }
 }
 
@@ -246,9 +282,33 @@ class ToolingRecord {
     [ToolingProgram[]]$Programs = @()
     # $null when the list has never had any.
     [AwaitingReinstall]$AwaitingReinstall
+    # Official installers for what winget and the Marketplace do not have.
+    # Written by hand; each recording carries them over.
+    [OfficialInstaller[]]$Installers = @()
 
     [ToolingProduct] FindProduct([string]$key) {
         return @($this.Products | Where-Object { $_.Key() -eq $key }) | Select-Object -First 1
+    }
+
+    # The installer for a program name or extension id, or $null.
+    [OfficialInstaller] FindInstaller([string]$name) {
+        return @($this.Installers | Where-Object { $_.Name -eq $name }) | Select-Object -First 1
+    }
+
+    # What winget installs: the winget packages, then the winget matches of
+    # the other programs, each once.
+    [WingetPackage[]] WingetInstalls() {
+        $packages = [System.Collections.Generic.List[WingetPackage]]::new()
+        $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($package in @($this.WingetPackages)) {
+            if ($package -and $package.Id -and $seen.Add($package.Id)) { $packages.Add($package) }
+        }
+        foreach ($program in @($this.Programs)) {
+            if ($program -and $program.WingetId -and $seen.Add($program.WingetId)) {
+                $packages.Add([WingetPackage]::FromObject(@{ Id = $program.WingetId; Source = 'winget' }))
+            }
+        }
+        return $packages.ToArray()
     }
 
     # The items awaiting reinstall, never $null.
@@ -271,6 +331,7 @@ class ToolingRecord {
         $record.Programs = [ToolingProgram[]]@(@([RecordReader]::Field($item, 'Programs')) | Where-Object { $_ } | ForEach-Object { [ToolingProgram]::FromObject($_) })
         $awaiting = [RecordReader]::Field($item, 'AwaitingReinstall')
         if ($null -ne $awaiting) { $record.AwaitingReinstall = [AwaitingReinstall]::FromObject($awaiting) }
+        $record.Installers = [OfficialInstaller[]]@(@([RecordReader]::Field($item, 'Installers')) | Where-Object { $_ } | ForEach-Object { [OfficialInstaller]::FromObject($_) })
         return $record
     }
 
@@ -285,6 +346,7 @@ class ToolingRecord {
         $document['WingetPackages'] = @($this.WingetPackages | ForEach-Object { $_.ToDictionary() })
         $document['Programs'] = @($this.Programs | ForEach-Object { $_.ToDictionary() })
         if ($this.AwaitingReinstall) { $document['AwaitingReinstall'] = $this.AwaitingReinstall.ToDictionary() }
+        if (@($this.Installers).Count -gt 0) { $document['Installers'] = @($this.Installers | ForEach-Object { $_.ToDictionary() }) }
         return ConvertTo-Json -InputObject $document -Depth 10
     }
 }

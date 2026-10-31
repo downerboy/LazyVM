@@ -663,6 +663,132 @@ function Find-GuestWinget {
     return $null
 }
 
+function ConvertFrom-GuestWingetTable {
+    <#
+      The rows of a table winget printed (search, list), each as @{ Name; Id }.
+      The columns are found from where each heading starts in the line above
+      the dashes, so localized headings do not matter. Progress output before
+      a carriage return is ignored.
+    #>
+    param([string[]]$Lines = @())
+
+    $clean = @($Lines | ForEach-Object { ("$_" -split "`r")[-1] })
+    $separator = -1
+    for ($i = 1; $i -lt $clean.Count; $i++) {
+        if ($clean[$i] -match '^\s*-{3,}\s*$') { $separator = $i; break }
+    }
+    if ($separator -lt 1) { return }
+
+    $header = $clean[$separator - 1]
+    $starts = @()
+    for ($i = 0; $i -lt $header.Length; $i++) {
+        if ($header[$i] -ne ' ' -and ($i -eq 0 -or $header[$i - 1] -eq ' ')) { $starts += $i }
+    }
+    if ($starts.Count -lt 3) { return }
+
+    for ($i = $separator + 1; $i -lt $clean.Count; $i++) {
+        $line = $clean[$i]
+        if (-not $line.Trim()) { break }
+        if ($line.Length -le $starts[1]) { continue }
+        $idLength = [Math]::Min($starts[2], $line.Length) - $starts[1]
+        [pscustomobject]@{
+            Name = $line.Substring(0, $starts[1]).Trim()
+            Id   = $line.Substring($starts[1], $idLength).Trim()
+        }
+    }
+}
+
+function Select-GuestWingetMatch {
+    <#
+      The id of the one package in winget's search output whose name is
+      exactly $Name (ignoring case), or '' when none is, several are, or the
+      id is not a well-formed winget identifier.
+    #>
+    param(
+        [string[]]$Lines = @(),
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    $matched = @(ConvertFrom-GuestWingetTable -Lines $Lines | Where-Object { $_.Name -eq $Name.Trim() })
+    if ($matched.Count -ne 1) { return '' }
+    if ($matched[0].Id -notmatch '^[A-Za-z0-9][A-Za-z0-9._+-]*$') { return '' }
+    return $matched[0].Id
+}
+
+function Get-GuestWingetPublisher {
+    <# The Publisher line of winget show's output, or '' when it has none. #>
+    param([string[]]$Lines = @())
+
+    foreach ($line in $Lines) {
+        if ("$line" -match '^\s*Publisher:\s*(.+?)\s*$') { return $Matches[1] }
+    }
+    return ''
+}
+
+function Get-GuestInstallerKind {
+    <# 'exe' or 'msi' from a downloaded file's first bytes, never its name; '' for anything else. #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $head = New-Object byte[] 8
+        $read = $stream.Read($head, 0, 8)
+    }
+    finally { $stream.Dispose() }
+
+    if ($read -ge 2 -and $head[0] -eq 0x4D -and $head[1] -eq 0x5A) { return 'exe' }
+    $ole = [byte[]](0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1)
+    if ($read -eq 8 -and -not (Compare-Object -ReferenceObject $ole -DifferenceObject $head -SyncWindow 0)) { return 'msi' }
+    return ''
+}
+
+function Get-GuestInstallerProblem {
+    <#
+      Why a downloaded installer must not run, or '' when it may: it must
+      have a valid Authenticode signature from $Publisher (the signing
+      certificate's name, ignoring case) and, when $Sha256 is given, that
+      hash. Anything that cannot be checked counts as a problem.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Publisher,
+        [string]$Sha256
+    )
+
+    if ($Sha256) {
+        $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+        if ($actual -ne $Sha256) { return "its SHA-256 hash is $actual, not the pinned $Sha256" }
+    }
+
+    try { $signature = Get-AuthenticodeSignature -LiteralPath $Path -ErrorAction Stop }
+    catch { return "its signature could not be read: $($_.Exception.Message)" }
+    if ("$($signature.Status)" -ne 'Valid') { return "its signature is $($signature.Status), not Valid" }
+    if (-not $signature.SignerCertificate) { return 'its signature names no signer' }
+
+    $signer = $signature.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+    if ("$signer".Trim() -ne $Publisher.Trim()) { return "it is signed by '$signer', not '$Publisher'" }
+    return ''
+}
+
+function New-GuestPrivateFolder {
+    <#
+      A new, empty folder only administrators and SYSTEM can change, for a
+      download that is checked and then run. Created with its ACL in one
+      step, so no one else can put anything in it first. Fails if anything
+      is already at $Path.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (Test-Path -LiteralPath $Path) { throw "$Path already exists" }
+    $acl = New-Object System.Security.AccessControl.DirectorySecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($sid in 'S-1-5-32-544', 'S-1-5-18') {
+        $identity = New-Object System.Security.Principal.SecurityIdentifier($sid)
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+    }
+    $null = [IO.Directory]::CreateDirectory($Path, $acl)
+}
+
 function Get-GuestInstallerInstance {
     <#
       Every product the Visual Studio Installer manages (Visual Studio, SSMS,
@@ -709,8 +835,9 @@ function Start-GuestTask {
     <#
       Writes the wrapper, the work and its arguments to $SetupDir, registers
       the task and starts it. As SYSTEM, or with -UserName as that signed-in
-      user under their normal (limited) token. Returns the boot time, so the
-      host can tell when the guest restarted.
+      user under their normal (limited) token, or with -Elevated their full
+      one. Returns the boot time, so the host can tell when the guest
+      restarted.
     #>
     param(
         [Parameter(Mandatory)][string]$TaskName,
@@ -718,6 +845,7 @@ function Start-GuestTask {
         [Parameter(Mandatory)][string]$Work,
         [object[]]$ArgumentList = @(),
         [string]$UserName,
+        [switch]$Elevated,
         [Parameter(Mandatory)][int]$TimeoutSeconds
     )
 
@@ -731,7 +859,7 @@ function Start-GuestTask {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$base.ps1`""
     $principal = if ($UserName) {
-        New-ScheduledTaskPrincipal -UserId $UserName -LogonType Interactive -RunLevel Limited
+        New-ScheduledTaskPrincipal -UserId $UserName -LogonType Interactive -RunLevel $(if ($Elevated) { 'Highest' } else { 'Limited' })
     }
     else {
         New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest

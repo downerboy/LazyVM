@@ -269,6 +269,10 @@ function Save-GuestSqlState {
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
+    if (-not $VM.Settings.InstallSqlServer) {
+        Write-LogEntry '  SQL Server turned off in the settings (InstallSqlServer) - skipping' 'INFO'
+        return $null
+    }
     $instance = Connect-GuestSqlInstance -VM $VM
     if (-not $instance) {
         Write-LogEntry '  SQL Server is not installed - skipping' 'INFO'

@@ -542,7 +542,8 @@ Each VM has a tooling list, the `Tooling` section of `DevBox\Config\VM.json`: wh
 - **Visual Studio Installer products.** Each Visual Studio and SSMS installation, by product, edition and channel, with its workloads and components. Replace Visual Studio 2022 with 2026 and the list follows.
 - **Visual Studio extensions**, including per-user ones installed from Manage Extensions. Each is matched to its Visual Studio Marketplace entry by exact name and publisher, so a build can install it.
 - **winget packages**, by identifier. Packages that come with Windows are left out (`ToolingWingetExclude`).
-- **Other programs**: everything else in the Windows list of installed programs, by name.
+- **Other programs**: everything else in the Windows list of installed programs, by name. Each one is looked up once in winget's own source. When exactly one package has the program's exact name, and winget names the same publisher, the list records it as the program's `WingetId`, and a build installs the program with winget.
+- **Official installers** (`Installers`), which you add by hand, for a program winget has no package for, or a per-user extension the Marketplace does not have. Maintenance keeps them when it records the list.
 
 ### How changes are picked up
 
@@ -568,15 +569,32 @@ Save-LazyVMTooling
 Phase 7 installs the whole list, in this order:
 1. Each Visual Studio Installer product from its channel's bootstrapper (`InstallerBootstrappers`), with its workloads and components. Then its Marketplace extensions are added, as a separate step, so an extension the installer refuses never stops the product itself from installing.
 2. SQL Server.
-3. Every winget package.
+3. Every winget package, and the winget match of every other program.
+4. The official installer of each program or extension that is still missing and has one.
 
 Anything already present is skipped.
+
+An official installer names the publisher's own download, its silent-install arguments, and who signed it:
+
+```json
+"Installers": [
+  {
+    "Name": "JetBrains ReSharper",
+    "Url": "https://download.jetbrains.com/resharper/dotUltimate.2026.2/JetBrains.dotUltimate.2026.2.exe",
+    "Arguments": [ "/SpecificProductNames=ReSharper", "/Silent=True", "/PerMachine=True" ],
+    "Publisher": "JetBrains s.r.o.",
+    "Sha256": "<optional: the download's SHA-256>"
+  }
+]
+```
+
+`Name` is the program's name, or the extension's id, as the list has it. The download must be HTTPS, and an `.exe` or `.msi` installer. It runs only when it has a valid Authenticode signature whose certificate names `Publisher` exactly, and the `Sha256` hash when you set one. Anything else is refused, never run, and left on the list below. Installers run as SYSTEM, so choose a per-machine install where the installer offers one.
 
 `DevBox\Config\VM.Template.json` keeps the list the first build installed. See [What the VM started with](#what-the-vm-started-with).
 
 The Visual Studio Installer refuses an unsigned extension unless its item name is in `UnsignedExtensions`. When it refuses some of a product's extensions, the rest are still added, one at a time, and the log names each refused one.
 
-Programs winget does not provide, and extensions with no Marketplace match, cannot be installed automatically. After a build they are logged and written to `DevBox\State\reinstall-by-hand.txt`. The list marks them as awaiting reinstall, so they are not mistaken for removals. Each one leaves that list once you install it.
+Programs winget does not provide, and extensions with no Marketplace match, cannot be installed automatically unless they have an official installer that passes its checks. After a build they are logged and written to `DevBox\State\reinstall-by-hand.txt`. The list marks them as awaiting reinstall, so they are not mistaken for removals. Each one leaves that list once you install it.
 
 ### What the VM started with
 

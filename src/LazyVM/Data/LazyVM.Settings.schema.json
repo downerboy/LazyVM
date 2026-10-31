@@ -338,7 +338,24 @@
       "required": ["Name"],
       "properties": {
         "Name": { "type": "string", "minLength": 1 },
-        "Publisher": { "type": "string" }
+        "Publisher": { "type": "string" },
+        "WingetId": { "type": "string", "description": "The winget package that installs it, found by its exact name and publisher; empty when winget has none. A rebuild installs it with winget." }
+      }
+    },
+    "OfficialInstaller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Name", "Url", "Publisher"],
+      "properties": {
+        "Name": { "type": "string", "minLength": 1, "description": "The program name, or per-user extension id, that it reinstalls, as the tooling list has it." },
+        "Url": { "type": "string", "pattern": "^https://[^\\s@]+$", "description": "The publisher's own HTTPS download of an .exe or .msi installer." },
+        "Arguments": {
+          "type": "array",
+          "description": "The installer's silent-install arguments, one per item.",
+          "items": { "type": "string", "pattern": "^[^\"\\r\\n]*$" }
+        },
+        "Publisher": { "type": "string", "minLength": 1, "pattern": "\\S", "description": "Who must have signed the download, as its Authenticode certificate names them. An unsigned download, or one signed by anyone else, is never run." },
+        "Sha256": { "type": "string", "pattern": "^[0-9A-Fa-f]{64}$", "description": "Optional: the download's SHA-256. When set, a download with any other hash is never run." }
       }
     },
     "AwaitingExtension": {
@@ -512,6 +529,11 @@
       "description": "Recorded by LazyVM: the location on the VM's SCSI controller 0 where the SQL data disk was attached. It is how a new, empty disk is found. Leave it as it is; a VM copied with -From starts without it.",
       "minimum": 0,
       "maximum": 63
+    },
+    "InstallSqlServer": {
+      "type": "boolean",
+      "default": true,
+      "description": "Give the VM SQL Server and its SQL data disk. When false, the build downloads no SQL Server media, creates and attaches no SQL data disk and installs no SQL Server, and capture and restore leave SQL out. Set it in the VM's VM.json; the shared settings file only supplies the default for new VMs."
     },
     "MoveSqlDataToDataDisk": {
       "type": "boolean",
@@ -1000,6 +1022,11 @@
               "items": { "$ref": "#/definitions/AwaitingExtension" }
             }
           }
+        },
+        "Installers": {
+          "type": "array",
+          "description": "Official installers for programs winget has no package for, and per-user extensions the Marketplace does not have. A rebuild downloads each one it needs over HTTPS and runs it only when it is signed by the named publisher (and has the pinned hash, when one is set). Kept when maintenance records the list.",
+          "items": { "$ref": "#/definitions/OfficialInstaller" }
         }
       }
     },

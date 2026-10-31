@@ -73,6 +73,24 @@ function ConvertTo-ToolingRecord {
     return $record
 }
 
+function Add-ToolingSource {
+    <#
+      Completes a tooling list just taken from the guest with where each item
+      can be reinstalled from: Marketplace links for per-user extensions,
+      winget matches for other programs (both reusing $Previous's answers),
+      and the official installers written into $Previous. Updates $Record.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][ToolingRecord]$Record,
+        [AllowNull()][ToolingRecord]$Previous
+    )
+
+    Add-MarketplaceItem -Record $Record -Previous $Previous
+    Add-ProgramWingetId -VM $VM -Record $Record -Previous $Previous
+    if ($Previous) { $Record.Installers = $Previous.Installers }
+}
+
 function Get-SetChange {
     <# "+ label: item" for each item only in New, "- label: item" for each only in Old. #>
     param(
@@ -117,6 +135,8 @@ function Compare-ToolingRecord {
 
     $changes += Get-SetChange -Label 'winget' -Old @($Old.WingetPackages | ForEach-Object { $_.Id }) -New @($New.WingetPackages | ForEach-Object { $_.Id })
     $changes += Get-SetChange -Label 'program' -Old @($Old.Programs | ForEach-Object { $_.Name }) -New @($New.Programs | ForEach-Object { $_.Name })
+    # A lookup's answer counts too, so it is recorded and not repeated (#24).
+    $changes += Get-SetChange -Label 'winget match' -Old @(Get-ProgramWingetMatch -Programs $Old.Programs) -New @(Get-ProgramWingetMatch -Programs $New.Programs)
     $changes += Get-SetChange -Label 'awaiting reinstall' -Old $Old.Awaiting().Names() -New $New.Awaiting().Names()
     return @($changes)
 }
@@ -204,7 +224,7 @@ function Update-ToolingRecord {
 
     $current = ConvertTo-ToolingRecord -Inventory (Get-GuestToolingInventory -VM $VM) -WingetExclude $VM.Settings.ToolingWingetExclude
     $previous = Read-VMTooling -VM $VM
-    Add-MarketplaceItem -Record $current -Previous $previous
+    Add-ToolingSource -VM $VM -Record $current -Previous $previous
     Merge-AwaitingReinstall -Record $current -Previous $previous
 
     if ($previous) {

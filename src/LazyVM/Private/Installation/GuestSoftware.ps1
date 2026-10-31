@@ -79,7 +79,9 @@ function Install-GuestSoftware {
     Install-SqlServerIfMissing -VM $VM
 
     if ($networkReady) {
-        Install-WingetPackage -VM $VM -Packages @($tooling.WingetPackages)
+        # The winget packages, and the winget matches of other programs (#24).
+        Install-WingetPackage -VM $VM -Packages @($tooling.WingetInstalls())
+        Install-OfficialInstaller -VM $VM -Tooling $tooling
     }
 
     Initialize-VMTooling -VM $VM
