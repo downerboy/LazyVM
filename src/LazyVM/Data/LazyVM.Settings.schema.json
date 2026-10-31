@@ -679,6 +679,18 @@
       "description": "The VM's time zone, as Windows names it (Get-TimeZone -ListAvailable).",
       "minLength": 1
     },
+    "GuestLocale": {
+      "type": "string",
+      "default": "en-US",
+      "description": "The VM's display language, region and formats, as a language tag like 'en-GB' or 'de-DE'. The display language must be one the Windows ISO contains; Setup stops if it is not.",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$"
+    },
+    "GuestInputLocale": {
+      "type": "string",
+      "default": "",
+      "description": "The VM's keyboard layout, as a language tag like 'en-GB' or a keyboard id like '0809:00000809'; several are separated by ';'. Empty uses the keyboard of GuestLocale.",
+      "pattern": "^([A-Za-z0-9{}:-]+(;[A-Za-z0-9{}:-]+)*)?$"
+    },
     "GuestRemoveApps": {
       "type": "array",
       "default": [
