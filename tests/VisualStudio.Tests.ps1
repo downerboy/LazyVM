@@ -243,16 +243,80 @@ Describe 'ConvertTo-ProjectsLocationSetting' {
 }
 
 Describe 'Restore-GuestVisualStudioSetting' {
+    BeforeAll {
+        # Mock replaces only a command that exists, and taskkill.exe exists only on Windows.
+        function taskkill.exe { }
+    }
+
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe' } }
         $copied = @{ Settings = $null }
         Mock -ModuleName $module Copy-ToGuest { $copied.Settings = Get-Content -LiteralPath $HostPath -Raw }
-        Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { }
+        $task = @{ Work = $null; Devenv = $null }
+        Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { $task.Work = $ScriptBlock }
+        Mock -ModuleName $module Get-GuestSignedInUser { @('devadmin') }
         $devDrive = $settings.Clone()
         $devDrive.UseDevDrive = $true
         $devDrive.DevDriveLetter = 'W'
+        $devDrive.GuestAdminUser = 'devadmin'
         $devDrive.VSSettingsBackup = Join-Path $TestDrive 'missing.vssettings'
+
+        <#
+          The task's work as the guest runs it: from its text, so it binds to
+          the mocks here. $DevenvProcess stands for the devenv process it starts.
+        #>
+        $runWork = {
+            param($DevenvProcess)
+            $task.Devenv = $DevenvProcess
+            Mock Test-Path { $true }
+            Mock New-Item { }
+            Mock Start-Process { $task.Devenv }
+            Mock taskkill.exe { }
+            $work = [scriptblock]::Create($task.Work.ToString())
+            & $work 'C:\VS\devenv.exe' 'C:\LazyVMSetup\VisualStudio.vssettings' $null 10
+        }
+        $newDevenv = {
+            param([bool]$Exits, [int]$ExitCode = 0)
+            $process = [pscustomobject]@{ Id = 4242; ExitCode = $ExitCode }
+            $process | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value ([scriptblock]::Create("param(`$milliseconds) `$$Exits"))
+            return $process
+        }
+    }
+
+    It 'fails at once, before starting devenv, when the guest account is not signed in (#262)' {
+        Mock -ModuleName $module Get-GuestSignedInUser { @() }
+
+        { InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) } } |
+            Should -Throw "*'devadmin' is not signed in*"
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 0 -Exactly
+    }
+
+    It 'gives the guest task longer than devenv gets, so the guest is the one to say why devenv did not finish (#262)' {
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $TimeoutMinutes -gt $ArgumentList[-1] }
+    }
+
+    It 'stops devenv and everything it started when it does not exit in time, and says why (#262)' {
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        { & $runWork (& $newDevenv -Exits $false) } | Should -Throw '*did not exit within 10 minute(s)*first launch*'
+        Should -Invoke taskkill.exe -Times 1 -Exactly -ParameterFilter { "$args" -eq '/PID 4242 /T /F' }
+    }
+
+    It 'applies the settings when devenv exits cleanly (#262)' {
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        { & $runWork (& $newDevenv -Exits $true) } | Should -Not -Throw
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $ArgumentList -contains '/ResetSettings' -and -not $Wait }
+        Should -Invoke taskkill.exe -Times 0 -Exactly
+    }
+
+    It 'reports the exit code when devenv fails (#262)' {
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        { & $runWork (& $newDevenv -Exits $true -ExitCode 1) } | Should -Throw '*devenv exited with 1*'
     }
 
     It 'points the projects location at the letter the Dev Drive actually got, even with no settings backup' {

@@ -394,7 +394,12 @@ function Restore-GuestVisualStudioSetting {
     <#
       Applies the Visual Studio settings in VSSettingsBackup, which a capture
       refreshes, in the guest user's desktop session: the settings store is
-      per-user, and devenv needs a real session to write it. With a Dev
+      per-user, and devenv /ResetSettings, the only documented way to apply
+      a .vssettings file, opens the IDE, so it needs that user signed in.
+      It fails at once when they are not. devenv gets ten minutes ($devenvMinutes) to
+      apply the file and exit; one still open then is waiting on a dialog,
+      such as the sign-in and theme choice of its first launch, that no one
+      will answer, so it is stopped with everything it started (#262). With a Dev
       Drive, the projects location is pointed at source\repos on it, so new
       projects outlive the Windows evaluation (#176); the setting lives on
       C:, so every restore sets it again. With no backup, the file applied
@@ -422,6 +427,10 @@ function Restore-GuestVisualStudioSetting {
         return
     }
     Write-LogEntry "Found $($vs.DisplayName) at $($vs.DevEnvPath)" 'INFO'
+    $account = $VM.Runtime.GuestAdminUser
+    if (@(Get-GuestSignedInUser -VM $VM) -notcontains $account) {
+        throw "'$account' is not signed in to the guest, and devenv applies Visual Studio settings only in their desktop session"
+    }
 
     $guestPath = Join-Path $VM.Settings.GuestSetupDir 'VisualStudio.vssettings'
     if ($projects) {
@@ -441,12 +450,19 @@ function Restore-GuestVisualStudioSetting {
         Copy-ToGuest -VM $VM -HostPath $backup -GuestPath $guestPath
     }
 
-    Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName "${script:TaskPrefix}VSSettings" -Activity 'Visual Studio settings restore' -TimeoutMinutes 25 `
-        -ArgumentList @($vs.DevEnvPath, $guestPath, $projects) -ScriptBlock {
-        param($devenv, $settingsPath, $projects)
+    # The guest task gets a few minutes more than devenv, so it is the guest
+    # that stops devenv and says why, not the host giving up on the task.
+    $devenvMinutes = 10
+    Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName "${script:TaskPrefix}VSSettings" -Activity 'Visual Studio settings restore' -TimeoutMinutes ($devenvMinutes + 3) `
+        -ArgumentList @($vs.DevEnvPath, $guestPath, $projects, $devenvMinutes) -ScriptBlock {
+        param($devenv, $settingsPath, $projects, $devenvMinutes)
         if (-not (Test-Path $devenv)) { throw "devenv.exe not found at $devenv" }
         if ($projects) { $null = New-Item -ItemType Directory -Path $projects -Force }
-        $process = Start-Process -FilePath $devenv -ArgumentList '/NoSplash', '/ResetSettings', "`"$settingsPath`"", '/Command', 'Exit' -Wait -PassThru
+        $process = Start-Process -FilePath $devenv -ArgumentList '/NoSplash', '/ResetSettings', "`"$settingsPath`"", '/Command', 'Exit' -PassThru
+        if (-not $process.WaitForExit($devenvMinutes * 60000)) {
+            $null = taskkill.exe /PID $process.Id /T /F
+            throw "devenv did not exit within $devenvMinutes minute(s) and was stopped - it was most likely waiting on a dialog, such as the sign-in and theme choice of its first launch. Open Visual Studio once in the VM, then import $settingsPath with Tools -> Import and Export Settings"
+        }
         if ($process.ExitCode -ne 0) { throw "devenv exited with $($process.ExitCode)" }
     }
     if ($hasBackup) { Write-LogEntry 'Visual Studio settings restored' 'OK' }
