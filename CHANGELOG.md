@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.2.1](https://github.com/downerboy/LazyVM/compare/v5.2.0...v5.2.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* delete the unused project-capture settings ([#274](https://github.com/downerboy/LazyVM/issues/274)) ([9a44f95](https://github.com/downerboy/LazyVM/commit/9a44f95589300c895e4f0374fe2b60f49a09f351))
+
 ## [5.2.0](https://github.com/downerboy/LazyVM/compare/v5.1.1...v5.2.0) (2026-11-01)
 
 
