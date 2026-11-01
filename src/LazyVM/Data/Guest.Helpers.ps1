@@ -982,7 +982,12 @@ function Get-GuestTaskStatus {
 }
 
 function Remove-GuestTask {
+    <#
+      Stops the task, then removes it. Removing a running task leaves its
+      work running, as a task the host gave up on would be (#262).
+    #>
     param([Parameter(Mandatory)][string]$TaskName)
 
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 }

@@ -102,3 +102,15 @@ Describe 'Start-GuestTask' {
         Should -Invoke Register-ScheduledTask -Times 1 -Exactly -ParameterFilter { $Principal.UserId -eq 'devadmin' -and "$($Principal.RunLevel)" -eq 'Limited' }
     }
 }
+
+Describe 'Remove-GuestTask' {
+    It 'stops the task before removing it, so a task that ran out of time does not run on (#262)' {
+        $calls = [System.Collections.Generic.List[string]]::new()
+        Mock Stop-ScheduledTask { $calls.Add('stop') }
+        Mock Unregister-ScheduledTask { $calls.Add('unregister') }
+
+        Remove-GuestTask -TaskName 'LazyVM-VSSettings'
+
+        $calls -join ',' | Should -Be 'stop,unregister'
+    }
+}
