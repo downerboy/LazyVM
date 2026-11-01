@@ -34,6 +34,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Update-GuestAppSettingRecord { }
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
         Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
+        Mock -ModuleName $module Update-GuestWingetPackage { 'stray' }
         Mock -ModuleName $module Update-GuestWindows { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
         Mock -ModuleName $module Save-GuestState { 'stray' }
@@ -132,6 +133,28 @@ Describe 'Invoke-Maintenance' {
         $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
 
         $script:order -join ',' | Should -Be 'backup,updates,license'
+    }
+
+    It 'upgrades the winget packages every day, and carries on when that fails (#235)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Update-GuestWingetPackage { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Update-GuestWingetPackage -Times 1 -Exactly
+    }
+
+    It 'upgrades the winget packages after recording the tooling and before Windows updates, whose restart then finishes them too (#235)' {
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Update-ToolingRecord { $script:order.Add('tooling') }
+        Mock -ModuleName $module Update-GuestWingetPackage { $script:order.Add('winget') }
+        Mock -ModuleName $module Update-GuestWindows { $script:order.Add('updates') }
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        $script:order -join ',' | Should -Be 'tooling,winget,updates'
     }
 
     It 'captures the state when it changed and nothing else is due (#20)' {

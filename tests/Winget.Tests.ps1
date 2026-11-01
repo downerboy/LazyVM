@@ -31,6 +31,12 @@ Describe 'Install-WingetPackage' {
         Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter { $AsGuestUser -and $Elevated -and $RestartAttempts -gt 0 }
     }
 
+    It 'shares the winget exit-code table with the upgrades (#235)' {
+        InModuleScope $module -Parameters @{ VM = $vm; Packages = $packages } { param($VM, $Packages) Install-WingetPackage -VM $VM -Packages $Packages }
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter { $ArgumentList[2]['-1978335212'] -eq 'no package matched that identifier' }
+    }
+
     It 'logs the report the task wrote' {
         InModuleScope $module -Parameters @{ VM = $vm; Packages = $packages } { param($VM, $Packages) Install-WingetPackage -VM $VM -Packages $Packages }
 

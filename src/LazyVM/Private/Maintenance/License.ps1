@@ -108,7 +108,7 @@ function Get-MaintenancePreview {
 
     $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
     if (-not $machine) { return "Build the VM: it does not exist yet" }
-    $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups, Windows updates)'
+    $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups, winget upgrades, Windows updates)'
     if ("$($machine.State)" -ne 'Running') {
         return "Start the VM, which is $($machine.State), then $($daily.Substring(0, 1).ToLower())$($daily.Substring(1)) and act on its evaluation, which was not read while the VM is not running"
     }
@@ -162,8 +162,8 @@ function Invoke-Maintenance {
       the persistent disks, copies the User disk when it changed, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
-      the databases, asks the Store to update its apps, installs Windows
-      updates, then does nothing
+      the databases, asks the Store to update its apps, upgrades the winget
+      packages, installs Windows updates, then does nothing
       more until the evaluation is close to expiry, when it captures state
       and rearms.
       Returns what the caller does next.
@@ -221,6 +221,11 @@ function Invoke-Maintenance {
     # The Store updates its apps only while the VM is on, so it is asked to check every night (#233).
     try { $null = Start-GuestStoreAppUpdate -VM $VM }
     catch { Write-LogError 'Store app update check failed (non-fatal)' $_ }
+
+    # The winget packages, after the tooling is recorded and before Windows updates, whose restart then finishes any
+    # upgrade waiting for one. Upgrades change versions, not the tooling list (#235).
+    try { $null = Update-GuestWingetPackage -VM $VM }
+    catch { Write-LogError 'winget upgrades failed (non-fatal)' $_ }
 
     # Windows updates, after tonight's records and backups so a bad update still has them, and before the
     # license check. The guest is restarted for them only when nobody can be disturbed by it (#234).

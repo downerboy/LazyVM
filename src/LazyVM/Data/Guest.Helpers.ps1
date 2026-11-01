@@ -715,6 +715,60 @@ function Select-GuestWingetMatch {
     return $matched[0].Id
 }
 
+function Resolve-GuestWingetId {
+    <#
+      The whole id for an id from a table winget printed. winget cuts a long
+      id short with an ellipsis to fit its columns; such an id is completed
+      from $KnownId (winget export's ids, which are whole) when exactly one
+      of them starts with it. Returns '' when it cannot be completed.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Id,
+        [string[]]$KnownId = @()
+    )
+
+    $ellipsis = [string][char]0x2026
+    if (-not $Id.EndsWith($ellipsis)) { return $Id }
+    $start = $Id.Substring(0, $Id.Length - 1)
+    $candidates = @($KnownId | Where-Object { $_.StartsWith($start, [StringComparison]::OrdinalIgnoreCase) })
+    if ($candidates.Count -ne 1) { return '' }
+    return $candidates[0]
+}
+
+function Get-GuestProgramFolder {
+    <#
+      The folders the program Windows lists as $Name (in Installed apps) is
+      installed in, from its uninstall entries: the install location, or the
+      folder of its icon. A name winget cut short with an ellipsis matches the
+      names it starts. Nothing for a program with neither, or whose icon is
+      in the Windows folder, as an MSI's is: its folder is then unknown.
+    #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    $ellipsis = [string][char]0x2026
+    $cutShort = $Name.EndsWith($ellipsis)
+    $start = $Name.TrimEnd([char]0x2026)
+    $uninstallKeys = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    $folders = foreach ($entry in @(Get-ItemProperty -Path $uninstallKeys -ErrorAction SilentlyContinue)) {
+        $displayName = "$($entry.DisplayName)"
+        $matched = if ($cutShort) { $displayName.StartsWith($start, [StringComparison]::OrdinalIgnoreCase) } else { $displayName -eq $Name }
+        if (-not $matched) { continue }
+
+        $folder = "$($entry.InstallLocation)".Trim().Trim('"').TrimEnd('\')
+        if (-not $folder -and "$($entry.DisplayIcon)") {
+            # An icon is "path" or "path,index".
+            $icon = ("$($entry.DisplayIcon)" -split ',')[0].Trim().Trim('"')
+            $folder = if ($icon.Contains('\')) { $icon.Substring(0, $icon.LastIndexOf('\')) } else { '' }
+        }
+        if ($folder -and $folder -notlike "$env:windir\*") { $folder }
+    }
+    return @($folders | Sort-Object -Unique)
+}
+
 function Get-GuestWingetPublisher {
     <# The Publisher line of winget show's output, or '' when it has none. #>
     param([string[]]$Lines = @())
