@@ -5,7 +5,7 @@ title Install the module
 actor "Administrator" as Admin
 
 rectangle "Repository" {
-  usecase "Install from the repository\n<size:10>./Invoke-AnalyzerAndTest.ps1 &&\n./src/Install.ps1 -Path out</size>" as RepoInstall
+  usecase "Install from the repository\n<size:10>./Invoke-AnalyzerAndTest.ps1 &&</size>\n<size:10>./src/Install.ps1 -Path out</size>" as RepoInstall
   usecase "Build the module" as Build
   usecase "Analyze with PSScriptAnalyzer" as Analyze
   usecase "Run the Pester tests" as Test

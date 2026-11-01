@@ -14,11 +14,15 @@ rectangle "LazyVM" {
   usecase "Get the installation media\n<size:10>phase 4</size>" as Media
   usecase "Open the evaluation\ndownload page" as EvalPage
   usecase "Download the SQL Server ISO" as SqlIso
-  usecase "Create the data disk\nand Dev Drive\n<size:10>phase 5</size>" as Disks
+  usecase "Create the data disk,\nDev Drive and User disk\n<size:10>phase 5</size>" as Disks
   usecase "Create the VM and install\nWindows unattended\n<size:10>phase 6</size>" as CreateVM
   usecase "Generate the guest account" as GenCred
   usecase "Install the tooling list\n<size:10>phase 7</size>" as Tooling
   usecase "Extend C: to the whole disk" as ExpandC
+  usecase "Turn on BitLocker" as BitLocker
+  usecase "Set up Windows and Sysmon" as Customize
+  usecase "Install Windows updates" as Updates
+  usecase "Answer Visual Studio's\nfirst launch" as FirstLaunch
   usecase "Configure the guest\n<size:10>phase 8</size>" as Configure
   usecase "Schedule daily maintenance" as Sched_UC
 }
@@ -38,6 +42,10 @@ Build ..> Tooling : <<include>>
 Build ..> Configure : <<include>>
 Build ..> Sched_UC : <<include>>
 Tooling ..> ExpandC : <<include>>
+Tooling ..> BitLocker : <<include>>
+Tooling ..> Customize : <<include>>
+Tooling ..> Updates : <<include>>
+FirstLaunch ..> Configure : <<extend>>\n[Visual Studio never opened]
 
 AutoRoot ..> Build : <<extend>>\n[no folder registered]
 Profile ..> Build : <<extend>>\n[no profile for -Name]
@@ -51,6 +59,10 @@ CreateVM --> HV
 Disks --> HV
 Tooling --> Guest
 ExpandC --> Guest
+BitLocker --> Guest
+Customize --> Guest
+Updates --> MS
+FirstLaunch --> Guest
 Configure --> Guest
 SqlIso --> MS
 EvalPage --> MS

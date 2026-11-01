@@ -9,13 +9,16 @@ Admin --|> User
 
 rectangle "LazyVM" {
   package "Look up" {
+    usecase "Show LazyVM and its commands\n<size:10>Show-LazyVM</size>" as UC_Show
     usecase "List VMs\n<size:10>Get-LazyVM</size>" as UC_List
     usecase "View settings\n<size:10>Get-LazyVMSetting</size>" as UC_Set
     usecase "Check the license\n<size:10>Get-LazyVMLicense</size>" as UC_Lic
     usecase "View the guest account\n<size:10>Get-LazyVMCredential</size>" as UC_CredV
+    usecase "Check a VM end to end\n<size:10>Test-LazyVM</size>" as UC_Test
   }
   package "Set up" {
     usecase "Create a VM profile\n<size:10>New-LazyVM</size>" as UC_New
+    usecase "Save a VM as a config template\n<size:10>Export-LazyVMTemplate</size>" as UC_Export
     usecase "Choose the LazyVM folder\n<size:10>Set-LazyVMRoot</size>" as UC_Root
     usecase "Store the guest account\n<size:10>Set-LazyVMCredential</size>" as UC_Cred
   }
@@ -41,8 +44,11 @@ rectangle "LazyVM" {
 User --> UC_List
 User --> UC_Set
 User --> UC_New
+User --> UC_Show
+User --> UC_Export
 Admin --> UC_Lic
 Admin --> UC_CredV
+Admin --> UC_Test
 Admin --> UC_Root
 Admin --> UC_Cred
 Admin --> UC_Build

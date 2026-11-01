@@ -7,6 +7,7 @@ actor "Task Scheduler\n(SYSTEM)" as Sched
 
 rectangle "LazyVM" {
   usecase "Rebuild the VM\n<size:10>Invoke-LazyVMRebuild</size>" as Rebuild
+  usecase "Put the personal folders\non the User disk" as UserDisk
   usecase "Capture state" as Capture
   usecase "Retire the old VM" as Retire
   usecase "Create the VM and install\nWindows unattended" as CreateVM
@@ -25,6 +26,7 @@ Admin --> Rebuild
 Sched --> Rebuild
 
 Capture ..> Rebuild : <<extend>>\n[not -SkipCapture]
+Rebuild ..> UserDisk : <<include>>
 Rebuild ..> Retire : <<include>>
 Rebuild ..> CreateVM : <<include>>
 Rebuild ..> Tooling : <<include>>
@@ -32,11 +34,12 @@ Rebuild ..> Configure : <<include>>
 Rebuild ..> Restore : <<include>>
 Rebuild ..> Verify : <<include>>
 Tooling ..> ExpandC : <<include>>
-DelRetired ..> Verify : <<extend>>\n[passed and\nDeleteRetiredDiskOnSuccess]
+DelRetired ..> Verify : <<extend>>\n[built without problems,\npassed and\nDeleteRetiredDiskOnSuccess]
 
 Retire --> HV
 CreateVM --> HV
 Verify --> HV
+UserDisk --> Guest
 Capture --> Guest
 Tooling --> Guest
 Configure --> Guest
