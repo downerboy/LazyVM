@@ -108,7 +108,7 @@ function Get-MaintenancePreview {
 
     $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
     if (-not $machine) { return "Build the VM: it does not exist yet" }
-    $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups, Windows updates)'
+    $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups, winget upgrades, Windows updates)'
     if ("$($machine.State)" -ne 'Running') {
         return "Start the VM, which is $($machine.State), then $($daily.Substring(0, 1).ToLower())$($daily.Substring(1)) and act on its evaluation, which was not read while the VM is not running"
     }
@@ -201,8 +201,9 @@ function Invoke-DailyMaintenance {
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
       the databases, asks the Store to update its apps, sets up Sysmon,
-      installs Windows updates, then does nothing more until the evaluation is close to
-      expiry, when it captures state and rearms. -StartedByLazyVM: the run
+      upgrades the winget packages, installs Windows updates, then does
+      nothing more until the evaluation is close to expiry, when it captures
+      state and rearms. -StartedByLazyVM: the run
       started the VM, so nobody is at work in it.
       Returns what the caller does next.
     #>
@@ -254,6 +255,11 @@ function Invoke-DailyMaintenance {
     # Sysmon turned on and installed if it is not, and given the configuration a newer LazyVM ships (#236).
     try { $null = Set-GuestSysmon -VM $VM }
     catch { Write-LogError 'Sysmon check failed (non-fatal)' $_ }
+
+    # The winget packages, after the tooling is recorded and before Windows updates, whose restart then finishes any
+    # upgrade waiting for one. Upgrades change versions, not the tooling list (#235).
+    try { $null = Update-GuestWingetPackage -VM $VM }
+    catch { Write-LogError 'winget upgrades failed (non-fatal)' $_ }
 
     # Windows updates, after tonight's records and backups so a bad update still has them, and before the
     # license check. The guest is restarted for them only when nobody can be disturbed by it (#234).

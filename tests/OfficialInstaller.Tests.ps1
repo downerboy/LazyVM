@@ -187,6 +187,20 @@ Describe 'ConvertFrom-GuestWingetTable' {
         $rows[1].Id | Should -Be 'LINQPad.LINQPad.8'
     }
 
+    It 'reads the last column as the source, empty for a line that is not a row (#235)' {
+        $lines = @(
+            'Name       Id                  Version  Source'
+            '-----------------------------------------------'
+            'LINQPad 9  LINQPad.LINQPad.9   9.1.10   winget'
+            '1 package(s) have pins'
+        )
+
+        $rows = @(ConvertFrom-GuestWingetTable -Lines $lines)
+
+        $rows[0].Source | Should -Be 'winget'
+        $rows[1].Source | Should -BeExactly ''
+    }
+
     It 'returns nothing when there is no table' {
         @(ConvertFrom-GuestWingetTable -Lines @('No package found matching input criteria.')) | Should -BeNullOrEmpty
     }

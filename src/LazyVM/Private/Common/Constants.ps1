@@ -77,6 +77,32 @@ $script:ProfileVersionsToKeep = 3
 $script:LegacyToolingFileName = 'Tooling.json'
 $script:LegacyToolingTemplateFileName = 'Tooling.Template.json'
 
+# winget's exit code for a package that is already installed and up to date.
+$script:WingetUpToDateExitCode = -1978335189
+
+# What the winget exit codes that actually come up mean, so the log explains
+# itself; the installs and the upgrades both use it. The keys are strings
+# because the table travels to a guest task as JSON, and Windows PowerShell
+# 5.1 writes only string keys.
+$script:WingetExitMeanings = @{
+    '-2147012889' = 'DNS could not be resolved - the guest has no working internet'
+    '-2147012894' = 'the connection timed out - the guest network is slow or blocked'
+    '-2147012867' = 'could not connect to the server'
+    '-2147012721' = 'content decoding failed - check for a proxy intercepting HTTPS'
+    '-2147012739' = 'a secure channel error - check the date, time and certificates in the guest'
+    "$script:WingetUpToDateExitCode" = 'already installed and up to date'
+    '-1978335212' = 'no package matched that identifier'
+    '-1978335215' = 'no applicable installer for this system'
+    '-1978334972' = 'the installer hash did not match'
+    '-1978335216' = 'the source could not be updated'
+    '-1978335226' = 'the package''s own installer failed'
+}
+
+# winget packages the nightly upgrades never touch (#235): Visual Studio and
+# SQL Server are serviced by their own installers, and a winget upgrade can
+# break a working install of either. Wildcards as -like takes them.
+$script:WingetUpgradeNever = @('Microsoft.VisualStudio.*', 'Microsoft.SQLServer.*', 'Microsoft.SQLServerManagementStudio*')
+
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.
 $script:TaskPrefix = 'LazyVM-'

@@ -34,26 +34,11 @@ function Install-WingetPackage {
         }
 
         $report = Invoke-GuestTask -VM $VM -TaskName "${script:TaskPrefix}winget" -Activity 'winget packages' -TimeoutMinutes 60 `
-            -AsGuestUser -Elevated -RestartAttempts 3 -ArgumentList @($winget, $tools) -Work {
-            param($winget, $tools)
+            -AsGuestUser -Elevated -RestartAttempts 3 -ArgumentList @($winget, $tools, $script:WingetExitMeanings, $script:WingetUpToDateExitCode) -Work {
+            # $exitMeanings is $script:WingetExitMeanings; after the trip as JSON, its keys are properties.
+            param($winget, $tools, $exitMeanings, $alreadyInstalled)
             $ErrorActionPreference = 'Continue'
 
-            # A bare winget exit code says nothing. These are the ones that
-            # actually come up, so the log explains itself.
-            $exitMeanings = @{
-                -2147012889 = 'DNS could not be resolved - the guest has no working internet'
-                -2147012894 = 'the connection timed out - the guest network is slow or blocked'
-                -2147012867 = 'could not connect to the server'
-                -2147012721 = 'content decoding failed - check for a proxy intercepting HTTPS'
-                -2147012739 = 'a secure channel error - check the date, time and certificates in the guest'
-                -1978335189 = 'already installed and up to date'
-                -1978335212 = 'no package matched that identifier'
-                -1978335215 = 'no applicable installer for this system'
-                -1978334972 = 'the installer hash did not match'
-                -1978335216 = 'the source could not be updated'
-                -1978335226 = 'the package''s own installer failed'
-            }
-            $alreadyInstalled = -1978335189
             # Worth one retry; everything else is a real failure.
             $transientCodes = @(-2147012889, -2147012894, -2147012867, -2147012716)
 
@@ -87,7 +72,8 @@ function Install-WingetPackage {
                 if ($exit -eq 0) { $notes += [pscustomobject]@{ Level = 'OK'; Text = "installed: $id" } }
                 elseif ($exit -eq $alreadyInstalled) { $notes += [pscustomobject]@{ Level = 'INFO'; Text = "present: $id" } }
                 else {
-                    $meaning = if ($exitMeanings.ContainsKey($exit)) { $exitMeanings[$exit] } else { 'see the winget documentation for this code' }
+                    $known = $exitMeanings.PSObject.Properties["$exit"]
+                    $meaning = if ($known) { $known.Value } else { 'see the winget documentation for this code' }
                     # An Int32 formats as its two's-complement hex, which is how winget documents its codes.
                     $notes += [pscustomobject]@{ Level = 'WARN'; Text = ('failed: {0} - exit {1} [0x{1:X8}] {2}' -f $id, [int]$exit, $meaning) }
                 }

@@ -269,7 +269,7 @@ Build-LazyVM
 
 ## 5. The 90-day cycle
 
-Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), turns Sysmon on and installs it if it is not, with any newer configuration LazyVM ships ([Sysmon](#sysmon)), installs Windows updates ([Windows updates](#windows-updates)), then does this:
+Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), turns Sysmon on and installs it if it is not, with any newer configuration LazyVM ships ([Sysmon](#sysmon)), upgrades the winget packages ([winget upgrades](#winget-upgrades)), installs Windows updates ([Windows updates](#windows-updates)), then does this:
 
 | Situation | What happens |
 |---|---|
@@ -280,6 +280,18 @@ Each night the maintenance run records any hardware change, extends `C:` into an
 | The VM does not exist | Builds it. |
 
 The 10-day threshold is `RebuildThresholdDays` ([section 8](#8-settings)).
+
+### winget upgrades
+
+Each night's maintenance upgrades everything winget can upgrade in the VM from its own source, as `winget upgrade --all` would, including packages you installed yourself, with three exceptions, each named in the log:
+
+- **Visual Studio and SQL Server** (and SSMS) are never upgraded by winget: their own installers service them, and a winget upgrade can break a working install.
+- **Packages you pin** are left alone. To keep a package at its version, pin it inside the VM: `winget pin add --id <id>`. `winget pin remove --id <id>` lets it upgrade again.
+- **Programs that are running** are skipped that night, so nothing you have open is closed under you. A program whose install folder Windows does not record, or records only as a shared folder such as `Program Files`, cannot be checked this way; it is upgraded anyway, and the log says it was upgraded without a running check.
+
+Upgrades that have not started after 45 minutes wait for the next night, so none is cut off halfway.
+
+The upgrades run as the guest account, so packages installed for that account alone upgrade too, which needs the account signed in: automatic sign-in does that whenever the VM starts. Upgrades change versions, not which packages are installed, so they do not change the VM's tooling list or take a tooling checkpoint, and a rebuild installs the current versions anyway.
 
 ### Windows updates
 
