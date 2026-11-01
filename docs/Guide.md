@@ -441,12 +441,29 @@ Each VM runs the [Sysmon built into Windows 11](https://learn.microsoft.com/wind
 
 ### Visual Studio settings
 
-A build applies your captured Visual Studio settings (`Backups\VisualStudio.vssettings`) in step 8c. On a new VM, Visual Studio has never been opened, so its first-launch dialog (sign-in and theme) blocks the import; the build log then says the import is retried automatically, and you do not have to import anything by hand.
+A build applies your captured Visual Studio settings (`Backups\VisualStudio.vssettings`) in step 8c. On a new VM, Visual Studio has never been opened, and its first-launch dialog (sign-in and theme) would block the import. So the build first opens Visual Studio once in the guest account's desktop session and answers that dialog with Windows UI Automation: **Skip and add accounts later**, the default theme, then **Start Visual Studio**. Visual Studio then closes itself and the settings are imported straight away. This takes up to 10 minutes.
 
-- **What to do:** open Visual Studio once in the VM, answer its first-launch dialog, and close it.
+If any of that does not go as expected (a control is not found, or it takes too long), the build stops Visual Studio and everything it started, says why in the log, and carries on; it never fails because of this. The settings import is then retried automatically, as below, and you do not have to import anything by hand.
+
+- **What to do then:** open Visual Studio once in the VM, answer its first-launch dialog, and close it.
 - **What happens next:** each night, maintenance applies the settings once Visual Studio has been opened and closed, the guest account is signed in, and Visual Studio is not open, so an IDE you have open is never touched. The log says each night which of these it is waiting for, or that the settings were applied.
 - **After that:** the VM records, per Visual Studio installation, that the settings are applied, so maintenance does not apply them again; a rebuild or `Restore-LazyVMState` does. While the import is still waiting, captures keep the settings backup rather than replacing it with a new install's defaults.
 - `InstallVisualStudio = false` turns all of this off.
+
+#### Checking the first-launch controls
+
+The build finds the dialog's buttons by their UI Automation id (`AutomationId`), which does not change with Visual Studio's language. The ids LazyVM uses are in one table, `$script:VisualStudioFirstLaunchControl` in `src\LazyVM\Private\Installation\VisualStudioFirstLaunch.ps1`, and have not yet been confirmed on a real VM. To see the real ones:
+
+1. In the VM, open Visual Studio for the first time and leave its first-launch dialog showing.
+2. Open **Windows PowerShell** (not PowerShell 7) and run:
+
+   ```powershell
+   powershell.exe -ExecutionPolicy Bypass -File C:\LazyVMSetup\VisualStudioFirstLaunch.ps1 -TreePath "$env:USERPROFILE\Desktop\VSFirstLaunch.txt"
+   ```
+
+3. Answer that screen, and run the same command again on each later screen.
+
+Each run adds every Visual Studio window's tree to the file, one line per element with its control type, name, `AutomationId` and class name, and changes nothing. The build copies the script to `GuestSetupDir` (`C:\LazyVMSetup` by default) when it first tries the first launch. When the build's own attempt does not match, it writes the same description of the windows Visual Studio had open to `C:\LazyVMSetup\VisualStudioFirstLaunch.txt`.
 
 ## 8. Settings
 
