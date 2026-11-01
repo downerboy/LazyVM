@@ -35,6 +35,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
         Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
         Mock -ModuleName $module Set-GuestSysmon { 'stray' }
+        Mock -ModuleName $module Update-GuestWindows { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
         Mock -ModuleName $module Save-GuestState { 'stray' }
         Mock -ModuleName $module Test-GuestStateChanged { $false }
@@ -99,6 +100,41 @@ Describe 'Invoke-Maintenance' {
         Should -Invoke -ModuleName $module Start-GuestStoreAppUpdate -Times 1 -Exactly
     }
 
+    It 'installs Windows updates every day, and carries on when that fails (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Update-GuestWindows { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly
+    }
+
+    It 'lets Windows updates restart the guest only when maintenance started it (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Open-GuestSession { $false }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { -not $StartedByLazyVM }
+
+        Mock -ModuleName $module Open-GuestSession { $true }
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { $StartedByLazyVM }
+    }
+
+    It 'installs Windows updates after the backups and before the license check (#234)' {
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Backup-GuestUserDatabase { $script:order.Add('backup') }
+        Mock -ModuleName $module Update-GuestWindows { $script:order.Add('updates') }
+        Mock -ModuleName $module Get-GuestLicenseStatus { $script:order.Add('license'); [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        $script:order -join ',' | Should -Be 'backup,updates,license'
+    }
+
     It 'keeps Sysmon configured every day, and carries on when that fails (#236)' {
         Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
         Mock -ModuleName $module Set-GuestSysmon { throw 'the guest stopped answering' }
@@ -136,6 +172,34 @@ Describe 'Invoke-Maintenance' {
         "$($result[0])" | Should -Be 'None'
     }
 
+    It 'shuts down a VM it started when nothing is due, and leaves one that was running (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+        Should -Invoke -ModuleName $module Stop-GuestGracefully -Times 1 -Exactly
+
+        Mock -ModuleName $module Open-GuestSession { $false }
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+        Should -Invoke -ModuleName $module Stop-GuestGracefully -Times 1 -Exactly
+    }
+
+    It 'still shuts down a VM it started when a step it cannot carry on from fails, such as a restart that left the guest unreachable (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { throw 'No open guest session for: license status' }
+
+        { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM } } | Should -Throw '*license status*'
+
+        Should -Invoke -ModuleName $module Stop-GuestGracefully -Times 1 -Exactly
+    }
+
+    It 'leaves a VM it started running for the rebuild (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Grace'; DaysLeft = 5; RearmsLeft = 0 } }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'Rebuild'
+        Should -Invoke -ModuleName $module Stop-GuestGracefully -Times 0
+    }
+
     It 'returns only Rearmed after a rearm' {
         Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Grace'; DaysLeft = 5; RearmsLeft = 2 } }
         Mock -ModuleName $module Invoke-GuestRearm { $true }
@@ -151,7 +215,7 @@ Describe 'Invoke-GuestRearm' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Success = $true; Reason = ''; Before = 2 } }
-        Mock -ModuleName $module Restart-GuestAndWait { 'stray' }
+        Mock -ModuleName $module Restart-GuestGracefully { 'stray' }
     }
 
     It 'returns only $true when the rearm is accepted' {
@@ -159,6 +223,12 @@ Describe 'Invoke-GuestRearm' {
 
         $result.Count | Should -Be 1
         $result[0] | Should -BeTrue
+    }
+
+    It 'restarts Windows gracefully to apply the rearm, never with a reset, as updates may be waiting for the restart (#234)' {
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-GuestRearm -VM $VM }
+
+        Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 1 -Exactly
     }
 }
 

@@ -222,15 +222,38 @@ function Open-GuestSession {
     return $started
 }
 
-function Restart-GuestAndWait {
-    <# Restarts the guest and reopens the session once it is back. #>
+function Restart-GuestGracefully {
+    <#
+      Restarts Windows from inside the guest, as its Start menu does, and
+      reopens the session once it is back. Updates waiting for a restart
+      finish installing while Windows shuts down and starts, which a reset
+      (Restart-VM) would cut short. Windows is given a few seconds' notice;
+      it then closes what is open, so this is only for a guest nobody is at
+      work in. Windows may spend a while installing updates before it goes
+      down, still answering PowerShell Direct, so the restart counts as done
+      only once the guest reports a new boot time. Throws when it does not
+      within GuestWaitMinutes.
+    #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $credential = Assert-GuestCredential -VM $VM
-    Remove-GuestSession -VM $VM
-    Restart-VM -Name $VM.Name -Force -Wait:$false | Out-Null
-    Start-Sleep -Seconds 20
-    Wait-GuestReady -VM $VM -Credential $credential -TimeoutMinutes $VM.Settings.GuestWaitMinutes
+    $readBootTime = { (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime }
+    $bootTime = Invoke-GuestScript -VM $VM -Activity 'reading the boot time' -TimeoutMinutes 2 -ScriptBlock $readBootTime
+    $exitCode = Invoke-GuestScript -VM $VM -Activity 'restarting Windows' -TimeoutMinutes 2 -ScriptBlock {
+        & shutdown.exe /r /t 10 /c 'LazyVM is restarting Windows.' | Out-Null
+        return $LASTEXITCODE
+    }
+    if ([int]$exitCode -ne 0) { throw "Windows in the guest refused to restart (shutdown.exe exit $exitCode)" }
+
+    Write-LogEntry 'Restarting Windows in the guest...' 'INFO'
+    Remove-GuestSession -VM $VM -KeepCredential
+    $null = Wait-Until -Activity 'The guest restart' -Timeout ([timespan]::FromMinutes($VM.Settings.GuestWaitMinutes)) -Interval ([timespan]::FromSeconds(20)) -Condition {
+        # Each try is a one-off PowerShell Direct call: the guest goes away
+        # and comes back between tries, which a kept session would not survive.
+        try { $now = Invoke-Command -VMName $VM.Name -Credential $credential -ScriptBlock $readBootTime -ErrorAction Stop }
+        catch { return $false }
+        return ($null -ne $now -and "$now" -ne "$bootTime")
+    }
     Connect-Guest -VM $VM -Credential $credential | Out-Null
 }
 

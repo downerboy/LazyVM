@@ -150,3 +150,55 @@ Describe 'Install-GuestSoftware' {
         Should -Invoke -ModuleName $module Set-GuestSysmon -Times 1 -Exactly
     }
 }
+
+Describe 'Install-GuestSoftware Windows updates (#234)' {
+    BeforeAll {
+        $buildVM = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; GuestWaitMinutes = 1; GuestNetworkWaitMinutes = 1 }) }
+        $emptyTooling = InModuleScope $module { [ToolingRecord]::new() }
+    }
+
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-LogError { }
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
+        Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('lazy', [securestring]::new()) }
+        foreach ($step in 'Wait-GuestReady', 'Remove-UnattendSeedDisk', 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk',
+            'Connect-Guest', 'Expand-GuestSystemDrive', 'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
+            'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization', 'Set-GuestSysmon', 'Install-ToolingProduct',
+            'Install-SqlServerIfMissing', 'Install-WingetPackage', 'Install-OfficialInstaller', 'Initialize-VMTooling') {
+            Mock -ModuleName $module $step { }
+        }
+        Mock -ModuleName $module Get-BuildTooling { $emptyTooling }
+        Mock -ModuleName $module Wait-GuestNetwork { $true }
+        Mock -ModuleName $module Write-ToolingReinstallReport { $true }
+        Mock -ModuleName $module Update-GuestWindows { }
+    }
+
+    It 'installs Windows updates after the tooling, and may restart the new VM for them' {
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Install-OfficialInstaller { $script:order.Add('tooling') }
+        Mock -ModuleName $module Update-GuestWindows { $script:order.Add('updates') }
+
+        $null = InModuleScope $module -Parameters @{ VM = $buildVM } { param($VM) Install-GuestSoftware -VM $VM }
+
+        $script:order -join ',' | Should -Be 'tooling,updates'
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { $StartedByLazyVM }
+    }
+
+    It 'carries on when Windows updates fail, without failing the phase' {
+        Mock -ModuleName $module Update-GuestWindows { throw 'Windows Update is broken' }
+
+        $outcome = @(InModuleScope $module -Parameters @{ VM = $buildVM } { param($VM) Install-GuestSoftware -VM $VM })
+
+        $outcome.Count | Should -Be 0
+        Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly
+    }
+
+    It 'skips Windows updates when the guest has no network' {
+        Mock -ModuleName $module Wait-GuestNetwork { $false }
+
+        $null = InModuleScope $module -Parameters @{ VM = $buildVM } { param($VM) Install-GuestSoftware -VM $VM }
+
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 0
+    }
+}
