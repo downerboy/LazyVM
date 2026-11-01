@@ -214,13 +214,13 @@ Describe 'Update-GuestWingetPackage (#235)' {
         Should -Invoke -ModuleName $module Write-LogEntry -Times 2 -Exactly -ParameterFilter { $Message -match 'Microsoft\.(VisualStudio|SQLServer)' -and $Message -match 'own installer' }
     }
 
-    It 'skips, and says why, a package when it cannot tell whether its program is running' {
+    It 'still upgrades a package whose install folder is unknown, without a running check (Sean, #235)' {
         Mock -ModuleName $module Get-GuestWingetUpgrade { New-Upgrade -Id 'Some.Tool' -Folders @(); New-Upgrade -Id 'Git.Git' }
 
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWingetPackage -VM $VM }
 
-        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter { (@($ArgumentList[1]).Id -join ',') -eq 'Git.Git' }
-        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -match 'Some\.Tool' -and $Message -match 'running' }
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter { (@($ArgumentList[1]).Id -join ',') -eq 'Some.Tool,Git.Git' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { $Message -match 'skipped Some\.Tool' }
     }
 
     It 'starts no task when nothing is to be upgraded' {
@@ -279,6 +279,17 @@ Describe 'Update-GuestWingetPackage (#235)' {
             ($script:upgraded -join ',') | Should -Be 'Some.Tool'
             Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter {
                 @($Notes).Text -contains 'upgraded: Some.Tool' -and @(@($Notes).Text -like 'skipped: Git.Git - running (git.exe)*').Count -eq 1
+            }
+        }
+
+        It 'upgrades a package with no known folder, and says it had no running check' {
+            Mock -ModuleName $module Get-GuestWingetUpgrade { New-Upgrade -Id 'Some.Tool' -Folders @() }
+
+            InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWingetPackage -VM $VM }
+
+            ($script:upgraded -join ',') | Should -Be 'Some.Tool'
+            Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter {
+                @($Notes | Where-Object { $_.Level -eq 'INFO' -and $_.Text -like 'upgraded without a running check: Some.Tool*' }).Count -eq 1
             }
         }
 

@@ -287,7 +287,7 @@ Each night's maintenance upgrades everything winget can upgrade in the VM from i
 
 - **Visual Studio and SQL Server** (and SSMS) are never upgraded by winget: their own installers service them, and a winget upgrade can break a working install.
 - **Packages you pin** are left alone. To keep a package at its version, pin it inside the VM: `winget pin add --id <id>`. `winget pin remove --id <id>` lets it upgrade again.
-- **Programs that are running** are skipped that night, so nothing you have open is closed under you. A program whose install folder Windows does not record, or records only as a shared folder such as `Program Files`, is skipped too, since LazyVM cannot tell whether it is running.
+- **Programs that are running** are skipped that night, so nothing you have open is closed under you. A program whose install folder Windows does not record, or records only as a shared folder such as `Program Files`, cannot be checked this way; it is upgraded anyway, and the log says it was upgraded without a running check.
 
 Upgrades that have not started after 45 minutes wait for the next night, so none is cut off halfway.
 

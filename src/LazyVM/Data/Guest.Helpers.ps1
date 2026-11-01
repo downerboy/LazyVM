@@ -757,7 +757,7 @@ function Resolve-GuestWingetId {
 function Test-GuestProgramFolderUsable {
     <#
       Whether $Path can stand for one program's folder when telling whether
-      it is running. Not a drive, Program Files, or a profile's AppData or
+      it is running; a program without one gets no running check. Not a drive, Program Files, or a profile's AppData or
       Programs folder, which hold every program, and nothing under Windows
       or the Package Cache, where installers keep only their own copies.
     #>
@@ -780,7 +780,8 @@ function Get-GuestProgramFolder {
       folder of its icon. A name winget cut short with an ellipsis matches the
       names it starts. Nothing for a program with neither, or whose folder
       cannot stand for it alone (Test-GuestProgramFolderUsable), as an MSI's
-      icon in the Windows folder cannot: its folder is then unknown.
+      icon in the Windows folder cannot: its folder is then unknown, and
+      whether it is running cannot be told.
     #>
     param([Parameter(Mandatory)][string]$Name)
 

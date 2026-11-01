@@ -70,7 +70,8 @@ function Update-GuestWingetPackage {
       Server, packages pinned with winget pin, and any program that is
       running when its turn comes, so nobody's open editor or tool is closed
       under them. A program whose folder Windows does not record, or records
-      too broadly, is left out too: whether it is running cannot be told.
+      only too broadly, cannot be checked; it is upgraded anyway, and the log
+      says it had no running check (Sean's decision on #235).
       Upgrades not started within 45 minutes wait for the next night. Each
       is logged.
 
@@ -100,9 +101,6 @@ function Update-GuestWingetPackage {
         }
         elseif (-not (Test-WingetUpgradeAllowed -Id $upgrade.Id)) {
             Write-LogEntry "winget upgrades: left $($upgrade.Id) to its own installer" 'INFO'
-        }
-        elseif (@($upgrade.Folders).Count -eq 0) {
-            Write-LogEntry "winget upgrades: skipped $($upgrade.Id) - Windows does not record where it is installed, so whether it is running cannot be told" 'INFO'
         }
         else {
             $packages.Add(@{ Id = "$($upgrade.Id)"; Folders = @($upgrade.Folders | ForEach-Object { "$_" }) })
@@ -134,7 +132,15 @@ function Update-GuestWingetPackage {
                 continue
             }
             # Checked just before its turn, as a program may have been opened since the list was made.
-            $running = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $path = "$($_.ExecutablePath)"; $path -and @($package.Folders | Where-Object { $path.StartsWith("$_\", [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 })
+            # A package with no folder that stands for it alone cannot be checked, and is upgraded anyway (Sean, #235).
+            $checked = @($package.Folders).Count -gt 0
+            $running = @()
+            if ($checked) {
+                $running = @(Get-CimInstance -ClassName Win32_Process | Where-Object {
+                        $path = "$($_.ExecutablePath)"
+                        $path -and @($package.Folders | Where-Object { $path.StartsWith("$_\", [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+                    })
+            }
             if ($running.Count -gt 0) {
                 $notes += [pscustomobject]@{ Level = 'INFO'; Text = "skipped: $id - running ($(@($running | ForEach-Object { $_.Name } | Sort-Object -Unique) -join ', ')); tried again tomorrow" }
                 continue
@@ -142,7 +148,8 @@ function Update-GuestWingetPackage {
 
             & $winget upgrade --id $id --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
             $exit = $LASTEXITCODE
-            if ($exit -eq 0) { $notes += [pscustomobject]@{ Level = 'OK'; Text = "upgraded: $id" } }
+            if ($exit -eq 0 -and -not $checked) { $notes += [pscustomobject]@{ Level = 'INFO'; Text = "upgraded without a running check: $id - Windows records no folder that stands for it alone" } }
+            elseif ($exit -eq 0) { $notes += [pscustomobject]@{ Level = 'OK'; Text = "upgraded: $id" } }
             elseif ($exit -eq $upToDate) { $notes += [pscustomobject]@{ Level = 'INFO'; Text = "up to date: $id" } }
             else {
                 $known = $exitMeanings.PSObject.Properties["$exit"]
