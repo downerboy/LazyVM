@@ -507,10 +507,11 @@ function Restore-GuestVisualStudioSetting {
       Applies the Visual Studio settings in VSSettingsBackup, which a capture
       refreshes (Get-VisualStudioSettingTarget, Import-GuestVisualStudioSetting).
       The guest records them as pending first, so nightly maintenance applies
-      them when this fails (#266), as it does on a fresh build, where devenv
-      waits on its first-launch dialog. devenv applies settings only in the
-      guest user's desktop session, so this fails at once when they are not
-      signed in.
+      them when this fails (#266). On a fresh build Visual Studio's first
+      launch is answered first (Complete-GuestVisualStudioFirstLaunch, #268);
+      when it cannot be, the import is left to nightly maintenance and the
+      build goes on. devenv applies settings only in the guest user's desktop
+      session, so this fails at once when they are not signed in.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -520,6 +521,10 @@ function Restore-GuestVisualStudioSetting {
     $account = $VM.Runtime.GuestAdminUser
     if (@(Get-GuestSignedInUser -VM $VM) -notcontains $account) {
         throw "'$account' is not signed in to the guest, and devenv applies Visual Studio settings only in their desktop session. The settings import is retried automatically by nightly maintenance"
+    }
+    if (-not (Complete-GuestVisualStudioFirstLaunch -VM $VM -VisualStudio $target.VisualStudio)) {
+        Write-LogEntry '  The Visual Studio settings import is retried automatically by nightly maintenance, once Visual Studio has been opened and closed in the VM' 'WARN'
+        return
     }
     Import-GuestVisualStudioSetting -VM $VM -VisualStudio $target.VisualStudio -Settings $target.Settings
 }
