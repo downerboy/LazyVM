@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.0.1](https://github.com/downerboy/LazyVM/compare/v5.0.0...v5.0.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* always delete the answer-file disc when ejecting it fails ([#256](https://github.com/downerboy/LazyVM/issues/256)) ([5379388](https://github.com/downerboy/LazyVM/commit/53793881fd31cfea0fa13128b1acfab015ea41e9))
+
 ## [5.0.0](https://github.com/downerboy/LazyVM/compare/v4.21.1...v5.0.0) (2026-10-31)
 
 
