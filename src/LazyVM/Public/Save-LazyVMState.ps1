@@ -4,11 +4,15 @@ function Save-LazyVMState {
     Captures a VM's state to the host, ready for a rebuild.
 
     .DESCRIPTION
-    Copies what a rebuild would otherwise lose to the VM's State folder on
-    the host: SQL Server databases (as backups), logins and settings, Visual
-    Studio settings, the Windows environment (variables, certificates,
-    firewall rules, scheduled tasks), and application settings listed in
-    AppSettings.
+    Copies what a rebuild would otherwise lose to a capture folder of its
+    own in the VM's State folder on the host, keeping the newest three:
+    Visual Studio settings and files, and certificates. Every user database
+    is backed up to the SQL data disk, which a rebuild keeps, and the
+    application settings listed in AppSettings are recorded in VM.json.
+
+    The environment, firewall rules, scheduled tasks and SQL logins,
+    settings and Agent jobs need no capture: the daily maintenance records
+    them in VM.json whenever they change.
 
     The daily maintenance captures automatically before a rearm or rebuild.
     The Dev Drive and the User disk, which holds Documents, Desktop,

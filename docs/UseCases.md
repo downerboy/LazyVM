@@ -10,7 +10,7 @@ UML use case diagrams for the LazyVM module, drawn from the code in `src/`, not 
 - An **oval** is a use case. Where one is a command, its name is underneath.
 - **«include»** points to a use case that always runs as part of another.
 - **«extend»** points from a use case that runs only sometimes. The condition is in square brackets.
-- **Administrator** is a Host user with an elevated PowerShell (the hollow arrow). Every command needs one except `Get-LazyVM`, `Get-LazyVMSetting` and `New-LazyVM`.
+- **Administrator** is a Host user with an elevated PowerShell (the hollow arrow). Every command needs one except `Show-LazyVM`, `Get-LazyVM`, `Get-LazyVMSetting`, `New-LazyVM` and `Export-LazyVMTemplate`.
 
 ## Contents
 
@@ -30,9 +30,9 @@ UML use case diagrams for the LazyVM module, drawn from the code in `src/`, not 
 
 Actors: Host user, Administrator (a Host user), Task Scheduler running as SYSTEM.
 
-- Host user: List VMs (`Get-LazyVM`), View settings (`Get-LazyVMSetting`), Create a VM profile (`New-LazyVM`).
+- Host user: Show LazyVM and its commands (`Show-LazyVM`, or just `LazyVM`), List VMs (`Get-LazyVM`), View settings (`Get-LazyVMSetting`), Create a VM profile (`New-LazyVM`), Save a VM as a config template (`Export-LazyVMTemplate`).
 - Administrator, also:
-  - Look up: Check the license (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`).
+  - Look up: Check the license (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`), Check a VM end to end (`Test-LazyVM`).
   - Set up: Choose the LazyVM folder (`Set-LazyVMRoot`), Store the guest account (`Set-LazyVMCredential`).
   - Build and maintain: Build a VM (`Build-LazyVM`), Schedule daily maintenance (`Register-LazyVMMaintenance`), Run daily maintenance (`Invoke-LazyVMMaintenance`), Rebuild the VM (`Invoke-LazyVMRebuild`).
   - Tooling: View installed tooling (`Get-LazyVMTooling`), Record tooling changes (`Save-LazyVMTooling`), List tooling restore points (`Get-LazyVMRestorePoint`), Return to a tooling version (`Restore-LazyVMTooling`).
@@ -50,10 +50,10 @@ Build a VM includes:
 
 - Check and prepare the host (phases 0-3). Extended by **Turn on Hyper-V and restart the host** when Hyper-V is off; the build then resumes at phase 3 by itself.
 - Get the installation media (phase 4). Extended by **Open the evaluation download page** when no Windows ISO is found, and by **Download the SQL Server ISO** when it is missing.
-- Create the data disk and Dev Drive (phase 5). Existing disks are never overwritten.
+- Create the data disk, the Dev Drive and the User disk (phase 5). Existing disks are never overwritten.
 - Create the VM and install Windows unattended (phase 6). Extended by **Generate the guest account** when no credential is stored.
-- Install the tooling list (phase 7), which includes **Extend C: to the whole disk**. Tooling comes from the `Tooling` section of the VM's `VM.json`, which a new VM gets from the shared template (by default the module's `Tooling.Default.json`).
-- Configure the guest (phase 8): SQL data files to D:, Visual Studio settings. A rebuild puts the databases back afterwards (phase 10).
+- Install the tooling list (phase 7), which includes **Extend C: to the whole disk**, **Turn on BitLocker**, **Set up Windows and Sysmon** (built-in apps removed, appearance, Developer Mode) and **Install Windows updates**. Tooling comes from the `Tooling` section of the VM's `VM.json`, which a new VM gets from the shared template (by default the module's `Tooling.Default.json`).
+- Configure the guest (phase 8): SQL data files to D:, Visual Studio settings. Extended by **Answer Visual Studio's first launch** when Visual Studio has never been opened. A rebuild puts the databases back afterwards, when it restores state.
 - Schedule daily maintenance.
 
 Build a VM is extended by:
@@ -70,13 +70,19 @@ Actors: Task Scheduler (daily at `MaintenanceTime`, as SYSTEM), Administrator. S
 Run daily maintenance includes, every day:
 
 - Extend C: to the whole disk. It takes a checkpoint first and moves the recovery partition to the end of the disk, so it works with BitLocker on.
+- Look after the User disk and BitLocker: a VM built before the User disk gets one, and BitLocker is turned on for any disk without it.
 - Record tooling changes. Extended by **Take a tooling checkpoint** when the tooling changed.
+- Record the guest's settings: environment, firewall rules, scheduled tasks, SQL logins, settings and Agent jobs, and application settings, in `VM.json`.
+- Check and back up the databases.
+- Keep the guest up to date: Store apps, Sysmon, winget packages and Windows updates.
 - Check the evaluation license.
 
 It is extended by:
 
 - **Start the VM** when the VM is off.
-- **Capture state** when the evaluation is within `RebuildThresholdDays` (10) of expiry.
+- **Copy the User disk** when its files changed.
+- **Apply Visual Studio settings** while a build or restore could not apply them.
+- **Capture state** when the evaluation is within `RebuildThresholdDays` (10) of expiry, or the certificates or Visual Studio settings changed since the last capture.
 - **Rearm the evaluation** when rearms are left.
 - **Rebuild the VM** when no rearms are left or the rearm failed.
 - **Build a VM** when the VM does not exist.
@@ -91,12 +97,13 @@ Actors: Administrator (`Invoke-LazyVMRebuild`), Task Scheduler (through daily ma
 
 Rebuild the VM includes:
 
-- Retire the old VM: removes its checkpoints and definition and renames its Windows disk aside. The data disk and Dev Drive are not touched.
+- Put the personal folders on the User disk, so nothing personal is left on the Windows disk. Nothing is retired if this fails.
+- Retire the old VM: removes its checkpoints and definition and renames its Windows disk aside. The data disk, the Dev Drive and the User disk are not touched.
 - Create the VM and install Windows unattended.
 - Install the tooling list, which includes **Extend C: to the whole disk**.
 - Configure the guest.
 - Restore state.
-- Verify the rebuilt VM: running and reachable, tooling-list products and SQL Server installed, captured databases online, D: and W: mounted. Extended by **Delete the retired disk** when verification passed and `DeleteRetiredDiskOnSuccess` is on. If it failed, the retired disk is kept and the log gives the rollback commands.
+- Verify the rebuilt VM: running and reachable, tooling-list products and SQL Server installed, captured databases online, D: and W: mounted. Extended by **Delete the retired disk** when the build had no problems, verification passed and `DeleteRetiredDiskOnSuccess` is on. If it failed, the retired disk is kept and the log gives the rollback commands.
 
 It is extended by **Capture state** unless `-SkipCapture` is given. Maintenance passes `-SkipCapture` because it has just captured.
 
@@ -118,8 +125,8 @@ Actor: Administrator. Systems: Guest Windows, Hyper-V.
 
 Actor: Administrator. Systems: Guest Windows, Hyper-V.
 
-- Capture state (`Save-LazyVMState`) copies Visual Studio settings, SQL databases and logins, the Windows environment and certificates, project files and application settings to `State\<VM>\` on the host.
-- Restore state (`Restore-LazyVMState`) puts them back.
+- Capture state (`Save-LazyVMState`) copies Visual Studio settings and files, and certificates, to a folder of its own, `<VM>\State\Captures\<stamp>\`, on the host, keeping the newest three. It backs up the databases to the SQL data disk and records application settings in `VM.json`.
+- Restore state (`Restore-LazyVMState`) puts the newest capture back, with what `VM.json` records: the environment, firewall rules, scheduled tasks, SQL settings, logins and Agent jobs, and application settings. Databases are attached from the SQL data disk, or restored from their backups there.
 - Both include **Bring the SQL data disk online**, and both are extended by **Start the VM** when the VM is off.
 
 ## 7. Set up
@@ -142,7 +149,8 @@ Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Window
 - List VMs (`Get-LazyVM`) and View settings (`Get-LazyVMSetting`), by any Host user. List VMs reads VM state from Hyper-V and the task from Task Scheduler.
 - View the guest account (`Get-LazyVMCredential`).
 - Check the license (`Get-LazyVMLicense`) reads the license inside the guest. Extended by **Start the VM** when the VM is off.
-- Remove a VM (`Remove-LazyVM`) includes **List what will be deleted and kept**, then deletes the VM, its tasks, its registry key, its disks (Dev Drive included), checkpoints, state, profile and log. Anything another VM also uses is kept. It asks first unless `-Force`; `-WhatIf` only lists.
+- Check a VM end to end (`Test-LazyVM`) checks the folder, the ISOs, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only: a VM that is off is not started.
+- Remove a VM (`Remove-LazyVM`) includes **List what will be deleted and kept**, then deletes the VM, its tasks, its registry key, its disks (Dev Drive and User disk included), checkpoints, state, profile and log. Anything another VM also uses is kept. It asks first unless `-Force`; `-WhatIf` only lists.
 
 ## 9. Install the module
 

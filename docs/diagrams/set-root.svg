@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 523" width="1030" height="523" role="img" aria-labelledby="t-set-root">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 613" width="1030" height="613" role="img" aria-labelledby="t-set-root">
 <title id="t-set-root">Choose the LazyVM folder: calls in order, with data flowing in from the left and out to the right</title>
 <style>
 svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
@@ -24,81 +24,83 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
 <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
 </defs>
-<rect class="bg" x="0" y="0" width="1030" height="523"/>
+<rect class="bg" x="0" y="0" width="1030" height="613"/>
 <text class="cap" x="20" y="16">INPUTS</text>
 <text class="cap" x="335" y="16">CALLS IN ORDER</text>
 <text class="cap" x="740" y="16">OUTPUTS</text>
-<path class="cl" d="M335,67.5 L305,67.5 L305,439"/>
-<path class="cl" d="M305,149 L335,149" marker-end="url(#ac)"/>
-<path class="cl" d="M305,240 L335,240" marker-end="url(#ac)"/>
-<path class="cl" d="M305,348 L335,348" marker-end="url(#ac)"/>
-<path class="cl" d="M305,439 L335,439" marker-end="url(#ac)"/>
-<path class="df" d="M275,253.5 L335,253.5" marker-end="url(#ad)"/>
-<path class="df" d="M640,361.5 L740,361.5" marker-end="url(#ad)"/>
-<path class="df" d="M275,452.5 L335,452.5" marker-end="url(#ad)"/>
-<path class="df" d="M640,461.0 L740,461.0" marker-end="url(#ad)"/>
-<g class="bd"><circle cx="293" cy="253.5" r="10"/><text x="293" y="257.0" text-anchor="middle">D1</text></g>
-<g class="bd"><circle cx="690.0" cy="361.5" r="10"/><text x="690.0" y="365.0" text-anchor="middle">D2</text></g>
-<g class="bd"><circle cx="293" cy="452.5" r="10"/><text x="293" y="456.0" text-anchor="middle">D3</text></g>
-<g class="bd"><circle cx="690.0" cy="461.0" r="10"/><text x="690.0" y="464.5" text-anchor="middle">D4</text></g>
-<g class="bx-cmd"><rect x="335" y="34" width="305" height="67" rx="3"/>
+<path class="cl" d="M335,76 L305,76 L305,502"/>
+<path class="cl" d="M305,166 L335,166" marker-end="url(#ac)"/>
+<path class="cl" d="M305,278 L335,278" marker-end="url(#ac)"/>
+<path class="df" d="M275,300 L335,300" marker-end="url(#ad)"/>
+<path class="cl" d="M305,390 L335,390" marker-end="url(#ac)"/>
+<path class="df" d="M640,412 L740,412" marker-end="url(#ad)"/>
+<path class="cl" d="M305,502 L335,502" marker-end="url(#ac)"/>
+<path class="df" d="M275,524 L335,524" marker-end="url(#ad)"/>
+<path class="df" d="M640,524 L740,524" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="300" r="10"/><text x="293" y="303.5" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="690" cy="412" r="10"/><text x="690" y="415.5" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="293" cy="524" r="10"/><text x="293" y="527.5" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="690" cy="524" r="10"/><text x="690" y="527.5" text-anchor="middle">D4</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="84" rx="3"/>
 <text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
 <text class="nm" x="487.5" y="64" text-anchor="middle">Set-LazyVMRoot</text>
 <line class="div" x1="335" y1="71" x2="640" y2="71"/>
 <text class="at" x="345" y="86">-Path D:\DevVM</text>
 </g>
-<g class="bx-mod"><rect x="335" y="129" width="305" height="67" rx="3"/>
-<text class="st" x="487.5" y="143" text-anchor="middle">«Settings»</text>
-<text class="nm" x="487.5" y="159" text-anchor="middle">Resolve-SettingsRoot()</text>
-<line class="div" x1="335" y1="166" x2="640" y2="166"/>
-<g class="sn"><circle cx="351" cy="150" r="10"/><text x="351" y="154" text-anchor="middle">1</text></g>
-<text class="at" x="345" y="181">checks it is a full local path</text>
+<g class="bx-mod"><rect x="335" y="146" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="160" text-anchor="middle">«Settings»</text>
+<text class="nm" x="500.5" y="176" text-anchor="middle">Resolve-SettingsRoot()</text>
+<line class="div" x1="335" y1="183" x2="640" y2="183"/>
+<g class="sn"><circle cx="351" cy="167" r="10"/><text x="351" y="171" text-anchor="middle">1</text></g>
+<text class="at" x="345" y="198">checks it is a full local path</text>
 </g>
-<g class="bx-mod"><rect x="335" y="220" width="305" height="84" rx="3"/>
-<text class="st" x="487.5" y="234" text-anchor="middle">«Settings»</text>
-<text class="nm" x="487.5" y="250" text-anchor="middle">Get-RegisteredRoot()</text>
-<line class="div" x1="335" y1="257" x2="640" y2="257"/>
-<g class="sn"><circle cx="351" cy="241" r="10"/><text x="351" y="245" text-anchor="middle">2</text></g>
-<text class="at" x="345" y="272">warns if a different folder</text>
-<text class="at" x="345" y="289">was in use</text>
+<g class="bx-mod"><rect x="335" y="258" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="272" text-anchor="middle">«Settings»</text>
+<text class="nm" x="500.5" y="288" text-anchor="middle">Get-RegisteredRoot()</text>
+<line class="div" x1="335" y1="295" x2="640" y2="295"/>
+<g class="sn"><circle cx="351" cy="279" r="10"/><text x="351" y="283" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="310">warns if a different folder was in use</text>
 </g>
-<g class="bx-store"><rect x="20" y="220" width="255" height="67" rx="3"/>
-<text class="st" x="147.5" y="234" text-anchor="middle">«registry»</text>
-<text class="nm" x="147.5" y="250" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
-<line class="div" x1="20" y1="257" x2="275" y2="257"/>
-<text class="at" x="30" y="272">Root</text>
+<g class="bx-store"><rect x="20" y="258" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="272" text-anchor="middle">«registry»</text>
+<text class="nm" x="147.5" y="288" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<line class="div" x1="20" y1="295" x2="275" y2="295"/>
+<text class="at" x="30" y="310">Root</text>
 </g>
-<g class="bx-mod"><rect x="335" y="328" width="305" height="67" rx="3"/>
-<text class="st" x="487.5" y="342" text-anchor="middle">«Settings»</text>
-<text class="nm" x="487.5" y="358" text-anchor="middle">Set-RegisteredRoot()</text>
-<line class="div" x1="335" y1="365" x2="640" y2="365"/>
-<g class="sn"><circle cx="351" cy="349" r="10"/><text x="351" y="353" text-anchor="middle">3</text></g>
+<g class="bx-mod"><rect x="335" y="370" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="384" text-anchor="middle">«Settings»</text>
+<text class="nm" x="500.5" y="400" text-anchor="middle">Set-RegisteredRoot()</text>
+<line class="div" x1="335" y1="407" x2="640" y2="407"/>
+<g class="sn"><circle cx="351" cy="391" r="10"/><text x="351" y="395" text-anchor="middle">3</text></g>
+<text class="at" x="345" y="422">creates the folder if needed and records</text>
+<text class="at" x="345" y="439">it</text>
 </g>
-<g class="bx-store"><rect x="740" y="328" width="270" height="67" rx="3"/>
-<text class="st" x="875.0" y="342" text-anchor="middle">«registry»</text>
-<text class="nm" x="875.0" y="358" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
-<line class="div" x1="740" y1="365" x2="1010" y2="365"/>
-<text class="at" x="750" y="380">Root = D:\DevVM</text>
+<g class="bx-store"><rect x="740" y="370" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="384" text-anchor="middle">«registry»</text>
+<text class="nm" x="875" y="400" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<line class="div" x1="740" y1="407" x2="1010" y2="407"/>
+<text class="at" x="750" y="422">Root = D:\DevVM</text>
 </g>
-<g class="bx-mod"><rect x="335" y="419" width="305" height="84" rx="3"/>
-<text class="st" x="487.5" y="433" text-anchor="middle">«Settings»</text>
-<text class="nm" x="487.5" y="449" text-anchor="middle">Initialize-ConfigFolder()</text>
-<line class="div" x1="335" y1="456" x2="640" y2="456"/>
-<g class="sn"><circle cx="351" cy="440" r="10"/><text x="351" y="444" text-anchor="middle">4</text></g>
-<text class="at" x="345" y="471">copies the schema for</text>
-<text class="at" x="345" y="488">VS Code autocomplete</text>
+<g class="bx-mod"><rect x="335" y="482" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="496" text-anchor="middle">«Settings»</text>
+<text class="nm" x="500.5" y="512" text-anchor="middle">Initialize-ConfigFolder()</text>
+<line class="div" x1="335" y1="519" x2="640" y2="519"/>
+<g class="sn"><circle cx="351" cy="503" r="10"/><text x="351" y="507" text-anchor="middle">4</text></g>
+<text class="at" x="345" y="534">copies the schema for VS Code</text>
+<text class="at" x="345" y="551">autocomplete; returns the folder and its</text>
+<text class="at" x="345" y="568">settings file</text>
 </g>
-<g class="bx-store"><rect x="20" y="419" width="255" height="67" rx="3"/>
-<text class="st" x="147.5" y="433" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="449" text-anchor="middle">Module Data\</text>
-<line class="div" x1="20" y1="456" x2="275" y2="456"/>
-<text class="at" x="30" y="471">LazyVM.Settings.schema.json</text>
+<g class="bx-store"><rect x="20" y="482" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="496" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="512" text-anchor="middle">Module Data\</text>
+<line class="div" x1="20" y1="519" x2="275" y2="519"/>
+<text class="at" x="30" y="534">LazyVM.Settings.schema.json</text>
 </g>
-<g class="bx-store"><rect x="740" y="419" width="270" height="84" rx="3"/>
-<text class="st" x="875.0" y="433" text-anchor="middle">«file»</text>
-<text class="nm" x="875.0" y="449" text-anchor="middle">D:\DevVM\Shared\Config\</text>
-<line class="div" x1="740" y1="456" x2="1010" y2="456"/>
-<text class="at" x="750" y="471">LazyVM.Settings.schema.json</text>
-<text class="at" x="750" y="488">LazyVM.Settings.json (if new)</text>
+<g class="bx-store"><rect x="740" y="482" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="496" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="512" text-anchor="middle">D:\DevVM\Shared\Config\</text>
+<line class="div" x1="740" y1="519" x2="1010" y2="519"/>
+<text class="at" x="750" y="534">LazyVM.Settings.schema.json</text>
+<text class="at" x="750" y="551">LazyVM.Settings.json (if new)</text>
 </g>
 </svg>

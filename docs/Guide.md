@@ -30,7 +30,7 @@ The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyV
 
 - **Build.** Create the VM and install Windows unattended. Then install everything in the VM's tooling list (Visual Studio, SSMS, SQL Server, winget packages) with no input from you.
 - **Configure.** Attach and prepare the SQL data disk, the Dev Drive and the User disk, encrypt them and `C:` with BitLocker, and relocate databases onto the data disk.
-- **Maintain.** Every day, record any tools you have added or removed in the VM, taking a checkpoint first so you can go back. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
+- **Maintain.** Every night, record what changed in the VM (tools you added or removed, taking a checkpoint first so you can go back, and your environment, firewall rules, scheduled tasks, SQL logins and application settings), back up the databases, and keep Windows, winget packages, Store apps and Sysmon up to date. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
 
 ### What survives a rebuild
 
@@ -231,7 +231,7 @@ Expect it to take between five and thirty minutes, depending on database size. W
 
 `Build-LazyVM` schedules it when the build succeeds. If that step fails, the build still succeeds and warns you; fix the cause and run `Register-LazyVMMaintenance`. Running that again at any time is harmless.
 
-This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. Each run records in `VM.json` any change made to the VM's hardware in Hyper-V (processors, memory, disk sizes, switch) and any tooling change ([section 9](#9-tooling-and-going-back)). It turns BitLocker on for `C:` and each persistent disk that does not have it yet ([BitLocker](#bitlocker)). It checks every user database with `DBCC CHECKDB` and, only when the check passes, backs it up to `D:\SQLBackup`, keeping one good, verified backup of each: a database that fails its check keeps the backup it had, and the log says so with `[X]`. It then compares the VM's certificates and Visual Studio settings with the fingerprint the newest capture recorded, and takes a full capture when either has changed, so a change is captured the night after it is made, not only when the evaluation is about to expire. Then it reads the license. On almost every day it finds plenty of time remaining and finishes within a few minutes, depending on database size.
+This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as SYSTEM at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not anyone is signed in. It wakes the host if needed and catches up if the host was off. [Section 5](#5-the-90-day-cycle) lists what each run does. It checks every user database with `DBCC CHECKDB` and, only when the check passes, backs it up to `D:\SQLBackup`, keeping one good, verified backup of each: a database that fails its check keeps the backup it had, and the log says so with `[X]`. It also compares the VM's certificates and Visual Studio settings with the fingerprint the newest capture recorded, and takes a full capture when either has changed, so a change is captured the night after it is made, not only when the evaluation is about to expire. On almost every day it finds plenty of time remaining on the license and finishes within a few minutes, plus the time updates take.
 
 A daily task is used rather than a 90-day one on purpose. A task that fires exactly every 90 days drifts past the expiry date, and misses it entirely if the host happens to be off that day.
 
@@ -269,11 +269,27 @@ Build-LazyVM
 
 ## 5. The 90-day cycle
 
-Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), turns Sysmon on and installs it if it is not, with any newer configuration LazyVM ships ([Sysmon](#sysmon)), applies the Visual Studio settings if the build could not ([Visual Studio settings](#visual-studio-settings)), upgrades the winget packages ([winget upgrades](#winget-upgrades)), installs Windows updates ([Windows updates](#windows-updates)), then does this:
+Each night the maintenance run, in this order:
+
+1. records in `VM.json` any change made to the VM's hardware in Hyper-V (processors, memory, disk sizes, switch);
+2. extends `C:` into any space added to the OS disk;
+3. gives a VM built before the User disk its User disk ([section 11](#the-user-disk));
+4. turns BitLocker on for `C:` and each persistent disk that does not have it yet ([BitLocker](#bitlocker));
+5. copies the User disk, when its files changed (`BackupDir`, [section 8](#the-settings-most-worth-knowing));
+6. records any tooling change, with a checkpoint first ([section 9](#9-tooling-and-going-back));
+7. records the guest's environment, firewall rules, scheduled tasks, SQL logins, settings and Agent jobs, and application settings in `VM.json`, when they changed;
+8. checks and backs up every user database to `D:\SQLBackup`;
+9. asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close);
+10. turns Sysmon on and installs it if it is not, with any newer configuration LazyVM ships ([Sysmon](#sysmon));
+11. applies the Visual Studio settings if the build could not ([Visual Studio settings](#visual-studio-settings));
+12. upgrades the winget packages ([winget upgrades](#winget-upgrades));
+13. installs Windows updates ([Windows updates](#windows-updates)).
+
+A step that fails is logged and the rest still run. Then it reads the license and does this:
 
 | Situation | What happens |
 |---|---|
-| More than 10 days left | Nothing more. The run reads the license, logs it and finishes. |
+| More than 10 days left | Nothing more, except a full capture when the certificates or Visual Studio settings changed since the last one. |
 | Within 10 days, rearms available | Captures the VM's state, runs the Windows rearm and restarts the VM. The evaluation clock resets to another 90 days. No rebuild, nothing to migrate. |
 | Within 10 days, no rearms left | Captures the VM's state, retires the old VM, builds a new one unattended, restores the capture and verifies the result. |
 | No evaluation countdown | Nothing. A fully licensed Windows is never rebuilt. |
@@ -311,10 +327,10 @@ Windows allows an evaluation period to be reset a limited number of times. Each 
 4. Builds a new VM and installs Windows unattended from a generated answer file.
 5. Unlocks the SQL data disk, the Dev Drive and the User disk with their stored BitLocker recovery passwords, and turns on auto-unlock for the new `C:`. If a disk stays locked, the rebuild stops here, before anything is restored onto it, and the old disk is kept.
 6. Installs everything in the VM's tooling list, and lists anything that has to be installed by hand.
-7. Runs post-configuration: data disk, SQL data, Visual Studio settings, databases.
-8. Restores the capture.
+7. Runs post-configuration: the data disk, SQL data files and Visual Studio settings.
+8. Restores the capture, databases included.
 9. Verifies the result against the capture.
-10. Deletes the retired disk only if verification passes.
+10. Deletes the retired disk only if every build step succeeded and verification passed.
 
 > **Important**
 > If verification fails, the old disk is kept, and the log gives the exact commands to roll back to it. A failed rebuild is recoverable. The old disk's `C:` is BitLocker-encrypted for the old VM's TPM, so on the first start after rolling back it asks for its recovery password: the `OS disk` one recorded before the rebuild, from `Get-LazyVMCredential -Name DevBox -RecoveryPassword`.
@@ -344,12 +360,10 @@ It asks for confirmation first. Budget a couple of hours: the Windows install an
 | 2 | Hyper-V | Turns Hyper-V on if needed. If the host must restart, a startup task resumes the build at phase 3 by itself. |
 | 3 | Folders | Creates the folders under the LazyVM folder. |
 | 4 | Installation media | Verifies the Windows ISO by its file signature. Downloads the SQL Server ISO if it is missing, checking it before replacing any existing copy. Visual Studio and SSMS are downloaded inside the VM in phase 7, from their channel's bootstrapper. |
-| 5 | SQL data disk | Creates the VM's SQL data disk if missing. An existing disk is never overwritten. |
-| 5b | Dev Drive disk | Creates the Dev Drive disk if missing. An existing one is never overwritten. |
-| 5c | User disk | Creates the User disk if missing. An existing one is never overwritten. |
-| 6 | VM | A Generation 2 VM with Secure Boot, a TPM, 4 processors and dynamic memory, plus a disc carrying the unattended Setup answer file. |
-| 7 | Installs | In this order: <ol><li>Waits for Windows to finish installing.</li><li>Makes `C:` use the whole OS disk: moves the recovery partition to the end of the disk and extends `C:` up to it, after taking a checkpoint. This works with BitLocker on.</li><li>Attaches and prepares the data disk, the Dev Drive and the User disk, marks the Dev Drive as trusted again, puts the personal folders on the User disk, and turns on Enhanced Session Mode. A disk BitLocker has locked, as after a rebuild, is unlocked first with its stored recovery password.</li><li>Turns BitLocker on for `C:`, then for the data disk, the Dev Drive and the User disk, with auto-unlock ([BitLocker](#bitlocker)).</li><li>Installs the VM's tooling list: Visual Studio Installer products with their workloads, components and extensions, then SQL Server, then winget packages.</li><li>Installs Windows updates, restarting the VM if they need it ([Windows updates](#windows-updates)).</li></ol>Anything already present is skipped, and anything that must be installed by hand is listed. SQL Server is installed from its ISO, placed in the VM's DVD drive for the install. |
-| 8 | Configuration | Relocates SQL data onto the data disk, restores Visual Studio settings, and attaches the databases (or restores them from their backups). |
+| 5 | Disks | Creates the SQL data disk, the Dev Drive and the User disk, each if missing. An existing disk is never overwritten. |
+| 6 | VM | A Generation 2 VM with Secure Boot, a TPM, `vCPU` processors (4 by default) and dynamic memory, plus, for a new VM, a disc carrying the unattended Setup answer file and a generated guest account. |
+| 7 | Installs | In this order: <ol><li>Waits for Windows to finish installing, then deletes the answer-file disc, which holds the guest password.</li><li>Makes `C:` use the whole OS disk: moves the recovery partition to the end of the disk and extends `C:` up to it, after taking a checkpoint. This works with BitLocker on.</li><li>Attaches and prepares the data disk, the Dev Drive and the User disk, marks the Dev Drive as trusted again, and puts the personal folders on the User disk. A disk BitLocker has locked, as after a rebuild, is unlocked first with its stored recovery password.</li><li>Turns BitLocker on for `C:`, then for the data disk, the Dev Drive and the User disk, with auto-unlock ([BitLocker](#bitlocker)).</li><li>Turns on Enhanced Session Mode, removes the built-in apps in `GuestRemoveApps`, and applies the appearance and Developer Mode settings.</li><li>Turns on Sysmon ([Sysmon](#sysmon)).</li><li>Installs the VM's tooling list: Visual Studio Installer products with their workloads, components and extensions, then SQL Server, then winget packages, then official installers ([section 9](#what-a-build-installs-and-what-it-cannot)).</li><li>Installs Windows updates, restarting the VM if they need it ([Windows updates](#windows-updates)).</li><li>Records what is installed as the VM's tooling list, if it has none yet.</li></ol>Anything already present is skipped, and anything that must be installed by hand is listed. SQL Server is installed from its ISO, placed in the VM's DVD drive for the install. |
+| 8 | Configuration | 8a prepares the SQL data disk, 8b moves existing databases from `C:` onto it (`MoveSqlDataToDataDisk`), and 8c answers Visual Studio's first launch and imports its settings ([Visual Studio settings](#visual-studio-settings)). A step that fails does not stop the others. Databases come back with the restore that follows, in a rebuild or `Restore-LazyVMState`. |
 
 Capture (`Save-LazyVMState`) and restore (`Restore-LazyVMState`) run on their own, and as part of a rebuild.
 
@@ -368,9 +382,9 @@ D:\DevVM\
     Config\         VM.json, VM.Template.json, History\
     Virtual Machines\
     Checkpoints\
-    Disks\          DevBox-OS.vhdx, DevBox-SQL.vhdx, DevBox-DevDrive.vhdx, DevBox-Seed.iso
+    Disks\          DevBox-OS.vhdx, DevBox-SQL.vhdx, DevBox-DevDrive.vhdx, DevBox-User.vhdx, DevBox-Seed.iso
     State\          manifest.json, Captures\<stamp>\ (the newest three)
-    Backups\        VisualStudio.vssettings
+    Backups\        VisualStudio.vssettings, DevBox-User.vhdx
     Credentials\    guest.cred, certs.cred, environment.cred, appsettings.cred, bitlocker.cred
     Logs\           DevBox.log
 ```
@@ -386,8 +400,8 @@ D:\DevVM\
 | `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
 | `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
 | `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive, the 20 GB User disk and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk, the Dev Drive and the User disk persist across rebuilds: they carry the databases and their backups, your working source, and your personal folders. |
-| `D:\DevVM\DevBox\State` | Captured state: each capture in a folder of its own, `Captures\<stamp>`, with its own manifest, and the newest three kept. `manifest.json` is a copy of the newest capture's manifest, the one a restore reads. Also application settings, `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
-| `D:\DevVM\DevBox\Backups` | The Visual Studio settings backup. |
+| `D:\DevVM\DevBox\State` | Captured state: each capture in a folder of its own, `Captures\<stamp>`, with its own manifest, and the newest three kept. `manifest.json` is a copy of the newest capture's manifest, the one a restore reads. Also `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
+| `D:\DevVM\DevBox\Backups` | The Visual Studio settings backup, and the nightly copy of the User disk unless `BackupDir` puts it elsewhere. |
 | `D:\DevVM\DevBox\Credentials` | The VM's encrypted account and certificate credentials, and its disks' BitLocker recovery passwords. |
 | `D:\DevVM\DevBox\Logs` | `DevBox.log`: every run for that VM appends here. Set aside at 5 MB. |
 
@@ -469,7 +483,7 @@ Each run adds every Visual Studio window's tree to the file, one line per elemen
 
 ## 8. Settings
 
-Settings live in two kinds of JSON file:
+Settings live in three kinds of JSON file:
 
 - **The shared template**, `Shared\Config\LazyVM.Settings.json`. Every setting has a default; list here only the ones you want to change. It is used only to create a VM: changing it never affects a VM that already exists.
 - **Config templates**: the built-in ones in the module's `Data\Templates` folder, and your own in `Shared\Templates`. `New-LazyVM -ConfigTemplate <Name>` or `Build-LazyVM -ConfigTemplate <Name>` applies one over the shared template when it creates a VM. See [Starting from a config template](#starting-from-a-config-template).
@@ -543,7 +557,7 @@ Get-LazyVMSetting -Name DevBox | Where-Object Source -ne 'DevBox\Config\VM.json'
 
 ### Settings that change after a VM is built
 
-Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in its `VM.json` does nothing to the running VM until it is rebuilt. Equally, a change made in Hyper-V Manager is not written back to the file, so a rebuild returns the VM to what the files say. Tooling is the exception: changes you make inside the VM are recorded automatically ([section 9](#9-tooling-and-going-back)).
+Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in its `VM.json` does nothing to the running VM until it is rebuilt. The other way round, a change made in Hyper-V Manager to the processors, memory, disk sizes or switch is recorded in `VM.json` by the next maintenance run or rebuild, so a rebuild keeps it. Changes you make inside the VM to its tooling, environment, firewall rules, scheduled tasks, SQL logins and application settings are recorded every night too ([section 5](#5-the-90-day-cycle)).
 
 ### The settings most worth knowing
 
@@ -558,7 +572,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `MaintenanceTime` | 02:00 | When the VM's daily maintenance runs. Run `Register-LazyVMMaintenance` after changing it. |
 | `ToolingCheckpointsToKeep` | 3 | How many tooling checkpoints to keep. |
 | `ToolingWingetExclude` | Windows built-ins | winget packages never recorded. Your list replaces the default, so copy it and add to it. |
-| `AppSettings` | WinMerge | Registry keys a capture exports and a restore imports, so an application's settings survive a rebuild. |
+| `AppSettings` | WinMerge | Registry keys whose values are recorded in `VM.json` each night and written back by a restore, so an application's settings survive a rebuild ([Application settings](#application-settings)). |
 | `InstallerBootstrappers` | 5 channels | The bootstrapper for each Visual Studio Installer channel. Add one if a tooling list uses a channel not listed. |
 | `UnsignedExtensions` | none | Marketplace extensions, by item name (`Publisher.Name`), that may be installed even though they are not signed. Any other unsigned extension is refused by the installer and named in the log; Visual Studio and its other extensions install anyway. |
 | `vCPU`, `MemStartGB`, `MemMaxGB` | 4, 8, 16 | VM sizing, applied when the VM is built. 8 GB to start is the Dev Drive minimum. |
@@ -765,7 +779,7 @@ Build-LazyVM -Name Office2 -ConfigTemplate Office
 
 The difference from `-From`: `-From` copies a VM once and saves nothing, while the template stays and appears after `-ConfigTemplate` for as many VMs as you like. It does not follow the VM afterwards; export again under a new name to save a newer version. To change or remove a template, edit or delete its file.
 
- to create the VM's `VM.json`. Anything you install afterwards is added to the VM's own tooling list by maintenance.
+Whichever way a VM starts, anything you install in it afterwards is added to its own tooling list by maintenance.
 
 Once there is more than one VM, every command needs `-Name`. LazyVM will not guess, because a wrong guess would maintain or rebuild the wrong machine.
 

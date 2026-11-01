@@ -11,6 +11,7 @@ rectangle "LazyVM" {
   usecase "View settings\n<size:10>Get-LazyVMSetting</size>" as Set
   usecase "View the guest account\n<size:10>Get-LazyVMCredential</size>" as CredV
   usecase "Check the license\n<size:10>Get-LazyVMLicense</size>" as Lic
+  usecase "Check a VM end to end\n<size:10>Test-LazyVM</size>" as Test
   usecase "Start the VM" as Start
   usecase "Remove a VM\n<size:10>Remove-LazyVM</size>" as Rem
   usecase "List what will be\ndeleted and kept" as Plan
@@ -24,6 +25,7 @@ User --> List
 User --> Set
 Admin --> CredV
 Admin --> Lic
+Admin --> Test
 Admin --> Rem
 
 Start ..> Lic : <<extend>>\n[VM is off]
@@ -32,6 +34,9 @@ Rem ..> Plan : <<include>>
 List --> HV
 List --> TS
 Lic --> Guest
+Test --> HV
+Test --> TS
+Test --> Guest
 Start --> HV
 Rem --> HV
 Rem --> TS
