@@ -275,8 +275,9 @@ function Remove-UnattendSeedDisk {
     <#
       The answer file holds the guest password in plain text, so the
       answer-file disc is ejected and deleted as soon as provisioning is
-      confirmed.
+      confirmed. Returns whether it is gone from disk.
     #>
+    [OutputType([bool])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $seedDisk = $VM.Settings.SeedDiskPath
@@ -291,13 +292,15 @@ function Remove-UnattendSeedDisk {
         Write-LogEntry "Could not eject the answer-file disc from the VM: $($_.Exception.Message)" 'WARN'
     }
 
-    if (-not (Test-Path -LiteralPath $seedDisk)) { return }
-    try {
-        Remove-Item -LiteralPath $seedDisk -Force
-        Write-LogEntry 'Answer-file disc deleted (it held the guest password in clear text)' 'OK'
+    if (Test-Path -LiteralPath $seedDisk) {
+        try {
+            Remove-Item -LiteralPath $seedDisk -Force
+            Write-LogEntry 'Answer-file disc deleted (it held the guest password in clear text)' 'OK'
+        }
+        catch {
+            Write-LogEntry "Could not delete the answer-file disc: $($_.Exception.Message)" 'WARN'
+            Write-LogEntry "  Delete $seedDisk by hand - it contains the guest password." 'WARN'
+        }
     }
-    catch {
-        Write-LogEntry "Could not delete the answer-file disc: $($_.Exception.Message)" 'WARN'
-        Write-LogEntry "  Delete $seedDisk by hand - it contains the guest password." 'WARN'
-    }
+    return -not (Test-Path -LiteralPath $seedDisk)
 }

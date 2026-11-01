@@ -104,10 +104,11 @@ function Invoke-BuildPhase {
     catch {
         # Only when there is one: before phase 2, Hyper-V may not be there to ask.
         if (Test-Path -LiteralPath $VM.Settings.SeedDiskPath) {
-            Remove-UnattendSeedDisk -VM $VM
+            # A disc that could not be deleted is already reported as one to delete by hand.
+            $seedDiskDeleted = Remove-UnattendSeedDisk -VM $VM
             # Without a VM, the next run builds a new disc along with it.
             $vmExists = (Get-Command -Name Get-VM -ErrorAction SilentlyContinue) -and (Get-VM -Name $VM.Name -ErrorAction SilentlyContinue)
-            if ($vmExists) {
+            if ($seedDiskDeleted -and $vmExists) {
                 Write-LogEntry 'The answer-file disc is gone, so Windows Setup cannot finish unattended: finish it by hand in the VM console, or remove the VM and build it again.' 'WARN'
             }
         }
