@@ -184,6 +184,34 @@ Describe 'Invoke-Maintenance' {
         "$($result[0])" | Should -Be 'None'
     }
 
+    It 'shuts down a VM it started when nothing is due, and leaves one that was running (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+        Should -Invoke -ModuleName $module Stop-GuestGracefully -Times 1 -Exactly
+
+        Mock -ModuleName $module Open-GuestSession { $false }
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+        Should -Invoke -ModuleName $module Stop-GuestGracefully -Times 1 -Exactly
+    }
+
+    It 'still shuts down a VM it started when a step it cannot carry on from fails, such as a restart that left the guest unreachable (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { throw 'No open guest session for: license status' }
+
+        { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM } } | Should -Throw '*license status*'
+
+        Should -Invoke -ModuleName $module Stop-GuestGracefully -Times 1 -Exactly
+    }
+
+    It 'leaves a VM it started running for the rebuild (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Grace'; DaysLeft = 5; RearmsLeft = 0 } }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'Rebuild'
+        Should -Invoke -ModuleName $module Stop-GuestGracefully -Times 0
+    }
+
     It 'returns only Rearmed after a rearm' {
         Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Grace'; DaysLeft = 5; RearmsLeft = 2 } }
         Mock -ModuleName $module Invoke-GuestRearm { $true }
@@ -199,7 +227,7 @@ Describe 'Invoke-GuestRearm' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Success = $true; Reason = ''; Before = 2 } }
-        Mock -ModuleName $module Restart-GuestAndWait { 'stray' }
+        Mock -ModuleName $module Restart-GuestGracefully { 'stray' }
     }
 
     It 'returns only $true when the rearm is accepted' {
@@ -207,6 +235,12 @@ Describe 'Invoke-GuestRearm' {
 
         $result.Count | Should -Be 1
         $result[0] | Should -BeTrue
+    }
+
+    It 'restarts Windows gracefully to apply the rearm, never with a reset, as updates may be waiting for the restart (#234)' {
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-GuestRearm -VM $VM }
+
+        Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 1 -Exactly
     }
 }
 

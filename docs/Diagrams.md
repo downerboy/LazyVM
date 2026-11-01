@@ -213,7 +213,7 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM).
 7. `Save-GuestState` (Capture, called by Invoke-Maintenance): only on rearm or rebuild (see Capture state)
    - Reads D13, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
    - Writes D14, captured state: <VM>\State\ (vs\  windows\  sql\, manifest.json, manifest-<stamp>.json)
-8. `Invoke-GuestRearm` (Maintenance, called by Invoke-Maintenance): slmgr rearm, then Restart-GuestAndWait
+8. `Invoke-GuestRearm` (Maintenance, called by Invoke-Maintenance): slmgr rearm, then Restart-GuestGracefully
    - Writes D15, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
 9. `Stop-GuestGracefully` (Maintenance, called by Invoke-Maintenance): only if the VM was off before the run
    - Writes D16, VM back off: VM <VM> (off)

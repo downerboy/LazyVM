@@ -249,7 +249,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="335" y1="1229" x2="640" y2="1229"/>
 <g class="sn"><circle cx="351" cy="1213" r="10"/><text x="351" y="1217" text-anchor="middle">8</text></g>
 <text class="at" x="345" y="1244">slmgr rearm, then</text>
-<text class="at" x="345" y="1261">Restart-GuestAndWait</text>
+<text class="at" x="345" y="1261">Restart-GuestGracefully</text>
 </g>
 <g class="bx-store"><rect x="740" y="1192" width="270" height="84" rx="3"/>
 <text class="st" x="875.0" y="1206" text-anchor="middle">«guest»</text>

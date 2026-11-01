@@ -13,8 +13,10 @@ function Set-GuestWindowsUpdatePolicy {
       (AUOptions 4), but never restart while someone is signed in
       (NoAutoRebootWithLoggedOnUsers), so Windows does not restart a VM
       under someone at work in it either. Microsoft warns this can put a
-      restart off indefinitely; maintenance restarts an idle VM for its
-      updates, so here it does not.
+      restart off indefinitely. Automatic sign-in keeps the guest account
+      signed in, so a VM that is always running restarts for its updates
+      only when its user restarts it; a VM maintenance starts is restarted
+      by maintenance (Update-GuestWindows).
       https://learn.microsoft.com/windows/deployment/update/waas-restart
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -40,7 +42,8 @@ function Install-GuestWindowsUpdate {
       dropped PowerShell Direct session from losing it. The search leaves out
       drivers (Type='Software'); the loop leaves out feature updates (the
       Upgrades category) and optional ones such as preview updates
-      (BrowseOnly). Nothing here restarts the guest.
+      (BrowseOnly). Only updates that downloaded are installed; each that
+      did not is logged. Nothing here restarts the guest.
     #>
     [OutputType([bool])]
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -68,6 +71,8 @@ function Install-GuestWindowsUpdate {
             $null = $wanted.Add($update)
         }
 
+        # Only what downloaded is installed; the rest is tried again next time.
+        $downloaded = New-Object -ComObject Microsoft.Update.UpdateColl
         if ($wanted.Count -eq 0) {
             $notes += [pscustomobject]@{ Level = 'OK'; Text = 'no quality or security updates to install' }
         }
@@ -75,14 +80,21 @@ function Install-GuestWindowsUpdate {
             $downloader = $session.CreateUpdateDownloader()
             $downloader.Updates = $wanted
             $null = $downloader.Download()
+            foreach ($update in $wanted) {
+                if ($update.IsDownloaded) { $null = $downloaded.Add($update) }
+                else { $notes += [pscustomobject]@{ Level = 'WARN'; Text = "not downloaded: $($update.Title)" } }
+            }
+        }
+
+        if ($downloaded.Count -gt 0) {
             $installer = $session.CreateUpdateInstaller()
-            $installer.Updates = $wanted
+            $installer.Updates = $downloaded
             $installed = $installer.Install()
-            for ($i = 0; $i -lt $wanted.Count; $i++) {
+            for ($i = 0; $i -lt $downloaded.Count; $i++) {
                 $result = $installed.GetUpdateResult($i)
                 $code = [int]$result.ResultCode
                 $name = if ($resultNames.ContainsKey($code)) { $resultNames[$code] } else { "result $code" }
-                $title = $wanted.Item($i).Title
+                $title = $downloaded.Item($i).Title
                 if ($code -eq 2) { $notes += [pscustomobject]@{ Level = 'OK'; Text = "${name}: $title" } }
                 else { $notes += [pscustomobject]@{ Level = 'WARN'; Text = ('{0}: {1} [0x{2:X8}]' -f $name, $title, [int]$result.HResult) } }
             }
@@ -115,7 +127,8 @@ function Update-GuestWindows {
 
     Write-LogEntry 'Installing Windows updates...' 'INFO'
     $null = Set-GuestWindowsUpdatePolicy -VM $VM
-    if (-not (Install-GuestWindowsUpdate -VM $VM)) { return }
+    $restartNeeded = Install-GuestWindowsUpdate -VM $VM
+    if (-not $restartNeeded) { return }
 
     if (-not $StartedByLazyVM) {
         $signedIn = @(Get-GuestSignedInUser -VM $VM)
