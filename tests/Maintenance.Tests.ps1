@@ -34,6 +34,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Update-GuestAppSettingRecord { }
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
         Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
+        Mock -ModuleName $module Set-GuestSysmon { 'stray' }
         Mock -ModuleName $module Update-GuestWingetPackage { 'stray' }
         Mock -ModuleName $module Update-GuestWindows { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
@@ -155,6 +156,16 @@ Describe 'Invoke-Maintenance' {
         $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
 
         $script:order -join ',' | Should -Be 'tooling,winget,updates'
+    }
+
+    It 'keeps Sysmon configured every day, and carries on when that fails (#236)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Set-GuestSysmon { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Set-GuestSysmon -Times 1 -Exactly
     }
 
     It 'captures the state when it changed and nothing else is due (#20)' {
