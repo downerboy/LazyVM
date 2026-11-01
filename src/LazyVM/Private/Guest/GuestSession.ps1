@@ -234,6 +234,36 @@ function Restart-GuestAndWait {
     Connect-Guest -VM $VM -Credential $credential | Out-Null
 }
 
+function Restart-GuestGracefully {
+    <#
+      Restarts Windows from inside the guest, as its Start menu does, and
+      reopens the session once it is back. Updates waiting for a restart
+      finish installing while Windows shuts down and starts, which the
+      reset Restart-GuestAndWait does (Restart-VM) would cut short. Windows
+      is given a few seconds' notice; it then closes what is open, so this is
+      only for a guest nobody is at work in. The wait for Windows to go down
+      allows for it installing updates first.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $credential = Assert-GuestCredential -VM $VM
+    $exitCode = Invoke-GuestScript -VM $VM -Activity 'restarting Windows' -TimeoutMinutes 2 -ScriptBlock {
+        & shutdown.exe /r /t 10 /c 'LazyVM is restarting Windows to finish installing updates.' | Out-Null
+        return $LASTEXITCODE
+    }
+    if ([int]$exitCode -ne 0) { throw "Windows in the guest refused to restart (shutdown.exe exit $exitCode)" }
+
+    Write-LogEntry 'Restarting Windows in the guest...' 'INFO'
+    Remove-GuestSession -VM $VM -KeepCredential
+    $waitTimeout = [timespan]::FromMinutes($VM.Settings.GuestWaitMinutes)
+    $null = Wait-Until -Activity 'Windows shutting down to restart' -Timeout $waitTimeout -Interval ([timespan]::FromSeconds(5)) -Condition {
+        $heartbeat = Get-VMIntegrationService -VMName $VM.Name -Name 'Heartbeat' -ErrorAction SilentlyContinue
+        (-not $heartbeat) -or $heartbeat.PrimaryStatusDescription -ne 'OK'
+    }
+    Wait-GuestReady -VM $VM -Credential $credential -TimeoutMinutes $VM.Settings.GuestWaitMinutes
+    Connect-Guest -VM $VM -Credential $credential | Out-Null
+}
+
 function Stop-GuestGracefully {
     <# Shuts the guest down, and turns it off if it has not stopped within $TimeoutMinutes. #>
     param(

@@ -7,7 +7,7 @@ function Install-GuestSoftware {
       waits for Windows, prepares the disks and Windows settings in the
       guest, then installs everything in the VM's tooling list that the guest
       does not have yet: Visual Studio Installer products, SQL Server and
-      winget packages.
+      winget packages; then installs Windows updates.
       Returns CompleteWithProblems when the phase could not run, the
       answer-file disc could not be deleted, or something in the tooling list
       is still missing.
@@ -88,6 +88,9 @@ function Install-GuestSoftware {
         # The winget packages, and the winget matches of other programs (#24).
         Install-WingetPackage -VM $VM -Packages @($tooling.WingetInstalls())
         Install-OfficialInstaller -VM $VM -Tooling $tooling
+        # Last, so the new VM starts patched; nobody is at work in it yet, so it may restart (#234).
+        try { Update-GuestWindows -VM $VM -StartedByLazyVM }
+        catch { Write-LogError 'Windows updates failed (non-fatal); maintenance tries again tonight' $_ }
     }
 
     Initialize-VMTooling -VM $VM

@@ -269,7 +269,7 @@ Build-LazyVM
 
 ## 5. The 90-day cycle
 
-Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), then does this:
+Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), installs Windows updates ([Windows updates](#windows-updates)), then does this:
 
 | Situation | What happens |
 |---|---|
@@ -280,6 +280,12 @@ Each night the maintenance run records any hardware change, extends `C:` into an
 | The VM does not exist | Builds it. |
 
 The 10-day threshold is `RebuildThresholdDays` ([section 8](#8-settings)).
+
+### Windows updates
+
+Each build, at the end of phase 7, and each night's maintenance install Windows' quality and security updates in the VM. Feature updates (a new version of Windows) are left out, since a rebuild brings the new version, and so are driver updates: the Hyper-V drivers come with Windows. Each update and its result is in the log.
+
+The VM is restarted for them only when nobody can be disturbed by it: during a build, when maintenance started the VM itself, or when nobody is signed in to it. If someone is signed in (at the console, in a VMConnect or Remote Desktop window, or in a disconnected session), the restart is left pending and Windows asks them when to restart. Windows' own automatic updates are set the same way: they never restart the VM while someone is signed in. Automatic sign-in signs the guest account in whenever the VM starts, so on a VM left running the restart usually waits for you; a VM that is off when maintenance runs is started, updated and restarted by it.
 
 ### Why rearm first
 
@@ -330,7 +336,7 @@ It asks for confirmation first. Budget a couple of hours: the Windows install an
 | 5b | Dev Drive disk | Creates the Dev Drive disk if missing. An existing one is never overwritten. |
 | 5c | User disk | Creates the User disk if missing. An existing one is never overwritten. |
 | 6 | VM | A Generation 2 VM with Secure Boot, a TPM, 4 processors and dynamic memory, plus a disc carrying the unattended Setup answer file. |
-| 7 | Installs | In this order: <ol><li>Waits for Windows to finish installing.</li><li>Makes `C:` use the whole OS disk: moves the recovery partition to the end of the disk and extends `C:` up to it, after taking a checkpoint. This works with BitLocker on.</li><li>Attaches and prepares the data disk, the Dev Drive and the User disk, marks the Dev Drive as trusted again, puts the personal folders on the User disk, and turns on Enhanced Session Mode. A disk BitLocker has locked, as after a rebuild, is unlocked first with its stored recovery password.</li><li>Turns BitLocker on for `C:`, then for the data disk, the Dev Drive and the User disk, with auto-unlock ([BitLocker](#bitlocker)).</li><li>Installs the VM's tooling list: Visual Studio Installer products with their workloads, components and extensions, then SQL Server, then winget packages.</li></ol>Anything already present is skipped, and anything that must be installed by hand is listed. SQL Server is installed from its ISO, placed in the VM's DVD drive for the install. |
+| 7 | Installs | In this order: <ol><li>Waits for Windows to finish installing.</li><li>Makes `C:` use the whole OS disk: moves the recovery partition to the end of the disk and extends `C:` up to it, after taking a checkpoint. This works with BitLocker on.</li><li>Attaches and prepares the data disk, the Dev Drive and the User disk, marks the Dev Drive as trusted again, puts the personal folders on the User disk, and turns on Enhanced Session Mode. A disk BitLocker has locked, as after a rebuild, is unlocked first with its stored recovery password.</li><li>Turns BitLocker on for `C:`, then for the data disk, the Dev Drive and the User disk, with auto-unlock ([BitLocker](#bitlocker)).</li><li>Installs the VM's tooling list: Visual Studio Installer products with their workloads, components and extensions, then SQL Server, then winget packages.</li><li>Installs Windows updates, restarting the VM if they need it ([Windows updates](#windows-updates)).</li></ol>Anything already present is skipped, and anything that must be installed by hand is listed. SQL Server is installed from its ISO, placed in the VM's DVD drive for the install. |
 | 8 | Configuration | Relocates SQL data onto the data disk, restores Visual Studio settings, and attaches the databases (or restores them from their backups). |
 
 Capture (`Save-LazyVMState`) and restore (`Restore-LazyVMState`) run on their own, and as part of a rebuild.

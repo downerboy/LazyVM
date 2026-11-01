@@ -34,6 +34,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Update-GuestAppSettingRecord { }
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
         Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
+        Mock -ModuleName $module Update-GuestWindows { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
         Mock -ModuleName $module Save-GuestState { 'stray' }
         Mock -ModuleName $module Test-GuestStateChanged { $false }
@@ -96,6 +97,41 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Start-GuestStoreAppUpdate -Times 1 -Exactly
+    }
+
+    It 'installs Windows updates every day, and carries on when that fails (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Update-GuestWindows { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly
+    }
+
+    It 'lets Windows updates restart the guest only when maintenance started it (#234)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Open-GuestSession { $false }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { -not $StartedByLazyVM }
+
+        Mock -ModuleName $module Open-GuestSession { $true }
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { $StartedByLazyVM }
+    }
+
+    It 'installs Windows updates after the backups and before the license check (#234)' {
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Backup-GuestUserDatabase { $script:order.Add('backup') }
+        Mock -ModuleName $module Update-GuestWindows { $script:order.Add('updates') }
+        Mock -ModuleName $module Get-GuestLicenseStatus { $script:order.Add('license'); [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        $script:order -join ',' | Should -Be 'backup,updates,license'
     }
 
     It 'captures the state when it changed and nothing else is due (#20)' {
