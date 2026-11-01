@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.0](https://github.com/downerboy/LazyVM/compare/v5.1.1...v5.2.0) (2026-11-01)
+
+
+### Features
+
+* answer Visual Studio's first launch during the build with UI Automation ([#269](https://github.com/downerboy/LazyVM/issues/269)) ([fff8370](https://github.com/downerboy/LazyVM/commit/fff8370998404531b0de66969cb164354561aeb3))
+* retry the Visual Studio settings import nightly until it succeeds ([#267](https://github.com/downerboy/LazyVM/issues/267)) ([8ff1b99](https://github.com/downerboy/LazyVM/commit/8ff1b99ccf4841e9f753f4873c04010940ba78fa))
+
 ## [5.1.1](https://github.com/downerboy/LazyVM/compare/v5.1.0...v5.1.1) (2026-11-01)
 
 
