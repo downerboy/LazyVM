@@ -34,12 +34,11 @@ function Install-WingetPackage {
         }
 
         $report = Invoke-GuestTask -VM $VM -TaskName "${script:TaskPrefix}winget" -Activity 'winget packages' -TimeoutMinutes 60 `
-            -AsGuestUser -Elevated -RestartAttempts 3 -ArgumentList @($winget, $tools, $script:WingetExitMeanings) -Work {
+            -AsGuestUser -Elevated -RestartAttempts 3 -ArgumentList @($winget, $tools, $script:WingetExitMeanings, $script:WingetUpToDateExitCode) -Work {
             # $exitMeanings is $script:WingetExitMeanings; after the trip as JSON, its keys are properties.
-            param($winget, $tools, $exitMeanings)
+            param($winget, $tools, $exitMeanings, $alreadyInstalled)
             $ErrorActionPreference = 'Continue'
 
-            $alreadyInstalled = -1978335189
             # Worth one retry; everything else is a real failure.
             $transientCodes = @(-2147012889, -2147012894, -2147012867, -2147012716)
 

@@ -22,8 +22,11 @@ function Get-GuestWingetUpgrade {
       @{ Id; Name; Folders }: Folders are where Windows says the program is
       installed (Get-GuestProgramFolder), for telling whether it is running.
       Id is '' when winget cut it short in its table and it could not be
-      completed. Read over the session, where the guest helpers are.
+      completed. Read over the session, where the guest helpers are. Lines
+      around the table, such as winget's footers, are not packages: a
+      package's row ends in its source and has an id's shape.
     #>
+    [OutputType([pscustomobject])]
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][string]$Winget
@@ -32,8 +35,10 @@ function Get-GuestWingetUpgrade {
     return Invoke-GuestScript -VM $VM -Activity 'listing winget upgrades' -TimeoutMinutes 10 -ArgumentList @($Winget, $VM.Settings.GuestSetupDir) -ScriptBlock {
         param($winget, $setupDir)
 
+        # winget writes UTF-8; read as anything else, its ellipsis and column alignment are lost.
+        [Console]::OutputEncoding = [Text.Encoding]::UTF8
         $lines = @(& $winget upgrade --source winget --accept-source-agreements --disable-interactivity 2>&1 | ForEach-Object { "$_" })
-        $rows = @(ConvertFrom-GuestWingetTable -Lines $lines)
+        $rows = @(ConvertFrom-GuestWingetTable -Lines $lines | Where-Object { $_.Source -eq 'winget' -and (Test-GuestWingetId -Id $_.Id -AllowCutShort) })
 
         # winget export lists whole ids, to complete any the table cut short.
         $knownIds = @()
@@ -64,8 +69,10 @@ function Update-GuestWingetPackage {
       Upgrades the guest's winget packages, leaving out Visual Studio and SQL
       Server, packages pinned with winget pin, and any program that is
       running when its turn comes, so nobody's open editor or tool is closed
-      under them. A program whose folder Windows does not record is left
-      out too: whether it is running cannot be told. Each is logged.
+      under them. A program whose folder Windows does not record, or records
+      too broadly, is left out too: whether it is running cannot be told.
+      Upgrades not started within 45 minutes wait for the next night. Each
+      is logged.
 
       The upgrades run as a guest task as the guest account under its full
       token, as the installs do (Install-WingetPackage), so per-user packages
@@ -106,19 +113,28 @@ function Update-GuestWingetPackage {
         return
     }
 
+    # No upgrade starts after the budget, so the task's time limit never stops
+    # one halfway, just before Windows updates may restart the guest.
+    $timeoutMinutes = 60
+    $budgetMinutes = 45
     Write-LogEntry "winget upgrades: upgrading $($packages.Count) package(s)..." 'INFO'
-    $report = Invoke-GuestTask -VM $VM -TaskName "${script:TaskPrefix}winget-upgrade" -Activity 'winget upgrades' -TimeoutMinutes 60 `
-        -AsGuestUser -Elevated -RestartAttempts 1 -ArgumentList @("$winget", $packages.ToArray(), $script:WingetExitMeanings) -Work {
+    $report = Invoke-GuestTask -VM $VM -TaskName "${script:TaskPrefix}winget-upgrade" -Activity 'winget upgrades' -TimeoutMinutes $timeoutMinutes `
+        -AsGuestUser -Elevated -RestartAttempts 1 -ArgumentList @("$winget", $packages.ToArray(), $script:WingetExitMeanings, $budgetMinutes, $script:WingetUpToDateExitCode) -Work {
         # $exitMeanings is $script:WingetExitMeanings; after the trip as JSON, its keys are properties.
-        param($winget, $packages, $exitMeanings)
+        param($winget, $packages, $exitMeanings, $budgetMinutes, $upToDate)
         $ErrorActionPreference = 'Continue'
-        $upToDate = -1978335189
+        $deadline = (Get-Date).AddMinutes($budgetMinutes)
 
+        # Built here as Install-WingetPackage's work does, not shared: a guest task runs without Guest.Helpers.ps1.
         $notes = @()
         foreach ($package in @($packages)) {
             $id = "$($package.Id)"
+            if ((Get-Date) -ge $deadline) {
+                $notes += [pscustomobject]@{ Level = 'INFO'; Text = "not started: $id - tonight's time for upgrades ran out; tried again tomorrow" }
+                continue
+            }
             # Checked just before its turn, as a program may have been opened since the list was made.
-            $running = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $path = "$($_.ExecutablePath)"; $path -and @($package.Folders | Where-Object { $path -like "$_\*" }).Count -gt 0 })
+            $running = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $path = "$($_.ExecutablePath)"; $path -and @($package.Folders | Where-Object { $path.StartsWith("$_\", [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 })
             if ($running.Count -gt 0) {
                 $notes += [pscustomobject]@{ Level = 'INFO'; Text = "skipped: $id - running ($(@($running | ForEach-Object { $_.Name } | Sort-Object -Unique) -join ', ')); tried again tomorrow" }
                 continue

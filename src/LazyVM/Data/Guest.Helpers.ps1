@@ -665,7 +665,9 @@ function Find-GuestWinget {
 
 function ConvertFrom-GuestWingetTable {
     <#
-      The rows of a table winget printed (search, list), each as @{ Name; Id }.
+      The rows of a table winget printed (search, list, upgrade), each as
+      @{ Name; Id; Source }: Source is the last column, empty on a line that
+      is not a row but runs on after the table, as winget's footers do.
       The columns are found from where each heading starts in the line above
       the dashes, so localized headings do not matter. Progress output before
       a carriage return is ignored.
@@ -691,11 +693,28 @@ function ConvertFrom-GuestWingetTable {
         if (-not $line.Trim()) { break }
         if ($line.Length -le $starts[1]) { continue }
         $idLength = [Math]::Min($starts[2], $line.Length) - $starts[1]
+        $lastStart = $starts[$starts.Count - 1]
         [pscustomobject]@{
-            Name = $line.Substring(0, $starts[1]).Trim()
-            Id   = $line.Substring($starts[1], $idLength).Trim()
+            Name   = $line.Substring(0, $starts[1]).Trim()
+            Id     = $line.Substring($starts[1], $idLength).Trim()
+            Source = $(if ($line.Length -gt $lastStart) { $line.Substring($lastStart).Trim() } else { '' })
         }
     }
+}
+
+function Test-GuestWingetId {
+    <#
+      Whether $Id has the shape of a winget identifier, which text from
+      around winget's tables (footers, notes) does not. With -AllowCutShort,
+      an id winget cut short with an ellipsis to fit its column passes too.
+    #>
+    param(
+        [AllowEmptyString()][string]$Id,
+        [switch]$AllowCutShort
+    )
+
+    $ending = if ($AllowCutShort) { [string][char]0x2026 + '?' } else { '' }
+    return $Id -match ('^[A-Za-z0-9][A-Za-z0-9._+-]*' + $ending + '$')
 }
 
 function Select-GuestWingetMatch {
@@ -711,7 +730,7 @@ function Select-GuestWingetMatch {
 
     $matched = @(ConvertFrom-GuestWingetTable -Lines $Lines | Where-Object { $_.Name -eq $Name.Trim() })
     if ($matched.Count -ne 1) { return '' }
-    if ($matched[0].Id -notmatch '^[A-Za-z0-9][A-Za-z0-9._+-]*$') { return '' }
+    if (-not (Test-GuestWingetId -Id $matched[0].Id)) { return '' }
     return $matched[0].Id
 }
 
@@ -735,13 +754,33 @@ function Resolve-GuestWingetId {
     return $candidates[0]
 }
 
+function Test-GuestProgramFolderUsable {
+    <#
+      Whether $Path can stand for one program's folder when telling whether
+      it is running. Not a drive, Program Files, or a profile's AppData or
+      Programs folder, which hold every program, and nothing under Windows
+      or the Package Cache, where installers keep only their own copies.
+    #>
+    param([AllowEmptyString()][string]$Path)
+
+    if (-not $Path -or $Path -match '^[A-Za-z]:\\?$') { return $false }
+    $tooBroad = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:APPDATA, $env:LOCALAPPDATA, "$env:LOCALAPPDATA\Programs") |
+        Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') }
+    if ($tooBroad -contains $Path.TrimEnd('\')) { return $false }
+    foreach ($installersOnly in @($env:windir, "$env:ProgramData\Package Cache")) {
+        if ("$Path\".StartsWith("$installersOnly\", [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    }
+    return $true
+}
+
 function Get-GuestProgramFolder {
     <#
       The folders the program Windows lists as $Name (in Installed apps) is
       installed in, from its uninstall entries: the install location, or the
       folder of its icon. A name winget cut short with an ellipsis matches the
-      names it starts. Nothing for a program with neither, or whose icon is
-      in the Windows folder, as an MSI's is: its folder is then unknown.
+      names it starts. Nothing for a program with neither, or whose folder
+      cannot stand for it alone (Test-GuestProgramFolderUsable), as an MSI's
+      icon in the Windows folder cannot: its folder is then unknown.
     #>
     param([Parameter(Mandatory)][string]$Name)
 
@@ -764,7 +803,7 @@ function Get-GuestProgramFolder {
             $icon = ("$($entry.DisplayIcon)" -split ',')[0].Trim().Trim('"')
             $folder = if ($icon.Contains('\')) { $icon.Substring(0, $icon.LastIndexOf('\')) } else { '' }
         }
-        if ($folder -and $folder -notlike "$env:windir\*") { $folder }
+        if (Test-GuestProgramFolderUsable -Path $folder) { $folder }
     }
     return @($folders | Sort-Object -Unique)
 }
