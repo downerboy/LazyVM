@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.1.0](https://github.com/downerboy/LazyVM/compare/v5.0.1...v5.1.0) (2026-11-01)
+
+
+### Features
+
+* install Windows updates in the guest at build and nightly ([#259](https://github.com/downerboy/LazyVM/issues/259)) ([56221c5](https://github.com/downerboy/LazyVM/commit/56221c523b88c4e3e829b5410955480048cfa943))
+* turn on built-in Sysmon in each VM and keep it at LazyVM's configuration ([#257](https://github.com/downerboy/LazyVM/issues/257)) ([f6973d0](https://github.com/downerboy/LazyVM/commit/f6973d0d5c48b7275a133541bd962e5682668a22))
+* upgrade the guest's winget packages nightly ([#260](https://github.com/downerboy/LazyVM/issues/260)) ([79a23de](https://github.com/downerboy/LazyVM/commit/79a23debd32eaa78d82f739aad2f4fe7434919ba))
+
 ## [5.0.1](https://github.com/downerboy/LazyVM/compare/v5.0.0...v5.0.1) (2026-11-01)
 
 
