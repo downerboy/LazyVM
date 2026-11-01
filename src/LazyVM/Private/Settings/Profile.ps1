@@ -326,15 +326,16 @@ function Update-VMProfile {
       The one way VM.json changes after it is created. Applies $Change (setting
       name -> new value), checks the result against the schema, writes it in
       a single step and keeps that version in History, named after $Stamp
-      (now, by default), removing versions no longer needed. Logs each
-      setting that changed and returns their names; returns nothing, and
-      writes nothing, when no value differs.
+      (now, by default), removing versions no longer needed. A setting
+      LazyVM no longer uses is dropped from the file (#273). Logs each
+      setting that changed or was dropped and returns their names; returns
+      nothing, and writes nothing, when there is neither.
     #>
     [OutputType([string[]])]
     param(
         [Parameter(Mandatory)][string]$Root,
         [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][hashtable]$Change,
+        [Parameter(Mandatory)][AllowEmptyCollection()][hashtable]$Change,
         [Parameter(Mandatory)][string]$Reason,
         [ValidatePattern('^\d{8}-\d{6}$')][string]$Stamp
     )
@@ -352,6 +353,10 @@ function Update-VMProfile {
         if ($current.ContainsKey($setting) -and (ConvertTo-ComparableJson $current[$setting]) -eq (ConvertTo-ComparableJson $Change[$key])) { continue }
         $updated[$setting] = $Change[$key]
         $changed.Add($setting)
+    }
+    # Read-SettingsFile has already left them out of $current, so writing drops them.
+    foreach ($key in @((Read-SettingsJson -Path $path).Keys | Where-Object { $_ -in $script:RetiredSettingNames })) {
+        $changed.Add("$key (no longer used, removed)")
     }
     if ($changed.Count -eq 0) { return @() }
 
@@ -378,6 +383,7 @@ function Sync-VMProfile {
         * fills in every setting it lacks from the shared template: all of
           them for a profile made before VM.json held every setting, or a
           setting added by a newer LazyVM;
+        * removes any setting LazyVM no longer uses (#273);
         * keeps a copy of it as VM.Template.json the first time, written once
           and never changed afterwards.
       A VM.json that cannot be read is never written over: the run goes on
@@ -401,9 +407,8 @@ function Sync-VMProfile {
     foreach ($key in $template.Keys) {
         if (-not $current.ContainsKey($key)) { $missing[$key] = $template[$key] }
     }
-    if ($missing.Count -gt 0) {
-        $null = Update-VMProfile -Root $root -Name $name -Change $missing -Reason 'filled in from the shared template'
-    }
+    # Writes nothing unless a setting was missing or one LazyVM no longer uses is still there (#273).
+    $null = Update-VMProfile -Root $root -Name $name -Change $missing -Reason 'brought up to date with the shared template'
 
     $templatePath = Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath $script:ProfileTemplateFileName
     if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) {

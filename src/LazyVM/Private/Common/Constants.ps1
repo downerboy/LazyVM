@@ -107,6 +107,11 @@ $script:WingetUpgradeNever = @('Microsoft.VisualStudio.*', 'Microsoft.SQLServer.
 # with this; the guest capture leaves such tasks out.
 $script:TaskPrefix = 'LazyVM-'
 
+# Settings LazyVM once had and no longer uses, deleted from the schema. A
+# settings file that still names one is read without it rather than
+# refused, and VM.json is written back without it (#273).
+$script:RetiredSettingNames = @('GuestProjectPaths', 'ProjectExcludeDirs', 'MaxProjectCaptureGB', 'GuestRestoreRoot')
+
 # Checkpoint names: '<prefix> <yyyyMMdd-HHmmss>[ <note>]'.
 $script:ToolingCheckpointPrefix = 'Tooling'
 $script:ExpansionCheckpointPrefix = 'C: expansion'
