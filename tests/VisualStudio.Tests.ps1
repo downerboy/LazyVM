@@ -252,7 +252,7 @@ Describe 'Restore-GuestVisualStudioSetting' {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' } }
         $markers = [System.Collections.Generic.List[string]]::new()
-        Mock -ModuleName $module Write-VisualStudioSettingMarker { $markers.Add("$InstanceId=$(if ($Pending) { 'Pending' } else { $AppliedHash })") }
+        Mock -ModuleName $module Write-VisualStudioSettingMarker { $markers.Add("$InstanceId=$(if (Get-Variable -Name Pending -ValueOnly -ErrorAction SilentlyContinue) { 'Pending' } else { Get-Variable -Name AppliedHash -ValueOnly })") }
         $copied = @{ Settings = $null }
         Mock -ModuleName $module Copy-ToGuest { $copied.Settings = Get-Content -LiteralPath $HostPath -Raw }
         $task = @{ Work = $null; Devenv = $null }
