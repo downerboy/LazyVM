@@ -447,7 +447,9 @@ If any of that does not go as expected (a control is not found, or it takes too 
 
 - **What to do then:** open Visual Studio once in the VM, answer its first-launch dialog, and close it.
 - **What happens next:** each night, maintenance applies the settings once Visual Studio has been opened and closed, the guest account is signed in, and Visual Studio is not open, so an IDE you have open is never touched. The log says each night which of these it is waiting for, or that the settings were applied.
-- **After that:** the VM records, per Visual Studio installation, that the settings are applied, so maintenance does not apply them again; a rebuild or `Restore-LazyVMState` does. While the import is still waiting, captures keep the settings backup rather than replacing it with a new install's defaults.
+- **If it cannot within 7 nights:** counted from the first night maintenance finds Visual Studio has been opened, it tries for 7 nights. After that it stops, keeps the settings Visual Studio has, records them as applied, and logs one warning saying why; the next capture saves them as the settings backup. Import the backup yourself (Tools -> Import and Export Settings) if you still want it. Until Visual Studio has been opened, maintenance just waits, however long that takes.
+- **After that:** the VM records, per Visual Studio installation and guest account (under `HKCU\SOFTWARE\LazyVM\VisualStudioSettings`), that the settings are applied, so maintenance does not apply them again; a rebuild or `Restore-LazyVMState` does, and starts a new 7 nights if it cannot. While the import is still waiting, captures keep the settings backup rather than replacing it with a new install's defaults.
+- **VMs built before LazyVM recorded this:** they record nothing yet, so maintenance treats their settings as waiting too and applies the settings backup once, the same way and with the same 7-night limit; until then, captures keep the backup.
 - `InstallVisualStudio = false` turns all of this off.
 
 #### Checking the first-launch controls

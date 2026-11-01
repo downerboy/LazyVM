@@ -256,9 +256,10 @@ function Save-GuestVisualStudioState {
 
     # The build's settings step applies VSSettingsBackup, so the captured
     # settings go there, and the guest records them as the ones it has. Not
-    # while the guest still records the backup as pending: its own settings
-    # are then a new install's defaults, and nightly maintenance applies the
-    # backup (#266).
+    # while the backup is still pending in the guest, or the guest records
+    # nothing (a VM built before it did): nightly maintenance applies the
+    # backup first, and until then the guest's own settings may be a new
+    # install's defaults (#266).
     if ($captured.Files.Contains('Settings')) {
         if (Test-VisualStudioSettingPending -Marker $info.SettingsMarker) {
             Write-LogEntry '  kept the Visual Studio settings backup: the guest is still to have it applied, which nightly maintenance does' 'INFO'

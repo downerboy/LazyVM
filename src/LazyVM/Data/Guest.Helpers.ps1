@@ -247,27 +247,70 @@ function Get-GuestVisualStudioSettingsFile {
 }
 
 # Where the guest records, per user, what it has of each Visual Studio
-# instance's settings: one value per instance id (#266).
+# instance's settings (#266): its marker, in the value named for the instance
+# id, and the night maintenance first found that Visual Studio opened while
+# the settings were pending, in the value named for the instance id with
+# $script:GuestVisualStudioFirstOpenedSuffix.
 $script:GuestVisualStudioSettingKey = 'HKCU:\SOFTWARE\LazyVM\VisualStudioSettings'
+$script:GuestVisualStudioFirstOpenedSuffix = '.FirstOpened'
+
+function Get-GuestVisualStudioSettingValue {
+    <# The value $Name under the Visual Studio settings key, or $null when there is none. #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    $recorded = Get-ItemProperty -Path $script:GuestVisualStudioSettingKey -Name $Name -ErrorAction SilentlyContinue
+    if ($recorded) { return "$($recorded.$Name)" }
+    return $null
+}
+
+function Set-GuestVisualStudioSettingValue {
+    <# Records $Value as the value $Name under the Visual Studio settings key. #>
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Value
+    )
+
+    if (-not (Test-Path -Path $script:GuestVisualStudioSettingKey)) { $null = New-Item -Path $script:GuestVisualStudioSettingKey -Force }
+    $null = New-ItemProperty -Path $script:GuestVisualStudioSettingKey -Name $Name -Value $Value -PropertyType String -Force
+}
 
 function Get-GuestVisualStudioSettingMarker {
     <# What the guest records of the settings of the Visual Studio with instance $InstanceId, or $null when it records nothing. #>
     param([Parameter(Mandatory)][string]$InstanceId)
 
-    $recorded = Get-ItemProperty -Path $script:GuestVisualStudioSettingKey -Name $InstanceId -ErrorAction SilentlyContinue
-    if ($recorded) { return "$($recorded.$InstanceId)" }
-    return $null
+    return Get-GuestVisualStudioSettingValue -Name $InstanceId
 }
 
 function Set-GuestVisualStudioSettingMarker {
-    <# Records $Value for the settings of the Visual Studio with instance $InstanceId. #>
+    <#
+      Records $Value for the settings of the Visual Studio with instance
+      $InstanceId. A new marker starts or ends a pending period, so the night
+      Visual Studio was first found opened in the previous one goes.
+    #>
     param(
         [Parameter(Mandatory)][string]$InstanceId,
         [Parameter(Mandatory)][string]$Value
     )
 
-    if (-not (Test-Path -Path $script:GuestVisualStudioSettingKey)) { $null = New-Item -Path $script:GuestVisualStudioSettingKey -Force }
-    $null = New-ItemProperty -Path $script:GuestVisualStudioSettingKey -Name $InstanceId -Value $Value -PropertyType String -Force
+    Set-GuestVisualStudioSettingValue -Name $InstanceId -Value $Value
+    Remove-ItemProperty -Path $script:GuestVisualStudioSettingKey -Name "$InstanceId$script:GuestVisualStudioFirstOpenedSuffix" -ErrorAction SilentlyContinue
+}
+
+function Get-GuestVisualStudioFirstOpened {
+    <# The night (yyyy-MM-dd) maintenance first found the Visual Studio with instance $InstanceId opened while its settings were pending, or $null. #>
+    param([Parameter(Mandatory)][string]$InstanceId)
+
+    return Get-GuestVisualStudioSettingValue -Name "$InstanceId$script:GuestVisualStudioFirstOpenedSuffix"
+}
+
+function Set-GuestVisualStudioFirstOpened {
+    <# Records $Date (yyyy-MM-dd) as the night maintenance first found the Visual Studio with instance $InstanceId opened while its settings were pending. #>
+    param(
+        [Parameter(Mandatory)][string]$InstanceId,
+        [Parameter(Mandatory)][string]$Date
+    )
+
+    Set-GuestVisualStudioSettingValue -Name "$InstanceId$script:GuestVisualStudioFirstOpenedSuffix" -Value $Date
 }
 
 function Backup-GuestSqlDatabase {
