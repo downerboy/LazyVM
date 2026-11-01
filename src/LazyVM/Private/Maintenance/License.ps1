@@ -162,9 +162,9 @@ function Invoke-Maintenance {
       the persistent disks, copies the User disk when it changed, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
-      the databases, asks the Store to update its apps, then does nothing
-      more until the evaluation is close to expiry, when it captures state
-      and rearms.
+      the databases, asks the Store to update its apps, sets up Sysmon,
+      then does nothing more until the evaluation
+      is close to expiry, when it captures state and rearms.
       Returns what the caller does next.
     #>
     [OutputType([MaintenanceStep])]
@@ -220,6 +220,10 @@ function Invoke-Maintenance {
     # The Store updates its apps only while the VM is on, so it is asked to check every night (#233).
     try { $null = Start-GuestStoreAppUpdate -VM $VM }
     catch { Write-LogError 'Store app update check failed (non-fatal)' $_ }
+
+    # Sysmon turned on and installed if it is not, and given the configuration a newer LazyVM ships (#236).
+    try { $null = Set-GuestSysmon -VM $VM }
+    catch { Write-LogError 'Sysmon check failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM
     Write-LogEntry "License: $($license.Status); $($license.DaysLeft) day(s) left; $($license.RearmsLeft) rearm(s) remaining" 'INFO'
