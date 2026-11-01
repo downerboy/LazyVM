@@ -85,7 +85,8 @@ function Update-GuestVisualStudioSetting {
       Applies the Visual Studio settings (Import-GuestVisualStudioSetting)
       while the guest records them as pending: a build or restore started
       applying them and devenv did not finish, or a VM built before LazyVM
-      recorded them. It waits, and says why, until Visual Studio has been
+      recorded them has a settings backup to apply; with none, that VM's
+      settings are left alone (Test-VisualStudioSettingPending). It waits, and says why, until Visual Studio has been
       opened once, its user is signed in, and Visual Studio is closed, so an
       IDE someone has open is never touched. From the night it first finds
       Visual Studio opened, it tries for $script:VisualStudioSettingRetryNights
@@ -99,8 +100,9 @@ function Update-GuestVisualStudioSetting {
     $instanceId = $target.VisualStudio.InstanceId
     $state = Get-GuestVisualStudioSettingState -VM $VM -InstanceId $instanceId
 
-    if (-not (Test-VisualStudioSettingPending -Marker $state.Marker)) {
-        Write-LogEntry 'Visual Studio settings: applied already' 'INFO'
+    if (-not (Test-VisualStudioSettingPending -Marker $state.Marker -HasBackup $target.Settings.HasBackup)) {
+        if ($state.Marker) { Write-LogEntry 'Visual Studio settings: applied already' 'INFO' }
+        else { Write-LogEntry 'Visual Studio settings: no captured settings backup to apply - leaving the settings of this VM, built by an earlier LazyVM, as they are' 'INFO' }
         return
     }
     if (-not $state.OpenedOnce) {

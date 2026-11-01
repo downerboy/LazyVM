@@ -465,12 +465,18 @@ function Test-VisualStudioSettingPending {
       Whether the guest's record $Marker (Get-GuestVisualStudioSettingMarker)
       says it is still to have its Visual Studio settings applied: a build or
       restore started applying them and devenv has not, or it records nothing,
-      as in a VM built before LazyVM recorded them (#266).
+      as in a VM built before LazyVM recorded them, and $HasBackup says there
+      is a settings backup (VSSettingsBackup) to apply. Without one, applying
+      would reset that VM's settings to the defaults (#266).
     #>
     [OutputType([bool])]
-    param([AllowNull()][AllowEmptyString()][string]$Marker)
+    param(
+        [AllowNull()][AllowEmptyString()][string]$Marker,
+        [Parameter(Mandatory)][bool]$HasBackup
+    )
 
-    return -not $Marker -or $Marker -eq $script:VisualStudioSettingPending
+    if (-not $Marker) { return $HasBackup }
+    return $Marker -eq $script:VisualStudioSettingPending
 }
 
 function Write-VisualStudioSettingMarker {
