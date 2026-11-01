@@ -250,7 +250,9 @@ Describe 'Restore-GuestVisualStudioSetting' {
 
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
-        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe' } }
+        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' } }
+        $markers = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Write-VisualStudioSettingMarker { $markers.Add("$InstanceId=$(if (Get-Variable -Name Pending -ValueOnly -ErrorAction SilentlyContinue) { 'Pending' } else { Get-Variable -Name AppliedHash -ValueOnly })") }
         $copied = @{ Settings = $null }
         Mock -ModuleName $module Copy-ToGuest { $copied.Settings = Get-Content -LiteralPath $HostPath -Raw }
         $task = @{ Work = $null; Devenv = $null }
@@ -288,8 +290,25 @@ Describe 'Restore-GuestVisualStudioSetting' {
         Mock -ModuleName $module Get-GuestSignedInUser { @() }
 
         { InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) } } |
-            Should -Throw "*'devadmin' is not signed in*"
+            Should -Throw "*'devadmin' is not signed in*retried automatically*"
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 0 -Exactly
+    }
+
+    It 'records the settings as pending in the guest before starting devenv, and their hash once they are applied (#266)' {
+        Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { $markers.Add('devenv') }
+
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        $expected = InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) (Get-VisualStudioSettingToApply -VM ([VMContext]::new($Settings))).BackupHash }
+        $markers -join ',' | Should -Be "a1b2c3d4=Pending,devenv,a1b2c3d4=$expected"
+    }
+
+    It 'leaves the settings recorded as pending when devenv fails, so nightly maintenance tries again (#266)' {
+        Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { throw 'devenv did not exit' }
+
+        { InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) } } | Should -Throw '*devenv did not exit*'
+
+        $markers -join ',' | Should -Be 'a1b2c3d4=Pending'
     }
 
     It 'gives the guest task longer than devenv gets, so the guest is the one to say why devenv did not finish (#262)' {
@@ -301,7 +320,7 @@ Describe 'Restore-GuestVisualStudioSetting' {
     It 'stops devenv and everything it started when it does not exit in time, and says why (#262)' {
         InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
 
-        { & $runWork (& $newDevenv -Exits $false) } | Should -Throw '*did not exit within 10 minute(s)*first launch*'
+        { & $runWork (& $newDevenv -Exits $false) } | Should -Throw '*did not exit within 10 minute(s)*first launch*retried automatically*'
         Should -Invoke taskkill.exe -Times 1 -Exactly -ParameterFilter { "$args" -eq '/PID 4242 /T /F' }
     }
 
@@ -350,6 +369,343 @@ Describe 'Restore-GuestVisualStudioSetting' {
     }
 }
 
+Describe 'Get-VisualStudioSettingToApply (#266)' {
+    BeforeEach {
+        $vmSettings = $settings.Clone()
+        $vmSettings.UseDevDrive = $true
+        $vmSettings.DevDriveLetter = 'W'
+        $vmSettings.VSSettingsBackup = Join-Path $TestDrive 'VisualStudio.vssettings'
+        Set-Content -LiteralPath $vmSettings.VSSettingsBackup -Value '<UserSettings><Category name="Environment_Group"/></UserSettings>'
+        $toApply = { param($Settings) InModuleScope $module -Parameters @{ Settings = $Settings } { param($Settings) Get-VisualStudioSettingToApply -VM ([VMContext]::new($Settings)) } }
+    }
+
+    It 'is the settings backup with the projects location on the Dev Drive' {
+        $result = & $toApply $vmSettings
+
+        $result.Text | Should -BeLike '*Environment_Group*W:\source\repos*'
+        $result.HasBackup | Should -BeTrue
+    }
+
+    It 'records the backup file as it is, whatever letter the Dev Drive has in this run' {
+        $fileHash = (Get-FileHash -LiteralPath $vmSettings.VSSettingsBackup -Algorithm SHA256).Hash
+
+        (& $toApply $vmSettings).BackupHash | Should -Be $fileHash
+        $vmSettings.DevDriveLetter = 'X'
+        (& $toApply $vmSettings).BackupHash | Should -Be $fileHash
+    }
+
+    It 'is only the projects location with no settings backup' {
+        Remove-Item -LiteralPath $vmSettings.VSSettingsBackup
+
+        $result = & $toApply $vmSettings
+
+        $result.HasBackup | Should -BeFalse
+        $result.Text | Should -BeLike '*W:\source\repos*'
+        $result.BackupHash | Should -Match '^[0-9A-F]{64}$'
+    }
+
+    It 'is nothing with no settings backup and no Dev Drive' {
+        $vmSettings.UseDevDrive = $false
+        Remove-Item -LiteralPath $vmSettings.VSSettingsBackup
+
+        & $toApply $vmSettings | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-VisualStudioSettingTarget (#266)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' } }
+        $vmSettings = $settings.Clone()
+        $vmSettings.UseDevDrive = $true
+        $vmSettings.DevDriveLetter = 'W'
+        $vmSettings.VSSettingsBackup = Join-Path $TestDrive 'missing.vssettings'
+        $target = { InModuleScope $module -Parameters @{ Settings = $vmSettings } { param($Settings) Get-VisualStudioSettingTarget -VM ([VMContext]::new($Settings)) } }
+    }
+
+    It 'is the Visual Studio and the settings to apply to it' {
+        $result = & $target
+
+        $result.VisualStudio.InstanceId | Should -Be 'a1b2c3d4'
+        $result.Settings.ProjectsLocation | Should -Be 'W:\source\repos'
+    }
+
+    It 'is nothing, without asking the guest, when there are no settings to apply' {
+        $vmSettings.UseDevDrive = $false
+
+        & $target | Should -BeNullOrEmpty
+        Should -Invoke -ModuleName $module Get-GuestVisualStudio -Times 0 -Exactly
+    }
+
+    It 'is nothing when Visual Studio is not installed' {
+        Mock -ModuleName $module Get-GuestVisualStudio { $null }
+
+        & $target | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Test-VisualStudioSettingPending (#266)' {
+    It 'is <Expected> when the guest records "<Marker>" (nothing: a VM built before LazyVM recorded it) and a settings backup exists: <HasBackup>' -ForEach @(
+        @{ Marker = $null; HasBackup = $true; Expected = $true }
+        @{ Marker = ''; HasBackup = $true; Expected = $true }
+        @{ Marker = $null; HasBackup = $false; Expected = $false }
+        @{ Marker = ''; HasBackup = $false; Expected = $false }
+        @{ Marker = 'Pending'; HasBackup = $true; Expected = $true }
+        @{ Marker = 'Pending'; HasBackup = $false; Expected = $true }
+        @{ Marker = 'HASH'; HasBackup = $true; Expected = $false }
+    ) {
+        InModuleScope $module -Parameters @{ Marker = $Marker; HasBackup = $HasBackup } { param($Marker, $HasBackup) Test-VisualStudioSettingPending -Marker $Marker -HasBackup $HasBackup } | Should -Be $Expected
+    }
+}
+
+Describe 'Write-VisualStudioSettingMarker (#266)' {
+    BeforeEach {
+        $recorded = @{ Value = $null }
+        Mock -ModuleName $module Invoke-GuestScript { $recorded.Value = $ArgumentList[1] }
+        $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha' }) }
+    }
+
+    It 'records <Expected> for <Name>' -ForEach @(
+        @{ Name = '-Pending'; Arguments = @{ Pending = $true }; Expected = 'Pending' }
+        @{ Name = '-AppliedHash'; Arguments = @{ AppliedHash = 'HASH' }; Expected = 'HASH' }
+    ) {
+        InModuleScope $module -Parameters @{ VM = $vm; Arguments = $Arguments } { param($VM, $Arguments) Write-VisualStudioSettingMarker -VM $VM -InstanceId 'a1b2c3d4' @Arguments }
+
+        $recorded.Value | Should -Be $Expected
+    }
+
+    It 'takes either -Pending or -AppliedHash, not both' {
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Write-VisualStudioSettingMarker -VM $VM -InstanceId 'a1b2c3d4' -Pending -AppliedHash 'HASH' } } | Should -Throw
+    }
+}
+
+Describe 'Write-VisualStudioSettingFirstOpened (#266)' {
+    It 'records the date, without the time, in a form that reads back the same in any culture' {
+        $recorded = @{ Arguments = $null }
+        Mock -ModuleName $module Invoke-GuestScript { $recorded.Arguments = $ArgumentList }
+        $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha' }) }
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Write-VisualStudioSettingFirstOpened -VM $VM -InstanceId 'a1b2c3d4' -Date ([datetime]'2026-10-25T03:15:00') }
+
+        $recorded.Arguments | Should -Be @('a1b2c3d4', '2026-10-25')
+    }
+}
+
+Describe 'Get-GuestVisualStudioSettingState (#266)' {
+    It 'reads the date Visual Studio was first found opened as a date, or nothing when the guest records none' -ForEach @(
+        @{ Recorded = '2026-10-25'; Expected = [datetime]'2026-10-25' }
+        @{ Recorded = $null; Expected = $null }
+    ) {
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Marker = 'Pending'; FirstOpened = $Recorded; OpenedOnce = $true; DevenvRunning = $false } }
+        $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha' }) }
+
+        $state = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-GuestVisualStudioSettingState -VM $VM -InstanceId 'a1b2c3d4' }
+
+        $state.FirstOpened | Should -Be $Expected
+        $state.Marker | Should -Be 'Pending'
+    }
+}
+
+Describe 'Update-GuestVisualStudioSetting (#266)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        $vs = [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' }
+        $toApply = [pscustomobject]@{ Text = '<UserSettings/>'; HasBackup = $true; BackupHash = 'HASH'; ProjectsLocation = 'W:\source\repos' }
+        Mock -ModuleName $module Get-VisualStudioSettingTarget { [pscustomobject]@{ VisualStudio = $vs; Settings = $toApply } }
+        $guest = @{ Marker = 'Pending'; FirstOpened = [datetime]'2026-10-30'; OpenedOnce = $true; DevenvRunning = $false }
+        Mock -ModuleName $module Get-GuestVisualStudioSettingState { [pscustomobject]$guest }
+        Mock -ModuleName $module Get-GuestSignedInUser { @('devadmin') }
+        Mock -ModuleName $module Get-Date { [datetime]'2026-11-01T02:30:00' }
+        Mock -ModuleName $module Write-VisualStudioSettingMarker { }
+        Mock -ModuleName $module Write-VisualStudioSettingFirstOpened { }
+        Mock -ModuleName $module Import-GuestVisualStudioSetting { }
+        $vmSettings = $settings.Clone()
+        $vmSettings.GuestAdminUser = 'devadmin'
+        $update = { InModuleScope $module -Parameters @{ Settings = $vmSettings } { param($Settings) Update-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) } }
+    }
+
+    It 'applies the settings when they are pending, Visual Studio has been opened once, its user is signed in and it is closed' {
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 1 -Exactly -ParameterFilter { $VisualStudio.InstanceId -eq 'a1b2c3d4' -and $Settings.BackupHash -eq 'HASH' }
+    }
+
+    It 'does nothing more once the guest records settings as applied, whatever their hash' -ForEach @(
+        @{ Marker = 'HASH' }
+        @{ Marker = 'OLDHASH' }
+    ) {
+        $guest.Marker = $Marker
+
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -like '*applied already*' }
+    }
+
+    It 'applies the settings in a VM built before the guest recorded them, as when they are pending' {
+        $guest.Marker = $null
+
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 1 -Exactly
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 0 -Exactly
+    }
+
+    It 'leaves a VM built before the guest recorded them alone, recording nothing, when there is no settings backup to apply' {
+        $guest.Marker = $null
+        $toApply.HasBackup = $false
+
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingFirstOpened -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'INFO' -and $Message -like '*no captured settings backup to apply*' }
+    }
+
+    It 'records tonight as the night Visual Studio was first found opened, and applies the settings' {
+        $guest.FirstOpened = $null
+
+        & $update
+
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingFirstOpened -Times 1 -Exactly -ParameterFilter { $InstanceId -eq 'a1b2c3d4' -and $Date -eq [datetime]'2026-11-01' }
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 1 -Exactly
+    }
+
+    It 'keeps the night Visual Studio was first found opened once it records one' {
+        & $update
+
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingFirstOpened -Times 0 -Exactly
+    }
+
+    It 'records no first night until Visual Studio has been opened' {
+        $guest.OpenedOnce = $false
+        $guest.FirstOpened = $null
+
+        & $update
+
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingFirstOpened -Times 0 -Exactly
+    }
+
+    It 'still tries on the seventh night since Visual Studio was first found opened' {
+        $guest.FirstOpened = [datetime]'2026-10-26'
+
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 1 -Exactly
+    }
+
+    It 'gives up after seven nights: keeps the settings Visual Studio has, records them as applied, and says why once, whatever else it waits for' -ForEach @(
+        @{ Waiting = 'nothing'; SignedIn = @('devadmin'); DevenvRunning = $false }
+        @{ Waiting = 'its user to sign in'; SignedIn = @(); DevenvRunning = $false }
+        @{ Waiting = 'Visual Studio to close'; SignedIn = @('devadmin'); DevenvRunning = $true }
+    ) {
+        $guest.FirstOpened = [datetime]'2026-10-25'
+        $guest.DevenvRunning = $DevenvRunning
+        Mock -ModuleName $module Get-GuestSignedInUser { $SignedIn }
+
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 1 -Exactly -ParameterFilter { $InstanceId -eq 'a1b2c3d4' -and $AppliedHash -eq 'HASH' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like '*7 nights*2026-10-25*keep*capture*' }
+    }
+
+    It 'waits for Visual Studio''s first launch' {
+        $guest.OpenedOnce = $false
+
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -like '*waiting for*first launch*' }
+    }
+
+    It 'waits while its user is not signed in' {
+        Mock -ModuleName $module Get-GuestSignedInUser { @() }
+
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -like "*'devadmin' is not signed in*" }
+    }
+
+    It 'leaves an open Visual Studio alone' {
+        $guest.DevenvRunning = $true
+
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -like '*Visual Studio is open*' }
+    }
+
+    It 'does nothing when there is nothing to apply or nothing to apply it to' {
+        Mock -ModuleName $module Get-VisualStudioSettingTarget { $null }
+
+        & $update
+
+        Should -Invoke -ModuleName $module Get-GuestVisualStudioSettingState -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 0 -Exactly
+    }
+}
+
+Describe 'Save-GuestVisualStudioState and the settings still to be applied (#266)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-GuestNote { }
+        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; Version = '18.0'; ProductLine = '2026'; InstanceId = 'a1b2c3d4' } }
+        $guest = @{ Marker = 'Pending' }
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Settings = 'C:\Users\devadmin\CurrentSettings.vssettings'; NuGetConfig = $null; GitConfig = $null; UserItems = $null; SettingsMarker = $guest.Marker; Notes = @() } }
+        Mock -ModuleName $module Copy-FromGuest { $null = New-Item -ItemType Directory -Path (Split-Path -Path $HostPath -Parent) -Force; Set-Content -LiteralPath $HostPath -Value '<UserSettings><Category name="Defaults"/></UserSettings>' }
+        Mock -ModuleName $module Write-VisualStudioSettingMarker { }
+        $vmSettings = $settings.Clone()
+        $vmSettings.UseDevDrive = $false
+        $vmSettings.VSSettingsBackup = Join-Path $TestDrive 'VisualStudio.vssettings'
+        Set-Content -LiteralPath $vmSettings.VSSettingsBackup -Value '<UserSettings><Category name="FromTheOldVM"/></UserSettings>'
+        $captureDir = Join-Path $TestDrive 'capture'
+        $capture = { InModuleScope $module -Parameters @{ Settings = $vmSettings; CaptureDir = $captureDir } { param($Settings, $CaptureDir) $null = Save-GuestVisualStudioState -VM ([VMContext]::new($Settings)) -CaptureDir $CaptureDir } }
+    }
+
+    It 'keeps the settings backup while the guest records it as pending, so a new install''s defaults never replace it' {
+        & $capture
+
+        Get-Content -LiteralPath $vmSettings.VSSettingsBackup -Raw | Should -BeLike '*FromTheOldVM*'
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 0 -Exactly
+    }
+
+    It 'keeps the settings backup in a VM built before the guest recorded it, which nightly maintenance applies first' {
+        $guest.Marker = $null
+
+        & $capture
+
+        Get-Content -LiteralPath $vmSettings.VSSettingsBackup -Raw | Should -BeLike '*FromTheOldVM*'
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 0 -Exactly
+    }
+
+    It 'refreshes the settings backup from the guest and records it as applied there, once the guest has its settings, or in a VM built before the guest recorded them with no backup to apply' -ForEach @(
+        @{ Marker = 'OLDHASH'; HasBackup = $true }
+        @{ Marker = $null; HasBackup = $false }
+    ) {
+        $guest.Marker = $Marker
+        if (-not $HasBackup) { Remove-Item -LiteralPath $vmSettings.VSSettingsBackup }
+
+        & $capture
+
+        Get-Content -LiteralPath $vmSettings.VSSettingsBackup -Raw | Should -BeLike '*Defaults*'
+        $refreshed = (Get-FileHash -LiteralPath $vmSettings.VSSettingsBackup -Algorithm SHA256).Hash
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 1 -Exactly -ParameterFilter { $InstanceId -eq 'a1b2c3d4' -and $AppliedHash -eq $refreshed }
+    }
+
+    It 'warns, and records nothing, when the settings backup cannot be refreshed' {
+        $guest.Marker = 'OLDHASH'
+        $vmSettings.VSSettingsBackup = Join-Path $TestDrive 'no-such-folder\VisualStudio.vssettings'
+
+        & $capture
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -like '*could not refresh the Visual Studio settings backup*' -and $Level -eq 'WARN' }
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 0 -Exactly
+    }
+}
+
 Describe 'The default tooling list' {
     It 'loads, and holds none of the extensions the installer refused as unsigned (#112)' {
         $links = InModuleScope $module {
@@ -387,6 +743,7 @@ Describe 'Visual Studio only when VM.json says so (#221)' {
     It '<Step> reaches Get-GuestVisualStudio only when InstallVisualStudio is <Install>' -ForEach @(
         foreach ($install in $true, $false) {
             @{ Step = 'Restore-GuestVisualStudioSetting'; Extra = @{}; Install = $install }
+            @{ Step = 'Update-GuestVisualStudioSetting'; Extra = @{}; Install = $install }
             @{ Step = 'Save-GuestVisualStudioState'; Extra = @{ CaptureDir = 'D:\State\Captures\1' }; Install = $install }
             @{ Step = 'Restore-GuestVisualStudioState'; Extra = @{ Manifest = 'with Visual Studio' }; Install = $install }
             @{ Step = 'Get-GuestStateFingerprint'; Extra = @{}; Install = $install }
