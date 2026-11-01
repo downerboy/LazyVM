@@ -246,6 +246,30 @@ function Get-GuestVisualStudioSettingsFile {
     return $null
 }
 
+# Where the guest records, per user, what it has of each Visual Studio
+# instance's settings: one value per instance id (#266).
+$script:GuestVisualStudioSettingKey = 'HKCU:\SOFTWARE\LazyVM\VisualStudioSettings'
+
+function Get-GuestVisualStudioSettingMarker {
+    <# What the guest records of the settings of the Visual Studio with instance $InstanceId, or $null when it records nothing. #>
+    param([Parameter(Mandatory)][string]$InstanceId)
+
+    $recorded = Get-ItemProperty -Path $script:GuestVisualStudioSettingKey -Name $InstanceId -ErrorAction SilentlyContinue
+    if ($recorded) { return "$($recorded.$InstanceId)" }
+    return $null
+}
+
+function Set-GuestVisualStudioSettingMarker {
+    <# Records $Value for the settings of the Visual Studio with instance $InstanceId. #>
+    param(
+        [Parameter(Mandatory)][string]$InstanceId,
+        [Parameter(Mandatory)][string]$Value
+    )
+
+    if (-not (Test-Path -Path $script:GuestVisualStudioSettingKey)) { $null = New-Item -Path $script:GuestVisualStudioSettingKey -Force }
+    $null = New-ItemProperty -Path $script:GuestVisualStudioSettingKey -Name $InstanceId -Value $Value -PropertyType String -Force
+}
+
 function Backup-GuestSqlDatabase {
     <#
       Checks database $Name with DBCC CHECKDB and, only when it passes, backs

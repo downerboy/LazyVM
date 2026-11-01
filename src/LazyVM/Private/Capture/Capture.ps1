@@ -200,9 +200,10 @@ function Save-GuestVisualStudioState {
         param($setupDir, $instanceId, $productLine)
         $ErrorActionPreference = 'Stop'
         New-GuestFolder -Path $setupDir
-        $out = [ordered]@{ Settings = $null; NuGetConfig = $null; GitConfig = $null; UserItems = $null; Notes = @() }
+        $out = [ordered]@{ Settings = $null; SettingsMarker = $null; NuGetConfig = $null; GitConfig = $null; UserItems = $null; Notes = @() }
 
         $out.Settings = Get-GuestVisualStudioSettingsFile -InstanceId $instanceId
+        $out.SettingsMarker = Get-GuestVisualStudioSettingMarker -InstanceId $instanceId
         if (-not $out.Settings) { $out.Notes += New-GuestNote -Level WARN -Text 'no .vssettings backup found (open and close Visual Studio once to create one)' }
 
         $nuget = Join-Path $env:APPDATA 'NuGet\NuGet.Config'
@@ -254,9 +255,19 @@ function Save-GuestVisualStudioState {
     }
 
     # The build's settings step applies VSSettingsBackup, so the captured
-    # settings go there.
+    # settings go there, and the guest records them as the ones it has. Not
+    # while the guest is still to have the backup applied: its own settings
+    # are then a new install's defaults, and nightly maintenance applies the
+    # backup (#266).
     if ($captured.Files.Contains('Settings')) {
-        Copy-Item -LiteralPath $captured.Files['Settings'] -Destination $VM.Settings.VSSettingsBackup -Force -ErrorAction SilentlyContinue
+        $toApply = Get-VisualStudioSettingToApply -VM $VM
+        if ($toApply -and (Test-VisualStudioSettingPending -Marker $info.SettingsMarker -Hash $toApply.Hash)) {
+            Write-LogEntry '  kept the Visual Studio settings backup: the guest is still to have it applied, which nightly maintenance does' 'INFO'
+        }
+        else {
+            Copy-Item -LiteralPath $captured.Files['Settings'] -Destination $VM.Settings.VSSettingsBackup -Force -ErrorAction SilentlyContinue
+            Write-VisualStudioSettingMarker -VM $VM -InstanceId $vs.InstanceId -Value (Get-VisualStudioSettingToApply -VM $VM).Hash
+        }
     }
 
     Write-LogEntry "  Visual Studio: $($vs.DisplayName)" 'OK'

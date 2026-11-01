@@ -201,7 +201,8 @@ function Invoke-DailyMaintenance {
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
       the databases, asks the Store to update its apps, sets up Sysmon,
-      upgrades the winget packages, installs Windows updates, then does
+      applies the Visual Studio settings when a build could not, upgrades
+      the winget packages, installs Windows updates, then does
       nothing more until the evaluation is close to expiry, when it captures
       state and rearms. -StartedByLazyVM: the run
       started the VM, so nobody is at work in it.
@@ -255,6 +256,11 @@ function Invoke-DailyMaintenance {
     # Sysmon turned on and installed if it is not, and given the configuration a newer LazyVM ships (#236).
     try { $null = Set-GuestSysmon -VM $VM }
     catch { Write-LogError 'Sysmon check failed (non-fatal)' $_ }
+
+    # The captured Visual Studio settings, retried until they are applied, while nobody has Visual Studio open (#266).
+    # Before tonight's capture, so a capture tonight already has them.
+    try { $null = Update-GuestVisualStudioSetting -VM $VM }
+    catch { Write-LogError 'Visual Studio settings import failed (non-fatal)' $_ }
 
     # The winget packages, after the tooling is recorded and before Windows updates, whose restart then finishes any
     # upgrade waiting for one. Upgrades change versions, not the tooling list (#235).

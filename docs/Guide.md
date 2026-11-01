@@ -269,7 +269,7 @@ Build-LazyVM
 
 ## 5. The 90-day cycle
 
-Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), turns Sysmon on and installs it if it is not, with any newer configuration LazyVM ships ([Sysmon](#sysmon)), upgrades the winget packages ([winget upgrades](#winget-upgrades)), installs Windows updates ([Windows updates](#windows-updates)), then does this:
+Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), turns Sysmon on and installs it if it is not, with any newer configuration LazyVM ships ([Sysmon](#sysmon)), applies the Visual Studio settings if the build could not ([Visual Studio settings](#visual-studio-settings)), upgrades the winget packages ([winget upgrades](#winget-upgrades)), installs Windows updates ([Windows updates](#windows-updates)), then does this:
 
 | Situation | What happens |
 |---|---|
@@ -438,6 +438,15 @@ Each VM runs the [Sysmon built into Windows 11](https://learn.microsoft.com/wind
 - **The configuration:** [SwiftOnSecurity's sysmon-config](https://github.com/SwiftOnSecurity/sysmon-config) (Creative Commons Attribution 4.0), copied into LazyVM at a fixed commit as `Data\Sysmon\sysmonconfig.xml`, never downloaded. LazyVM's additions, marked `LazyVM:` in the file, leave out the build noise of Visual Studio, MSBuild, the .NET SDK, NuGet and SQL Server. What those programs start elsewhere, such as a build event's `cmd.exe` or a SQL Agent job step, is still recorded.
 - **Checked every night:** every build and every night, LazyVM turns the Sysmon feature on if it is off, installs Sysmon if it is missing, applies the configuration if LazyVM ships a newer one than the VM last got, and sets the log size if it changed. Nothing restarts. If you change Sysmon's configuration by hand with `sysmon -c`, LazyVM does not notice and leaves it until it next ships a new configuration.
 - **When it cannot:** Windows ISOs from before February 2026 have no built-in Sysmon; LazyVM logs that and tries again each night, so Sysmon starts once Windows Update brings it. A standalone Sysmon from Sysinternals cannot run beside the built-in one, so LazyVM leaves it alone and says so in the log. Nothing here ever stops a build or a maintenance run.
+
+### Visual Studio settings
+
+A build applies your captured Visual Studio settings (`Backups\VisualStudio.vssettings`) in step 8c. On a new VM, Visual Studio has never been opened, so its first-launch dialog (sign-in and theme) blocks the import; the build log then says the import is retried automatically, and you do not have to import anything by hand.
+
+- **What to do:** open Visual Studio once in the VM, answer its first-launch dialog, and close it.
+- **What happens next:** each night, maintenance applies the settings once Visual Studio has been opened and closed, the guest account is signed in, and Visual Studio is not open, so an IDE you have open is never touched. The log says each night which of these it is waiting for, or that the settings were applied.
+- **After that:** the VM records, per Visual Studio installation, which settings it has, so they are not applied again. They are applied again only when the settings backup holds settings the VM has not had, such as an exported file you put there. While the import is still waiting, captures keep the settings backup rather than replacing it with a new install's defaults.
+- `InstallVisualStudio = false` turns all of this off.
 
 ## 8. Settings
 
