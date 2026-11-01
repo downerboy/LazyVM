@@ -14,7 +14,8 @@ $script:GuestInstallerLogHint = 'Guest log: C:\Windows\SystemTemp\dd_*.log (C:\W
 
 # What the guest records for a Visual Studio whose settings LazyVM has started
 # to apply but devenv has not yet applied; once it has, the guest records the
-# applied settings' hash instead (Write-VisualStudioSettingMarker, #266).
+# settings backup's hash instead (Write-VisualStudioSettingMarker, #266).
+# Used only by Write-VisualStudioSettingMarker and Test-VisualStudioSettingPending.
 $script:VisualStudioSettingPending = 'Pending'
 
 function Get-GuestInstallerProduct {
@@ -398,60 +399,97 @@ function ConvertTo-ProjectsLocationSetting {
 function Get-VisualStudioSettingToApply {
     <#
       The Visual Studio settings the settings restore applies, as
-      @{ Text; Hash; ProjectsLocation }, or $null when there are none: the
-      settings backup (VSSettingsBackup) with, on a Dev Drive, the projects
-      location (ProjectsLocation, otherwise $null) pointed at source\repos on
-      it (#176). With no backup, Text holds only that setting. Hash, the
-      SHA256 of Text, is what the guest records once Text is applied (#266).
+      @{ Text; HasBackup; BackupHash; ProjectsLocation }, or $null when there
+      are none: the settings backup (VSSettingsBackup) with, on a Dev Drive,
+      the projects location (ProjectsLocation, otherwise $null) pointed at
+      source\repos on it (#176). With no backup (HasBackup false), Text holds
+      only that setting. BackupHash, the SHA256 of the backup file as it is
+      (of no bytes when there is none), is what the guest records once the
+      settings are applied (#266). It is a record only: Text depends on the
+      Dev Drive's letter in this run, the backup does not.
     #>
     [OutputType([pscustomobject])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $backup = $VM.Settings.VSSettingsBackup
-    $text = if (Test-Path -LiteralPath $backup) { Get-Content -LiteralPath $backup -Raw } else { '' }
+    $hasBackup = Test-Path -LiteralPath $backup
+    $text = if ($hasBackup) { Get-Content -LiteralPath $backup -Raw } else { '' }
     $projects = $null
     if ($VM.Settings.UseDevDrive) {
         $projects = "$($VM.Runtime.DevDriveLetter):\source\repos"
         $text = ConvertTo-ProjectsLocationSetting -Settings $text -Path $projects
     }
     if (-not $text) { return $null }
+    $bytes = [byte[]]::new(0)
+    if ($hasBackup) { $bytes = [IO.File]::ReadAllBytes((Convert-Path -LiteralPath $backup)) }
     return [pscustomobject]@{
         Text             = $text
-        Hash             = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($text)))
+        HasBackup        = $hasBackup
+        BackupHash       = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
         ProjectsLocation = $projects
     }
 }
 
+function Get-VisualStudioSettingTarget {
+    <#
+      What the settings restore applies and where, as
+      @{ VisualStudio; Settings } (Get-GuestVisualStudio,
+      Get-VisualStudioSettingToApply), or $null, saying why, when there is
+      nothing to apply or nothing to apply it to: Visual Studio turned off in
+      the settings, no settings, or no Visual Studio in the guest.
+    #>
+    [OutputType([pscustomobject])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    if (-not $VM.Settings.InstallVisualStudio) {
+        Write-LogEntry 'Visual Studio turned off in the settings (InstallVisualStudio) - skipping its settings' 'INFO'
+        return $null
+    }
+    $settings = Get-VisualStudioSettingToApply -VM $VM
+    if (-not $settings -or -not $settings.HasBackup) {
+        Write-LogEntry "No Visual Studio settings backup at $($VM.Settings.VSSettingsBackup)$(if (-not $settings) { ' - skipping' })" 'INFO'
+        Write-LogEntry '  A capture saves one, or export one: Visual Studio -> Tools -> Import and Export Settings -> Export all settings' 'INFO'
+        if (-not $settings) { return $null }
+    }
+    $vs = Get-GuestVisualStudio -VM $VM
+    if (-not $vs) {
+        Write-LogEntry 'Visual Studio is not installed in the guest - skipping its settings' 'WARN'
+        return $null
+    }
+    Write-LogEntry "Found $($vs.DisplayName) at $($vs.DevEnvPath)" 'INFO'
+    return [pscustomobject]@{ VisualStudio = $vs; Settings = $settings }
+}
+
 function Test-VisualStudioSettingPending {
     <#
-      Whether the guest is still to have the settings with hash $Hash
-      applied: it records them as pending, or records other settings (#266).
-      A guest that records nothing is not: its VM is from a LazyVM before
-      the guest recorded them.
+      Whether the guest's record $Marker (Get-GuestVisualStudioSettingMarker)
+      says it is still to have its Visual Studio settings applied: a build or
+      restore started applying them and devenv has not (#266).
     #>
     [OutputType([bool])]
-    param(
-        [AllowNull()][AllowEmptyString()][string]$Marker,
-        [Parameter(Mandatory)][string]$Hash
-    )
+    param([AllowNull()][AllowEmptyString()][string]$Marker)
 
-    return [bool]$Marker -and $Marker -ne $Hash
+    return $Marker -eq $script:VisualStudioSettingPending
 }
 
 function Write-VisualStudioSettingMarker {
     <#
       Records in the guest what it has of the settings of the Visual Studio
-      with instance $InstanceId: the hash of the settings applied, or
-      $script:VisualStudioSettingPending (#266). Kept per user and per
-      Visual Studio instance, as Visual Studio keeps its settings.
+      with instance $InstanceId: -Pending, LazyVM has started to apply them
+      and devenv has not yet, or -AppliedHash, the BackupHash of the settings
+      it has (#266). Kept per user and per Visual Studio instance, as Visual
+      Studio keeps its settings.
     #>
+    [CmdletBinding(DefaultParameterSetName = 'Applied')]
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][string]$InstanceId,
-        [Parameter(Mandatory)][string]$Value
+        [Parameter(Mandatory, ParameterSetName = 'Pending')][switch]$Pending,
+        [Parameter(Mandatory, ParameterSetName = 'Applied')][string]$AppliedHash
     )
 
-    $null = Invoke-GuestScript -VM $VM -Activity 'recording the Visual Studio settings' -TimeoutMinutes 2 -ArgumentList @($InstanceId, $Value) -ScriptBlock {
+    $value = if ($Pending) { $script:VisualStudioSettingPending } else { $AppliedHash }
+    $null = Invoke-GuestScript -VM $VM -Activity 'recording the Visual Studio settings' -TimeoutMinutes 2 -ArgumentList @($InstanceId, $value) -ScriptBlock {
         param($instanceId, $value)
         Set-GuestVisualStudioSettingMarker -InstanceId $instanceId -Value $value
     }
@@ -460,56 +498,53 @@ function Write-VisualStudioSettingMarker {
 function Restore-GuestVisualStudioSetting {
     <#
       Applies the Visual Studio settings in VSSettingsBackup, which a capture
-      refreshes (Get-VisualStudioSettingToApply), in the guest user's desktop
-      session: the settings store is per-user, and devenv /ResetSettings, the
-      only documented way to apply a .vssettings file, opens the IDE, so it
-      needs that user signed in. It fails at once when they are not. devenv
-      gets ten minutes ($devenvMinutes) to apply the file and exit; one still
-      open then is waiting on a dialog, such as the sign-in and theme choice
-      of its first launch, that no one will answer, so it is stopped with
-      everything it started (#262). The guest records the settings as pending
-      until devenv has applied them, and then their hash, so nightly
-      maintenance applies them when this fails (#266). With a Dev Drive, the
-      projects location is pointed at source\repos on it, so new projects
-      outlive the Windows evaluation (#176); the setting lives on C:, so every
-      restore sets it again. With no backup, the file applied holds only that
-      setting, and the reset leaves the rest at the defaults a new install
-      has anyway.
+      refreshes (Get-VisualStudioSettingTarget, Import-GuestVisualStudioSetting).
+      The guest records them as pending first, so nightly maintenance applies
+      them when this fails (#266), as it does on a fresh build, where devenv
+      waits on its first-launch dialog. devenv applies settings only in the
+      guest user's desktop session, so this fails at once when they are not
+      signed in.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    if (-not $VM.Settings.InstallVisualStudio) {
-        Write-LogEntry 'Visual Studio turned off in the settings (InstallVisualStudio) - skipping its settings' 'INFO'
-        return
-    }
-    $backup = $VM.Settings.VSSettingsBackup
-    $hasBackup = Test-Path -LiteralPath $backup
-    $settings = Get-VisualStudioSettingToApply -VM $VM
-    if (-not $hasBackup) {
-        Write-LogEntry "No Visual Studio settings backup at $backup$(if (-not $settings) { ' - skipping' })" 'INFO'
-        Write-LogEntry '  A capture saves one, or export one: Visual Studio -> Tools -> Import and Export Settings -> Export all settings' 'INFO'
-        if (-not $settings) { return }
-    }
-    $projects = $settings.ProjectsLocation
-
-    $vs = Get-GuestVisualStudio -VM $VM
-    if (-not $vs) {
-        Write-LogEntry 'Visual Studio is not installed in the guest - skipping the settings restore' 'WARN'
-        return
-    }
-    Write-LogEntry "Found $($vs.DisplayName) at $($vs.DevEnvPath)" 'INFO'
-    Write-VisualStudioSettingMarker -VM $VM -InstanceId $vs.InstanceId -Value $script:VisualStudioSettingPending
+    $target = Get-VisualStudioSettingTarget -VM $VM
+    if (-not $target) { return }
+    Write-VisualStudioSettingMarker -VM $VM -InstanceId $target.VisualStudio.InstanceId -Pending
     $account = $VM.Runtime.GuestAdminUser
     if (@(Get-GuestSignedInUser -VM $VM) -notcontains $account) {
         throw "'$account' is not signed in to the guest, and devenv applies Visual Studio settings only in their desktop session. The settings import is retried automatically by nightly maintenance"
     }
+    Import-GuestVisualStudioSetting -VM $VM -VisualStudio $target.VisualStudio -Settings $target.Settings
+}
+
+function Import-GuestVisualStudioSetting {
+    <#
+      Applies $Settings (Get-VisualStudioSettingToApply) to the Visual Studio
+      $VisualStudio (Get-GuestVisualStudio) in the signed-in guest user's
+      desktop session, then records them as applied in the guest. The
+      settings store is per-user, and devenv /ResetSettings, the only
+      documented way to apply a .vssettings file, opens the IDE. devenv gets
+      ten minutes ($devenvMinutes) to apply the file and exit; one still open
+      then is waiting on a dialog, such as the sign-in and theme choice of
+      its first launch, that no one will answer, so it is stopped with
+      everything it started (#262). With a Dev Drive, the projects location
+      is pointed at source\repos on it, so new projects outlive the Windows
+      evaluation (#176); the setting lives on C:, so every restore sets it
+      again. With no backup, the file applied holds only that setting, and
+      the reset leaves the rest at the defaults a new install has anyway.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][object]$VisualStudio,
+        [Parameter(Mandatory)][object]$Settings
+    )
 
     $guestPath = Join-Path $VM.Settings.GuestSetupDir 'VisualStudio.vssettings'
     $staging = Join-Path -Path ([IO.Path]::GetTempPath()) -ChildPath ("LazyVM-" + [guid]::NewGuid().ToString('N'))
     try {
         New-Folder -Path $staging
         $staged = Join-Path -Path $staging -ChildPath 'VisualStudio.vssettings'
-        [IO.File]::WriteAllText($staged, $settings.Text, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($staged, $Settings.Text, [Text.UTF8Encoding]::new($false))
         Copy-ToGuest -VM $VM -HostPath $staged -GuestPath $guestPath
     }
     finally {
@@ -519,8 +554,9 @@ function Restore-GuestVisualStudioSetting {
     # The guest task gets a few minutes more than devenv, so it is the guest
     # that stops devenv and says why, not the host giving up on the task.
     $devenvMinutes = 10
+    $projects = $Settings.ProjectsLocation
     Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName "${script:TaskPrefix}VSSettings" -Activity 'Visual Studio settings restore' -TimeoutMinutes ($devenvMinutes + 3) `
-        -ArgumentList @($vs.DevEnvPath, $guestPath, $projects, $devenvMinutes) -ScriptBlock {
+        -ArgumentList @($VisualStudio.DevEnvPath, $guestPath, $projects, $devenvMinutes) -ScriptBlock {
         param($devenv, $settingsPath, $projects, $devenvMinutes)
         if (-not (Test-Path $devenv)) { throw "devenv.exe not found at $devenv" }
         if ($projects) { $null = New-Item -ItemType Directory -Path $projects -Force }
@@ -531,7 +567,7 @@ function Restore-GuestVisualStudioSetting {
         }
         if ($process.ExitCode -ne 0) { throw "devenv exited with $($process.ExitCode)" }
     }
-    Write-VisualStudioSettingMarker -VM $VM -InstanceId $vs.InstanceId -Value $settings.Hash
-    if ($hasBackup) { Write-LogEntry 'Visual Studio settings restored' 'OK' }
+    Write-VisualStudioSettingMarker -VM $VM -InstanceId $VisualStudio.InstanceId -AppliedHash $Settings.BackupHash
+    if ($Settings.HasBackup) { Write-LogEntry 'Visual Studio settings restored' 'OK' }
     if ($projects) { Write-LogEntry "Visual Studio creates new projects in $projects, on the Dev Drive" 'OK' }
 }

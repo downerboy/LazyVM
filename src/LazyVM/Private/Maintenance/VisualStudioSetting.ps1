@@ -39,39 +39,27 @@ function Get-GuestVisualStudioSettingState {
 
 function Update-GuestVisualStudioSetting {
     <#
-      Applies the Visual Studio settings (Restore-GuestVisualStudioSetting)
-      while the guest is still to have them applied: after a build or
-      restore that could not apply them, or when the settings backup has
-      settings the guest has not had. It waits, and says why, until Visual
-      Studio has been opened once, its user is signed in, and Visual Studio
-      is closed, so an IDE someone has open is never touched. A guest that
-      records nothing about them, a VM from before #266, has them recorded
-      as applied, without applying them again.
+      Applies the Visual Studio settings (Import-GuestVisualStudioSetting)
+      while the guest records them as pending: a build or restore started
+      applying them and devenv did not finish. It waits, and says why, until
+      Visual Studio has been opened once, its user is signed in, and Visual
+      Studio is closed, so an IDE someone has open is never touched. A guest
+      that records nothing about them, a VM from before #266, has them
+      recorded as applied, without applying them again.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    if (-not $VM.Settings.InstallVisualStudio) {
-        Write-LogEntry 'Visual Studio settings: Visual Studio turned off in the settings (InstallVisualStudio) - skipping' 'INFO'
-        return
-    }
-    $settings = Get-VisualStudioSettingToApply -VM $VM
-    if (-not $settings) {
-        Write-LogEntry 'Visual Studio settings: no settings backup to apply' 'INFO'
-        return
-    }
-    $vs = Get-GuestVisualStudio -VM $VM
-    if (-not $vs) {
-        Write-LogEntry 'Visual Studio settings: Visual Studio is not installed in the guest' 'INFO'
-        return
-    }
+    $target = Get-VisualStudioSettingTarget -VM $VM
+    if (-not $target) { return }
+    $instanceId = $target.VisualStudio.InstanceId
+    $state = Get-GuestVisualStudioSettingState -VM $VM -InstanceId $instanceId
 
-    $state = Get-GuestVisualStudioSettingState -VM $VM -InstanceId $vs.InstanceId
     if (-not $state.Marker) {
-        Write-VisualStudioSettingMarker -VM $VM -InstanceId $vs.InstanceId -Value $settings.Hash
+        Write-VisualStudioSettingMarker -VM $VM -InstanceId $instanceId -AppliedHash $target.Settings.BackupHash
         Write-LogEntry 'Visual Studio settings: recorded as applied (this VM was built by an earlier LazyVM)' 'INFO'
         return
     }
-    if (-not (Test-VisualStudioSettingPending -Marker $state.Marker -Hash $settings.Hash)) {
+    if (-not (Test-VisualStudioSettingPending -Marker $state.Marker)) {
         Write-LogEntry 'Visual Studio settings: applied already' 'INFO'
         return
     }
@@ -89,5 +77,5 @@ function Update-GuestVisualStudioSetting {
         return
     }
     Write-LogEntry 'Visual Studio settings: applying the captured settings...' 'INFO'
-    Restore-GuestVisualStudioSetting -VM $VM
+    Import-GuestVisualStudioSetting -VM $VM -VisualStudio $target.VisualStudio -Settings $target.Settings
 }

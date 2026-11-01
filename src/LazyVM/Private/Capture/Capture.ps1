@@ -256,17 +256,22 @@ function Save-GuestVisualStudioState {
 
     # The build's settings step applies VSSettingsBackup, so the captured
     # settings go there, and the guest records them as the ones it has. Not
-    # while the guest is still to have the backup applied: its own settings
+    # while the guest still records the backup as pending: its own settings
     # are then a new install's defaults, and nightly maintenance applies the
     # backup (#266).
     if ($captured.Files.Contains('Settings')) {
-        $toApply = Get-VisualStudioSettingToApply -VM $VM
-        if ($toApply -and (Test-VisualStudioSettingPending -Marker $info.SettingsMarker -Hash $toApply.Hash)) {
+        if (Test-VisualStudioSettingPending -Marker $info.SettingsMarker) {
             Write-LogEntry '  kept the Visual Studio settings backup: the guest is still to have it applied, which nightly maintenance does' 'INFO'
         }
         else {
-            Copy-Item -LiteralPath $captured.Files['Settings'] -Destination $VM.Settings.VSSettingsBackup -Force -ErrorAction SilentlyContinue
-            Write-VisualStudioSettingMarker -VM $VM -InstanceId $vs.InstanceId -Value (Get-VisualStudioSettingToApply -VM $VM).Hash
+            try {
+                Copy-Item -LiteralPath $captured.Files['Settings'] -Destination $VM.Settings.VSSettingsBackup -Force -ErrorAction Stop
+                $refreshed = Get-VisualStudioSettingToApply -VM $VM
+                Write-VisualStudioSettingMarker -VM $VM -InstanceId $vs.InstanceId -AppliedHash $refreshed.BackupHash
+            }
+            catch {
+                Write-LogEntry "  could not refresh the Visual Studio settings backup at $($VM.Settings.VSSettingsBackup): $($_.Exception.Message)" 'WARN'
+            }
         }
     }
 

@@ -445,7 +445,7 @@ A build applies your captured Visual Studio settings (`Backups\VisualStudio.vsse
 
 - **What to do:** open Visual Studio once in the VM, answer its first-launch dialog, and close it.
 - **What happens next:** each night, maintenance applies the settings once Visual Studio has been opened and closed, the guest account is signed in, and Visual Studio is not open, so an IDE you have open is never touched. The log says each night which of these it is waiting for, or that the settings were applied.
-- **After that:** the VM records, per Visual Studio installation, which settings it has, so they are not applied again. They are applied again only when the settings backup holds settings the VM has not had, such as an exported file you put there. While the import is still waiting, captures keep the settings backup rather than replacing it with a new install's defaults.
+- **After that:** the VM records, per Visual Studio installation, that the settings are applied, so maintenance does not apply them again; a rebuild or `Restore-LazyVMState` does. While the import is still waiting, captures keep the settings backup rather than replacing it with a new install's defaults.
 - `InstallVisualStudio = false` turns all of this off.
 
 ## 8. Settings
