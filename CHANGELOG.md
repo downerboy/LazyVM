@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.1.1](https://github.com/downerboy/LazyVM/compare/v5.1.0...v5.1.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* stop the Visual Studio settings restore from hanging on devenv ([#263](https://github.com/downerboy/LazyVM/issues/263)) ([fcad7bb](https://github.com/downerboy/LazyVM/commit/fcad7bb29d5e2309e25716485b39c9011e02a6ee))
+
 ## [5.1.0](https://github.com/downerboy/LazyVM/compare/v5.0.1...v5.1.0) (2026-11-01)
 
 
