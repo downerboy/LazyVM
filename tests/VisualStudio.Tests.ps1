@@ -446,13 +446,16 @@ Describe 'Get-VisualStudioSettingTarget (#266)' {
 }
 
 Describe 'Test-VisualStudioSettingPending (#266)' {
-    It 'is <Expected> when the guest records "<Marker>" (nothing: a VM built before LazyVM recorded it)' -ForEach @(
-        @{ Marker = $null; Expected = $true }
-        @{ Marker = ''; Expected = $true }
-        @{ Marker = 'Pending'; Expected = $true }
-        @{ Marker = 'HASH'; Expected = $false }
+    It 'is <Expected> when the guest records "<Marker>" (nothing: a VM built before LazyVM recorded it) and a settings backup exists: <HasBackup>' -ForEach @(
+        @{ Marker = $null; HasBackup = $true; Expected = $true }
+        @{ Marker = ''; HasBackup = $true; Expected = $true }
+        @{ Marker = $null; HasBackup = $false; Expected = $false }
+        @{ Marker = ''; HasBackup = $false; Expected = $false }
+        @{ Marker = 'Pending'; HasBackup = $true; Expected = $true }
+        @{ Marker = 'Pending'; HasBackup = $false; Expected = $true }
+        @{ Marker = 'HASH'; HasBackup = $true; Expected = $false }
     ) {
-        InModuleScope $module -Parameters @{ Marker = $Marker } { param($Marker) Test-VisualStudioSettingPending -Marker $Marker } | Should -Be $Expected
+        InModuleScope $module -Parameters @{ Marker = $Marker; HasBackup = $HasBackup } { param($Marker, $HasBackup) Test-VisualStudioSettingPending -Marker $Marker -HasBackup $HasBackup } | Should -Be $Expected
     }
 }
 
@@ -547,6 +550,18 @@ Describe 'Update-GuestVisualStudioSetting (#266)' {
 
         Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 1 -Exactly
         Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 0 -Exactly
+    }
+
+    It 'leaves a VM built before the guest recorded them alone, recording nothing, when there is no settings backup to apply' {
+        $guest.Marker = $null
+        $toApply.HasBackup = $false
+
+        & $update
+
+        Should -Invoke -ModuleName $module Import-GuestVisualStudioSetting -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingFirstOpened -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'INFO' -and $Message -like '*no captured settings backup to apply*' }
     }
 
     It 'records tonight as the night Visual Studio was first found opened, and applies the settings' {
@@ -667,8 +682,12 @@ Describe 'Save-GuestVisualStudioState and the settings still to be applied (#266
         Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 0 -Exactly
     }
 
-    It 'refreshes the settings backup from the guest and records it as applied there, once the guest has its settings' {
-        $guest.Marker = 'OLDHASH'
+    It 'refreshes the settings backup from the guest and records it as applied there, once the guest has its settings, or in a VM built before the guest recorded them with no backup to apply' -ForEach @(
+        @{ Marker = 'OLDHASH'; HasBackup = $true }
+        @{ Marker = $null; HasBackup = $false }
+    ) {
+        $guest.Marker = $Marker
+        if (-not $HasBackup) { Remove-Item -LiteralPath $vmSettings.VSSettingsBackup }
 
         & $capture
 
