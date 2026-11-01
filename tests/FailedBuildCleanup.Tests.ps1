@@ -51,7 +51,8 @@ Describe 'Invoke-BuildPhase when a phase fails' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Initialize-InstallationIso { }
-        Mock -ModuleName $module Remove-UnattendSeedDisk { }
+        Mock -ModuleName $module Remove-UnattendSeedDisk { $true }
+        Mock -ModuleName $module Get-VM { }
         $seedDisk = 'D:\DevVM\Alpha\Disks\Alpha-Seed.iso'
         $disc = @{ Exists = $true }
         Mock -ModuleName $module Test-Path { $disc.Exists } -ParameterFilter { $LiteralPath -eq $seedDisk }
@@ -79,12 +80,120 @@ Describe 'Invoke-BuildPhase when a phase fails' {
         Should -Invoke -ModuleName $module Remove-UnattendSeedDisk -Times 0 -Exactly
     }
 
+    It 'says to finish Setup in the VM console when the VM exists' {
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha' } }
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 6; Name = 'VM Build'; Action = { throw 'Start-VM failed.' } } }
+
+        $build | Should -Throw -ExpectedMessage 'Start-VM failed.'
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*VM console*' -and $Level -eq 'WARN' }
+    }
+
+    It 'does not say the answer-file disc is gone when it could not be deleted' {
+        Mock -ModuleName $module Remove-UnattendSeedDisk { $false }
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha' } }
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 6; Name = 'VM Build'; Action = { throw 'Start-VM failed.' } } }
+
+        $build | Should -Throw -ExpectedMessage 'Start-VM failed.'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly -ParameterFilter { $Message -like '*disc is gone*' }
+    }
+
+    It 'does not send the user to the VM console when there is no VM' {
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 6; Name = 'VM Build'; Action = { throw 'New-VM failed.' } } }
+
+        $build | Should -Throw -ExpectedMessage 'New-VM failed.'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly -ParameterFilter { $Message -like '*VM console*' }
+    }
+
     It 'does not look for the answer-file disc in Hyper-V when there is none' {
         $disc.Exists = $false
         Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 1; Name = 'Readiness'; Action = { throw 'Hyper-V is not available.' } } }
 
         $build | Should -Throw -ExpectedMessage 'Hyper-V is not available.'
         Should -Invoke -ModuleName $module Remove-UnattendSeedDisk -Times 0 -Exactly
+    }
+}
+
+Describe 'Remove-UnattendSeedDisk' {
+    # The answer-file disc holds the guest password in clear text, so it is
+    # deleted even when it cannot be ejected from the VM first (#255).
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        $seedDisk = Join-Path -Path $TestDrive -ChildPath 'Alpha-Seed.iso'
+        Set-Content -LiteralPath $seedDisk -Value 'password'
+
+        $remove = {
+            InModuleScope $module -Parameters @{ SeedDisk = $seedDisk } {
+                param($SeedDisk)
+                Remove-UnattendSeedDisk -VM ([VMContext]::new(@{ VMName = 'Alpha'; SeedDiskPath = $SeedDisk }))
+            }
+        }
+    }
+
+    It 'deletes the answer-file disc when it cannot be ejected' {
+        Mock -ModuleName $module Get-VMDvdDrive { throw 'Hyper-V was unable to find a virtual machine with name "Alpha".' }
+
+        & $remove
+
+        $seedDisk | Should -Not -Exist
+    }
+
+    It 'warns that the answer-file disc could not be ejected' {
+        Mock -ModuleName $module Get-VMDvdDrive { throw 'Hyper-V was unable to find a virtual machine with name "Alpha".' }
+
+        & $remove
+
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*eject*unable to find*' -and $Level -eq 'WARN' }
+    }
+
+    It 'returns $true once the answer-file disc is deleted' {
+        Mock -ModuleName $module Get-VMDvdDrive { }
+
+        & $remove | Should -Be $true
+    }
+
+    It 'returns $false and says to delete the answer-file disc by hand when it cannot be deleted' {
+        Mock -ModuleName $module Get-VMDvdDrive { }
+        Mock -ModuleName $module Remove-Item { throw 'The process cannot access the file because it is being used by another process.' } -ParameterFilter { $LiteralPath -eq $seedDisk }
+
+        & $remove | Should -Be $false
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*by hand*' -and $Level -eq 'WARN' }
+    }
+}
+
+Describe 'Install-GuestSoftware when the answer-file disc cannot be deleted' {
+    # Phase 7 carries on, but must not report itself complete while the
+    # guest password is still on disk (#255).
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        $seedDisk = Join-Path -Path $TestDrive -ChildPath 'Alpha-Seed.iso'
+        Set-Content -LiteralPath $seedDisk -Value 'password'
+        Mock -ModuleName $module Get-VMDvdDrive { }
+        Mock -ModuleName $module Remove-Item { throw 'The process cannot access the file because it is being used by another process.' } -ParameterFilter { $LiteralPath -eq $seedDisk }
+
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
+        Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('lazy', [securestring]::new()) }
+        Mock -ModuleName $module Wait-GuestReady { }
+        foreach ($step in 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk', 'Connect-Guest', 'Expand-GuestSystemDrive',
+            'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
+            'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization',
+            'Install-SqlServerIfMissing', 'Initialize-VMTooling') {
+            Mock -ModuleName $module $step { }
+        }
+        $tooling = InModuleScope $module { [ToolingRecord]::new() }
+        Mock -ModuleName $module Get-BuildTooling { $tooling }
+        Mock -ModuleName $module Wait-GuestNetwork { $false }
+        Mock -ModuleName $module Write-ToolingReinstallReport { $true }
+    }
+
+    It 'says to delete it by hand and returns CompleteWithProblems' {
+        $outcome = InModuleScope $module -Parameters @{ SeedDisk = $seedDisk } {
+            param($SeedDisk)
+            @(Install-GuestSoftware -VM ([VMContext]::new(@{ VMName = 'Alpha'; SeedDiskPath = $SeedDisk; GuestWaitMinutes = 90; GuestNetworkWaitMinutes = 5 })) -UsedUnattend) |
+                Where-Object { $_ -is [BuildOutcome] } | ForEach-Object { "$_" }
+        }
+
+        $outcome | Should -Be 'CompleteWithProblems'
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*by hand*' -and $Level -eq 'WARN' }
     }
 }
 

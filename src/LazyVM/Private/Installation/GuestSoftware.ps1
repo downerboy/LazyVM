@@ -8,8 +8,9 @@ function Install-GuestSoftware {
       guest, then installs everything in the VM's tooling list that the guest
       does not have yet: Visual Studio Installer products, SQL Server and
       winget packages.
-      Returns CompleteWithProblems when the phase could not run or something
-      in the tooling list is still missing.
+      Returns CompleteWithProblems when the phase could not run, the
+      answer-file disc could not be deleted, or something in the tooling list
+      is still missing.
     #>
     [OutputType([BuildOutcome])]
     param(
@@ -43,8 +44,9 @@ function Install-GuestSoftware {
 
     # The answer-file disc holds the guest password in clear text, so it goes
     # before anything else runs. If the build stops before this,
-    # Invoke-BuildPhase removes it (#247).
-    if ($UsedUnattend) { Remove-UnattendSeedDisk -VM $VM }
+    # Invoke-BuildPhase removes it (#247). One left on disk does not stop the
+    # phase, but the phase is not complete (#255).
+    $seedDiskLeft = $UsedUnattend -and -not (Remove-UnattendSeedDisk -VM $VM)
 
     # The data disks go on before SQL Server is installed, so its data
     # folders are on the data disk from the start.
@@ -90,7 +92,8 @@ function Install-GuestSoftware {
     }
 
     Initialize-VMTooling -VM $VM
-    if (-not (Write-ToolingReinstallReport -VM $VM -Tooling $tooling)) { return [BuildOutcome]::CompleteWithProblems }
+    $toolingComplete = Write-ToolingReinstallReport -VM $VM -Tooling $tooling
+    if ($seedDiskLeft -or -not $toolingComplete) { return [BuildOutcome]::CompleteWithProblems }
 }
 
 function Wait-GuestNetwork {
