@@ -280,18 +280,24 @@ function Remove-UnattendSeedDisk {
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $seedDisk = $VM.Settings.SeedDiskPath
+    # A failed eject (no Hyper-V, or the VM is gone) must not keep the file.
     try {
         foreach ($drive in @(Get-VMDvdDrive -VMName $VM.Name -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $seedDisk })) {
             Remove-VMDvdDrive -VMDvdDrive $drive
             Write-LogEntry 'Answer-file disc removed from the VM' 'OK'
         }
-        if (Test-Path -LiteralPath $seedDisk) {
-            Remove-Item -LiteralPath $seedDisk -Force
-            Write-LogEntry 'Answer-file disc deleted (it held the guest password in clear text)' 'OK'
-        }
     }
     catch {
-        Write-LogEntry "Could not remove the answer-file disc: $($_.Exception.Message)" 'WARN'
+        Write-LogEntry "Could not eject the answer-file disc from the VM: $($_.Exception.Message)" 'WARN'
+    }
+
+    if (-not (Test-Path -LiteralPath $seedDisk)) { return }
+    try {
+        Remove-Item -LiteralPath $seedDisk -Force
+        Write-LogEntry 'Answer-file disc deleted (it held the guest password in clear text)' 'OK'
+    }
+    catch {
+        Write-LogEntry "Could not delete the answer-file disc: $($_.Exception.Message)" 'WARN'
         Write-LogEntry "  Delete $seedDisk by hand - it contains the guest password." 'WARN'
     }
 }

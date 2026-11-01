@@ -52,6 +52,7 @@ Describe 'Invoke-BuildPhase when a phase fails' {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Initialize-InstallationIso { }
         Mock -ModuleName $module Remove-UnattendSeedDisk { }
+        Mock -ModuleName $module Get-VM { }
         $seedDisk = 'D:\DevVM\Alpha\Disks\Alpha-Seed.iso'
         $disc = @{ Exists = $true }
         Mock -ModuleName $module Test-Path { $disc.Exists } -ParameterFilter { $LiteralPath -eq $seedDisk }
@@ -79,12 +80,60 @@ Describe 'Invoke-BuildPhase when a phase fails' {
         Should -Invoke -ModuleName $module Remove-UnattendSeedDisk -Times 0 -Exactly
     }
 
+    It 'says to finish Setup in the VM console when the VM exists' {
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha' } }
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 6; Name = 'VM Build'; Action = { throw 'Start-VM failed.' } } }
+
+        $build | Should -Throw -ExpectedMessage 'Start-VM failed.'
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*VM console*' -and $Level -eq 'WARN' }
+    }
+
+    It 'does not send the user to the VM console when there is no VM' {
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 6; Name = 'VM Build'; Action = { throw 'New-VM failed.' } } }
+
+        $build | Should -Throw -ExpectedMessage 'New-VM failed.'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly -ParameterFilter { $Message -like '*VM console*' }
+    }
+
     It 'does not look for the answer-file disc in Hyper-V when there is none' {
         $disc.Exists = $false
         Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 1; Name = 'Readiness'; Action = { throw 'Hyper-V is not available.' } } }
 
         $build | Should -Throw -ExpectedMessage 'Hyper-V is not available.'
         Should -Invoke -ModuleName $module Remove-UnattendSeedDisk -Times 0 -Exactly
+    }
+}
+
+Describe 'Remove-UnattendSeedDisk' {
+    # The answer-file disc holds the guest password in clear text, so it is
+    # deleted even when it cannot be ejected from the VM first (#255).
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        $seedDisk = Join-Path -Path $TestDrive -ChildPath 'Alpha-Seed.iso'
+        Set-Content -LiteralPath $seedDisk -Value 'password'
+
+        $remove = {
+            InModuleScope $module -Parameters @{ SeedDisk = $seedDisk } {
+                param($SeedDisk)
+                Remove-UnattendSeedDisk -VM ([VMContext]::new(@{ VMName = 'Alpha'; SeedDiskPath = $SeedDisk }))
+            }
+        }
+    }
+
+    It 'deletes the answer-file disc when it cannot be ejected' {
+        Mock -ModuleName $module Get-VMDvdDrive { throw 'Hyper-V was unable to find a virtual machine with name "Alpha".' }
+
+        & $remove
+
+        $seedDisk | Should -Not -Exist
+    }
+
+    It 'warns that the answer-file disc could not be ejected' {
+        Mock -ModuleName $module Get-VMDvdDrive { throw 'Hyper-V was unable to find a virtual machine with name "Alpha".' }
+
+        & $remove
+
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*eject*unable to find*' -and $Level -eq 'WARN' }
     }
 }
 
