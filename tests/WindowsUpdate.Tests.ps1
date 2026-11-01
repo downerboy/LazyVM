@@ -43,41 +43,52 @@ Describe 'Restart-GuestGracefully (#234)' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Assert-GuestCredential { $credential }
-        Mock -ModuleName $module Invoke-GuestScript { 0 }
+        Mock -ModuleName $module Invoke-GuestScript { 'boot1' } -ParameterFilter { $Activity -eq 'reading the boot time' }
+        Mock -ModuleName $module Invoke-GuestScript { 0 } -ParameterFilter { $Activity -eq 'restarting Windows' }
         Mock -ModuleName $module Remove-GuestSession { }
-        Mock -ModuleName $module Get-VMIntegrationService { [pscustomobject]@{ PrimaryStatusDescription = 'Lost Communication' } }
-        Mock -ModuleName $module Wait-GuestReady { }
+        Mock -ModuleName $module Invoke-Command { 'boot2' }
+        Mock -ModuleName $module Start-Sleep { }
         Mock -ModuleName $module Connect-Guest { 'session' }
         Mock -ModuleName $module Restart-VM { }
     }
 
-    It 'restarts Windows from inside the guest, never with a reset, and reconnects once it is back' {
+    It 'restarts Windows from inside the guest, with a neutral message, never with a reset, and reconnects once it is back' {
         $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Restart-GuestGracefully -VM $VM })
 
         $result.Count | Should -Be 0
-        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { "$ScriptBlock" -match 'shutdown\.exe /r' }
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { "$ScriptBlock" -match 'shutdown\.exe /r' -and "$ScriptBlock" -match "'LazyVM is restarting Windows\.'" }
         Should -Invoke -ModuleName $module Restart-VM -Times 0
-        Should -Invoke -ModuleName $module Wait-GuestReady -Times 1 -Exactly
         Should -Invoke -ModuleName $module Connect-Guest -Times 1 -Exactly
     }
 
-    It 'waits for Windows to go down before waiting for it to come back' {
-        $script:heartbeats = [System.Collections.Generic.Queue[string]]::new([string[]]@('OK', 'OK', 'No Contact'))
-        Mock -ModuleName $module Get-VMIntegrationService { [pscustomobject]@{ PrimaryStatusDescription = $script:heartbeats.Dequeue() } }
-        Mock -ModuleName $module Start-Sleep { }
+    It 'waits until the guest reports a new boot time, so a guest still installing updates before it restarts is not taken as restarted' {
+        $script:bootTimes = [System.Collections.Generic.Queue[object]]::new([object[]]@('boot1', $null, 'boot2'))
+        Mock -ModuleName $module Invoke-Command {
+            $next = $script:bootTimes.Dequeue()
+            if ($null -eq $next) { throw 'The virtual machine is not running' }
+            $next
+        }
 
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Restart-GuestGracefully -VM $VM }
 
-        Should -Invoke -ModuleName $module Get-VMIntegrationService -Times 3 -Exactly
-        Should -Invoke -ModuleName $module Wait-GuestReady -Times 1 -Exactly
+        Should -Invoke -ModuleName $module Invoke-Command -Times 3 -Exactly -ParameterFilter { $VMName -eq 'Alpha' }
+        Should -Invoke -ModuleName $module Connect-Guest -Times 1 -Exactly
+    }
+
+    It 'throws when the guest does not come back within the wait' {
+        Mock -ModuleName $module Invoke-Command { 'boot1' }
+
+        { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Restart-GuestGracefully -VM $VM } } | Should -Throw '*restart*'
+
+        Should -Invoke -ModuleName $module Connect-Guest -Times 0
     }
 
     It 'throws, without waiting, when Windows refuses to restart' {
-        Mock -ModuleName $module Invoke-GuestScript { 5 }
+        Mock -ModuleName $module Invoke-GuestScript { 5 } -ParameterFilter { $Activity -eq 'restarting Windows' }
 
         { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Restart-GuestGracefully -VM $VM } } | Should -Throw '*5*'
 
-        Should -Invoke -ModuleName $module Wait-GuestReady -Times 0
+        Should -Invoke -ModuleName $module Invoke-Command -Times 0
     }
 }
 
@@ -106,6 +117,16 @@ Describe 'Install-GuestWindowsUpdate (#234)' {
         Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
             # 3689bdc8-... is the Upgrades category, which holds feature updates.
             "$Work" -match '3689bdc8-b205-4af4-8d4a-a63924c5e9d5' -and "$Work" -match 'BrowseOnly'
+        }
+    }
+
+    It 'installs only the updates that downloaded, and warns about each one that did not' {
+        Mock -ModuleName $module Invoke-GuestTask { New-UpdateReport -RestartNeeded $false }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Install-GuestWindowsUpdate -VM $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
+            "$Work" -match '\.IsDownloaded' -and "$Work" -match 'not downloaded: '
         }
     }
 

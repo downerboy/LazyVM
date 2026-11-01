@@ -75,7 +75,7 @@ function Invoke-GuestRearm {
         return $false
     }
     Write-LogEntry "Rearm accepted (had $($result.Before) remaining) - restarting the guest to apply it" 'OK'
-    $null = Restart-GuestAndWait -VM $VM
+    $null = Restart-GuestGracefully -VM $VM
     return $true
 }
 
@@ -157,15 +157,11 @@ function Get-LicenseReport {
 
 function Invoke-Maintenance {
     <#
-      The scheduled task's daily work: extends C: into any new space, puts
-      the personal folders on the User disk, turns BitLocker on for C: and
-      the persistent disks, copies the User disk when it changed, records
-      the guest's tooling, environment, firewall rules, scheduled tasks, SQL
-      logins and Agent jobs, and application settings, checks and backs up
-      the databases, asks the Store to update its apps, installs Windows
-      updates, then does nothing
-      more until the evaluation is close to expiry, when it captures state
-      and rearms.
+      The scheduled task's daily run: opens the guest, starting the VM if it
+      is off, runs the day's work (Invoke-DailyMaintenance) and, however that
+      ends, shuts a VM it started down again, even when a step threw, such as
+      a restart for updates that left the guest unreachable. A VM about to be
+      rebuilt is left to the rebuild.
       Returns what the caller does next.
     #>
     [OutputType([MaintenanceStep])]
@@ -182,6 +178,39 @@ function Invoke-Maintenance {
         Write-LogError 'Could not reach the guest to check its license' $_
         return [MaintenanceStep]::Error
     }
+
+    $step = $null
+    try {
+        $step = Invoke-DailyMaintenance -VM $VM -StartedByLazyVM:$wasOff
+        return $step
+    }
+    finally {
+        if ($wasOff -and $step -ne [MaintenanceStep]::Rebuild) {
+            # Logged rather than thrown, so it never hides why the run failed.
+            try { $null = Stop-GuestGracefully -VM $VM }
+            catch { Write-LogError 'Could not shut the VM down again after maintenance' $_ }
+        }
+    }
+}
+
+function Invoke-DailyMaintenance {
+    <#
+      The day's work in an open guest: extends C: into any new space, puts
+      the personal folders on the User disk, turns BitLocker on for C: and
+      the persistent disks, copies the User disk when it changed, records
+      the guest's tooling, environment, firewall rules, scheduled tasks, SQL
+      logins and Agent jobs, and application settings, checks and backs up
+      the databases, asks the Store to update its apps, installs Windows
+      updates, then does nothing more until the evaluation is close to
+      expiry, when it captures state and rearms. -StartedByLazyVM: the run
+      started the VM, so nobody is at work in it.
+      Returns what the caller does next.
+    #>
+    [OutputType([MaintenanceStep])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [switch]$StartedByLazyVM
+    )
 
     # A user who made the OS disk bigger gets the space on C: tonight.
     $null = Expand-GuestSystemDrive -VM $VM
@@ -224,7 +253,7 @@ function Invoke-Maintenance {
 
     # Windows updates, after tonight's records and backups so a bad update still has them, and before the
     # license check. The guest is restarted for them only when nobody can be disturbed by it (#234).
-    try { $null = Update-GuestWindows -VM $VM -StartedByLazyVM:$wasOff }
+    try { $null = Update-GuestWindows -VM $VM -StartedByLazyVM:$StartedByLazyVM }
     catch { Write-LogError 'Windows updates failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM
@@ -238,7 +267,6 @@ function Invoke-Maintenance {
         # A full capture whenever the guest changed in a way only a capture keeps (#20).
         try { if (Test-GuestStateChanged -VM $VM) { $null = Save-GuestState -VM $VM } }
         catch { Write-LogError 'State change check or capture failed (non-fatal)' $_ }
-        if ($wasOff) { $null = Stop-GuestGracefully -VM $VM }
         return [MaintenanceStep]::None
     }
 
@@ -252,7 +280,6 @@ function Invoke-Maintenance {
         if (Invoke-GuestRearm -VM $VM) {
             $after = Get-GuestLicenseStatus -VM $VM
             Write-LogEntry "Rearmed: $($after.DaysLeft) day(s) now remaining, $($after.RearmsLeft) rearm(s) left" 'OK'
-            if ($wasOff) { $null = Stop-GuestGracefully -VM $VM }
             return [MaintenanceStep]::Rearmed
         }
         Write-LogEntry 'Rearm did not succeed - falling through to a full rebuild' 'WARN'
