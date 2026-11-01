@@ -269,7 +269,7 @@ Build-LazyVM
 
 ## 5. The 90-day cycle
 
-Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), installs Windows updates ([Windows updates](#windows-updates)), then does this:
+Each night the maintenance run records any hardware change, extends `C:` into any space added to the OS disk, records any tooling change, asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close), turns Sysmon on and installs it if it is not, with any newer configuration LazyVM ships ([Sysmon](#sysmon)), installs Windows updates ([Windows updates](#windows-updates)), then does this:
 
 | Situation | What happens |
 |---|---|
@@ -418,6 +418,15 @@ Get-LazyVMCredential -Name DevBox -RecoveryPassword
 
 Windows keeps its recovery tools (Windows RE) on a partition of their own after `C:`, because it refuses them on a BitLocker-encrypted volume. Extending `C:` keeps it that way.
 
+### Sysmon
+
+Each VM runs the [Sysmon built into Windows 11](https://learn.microsoft.com/windows/security/operating-system-security/sysmon/overview). It records what happens in the VM, such as programs started, network connections from unusual places, and files and registry keys that malware uses to stay, so you can look back if something odd happened. It only records: it blocks nothing and raises no alerts.
+
+- **Where the events are:** Event Viewer, under **Applications and Services Logs > Microsoft > Windows > Sysmon > Operational**. They stay in the VM; nothing is sent anywhere. The log holds 256 MB, then overwrites the oldest events.
+- **The configuration:** [SwiftOnSecurity's sysmon-config](https://github.com/SwiftOnSecurity/sysmon-config) (Creative Commons Attribution 4.0), copied into LazyVM at a fixed commit as `Data\Sysmon\sysmonconfig.xml`, never downloaded. LazyVM's additions, marked `LazyVM:` in the file, leave out the build noise of Visual Studio, MSBuild, the .NET SDK, NuGet and SQL Server. What those programs start elsewhere, such as a build event's `cmd.exe` or a SQL Agent job step, is still recorded.
+- **Checked every night:** every build and every night, LazyVM turns the Sysmon feature on if it is off, installs Sysmon if it is missing, applies the configuration if LazyVM ships a newer one than the VM last got, and sets the log size if it changed. Nothing restarts. If you change Sysmon's configuration by hand with `sysmon -c`, LazyVM does not notice and leaves it until it next ships a new configuration.
+- **When it cannot:** Windows ISOs from before February 2026 have no built-in Sysmon; LazyVM logs that and tries again each night, so Sysmon starts once Windows Update brings it. A standalone Sysmon from Sysinternals cannot run beside the built-in one, so LazyVM leaves it alone and says so in the log. Nothing here ever stops a build or a maintenance run.
+
 ## 8. Settings
 
 Settings live in two kinds of JSON file:
@@ -525,6 +534,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `GuestRemoveOneDrive` | true | Removes OneDrive and stops it installing for new users. |
 | `GuestDarkMode`, `GuestShowFileExtensions`, `GuestTaskbarLeft`, `GuestHideWidgets`, `GuestHideTaskbarSearch` | true | Windows appearance in the VM, applied for every user at every build. |
 | `GuestDeveloperMode` | true | Turns on Developer Mode in the VM at every build. Visual Studio needs it to build and run WinUI and other packaged apps. |
+| `GuestSysmon` | true | Turns on the Sysmon built into Windows 11 with LazyVM's configuration, checked at every build and every night. See [Sysmon](#sysmon). `false` leaves Sysmon as it is. |
 
 ### Adding tools to a VM
 
