@@ -206,8 +206,9 @@ function ConvertTo-CheckedSetting {
     <#
       A table of settings read from $Path, checked against the schema, with
       names in the schema's spelling and a single value where a list belongs
-      made a one-item list. Throws, listing every problem at once, if it
-      cannot be used; nothing with problems is ever applied.
+      made a one-item list. A setting LazyVM no longer uses is left out
+      (#273). Throws, listing every problem at once, if it cannot be used;
+      nothing with problems is ever applied.
     #>
     [OutputType([hashtable])]
     param(
@@ -218,7 +219,7 @@ function ConvertTo-CheckedSetting {
     $schema = Get-SettingsSchema
     $checked = [ordered]@{}
     foreach ($key in $Values.Keys) {
-        if ($key -eq '$schema') { continue }
+        if ($key -eq '$schema' -or $key -in $script:RetiredSettingNames) { continue }
         $name = Find-SettingName -Name $key
         if (-not $name) { $name = $key }
         $value = $Values[$key]
