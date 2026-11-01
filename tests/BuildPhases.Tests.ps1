@@ -128,4 +128,25 @@ Describe 'Install-GuestSoftware' {
 
         $outcome | Should -Be 'CompleteWithProblems'
     }
+
+    It 'sets up Sysmon in the guest (#236)' {
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
+        Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('lazy', [securestring]::new()) }
+        foreach ($step in 'Wait-GuestReady', 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk', 'Connect-Guest',
+            'Expand-GuestSystemDrive', 'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
+            'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization', 'Set-GuestSysmon',
+            'Wait-GuestNetwork', 'Install-SqlServerIfMissing', 'Initialize-VMTooling') {
+            Mock -ModuleName $module $step { }
+        }
+        # Classes defined in a module are only visible inside it.
+        $tooling = InModuleScope $module { [ToolingRecord]::new() }
+        Mock -ModuleName $module Get-BuildTooling { $tooling }
+        Mock -ModuleName $module Write-ToolingReinstallReport { $true }
+
+        $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; GuestWaitMinutes = 1; GuestNetworkWaitMinutes = 1 }) }
+
+        $null = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Install-GuestSoftware -VM $VM }
+
+        Should -Invoke -ModuleName $module Set-GuestSysmon -Times 1 -Exactly
+    }
 }

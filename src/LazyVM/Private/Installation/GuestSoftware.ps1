@@ -63,6 +63,7 @@ function Install-GuestSoftware {
     Protect-GuestPersistentDisk -VM $VM -NewSystemDrive:$UsedUnattend
     Enable-GuestEnhancedSession -VM $VM
     Set-GuestCustomization -VM $VM
+    Set-GuestSysmon -VM $VM
 
     # The VM's own recorded list, or the shared template's for a VM that has
     # none. VM.Template.json keeps the list the VM was first built from.

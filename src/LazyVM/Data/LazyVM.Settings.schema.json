@@ -761,6 +761,11 @@
       "default": true,
       "description": "Turn on Developer Mode in the VM, which Visual Studio needs to build and run WinUI and other packaged apps. Set to false to leave it off."
     },
+    "GuestSysmon": {
+      "type": "boolean",
+      "default": true,
+      "description": "Turn on the Sysmon built into Windows 11 in the VM, with the configuration LazyVM ships (SwiftOnSecurity's, without the build noise of Visual Studio, MSBuild and SQL Server) and a 256 MB event log, at every build and every night. Set to false to leave Sysmon as it is."
+    },
     "GuestHideTaskbarSearch": {
       "type": "boolean",
       "default": true,
