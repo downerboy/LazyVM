@@ -5,11 +5,17 @@
 # <GuestSetupDir>\VisualStudioFirstLaunch.ps1 (C:\LazyVMSetup by default).
 #
 # The build (Complete-GuestVisualStudioFirstLaunch) runs it with -DevenvPath,
-# -Control and -Minutes: it starts Visual Studio with /Command Exit, presses
-# each control in -Control in order, found by its AutomationId, and waits for
+# -Control, -TimeoutMinutes and -ProcessIdPath: it starts Visual Studio with
+# /Command Exit, records its process id in -ProcessIdPath, presses each
+# control in -Control in order, found by its AutomationId, and waits for
 # Visual Studio to finish starting and close itself. Whatever goes wrong, it
 # describes the windows Visual Studio had open in -TreePath, stops Visual
-# Studio and everything it started, and throws saying why.
+# Studio and everything it started, and throws saying why. It removes
+# -ProcessIdPath once Visual Studio has stopped, so a file left behind names
+# a devenv the host is to stop.
+#
+# Each -Control item is @{ Name; AutomationId }: AutomationId finds the
+# control, Name is only for messages.
 #
 # By hand, to see the AutomationIds of the first-launch window: open Visual
 # Studio in the VM and, while a first-launch screen shows, run in Windows
@@ -26,10 +32,14 @@ param(
     [Parameter(Mandatory)][string]$TreePath,
     [Parameter(Mandatory, ParameterSetName = 'FirstLaunch')][string]$DevenvPath,
     [Parameter(Mandatory, ParameterSetName = 'FirstLaunch')][object[]]$Control,
-    [Parameter(Mandatory, ParameterSetName = 'FirstLaunch')][int]$Minutes
+    [Parameter(Mandatory, ParameterSetName = 'FirstLaunch')][ValidateRange(1, [int]::MaxValue)][int]$TimeoutMinutes,
+    [Parameter(Mandatory, ParameterSetName = 'FirstLaunch')][string]$ProcessIdPath
 )
 
 $ErrorActionPreference = 'Stop'
+# How long a description of the windows may take, so a failed first launch
+# still stops Visual Studio well inside the time the host gives the task.
+$treeSeconds = 60
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 
 function Get-DevenvWindow {
@@ -46,7 +56,8 @@ function Get-DevenvWindow {
 function Write-AutomationTree {
     <#
       Adds to $Path, under $Heading, the UI Automation tree of each of
-      $Window: one line per element, indented by its depth.
+      $Window: one line per element, indented by its depth. Cut short after
+      $treeSeconds seconds, and says so.
     #>
     param(
         [object[]]$Window = @(),
@@ -55,6 +66,7 @@ function Write-AutomationTree {
     )
 
     $walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("=== $(Get-Date -Format s) $Heading")
     if (@($Window).Count -eq 0) { $lines.Add('(Visual Studio has no window open)') }
@@ -62,6 +74,10 @@ function Write-AutomationTree {
     $pending = New-Object System.Collections.Generic.Stack[object]
     foreach ($window in @($Window)) { $pending.Push(@($window, 0)) }
     while ($pending.Count -gt 0) {
+        if ($clock.Elapsed.TotalSeconds -ge $treeSeconds) {
+            $lines.Add("(dump cut short after $treeSeconds seconds)")
+            break
+        }
         $element, $depth = $pending.Pop()
         try {
             $current = $element.Current
@@ -79,39 +95,40 @@ function Write-AutomationTree {
 
 function Wait-AutomationElement {
     <#
-      The element with AutomationId $AutomationId in a window of devenv
+      The element of $Control (an item of -Control) in a window of devenv
       $Process, once it shows. Throws when devenv exits first or $Deadline
       passes.
     #>
     param(
         [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
-        [Parameter(Mandatory)][string]$AutomationId,
-        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][object]$Control,
         [Parameter(Mandatory)][datetime]$Deadline
     )
 
-    $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $AutomationId)
+    $name = $Control.Name
+    $automationId = $Control.AutomationId
+    $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $automationId)
     while ((Get-Date) -lt $Deadline) {
-        if ($Process.HasExited) { throw "Visual Studio exited (code $($Process.ExitCode)) before showing '$Name' (AutomationId $AutomationId)" }
+        if ($Process.HasExited) { throw "Visual Studio exited (code $($Process.ExitCode)) before showing '$name' (AutomationId $automationId)" }
         foreach ($window in @(Get-DevenvWindow -ProcessId $Process.Id)) {
             $element = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
             if ($element) { return $element }
         }
         Start-Sleep -Seconds 2
     }
-    throw "Visual Studio did not show '$Name' (AutomationId $AutomationId) by $($Deadline.ToString('T'))"
+    throw "Visual Studio did not show '$name' (AutomationId $automationId) by $($Deadline.ToString('T'))"
 }
 
 function Invoke-AutomationElement {
-    <# Presses $Element, a button or link, with its Invoke pattern. #>
+    <# Presses $Element, the button or link of $Control (an item of -Control), with its Invoke pattern. #>
     param(
         [Parameter(Mandatory)][object]$Element,
-        [Parameter(Mandatory)][string]$Name
+        [Parameter(Mandatory)][object]$Control
     )
 
     $pattern = $null
     if (-not $Element.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
-        throw "'$Name' (AutomationId $($Element.Current.AutomationId)) cannot be pressed: it has no Invoke pattern"
+        throw "'$($Control.Name)' (AutomationId $($Control.AutomationId)) cannot be pressed: it has no Invoke pattern"
     }
     $pattern.Invoke()
 }
@@ -123,20 +140,27 @@ if ($PSCmdlet.ParameterSetName -eq 'Tree') {
 }
 
 Remove-Item -LiteralPath $TreePath -Force -ErrorAction SilentlyContinue
-$deadline = (Get-Date).AddMinutes($Minutes)
+$deadline = (Get-Date).AddMinutes($TimeoutMinutes)
 $process = Start-Process -FilePath $DevenvPath -ArgumentList '/NoSplash', '/Command', 'Exit' -PassThru
 try {
+    Set-Content -LiteralPath $ProcessIdPath -Value $process.Id
     foreach ($step in $Control) {
-        $element = Wait-AutomationElement -Process $process -AutomationId $step.AutomationId -Name $step.Name -Deadline $deadline
-        Invoke-AutomationElement -Element $element -Name $step.Name
+        $element = Wait-AutomationElement -Process $process -Control $step -Deadline $deadline
+        Invoke-AutomationElement -Element $element -Control $step
     }
     $remaining = [int][Math]::Max(0, ($deadline - (Get-Date)).TotalMilliseconds)
-    if (-not $process.WaitForExit($remaining)) { throw "Visual Studio did not close itself within $Minutes minute(s) of starting" }
+    if (-not $process.WaitForExit($remaining)) { throw "Visual Studio did not close itself within $TimeoutMinutes minute(s) of starting" }
 }
 catch {
-    Write-AutomationTree -Window @(Get-DevenvWindow -ProcessId $process.Id) -Path $TreePath -Heading $_.Exception.Message
-    throw "$($_.Exception.Message). The windows Visual Studio had open are described in $TreePath"
+    $reason = $_.Exception.Message
+    try {
+        Write-AutomationTree -Window @(Get-DevenvWindow -ProcessId $process.Id) -Path $TreePath -Heading $reason
+        $reason += ". The windows Visual Studio had open are described in $TreePath"
+    }
+    catch { $reason += ". Its windows could not be described: $($_.Exception.Message)" }
+    throw $reason
 }
 finally {
     if (-not $process.HasExited) { $null = taskkill.exe /PID $process.Id /T /F }
+    Remove-Item -LiteralPath $ProcessIdPath -Force -ErrorAction SilentlyContinue
 }

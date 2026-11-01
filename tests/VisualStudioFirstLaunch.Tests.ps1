@@ -29,6 +29,7 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
         $copied = @{ Text = $null; GuestPath = $null }
         Mock -ModuleName $module Copy-ToGuest { $copied.Text = Get-Content -LiteralPath $HostPath -Raw; $copied.GuestPath = $GuestPath }
         Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { }
+        Mock -ModuleName $module Stop-GuestVisualStudioFirstLaunch { }
         $vs = [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' }
         $complete = { InModuleScope $module -Parameters @{ Settings = $settings; VisualStudio = $vs } { param($Settings, $VisualStudio) Complete-GuestVisualStudioFirstLaunch -VM ([VMContext]::new($Settings)) -VisualStudio $VisualStudio } }
     }
@@ -45,12 +46,14 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
     It 'puts the UI Automation script in the guest, where it can also be run by hand, and runs it in the signed-in user''s session' {
         & $complete | Should -BeTrue
 
-        $copied.GuestPath | Should -Be 'C:\LazyVMSetup\VisualStudioFirstLaunch.ps1'
+        # ? for the path separators, which are / where the tests run on Linux.
+        $copied.GuestPath | Should -BeLike 'C:?LazyVMSetup?VisualStudioFirstLaunch.ps1'
         $copied.Text | Should -Be (Get-Content -LiteralPath $guestScript -Raw)
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter {
-            $ArgumentList[0] -eq 'C:\LazyVMSetup\VisualStudioFirstLaunch.ps1' -and
-            $ArgumentList[1] -eq 'C:\LazyVMSetup\VisualStudioFirstLaunch.txt' -and
-            $ArgumentList[2] -eq 'C:\VS\devenv.exe'
+            $ArgumentList[0] -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.ps1' -and
+            $ArgumentList[1] -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.txt' -and
+            $ArgumentList[2] -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.pid' -and
+            $ArgumentList[3] -eq 'C:\VS\devenv.exe'
         }
     }
 
@@ -60,22 +63,45 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
         & $complete
 
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter {
-            (@($ArgumentList[3] | ForEach-Object { $_.AutomationId }) -join ',') -eq (@($table | ForEach-Object { $_.AutomationId }) -join ',')
+            (@($ArgumentList[4] | ForEach-Object { $_.AutomationId }) -join ',') -eq (@($table | ForEach-Object { $_.AutomationId }) -join ',')
         }
     }
 
     It 'gives the guest task longer than the script gets, so the guest stops Visual Studio and says why' {
         & $complete
 
-        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $TimeoutMinutes -gt $ArgumentList[4] }
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $TimeoutMinutes -gt $ArgumentList[5] }
     }
 
-    It 'returns false and logs why, without throwing, when the first launch cannot be automated' {
+    It 'returns false and logs the guest''s reason, without throwing, when the first launch cannot be automated' {
+        $states.Clear()
+        $states.Enqueue([pscustomobject]@{ Marker = 'Pending'; OpenedOnce = $false; DevenvRunning = $false })
+        $states.Enqueue([pscustomobject]@{ Marker = 'Pending'; OpenedOnce = $false; DevenvRunning = $false })
         Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { throw "Visual Studio's first launch failed in the guest: did not show 'Start Visual Studio'" }
 
         & $complete | Should -BeFalse
 
         $logged | Where-Object { $_ -like "WARN:*first launch*did not show 'Start Visual Studio'*" } | Should -Not -BeNullOrEmpty
+    }
+
+    It 'goes by whether Visual Studio was opened, not by how the guest task ended' {
+        Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { throw 'the host gave up waiting' }
+
+        & $complete | Should -BeTrue
+    }
+
+    It 'stops the Visual Studio it started, by its process id, when the guest task did not finish' {
+        Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { throw 'the host gave up waiting' }
+
+        & $complete
+
+        Should -Invoke -ModuleName $module Stop-GuestVisualStudioFirstLaunch -Times 1 -Exactly -ParameterFilter { $ProcessIdPath -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.pid' }
+    }
+
+    It 'stops nothing when the guest task finished' {
+        & $complete
+
+        Should -Invoke -ModuleName $module Stop-GuestVisualStudioFirstLaunch -Times 0 -Exactly
     }
 
     It 'returns false and logs why when Visual Studio closed without saving its settings backup' {
@@ -104,6 +130,53 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
         & $complete | Should -BeFalse
 
         $logged | Where-Object { $_ -like 'WARN:*session dropped*' } | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe 'Stop-GuestVisualStudioFirstLaunch' {
+    BeforeAll {
+        # Mock replaces only a command that exists, and taskkill.exe exists only on Windows.
+        function taskkill.exe { }
+    }
+
+    BeforeEach {
+        $task = @{ Work = $null; Arguments = $null }
+        Mock -ModuleName $module Invoke-GuestScript { $task.Work = $ScriptBlock; $task.Arguments = $ArgumentList }
+        InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Stop-GuestVisualStudioFirstLaunch -VM ([VMContext]::new($Settings)) -ProcessIdPath 'C:\LazyVMSetup\VisualStudioFirstLaunch.pid' }
+
+        <# The guest work, from its text, with the process id file holding $Recorded and Get-Process finding $Process. #>
+        $runWork = {
+            param($Recorded, $Process)
+            $guest = @{ Recorded = $Recorded; Process = $Process }
+            Mock Test-Path { $null -ne $guest.Recorded }
+            Mock Get-Content { $guest.Recorded }
+            Mock Get-Process { $guest.Process }
+            Mock Remove-Item { }
+            Mock taskkill.exe { }
+            $work = [scriptblock]::Create($task.Work.ToString())
+            & $work @($task.Arguments)
+        }
+    }
+
+    It 'stops the process tree of the devenv whose id the script recorded, by id' {
+        & $runWork '4242' ([pscustomobject]@{ Id = 4242; ProcessName = 'devenv' })
+
+        Should -Invoke taskkill.exe -Times 1 -Exactly -ParameterFilter { "$args" -eq '/PID 4242 /T /F' }
+        Should -Invoke Get-Process -Times 1 -Exactly -ParameterFilter { $Id -eq 4242 }
+        Should -Invoke Remove-Item -Times 1 -Exactly
+    }
+
+    It 'leaves a process alone that is not devenv, as when the id was reused' {
+        & $runWork '4242' ([pscustomobject]@{ Id = 4242; ProcessName = 'notepad' })
+
+        Should -Invoke taskkill.exe -Times 0 -Exactly
+    }
+
+    It 'stops nothing when the script recorded no process' {
+        & $runWork $null $null
+
+        Should -Invoke taskkill.exe -Times 0 -Exactly
+        Should -Invoke Get-Process -Times 0 -Exactly
     }
 }
 
@@ -162,6 +235,15 @@ Describe 'The first-launch UI Automation script' {
                 $_.Attributes | Where-Object { $_.TypeName.Name -eq 'Parameter' -and $_.NamedArguments.ArgumentName -contains 'Mandatory' -and -not ($_.NamedArguments | Where-Object ArgumentName -EQ 'ParameterSetName') }
             } | ForEach-Object { $_.Name.VariablePath.UserPath })
         $mandatory | Should -Be @('TreePath')
+    }
+
+    It 'takes a time limit of at least one minute' {
+        $timeout = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'TimeoutMinutes' }
+        $timeout.Attributes.TypeName.Name | Should -Contain 'ValidateRange'
+    }
+
+    It 'records the devenv it starts in -ProcessIdPath, so the host can stop it by id' {
+        @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }) | Should -Contain 'ProcessIdPath'
     }
 
     It 'holds no AutomationId of its own: they live in one table in the module' {
