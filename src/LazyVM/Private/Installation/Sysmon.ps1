@@ -9,12 +9,13 @@
 
 function Set-GuestSysmon {
     <#
-      Brings Sysmon in the guest to the state LazyVM wants, at every build
-      and every night: the feature on, Sysmon installed with the
-      configuration in Data\Sysmon, and a 256 MB event log. Only what
-      differs is changed. The hash of the configuration last applied is kept
-      in the guest's LazyVM registry key, so a LazyVM release with a new
-      configuration applies it the next night (sysmon -c, no restart).
+      Sets up Sysmon in the guest, at every build and every night: turns
+      the feature on if it is off, installs Sysmon with the configuration
+      in Data\Sysmon if it is not installed, and sets a 256 MB event log.
+      The hash of the configuration last applied is kept in the guest's
+      LazyVM registry key, so the configuration is applied again (sysmon -c,
+      no restart) only when a LazyVM release ships a different one. A
+      configuration changed by hand in the guest is not noticed.
 
       Forgiving: a Windows without the built-in feature (an ISO from before
       February 2026), a standalone Sysmon someone installed, or any failure
@@ -28,22 +29,27 @@ function Set-GuestSysmon {
         return
     }
 
-    $configPath = Join-Path -Path $script:DataDir -ChildPath 'Sysmon\sysmonconfig.xml'
-    $configText = Get-Content -LiteralPath $configPath -Raw
-    $configHash = (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash
     # Big enough that a day of a developer's work does not roll over (Sean's decision on #236).
     $eventLogSizeBytes = 256MB
 
     try {
+        # Read inside the try: a configuration file that is missing or locked must not stop the run either.
+        $configPath = Join-Path -Path $script:DataDir -ChildPath 'Sysmon\sysmonconfig.xml'
+        $configText = Get-Content -LiteralPath $configPath -Raw
+        $configHash = (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash
         $notes = Invoke-GuestScript -VM $VM -Activity 'Sysmon' -TimeoutMinutes 15 `
             -ArgumentList @($configText, $configHash, $eventLogSizeBytes, $script:GuestMarkerKey) -ScriptBlock {
             param($configText, $configHash, $eventLogSizeBytes, $markerKey)
             $ErrorActionPreference = 'Stop'
             $notes = @()
 
-            # An unknown feature name is an error, not an empty result.
+            # An unknown feature name can be an error rather than an empty
+            # result, so the error is reported as it is: it may as well be
+            # access denied or a servicing problem.
             try { $feature = Get-WindowsOptionalFeature -Online -FeatureName Sysmon }
-            catch { $feature = $null }
+            catch {
+                return New-GuestNote -Level WARN -Text "Sysmon: could not read the built-in Sysmon feature ($($_.Exception.Message)); the next run tries again"
+            }
             if (-not $feature) {
                 return New-GuestNote -Level WARN -Text 'Sysmon: this Windows has no built-in Sysmon (it came with the February 2026 update); the next run tries again, after Windows Update has brought it'
             }

@@ -76,6 +76,16 @@ Describe 'Set-GuestSysmon' {
         Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly -ParameterFilter { $Context -match 'non-fatal' }
     }
 
+    It 'logs a configuration it cannot read as non-fatal and carries on' {
+        Mock -ModuleName $module Invoke-GuestScript { }
+        Mock -ModuleName $module Get-FileHash { throw 'The file is locked by another process' }
+
+        { InModuleScope $module { Set-GuestSysmon -VM ([VMContext]::new(@{ VMName = 'Alpha'; GuestSysmon = $true })) } } | Should -Not -Throw
+
+        Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly -ParameterFilter { $Context -match 'non-fatal' }
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 0 -Exactly
+    }
+
     It 'emits nothing' {
         Mock -ModuleName $module Invoke-GuestScript { @(@{ Level = 'OK'; Text = 'Sysmon installed' }) }
 

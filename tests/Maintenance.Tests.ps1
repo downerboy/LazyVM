@@ -99,8 +99,9 @@ Describe 'Invoke-Maintenance' {
         Should -Invoke -ModuleName $module Start-GuestStoreAppUpdate -Times 1 -Exactly
     }
 
-    It 'keeps Sysmon configured every day (#236)' {
+    It 'keeps Sysmon configured every day, and carries on when that fails (#236)' {
         Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Set-GuestSysmon { throw 'the guest stopped answering' }
 
         $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
 

@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/downerboy/LazyVM/LazyVM.Settings.schema.json",
   "title": "LazyVM settings",
@@ -764,7 +764,7 @@
     "GuestSysmon": {
       "type": "boolean",
       "default": true,
-      "description": "Turn on the Sysmon built into Windows 11 in the VM, with the configuration LazyVM ships (SwiftOnSecurity's, without the build noise of Visual Studio, MSBuild and SQL Server) and a 256 MB event log, at every build and every night. Set to false to leave Sysmon as it is."
+      "description": "Turn on the Sysmon built into Windows 11 in the VM, with the configuration LazyVM ships (SwiftOnSecurity's, without the build noise of Visual Studio, MSBuild and SQL Server) and a 256 MB event log. Checked at every build and every night: turned on and installed if it is not, and given the configuration again when a newer LazyVM ships a different one. Set to false to leave Sysmon as it is."
     },
     "GuestHideTaskbarSearch": {
       "type": "boolean",
