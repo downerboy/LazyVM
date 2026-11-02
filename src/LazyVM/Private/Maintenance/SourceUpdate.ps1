@@ -7,7 +7,7 @@
 # modules installed for all users update too. Updates change versions, not
 # what is installed, so the tooling list does not change.
 #
-# Invoke-ItemUpdate, shared with the Visual Studio updates, holds the time
+# Invoke-ItemUpdate, shared with the installer product updates, holds the time
 # budget: each item is updated on its own, its result logged as it comes.
 
 function New-UpdateResult {
@@ -40,19 +40,20 @@ function ConvertTo-UpdateResult {
 
 function Invoke-ItemUpdate {
     <#
-      Updates each of $Items, each @{ Label; ... }, with $Update, which is
-      given the item and returns its result (New-UpdateResult; it may carry
-      more for its caller). Each result is logged as it comes, and returned.
-      One that throws is logged as failed, and the next item goes on. Once
-      $BudgetMinutes, counted from now, are up, no update starts.
-      $Update runs in its caller's scope, so it can use the caller's
-      variables; it must not need this function's ($deadline, $current, $outcome).
+      Updates each of $Items, each @{ Label; ... }, with $Update, and logs
+      each result as it comes, and returns it. $Update is given the item,
+      $State (whatever the caller needs, as Wait-Until's -State) and the
+      [datetime] tonight's budget ends at; it returns the item's result
+      (New-UpdateResult; it may carry more for its caller). One that throws
+      is logged as failed, and the next item goes on. Once $BudgetMinutes,
+      counted from now, are up, no update starts.
     #>
     [OutputType([pscustomobject])]
     param(
         [AllowEmptyCollection()][object[]]$Items = @(),
         [Parameter(Mandatory)][int]$BudgetMinutes,
-        [Parameter(Mandatory)][scriptblock]$Update
+        [Parameter(Mandatory)][scriptblock]$Update,
+        [object]$State
     )
 
     $deadline = (Get-Date).AddMinutes($BudgetMinutes)
@@ -61,7 +62,7 @@ function Invoke-ItemUpdate {
             $outcome = New-UpdateResult -Level INFO -Text "not started: $($current.Label) - tonight's time for updates ran out; tried again tomorrow"
         }
         else {
-            try { $outcome = & $Update $current | Select-Object -Last 1 }
+            try { $outcome = & $Update $current $State $deadline | Select-Object -Last 1 }
             catch { $outcome = New-UpdateResult -Level WARN -Text "update failed: $($current.Label) - $($_.Exception.Message)" }
         }
         Write-LogEntry "  $($outcome.Text)" $outcome.Level
@@ -96,11 +97,10 @@ function Update-GuestSource {
     }
 
     Write-LogEntry "${Label}: checking $($items.Count) for updates..." 'INFO'
-    # Named apart from Invoke-ItemUpdate's own -Update, which the block below would otherwise see.
-    $guestUpdate = $Update
-    $null = Invoke-ItemUpdate -Items $items -BudgetMinutes $script:SourceUpdateBudgetMinutes -Update {
-        param($item)
-        $after = Invoke-GuestScript -VM $VM -Activity "$Label - $($item.Label)" -TimeoutMinutes $script:SourceUpdateItemTimeoutMinutes -ArgumentList @($item) -ScriptBlock $guestUpdate
+    $null = Invoke-ItemUpdate -Items $items -BudgetMinutes $script:SourceUpdateBudgetMinutes -State @{ VM = $VM; Label = $Label; Update = $Update } -Update {
+        param($item, $state)
+        $after = Invoke-GuestScript -VM $state.VM -Activity "$($state.Label) - $($item.Label)" -TimeoutMinutes $script:SourceUpdateItemTimeoutMinutes `
+            -ArgumentList @($item) -ScriptBlock $state.Update
         Write-GuestNote -Notes @($after.Notes)
         ConvertTo-UpdateResult -Label $item.Label -Before $item.Version -After $after.Version
     }
@@ -111,8 +111,8 @@ function Update-GuestGalleryModule {
       Updates the modules installed from the PowerShell Gallery, in Windows
       PowerShell and in PowerShell 7, each in the edition it was installed
       in, and only when the Gallery has a newer version, which goes in beside
-      the old one; the two newest versions are kept
-      (Invoke-GuestGalleryModuleUpdate). PowerShellGet and PackageManagement
+      the old one; the version it made old is removed, so the two newest are
+      kept (Invoke-GuestGalleryModuleUpdate). PowerShellGet and PackageManagement
       are left alone (Get-GuestGalleryModule).
     #>
     param([Parameter(Mandatory)][VMContext]$VM)

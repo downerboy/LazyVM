@@ -298,8 +298,8 @@ function Invoke-DailyMaintenance {
 
     # Visual Studio and SSMS, by their own installer, which winget leaves them to, while nobody is using them (#293). A
     # restart one needs is made with Windows updates', under the same rule.
-    $restartNeeded = $false
-    try { $restartNeeded = Update-GuestInstallerProduct -VM $VM }
+    $restartNeededBy = ''
+    try { if (Update-GuestInstallerProduct -VM $VM) { $restartNeededBy = 'Visual Studio Installer products' } }
     catch { Write-LogError 'Visual Studio Installer product updates failed (non-fatal)' $_ }
 
     # The modules installed from the PowerShell Gallery, and the dotnet global tools, when the guest has any (#293).
@@ -310,7 +310,7 @@ function Invoke-DailyMaintenance {
 
     # Windows updates, after tonight's records and backups so a bad update still has them, and before the
     # license check. The guest is restarted for them only when nobody can be disturbed by it (#234).
-    try { $null = Update-GuestWindows -VM $VM -StartedByLazyVM:$StartedByLazyVM -RestartNeeded:$restartNeeded }
+    try { $null = Update-GuestWindows -VM $VM -StartedByLazyVM:$StartedByLazyVM -RestartNeededBy $restartNeededBy }
     catch { Write-LogError 'Windows updates failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM

@@ -118,9 +118,13 @@ function Update-GuestWindows {
       it: LazyVM started the VM itself (-StartedByLazyVM; automatic sign-in
       then signs the guest account in, but nobody is at work in it), or
       nobody is signed in. Otherwise the restart is left pending, and
-      Windows asks the signed-in user when to restart. -RestartNeeded: an
-      earlier step needs a restart Windows Update does not know of, such as a
-      Visual Studio update (#293); it is made, or left pending, the same way.
+      Windows asks the signed-in user when to restart.
+      -RestartNeededBy names an earlier step that needs a restart Windows
+      Update does not know of, such as the Visual Studio Installer products
+      (#293). That restart is made under the same rule, even when the updates
+      fail to install (the failure is logged); when it is left, the log says
+      so, as Windows does not ask for it. With no such step, a failure to
+      install the updates reaches the caller.
       Returns whether it restarted the guest, so a build can wait for it to
       settle (#276).
     #>
@@ -128,23 +132,36 @@ function Update-GuestWindows {
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [switch]$StartedByLazyVM,
-        [switch]$RestartNeeded
+        [string]$RestartNeededBy = ''
     )
 
     Write-LogEntry 'Installing Windows updates...' 'INFO'
-    $null = Set-GuestWindowsUpdatePolicy -VM $VM
-    # Named apart from -RestartNeeded: PowerShell variable names ignore case.
-    $updatesNeedRestart = Install-GuestWindowsUpdate -VM $VM
-    if (-not ($updatesNeedRestart -or $RestartNeeded)) { return $false }
+    $updatesNeedRestart = $false
+    try {
+        $null = Set-GuestWindowsUpdatePolicy -VM $VM
+        $updatesNeedRestart = Install-GuestWindowsUpdate -VM $VM
+    }
+    catch {
+        if (-not $RestartNeededBy) { throw }
+        Write-LogError 'Windows updates failed (non-fatal); the restart they would have needed is decided without them' $_
+    }
+    if (-not ($updatesNeedRestart -or $RestartNeededBy)) { return $false }
 
     if (-not $StartedByLazyVM) {
         $signedIn = @(Get-GuestSignedInUser -VM $VM)
         if ($signedIn.Count -gt 0) {
-            Write-LogEntry "Windows updates: restart pending - $($signedIn -join ', ') signed in to the guest, so Windows asks when to restart" 'INFO'
+            $who = $signedIn -join ', '
+            if ($updatesNeedRestart) { Write-LogEntry "Windows updates: restart pending - $who signed in to the guest, so Windows asks when to restart" 'INFO' }
+            if ($RestartNeededBy) {
+                Write-LogEntry "$RestartNeededBy need a restart to finish updating - $who signed in to the guest, so restart the VM yourself when you can; Windows does not ask for this one" 'WARN'
+            }
             return $false
         }
     }
-    Write-LogEntry 'Windows updates: restarting the guest to finish them' 'INFO'
+    $reasons = @()
+    if ($updatesNeedRestart) { $reasons += 'Windows' }
+    if ($RestartNeededBy) { $reasons += $RestartNeededBy }
+    Write-LogEntry "Restarting the guest to finish the $($reasons -join ' and ') updates" 'INFO'
     $null = Restart-GuestGracefully -VM $VM
     return $true
 }

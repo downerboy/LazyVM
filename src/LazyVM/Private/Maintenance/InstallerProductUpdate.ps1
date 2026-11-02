@@ -27,9 +27,9 @@ function Update-GuestInstallerProduct {
     }
 
     Write-LogEntry "Visual Studio Installer products: checking $($products.Count) for updates..." 'INFO'
-    $results = @(Invoke-ItemUpdate -Items $products -BudgetMinutes $script:InstallerProductUpdateBudgetMinutes -Update {
-            param($product)
-            Update-InstallerProduct -VM $VM -Product $product
+    $results = @(Invoke-ItemUpdate -Items $products -BudgetMinutes $script:InstallerProductUpdateBudgetMinutes -State $VM -Update {
+            param($product, $vm, $deadline)
+            Update-InstallerProduct -VM $vm -Product $product -Deadline $deadline
         })
     return [bool]@($results | Where-Object { $_ -and $_.PSObject.Properties['RestartNeeded'] -and $_.RestartNeeded }).Count
 }
@@ -42,15 +42,19 @@ function Update-InstallerProduct {
       (New-UpdateResult), with RestartNeeded when the update needs a restart
       to finish. It is skipped that night while any program runs from its
       folder (devenv or MSBuild for Visual Studio, Ssms.exe for SSMS), or
-      when the installer says it is busy or in use. An incomplete product,
-      or one a failed update left incomplete, is repaired instead
-      (Repair-IncompleteInstallerProduct). A failure is reported only after
-      that check.
+      when the installer says it is busy or in use. An incomplete product
+      is repaired instead (Repair-IncompleteInstallerProduct). One a failed
+      update left incomplete is repaired at once only when the installer
+      gave up within $script:InstallerProductQuickFailureMinutes minutes and
+      $Deadline, when tonight's budget ends, has not passed; otherwise the
+      next night's check repairs it, so a timed-out update does not cost the
+      night twice.
     #>
     [OutputType([pscustomobject])]
     param(
         [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][object]$Product
+        [Parameter(Mandatory)][object]$Product,
+        [Parameter(Mandatory)][datetime]$Deadline
     )
 
     $label = $Product.Label
@@ -65,6 +69,7 @@ function Update-InstallerProduct {
 
     $exitCode = $null
     $failure = $null
+    $started = Get-Date
     try {
         $exitCode = Invoke-GuestInstaller -VM $VM -FilePath $guest.Installer -ArgumentList @('update', '--installPath', "`"$($Product.InstallPath)`"", '--quiet', '--norestart') `
             -Name 'installer-product-update' -TimeoutMinutes $VM.Settings.VSInstallMinutes -Activity "the $label update"
@@ -80,15 +85,24 @@ function Update-InstallerProduct {
         }
         return $result
     }
-    if ($after -and -not (Test-InstallerProductComplete -Product $after)) { return Repair-IncompleteInstallerProduct -VM $VM -Product $Product }
-    if ($failure) { return New-UpdateResult -Level WARN -Text "update failed: $label - $failure" }
-
-    $meaning = $script:VisualStudioInstallerExitMeanings[$exitCode]
-    if ($exitCode -in $script:VisualStudioInstallerBusyExitCodes) {
-        return New-UpdateResult -Level INFO -Text "skipped: $label - exit ${exitCode}: $meaning; tried again tomorrow"
+    if ($failure) { $reason = $failure }
+    else {
+        $meaning = $script:VisualStudioInstallerExitMeanings[$exitCode]
+        if (-not $meaning) { $meaning = "see the installer's logs. $script:GuestInstallerLogHint" }
+        $reason = "exit ${exitCode}: $meaning"
     }
-    if (-not $meaning) { $meaning = "see the installer's logs. $script:GuestInstallerLogHint" }
-    return New-UpdateResult -Level WARN -Text "update failed: $label - exit ${exitCode}: $meaning"
+
+    if ($after -and -not (Test-InstallerProductComplete -Product $after)) {
+        $now = Get-Date
+        if (-not $failure -and ($now - $started).TotalMinutes -lt $script:InstallerProductQuickFailureMinutes -and $now -lt $Deadline) {
+            return Repair-IncompleteInstallerProduct -VM $VM -Product $Product
+        }
+        return New-UpdateResult -Level WARN -Text "update failed: $label - $reason; left incomplete, repaired tomorrow"
+    }
+    if ($exitCode -in $script:VisualStudioInstallerBusyExitCodes) {
+        return New-UpdateResult -Level INFO -Text "skipped: $label - ${reason}; tried again tomorrow"
+    }
+    return New-UpdateResult -Level WARN -Text "update failed: $label - $reason"
 }
 
 function Repair-IncompleteInstallerProduct {

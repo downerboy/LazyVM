@@ -57,8 +57,8 @@ Describe 'Invoke-ItemUpdate (#293)' {
     It 'logs each result as it comes, and returns the results' {
         $results = @(InModuleScope $module {
                 Invoke-ItemUpdate -Items @([pscustomobject]@{ Label = 'one' }, [pscustomobject]@{ Label = 'two' }) -BudgetMinutes 20 -Update {
-                    param($current)
-                    New-UpdateResult -Level OK -Text "updated: $($current.Label)"
+                    param($item)
+                    New-UpdateResult -Level OK -Text "updated: $($item.Label)"
                 }
             })
 
@@ -70,8 +70,8 @@ Describe 'Invoke-ItemUpdate (#293)' {
     It 'keeps going when one update throws, and says why it failed' {
         $results = @(InModuleScope $module {
                 Invoke-ItemUpdate -Items @([pscustomobject]@{ Label = 'broken' }, [pscustomobject]@{ Label = 'fine' }) -BudgetMinutes 20 -Update {
-                    param($current)
-                    if ($current.Label -eq 'broken') { throw 'the guest stopped answering' }
+                    param($item)
+                    if ($item.Label -eq 'broken') { throw 'the guest stopped answering' }
                     New-UpdateResult -Level OK -Text 'updated: fine'
                 }
             })
@@ -79,6 +79,18 @@ Describe 'Invoke-ItemUpdate (#293)' {
         $results[0].Level | Should -Be 'WARN'
         $results[0].Text | Should -Be 'update failed: broken - the guest stopped answering'
         $results[1].Text | Should -Be 'updated: fine'
+    }
+
+    It 'gives each update the caller''s state and when tonight''s budget ends, so the update needs nothing from the scope it runs in' {
+        $results = @(InModuleScope $module {
+                $state = @{ Greeting = 'hello' }
+                Invoke-ItemUpdate -Items @([pscustomobject]@{ Label = 'one' }) -BudgetMinutes 20 -State $state -Update {
+                    param($item, $state, $deadline)
+                    New-UpdateResult -Level INFO -Text "$($state.Greeting) $($item.Label) $($deadline -gt (Get-Date))"
+                }
+            })
+
+        $results[0].Text | Should -Be 'hello one True'
     }
 
     It 'starts no update once its time is up, and says it is tried again tomorrow' {
@@ -353,13 +365,21 @@ Describe 'Invoke-GuestGalleryModuleUpdate (#293)' {
     }
 
     BeforeEach {
-        $script:installed = @((New-InstalledModule -Version '1.1.0'), (New-InstalledModule -Version '1.0.0'), (New-InstalledModule -Version '0.7.3'))
+        # 0.5.0 is kept side by side on purpose; 1.0.0 is the one before the newest.
+        $script:installed = @((New-InstalledModule -Version '1.1.0'), (New-InstalledModule -Version '1.0.0'), (New-InstalledModule -Version '0.5.0'))
         # Runs the script block here, as the edition's own process would.
         Mock Invoke-GuestPowerShellEdition { & $ScriptBlock @ArgumentList }
-        Mock Get-InstalledModule { if ($AllVersions) { $script:installed } else { $script:installed | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1 } }
+        # As Get-InstalledModule does, one object per location without -AllVersions, every version with it.
+        Mock Get-InstalledModule {
+            if ($AllVersions) { return $script:installed }
+            $script:installed | Group-Object { Split-Path -Path (Split-Path -Path $_.InstalledLocation -Parent) -Parent } |
+                ForEach-Object { $_.Group | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1 }
+        }
         Mock Find-Module { [pscustomobject]@{ Name = 'posh-git'; Version = '2.0.0' } }
         Mock Install-Module { $script:installed = @(New-InstalledModule -Version $RequiredVersion) + $script:installed }
-        Mock Uninstall-Module { }
+        Mock Uninstall-Module { $script:installed = @($script:installed | Where-Object { $_.Version -ne "$RequiredVersion" }) }
+        Mock Get-GuestModuleRemovalPending { }
+        Mock Set-GuestModuleRemovalPending { }
     }
 
     It 'installs the newer version from the Gallery beside the old one, in the scope it was installed in, in its own PowerShell' {
@@ -378,7 +398,8 @@ Describe 'Invoke-GuestGalleryModuleUpdate (#293)' {
         Should -Invoke Install-Module -Times 1 -Exactly -ParameterFilter { $Scope -eq 'CurrentUser' }
     }
 
-    It 'installs nothing when the Gallery has no newer version, and never reinstalls the one there is' {
+    It 'compares with the newest copy of a module installed both for all users and for the current user' {
+        $script:installed = @((New-InstalledModule -Version '1.1.0' -Location 'U:\Documents\PowerShell\Modules\posh-git'), (New-InstalledModule -Version '1.0.0'))
         Mock Find-Module { [pscustomobject]@{ Name = 'posh-git'; Version = '1.1.0' } }
 
         $outcome = Invoke-GuestGalleryModuleUpdate -Module $posh
@@ -387,29 +408,76 @@ Describe 'Invoke-GuestGalleryModuleUpdate (#293)' {
         Should -Invoke Install-Module -Times 0
     }
 
-    It 'keeps the newest version and the one before it, and removes the older ones, saying so' {
+    It 'installs nothing, and removes nothing, when the Gallery has no newer version' {
+        Mock Find-Module { [pscustomobject]@{ Name = 'posh-git'; Version = '1.1.0' } }
+
         $outcome = Invoke-GuestGalleryModuleUpdate -Module $posh
 
-        Should -Invoke Uninstall-Module -Times 2 -Exactly
-        Should -Invoke Uninstall-Module -Times 1 -Exactly -ParameterFilter { "$RequiredVersion" -eq '1.0.0' }
-        Should -Invoke Uninstall-Module -Times 1 -Exactly -ParameterFilter { "$RequiredVersion" -eq '0.7.3' }
-        @($outcome.Notes | Where-Object { $_.Level -eq 'INFO' -and $_.Text -eq 'removed: posh-git (PowerShell 7) 1.0.0 - the two newest versions are kept' }).Count | Should -Be 1
+        $outcome.Version | Should -Be '1.1.0'
+        Should -Invoke Install-Module -Times 0
+        Should -Invoke Uninstall-Module -Times 0
     }
 
-    It 'removes old versions on a night with no update too, so one in use is removed later' {
+    It 'removes only the version tonight''s update made old, and leaves other versions kept side by side alone' {
+        $outcome = Invoke-GuestGalleryModuleUpdate -Module $posh
+
+        Should -Invoke Uninstall-Module -Times 1 -Exactly
+        Should -Invoke Uninstall-Module -Times 1 -Exactly -ParameterFilter { "$RequiredVersion" -eq '1.0.0' }
+        @($outcome.Notes | Where-Object { $_.Level -eq 'INFO' -and $_.Text -eq 'removed: posh-git (PowerShell 7) 1.0.0 - made old by tonight''s update; the two newest versions are kept' }).Count | Should -Be 1
+    }
+
+    It 'records a version it could not remove, such as one in use, and says it is tried again tomorrow' {
+        Mock Uninstall-Module { throw 'The module is currently in use.' }
+
+        $outcome = Invoke-GuestGalleryModuleUpdate -Module $posh
+
+        Should -Invoke Set-GuestModuleRemovalPending -Times 1 -Exactly -ParameterFilter { $Label -eq 'posh-git (PowerShell 7)' -and (@($Version) -join ',') -eq '1.0.0' }
+        @($outcome.Notes | Where-Object { $_.Level -eq 'INFO' -and $_.Text -eq 'not removed yet: posh-git (PowerShell 7) 1.0.0 - The module is currently in use.; tried again tomorrow' }).Count | Should -Be 1
+    }
+
+    It 'tries again a removal recorded on an earlier night, even with no update tonight, and forgets it once done or once the version is gone' {
         Mock Find-Module { [pscustomobject]@{ Name = 'posh-git'; Version = '1.1.0' } }
+        Mock Get-GuestModuleRemovalPending { '0.5.0'; '0.1.0' }
 
         $null = Invoke-GuestGalleryModuleUpdate -Module $posh
 
-        Should -Invoke Uninstall-Module -Times 1 -Exactly -ParameterFilter { "$RequiredVersion" -eq '0.7.3' }
+        Should -Invoke Uninstall-Module -Times 1 -Exactly -ParameterFilter { "$RequiredVersion" -eq '0.5.0' }
+        Should -Invoke Set-GuestModuleRemovalPending -Times 1 -Exactly -ParameterFilter { $Label -eq 'posh-git (PowerShell 7)' -and @($Version).Count -eq 0 }
+    }
+}
+
+Describe 'Get-GuestModuleRemovalPending and Set-GuestModuleRemovalPending (#293)' {
+    BeforeAll {
+        $label = 'posh-git (PowerShell 7)'
     }
 
-    It 'says an old version that could not be removed, such as one in use, is tried again tomorrow' {
-        Mock Uninstall-Module { throw 'The module is currently in use.' } -ParameterFilter { "$RequiredVersion" -eq '0.7.3' }
+    It 'reads the versions recorded for a module, by its label' {
+        Mock Get-ItemProperty { [pscustomobject]@{ 'posh-git (PowerShell 7)' = '0.5.0;0.1.0' } }
 
-        $outcome = Invoke-GuestGalleryModuleUpdate -Module $posh
+        (@(Get-GuestModuleRemovalPending -Label $label) -join ',') | Should -Be '0.5.0,0.1.0'
+    }
 
-        @($outcome.Notes | Where-Object { $_.Level -eq 'INFO' -and $_.Text -eq 'not removed yet: posh-git (PowerShell 7) 0.7.3 - The module is currently in use.; tried again tomorrow' }).Count | Should -Be 1
+    It 'reads nothing when nothing is recorded' {
+        Mock Get-ItemProperty { }
+
+        @(Get-GuestModuleRemovalPending -Label $label).Count | Should -Be 0
+    }
+
+    It 'records the versions under the module''s label' {
+        Mock Test-Path { $true }
+        Mock New-ItemProperty { }
+
+        Set-GuestModuleRemovalPending -Label $label -Version @('1.0.0', '0.5.0')
+
+        Should -Invoke New-ItemProperty -Times 1 -Exactly -ParameterFilter { $Name -eq $label -and $Value -eq '1.0.0;0.5.0' -and $Path -like 'HKCU:\SOFTWARE\LazyVM\*' }
+    }
+
+    It 'forgets the module when no version is left to remove' {
+        Mock Remove-ItemProperty { }
+
+        Set-GuestModuleRemovalPending -Label $label -Version @()
+
+        Should -Invoke Remove-ItemProperty -Times 1 -Exactly -ParameterFilter { $Name -eq $label }
     }
 }
 
@@ -532,7 +600,7 @@ Describe 'Update-GuestInstallerProduct (#293)' {
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'OK' -and $Message -like '  repaired: Product a1b2c3d4 - *updated from tomorrow' }
     }
 
-    It 'repairs a product a failed update left incomplete, and says what to do when the repair fails too' {
+    It 'repairs at once a product a failed update left incomplete, when the installer gave up quickly and time is left, and says what to do when the repair fails too' {
         Mock -ModuleName $module Get-GuestInstallerProduct { $script:listed++; if ($script:listed -eq 1) { New-Product } else { New-Product -IsComplete $false } }
         Mock -ModuleName $module Invoke-GuestInstaller { 1 }
         Mock -ModuleName $module Repair-ToolingProduct { $false }
@@ -541,6 +609,35 @@ Describe 'Update-GuestInstallerProduct (#293)' {
 
         Should -Invoke -ModuleName $module Repair-ToolingProduct -Times 1 -Exactly
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like '  repair failed: Product a1b2c3d4 - *Visual Studio Installer*' }
+    }
+
+    It 'leaves a product an update that threw, such as one that ran out of time, left incomplete to the next night''s check, so tonight''s time is not spent twice' {
+        Mock -ModuleName $module Get-GuestInstallerProduct { $script:listed++; if ($script:listed -eq 1) { New-Product } else { New-Product -IsComplete $false } }
+        Mock -ModuleName $module Invoke-GuestInstaller { throw 'the update did not finish within 90 minutes' }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestInstallerProduct -VM $VM }
+
+        Should -Invoke -ModuleName $module Repair-ToolingProduct -Times 0
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter {
+            $Level -eq 'WARN' -and $Message -eq '  update failed: Product a1b2c3d4 - the update did not finish within 90 minutes; left incomplete, repaired tomorrow'
+        }
+    }
+
+    It 'repairs nothing tonight when the failed update <Case>' -ForEach @(
+        @{ Case = 'took a long time'; InstallerMinutes = 30; DeadlineMinutes = 60 }
+        @{ Case = 'left no time in the budget'; InstallerMinutes = 0; DeadlineMinutes = -1 }
+    ) {
+        Mock -ModuleName $module Get-GuestInstallerProduct { New-Product -IsComplete $false }
+        $script:now = [datetime]'2026-11-02T03:00:00'
+        Mock -ModuleName $module Get-Date { $script:now }
+        Mock -ModuleName $module Invoke-GuestInstaller { $script:now = $script:now.AddMinutes($InstallerMinutes); 1 }.GetNewClosure()
+
+        InModuleScope $module -Parameters @{ VM = $testVM; Product = (New-Product | Add-Member -NotePropertyName Label -NotePropertyValue 'Product a1b2c3d4' -PassThru); Deadline = $script:now.AddMinutes($DeadlineMinutes) } {
+            param($VM, $Product, $Deadline)
+            Update-InstallerProduct -VM $VM -Product $Product -Deadline $Deadline
+        } | Out-Null
+
+        Should -Invoke -ModuleName $module Repair-ToolingProduct -Times 0
     }
 
     It 'says the update failed when the product is gone from the installer''s list afterwards' {

@@ -1144,49 +1144,92 @@ function Get-GuestGalleryModule {
     return [pscustomobject]@{ Items = $items; Notes = $notes }
 }
 
+# Old versions of Gallery modules that could not be removed yet, such as
+# ones in use, by module label: versions separated by ';' (#293).
+$script:GuestModuleRemovalKey = 'HKCU:\SOFTWARE\LazyVM\GalleryModuleRemovals'
+
+function Get-GuestModuleRemovalPending {
+    <# The versions of the module labelled $Label recorded as still to be removed. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Label)
+
+    $recorded = Get-ItemProperty -Path $script:GuestModuleRemovalKey -Name $Label -ErrorAction SilentlyContinue
+    if (-not $recorded) { return }
+    @("$($recorded.$Label)" -split ';' | Where-Object { $_ })
+}
+
+function Set-GuestModuleRemovalPending {
+    <# Records $Version as the versions of the module labelled $Label still to be removed; with none, forgets the module. #>
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [AllowEmptyCollection()][string[]]$Version = @()
+    )
+
+    if (@($Version).Count -eq 0) {
+        Remove-ItemProperty -Path $script:GuestModuleRemovalKey -Name $Label -ErrorAction SilentlyContinue
+        return
+    }
+    if (-not (Test-Path -Path $script:GuestModuleRemovalKey)) { $null = New-Item -Path $script:GuestModuleRemovalKey -Force }
+    $null = New-ItemProperty -Path $script:GuestModuleRemovalKey -Name $Label -Value ($Version -join ';') -PropertyType String -Force
+}
+
 function Invoke-GuestGalleryModuleUpdate {
     <#
       Updates the PowerShell Gallery module $Module (Get-GuestGalleryModule)
       in its own edition, and returns @{ Version; Notes }: its newest version
       afterwards, and a note for each old version removed or not removed.
       Only when the Gallery has a newer version is it installed, beside the
-      ones there are and in the scope the module was installed in; nothing is
-      reinstalled. Then every version but the two newest is removed, on
-      nights with no update too, so one that was in use is removed later.
+      ones there are and in the scope of the newest copy; nothing is
+      reinstalled. That night, the version it made old (the one before the
+      newest until then) is removed, so the two newest are kept; any other
+      version, such as one kept side by side on purpose, is left alone. A
+      version that could not be removed is recorded and tried again each
+      night (Get-GuestModuleRemovalPending) until it is removed or gone.
     #>
     [OutputType([pscustomobject])]
     param([Parameter(Mandatory)][object]$Module)
 
-    $report = Invoke-GuestPowerShellEdition -Path $Module.Path -ArgumentList @($Module.Name) -ScriptBlock {
-        param($name)
+    $pending = @(Get-GuestModuleRemovalPending -Label $Module.Label)
+    $report = Invoke-GuestPowerShellEdition -Path $Module.Path -ArgumentList @($Module.Name, $pending) -ScriptBlock {
+        param($name, $pending)
         $ErrorActionPreference = 'Stop'
         # Windows PowerShell may offer only TLS 1.0, which the Gallery refuses (https://devblogs.microsoft.com/powershell/powershell-gallery-tls-support/).
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         # A prerelease label is left out of the comparison: [version] cannot read it, and Windows PowerShell has no semantic version.
         $numeric = { param($version) [version]("$version" -replace '-.*$') }
+        $byVersion = { @(Get-InstalledModule -Name $name -AllVersions | Sort-Object { & $numeric $_.Version } -Descending) }
 
-        $installed = Get-InstalledModule -Name $name
+        # A module installed both for all users and for the current user has a copy in each; the newest counts.
+        $versions = & $byVersion
+        $newest = $versions | Select-Object -First 1
         $latest = Find-Module -Name $name -Repository PSGallery
-        if ((& $numeric $latest.Version) -gt (& $numeric $installed.Version)) {
-            $scope = if ("$($installed.InstalledLocation)".StartsWith("$env:ProgramFiles\", [StringComparison]::OrdinalIgnoreCase)) { 'AllUsers' } else { 'CurrentUser' }
+        $toRemove = @($pending)
+        if ((& $numeric $latest.Version) -gt (& $numeric $newest.Version)) {
+            $scope = if ("$($newest.InstalledLocation)".StartsWith("$env:ProgramFiles\", [StringComparison]::OrdinalIgnoreCase)) { 'AllUsers' } else { 'CurrentUser' }
             # -Force lets the new version in beside the old one; it reinstalls nothing, as this version is not installed.
             Install-Module -Name $name -RequiredVersion $latest.Version -Repository PSGallery -Scope $scope -Force
+            if ($versions.Count -ge 2) { $toRemove += "$($versions[1].Version)" }
         }
 
-        $versions = @(Get-InstalledModule -Name $name -AllVersions | Sort-Object { & $numeric $_.Version } -Descending)
+        $present = @(& $byVersion | ForEach-Object { "$($_.Version)" })
         $removed = @()
         $notRemoved = @()
-        foreach ($old in @($versions | Select-Object -Skip 2)) {
+        foreach ($version in @($toRemove | Select-Object -Unique)) {
+            # A recorded version that is gone, removed by hand say, has nothing left to do.
+            if ($present -notcontains $version) { continue }
             try {
-                Uninstall-Module -Name $name -RequiredVersion $old.Version
-                $removed += "$($old.Version)"
+                Uninstall-Module -Name $name -RequiredVersion $version
+                $removed += $version
             }
-            catch { $notRemoved += [pscustomobject]@{ Version = "$($old.Version)"; Reason = $_.Exception.Message } }
+            catch { $notRemoved += [pscustomobject]@{ Version = $version; Reason = $_.Exception.Message } }
         }
-        [pscustomobject]@{ Version = "$(($versions | Select-Object -First 1).Version)"; Removed = $removed; NotRemoved = $notRemoved }
+        [pscustomobject]@{ Version = "$((& $byVersion | Select-Object -First 1).Version)"; Removed = $removed; NotRemoved = $notRemoved }
     } | Select-Object -Last 1
 
-    $notes = @(foreach ($version in @($report.Removed)) { New-GuestNote -Level INFO -Text "removed: $($Module.Label) $version - the two newest versions are kept" })
+    Set-GuestModuleRemovalPending -Label $Module.Label -Version @($report.NotRemoved | ForEach-Object { "$($_.Version)" })
+    $notes = @(foreach ($version in @($report.Removed)) {
+            New-GuestNote -Level INFO -Text "removed: $($Module.Label) $version - made old by tonight's update; the two newest versions are kept"
+        })
     $notes += @(foreach ($old in @($report.NotRemoved)) { New-GuestNote -Level INFO -Text "not removed yet: $($Module.Label) $($old.Version) - $($old.Reason); tried again tomorrow" })
     return [pscustomobject]@{ Version = $(if ($report) { $report.Version }); Notes = $notes }
 }

@@ -213,12 +213,12 @@ Describe 'Invoke-Maintenance' {
 
         $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
 
-        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { $RestartNeeded }
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { $RestartNeededBy -eq 'Visual Studio Installer products' }
 
         Mock -ModuleName $module Update-GuestInstallerProduct { throw 'the guest stopped answering' }
         $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
 
-        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { -not $RestartNeeded }
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { -not $RestartNeededBy }
     }
 
     It 'updates the other sources next to the winget upgrades, before Windows updates, whose restart then finishes them too (#293)' {

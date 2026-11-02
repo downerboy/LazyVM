@@ -169,6 +169,11 @@ $script:InstallerProductUpdateBudgetMinutes = 45
 $script:SourceUpdateBudgetMinutes = 20
 $script:SourceUpdateItemTimeoutMinutes = 10
 
+# An installer product update that failed within this many minutes, and left
+# the product incomplete, is repaired the same night; one that took longer,
+# or timed out, is repaired by the next night's check instead (#293).
+$script:InstallerProductQuickFailureMinutes = 10
+
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.
 $script:TaskPrefix = 'LazyVM-'

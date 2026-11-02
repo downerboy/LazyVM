@@ -632,8 +632,8 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="345" y="3479">called by Invoke-DailyMaintenance</text>
 <text class="at" x="345" y="3496">installs the newer version of each</text>
 <text class="at" x="345" y="3513">PowerShell Gallery module, in Windows</text>
-<text class="at" x="345" y="3530">PowerShell and PowerShell 7; keeps the</text>
-<text class="at" x="345" y="3547">two newest</text>
+<text class="at" x="345" y="3530">PowerShell and PowerShell 7, and removes</text>
+<text class="at" x="345" y="3547">the version it made old</text>
 </g>
 <g class="bx-store"><rect x="20" y="3427" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="3441" text-anchor="middle">«web»</text>
@@ -646,7 +646,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="875" y="3457" text-anchor="middle">Running guest</text>
 <line class="div" x1="740" y1="3464" x2="1010" y2="3464"/>
 <text class="at" x="750" y="3479">new versions beside the old</text>
-<text class="at" x="750" y="3496">older versions removed</text>
+<text class="at" x="750" y="3496">the version made old removed</text>
 </g>
 <g class="bx-mod"><rect x="335" y="3590" width="305" height="101" rx="3"/>
 <text class="st" x="500.5" y="3604" text-anchor="middle">«Maintenance»</text>

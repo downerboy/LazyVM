@@ -184,9 +184,9 @@
             Function = 'Update-GuestGalleryModule'
             Area     = 'Maintenance'
             Caller   = 'Invoke-DailyMaintenance'
-            Note     = 'installs the newer version of each PowerShell Gallery module, in Windows PowerShell and PowerShell 7; keeps the two newest'
+            Note     = 'installs the newer version of each PowerShell Gallery module, in Windows PowerShell and PowerShell 7, and removes the version it made old'
             Reads    = @(@{ Label = 'modules'; Kind = 'web'; Store = 'PowerShell Gallery'; Items = @('newer module versions') })
-            Writes   = @(@{ Label = 'updated modules'; Kind = 'guest'; Store = 'Running guest'; Items = @('new versions beside the old', 'older versions removed') })
+            Writes   = @(@{ Label = 'updated modules'; Kind = 'guest'; Store = 'Running guest'; Items = @('new versions beside the old', 'the version made old removed') })
         }
         @{
             Function = 'Update-GuestDotnetTool'
