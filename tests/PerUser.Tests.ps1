@@ -511,7 +511,7 @@ Describe 'Assert-RootLocked (#284)' {
 Describe 'The resume point of an interrupted build (#284)' {
     It 'is kept in the VM''s own folder, which the resume task, running as SYSTEM, reads' {
         $file = Join-Path -Path $TestDrive -ChildPath "$([guid]::NewGuid().ToString('N'))/Config/Resume.json"
-        $vm = InModuleScope $module -Parameters @{ File = $file } { param($File) [VMContext]::new(@{ VMName = 'Alpha'; ResumeFile = $File }) }
+        $vm = InModuleScope $module -Parameters @{ File = $file } { param($File) [VMContext]::new(@{ VMName = 'Alpha'; ResumeFile = $File; ResumeTaskName = 'LazyVM-ResumeAfterReboot-Alpha' }) }
 
         $phases = InModuleScope $module -Parameters @{ VM = $vm; File = $file } {
             param($VM, $File)

@@ -151,7 +151,7 @@ function Get-ModuleImportCommand {
     $moduleBase = (Get-LazyVMModuleBase).TrimEnd('\', '/')
     $parent = Split-Path -Path $moduleBase -Parent
     $path = if ((Split-Path -Path $moduleBase -Leaf) -as [version] -and (Split-Path -Path $parent -Leaf) -eq 'LazyVM') { $parent }
-    else { Join-Path -Path $moduleBase -ChildPath 'LazyVM.psd1' }
+    else { [IO.Path]::Combine($moduleBase, 'LazyVM.psd1') }
     return "Import-Module -Name '$($path.Replace("'", "''"))'"
 }
 
