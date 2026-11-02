@@ -70,7 +70,7 @@ function Get-LazyVMDiagnostic {
 
     if ($machine -and "$($machine.State)" -eq 'Running') {
         try {
-            $credential = Get-StoredCredential -KeyPath $settings.CredKeyFile -Path $settings.GuestCredFile
+            $credential = Get-StoredCredential -Path $settings.GuestCredFile
             if (-not $credential) { throw "No credential is stored for '$vmName'. Store one with: Set-LazyVMCredential -Name $vmName" }
             $guest = Invoke-Command -VMName $vmName -Credential $credential -ErrorAction Stop -ArgumentList $script:GuestMarkerKey -ScriptBlock {
                 param($markerKey)

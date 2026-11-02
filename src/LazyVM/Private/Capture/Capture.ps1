@@ -474,7 +474,7 @@ function Save-GuestCertificate {
         [Parameter(Mandatory)][string]$Staging
     )
 
-    $password = (Get-OrNewStoredCredential -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.CertCredFile -UserName 'certs').Credential.Password
+    $password = (Get-OrNewStoredCredential -Path $VM.Settings.CertCredFile -UserName 'certs').Credential.Password
     return Invoke-GuestScript -VM $VM -Activity 'certificate capture' -TimeoutMinutes 10 -ArgumentList @($Staging, (ConvertTo-PlainText -Secure $password)) -ScriptBlock {
         param($staging, $certPassword)
         $securePassword = ConvertTo-SecureString -String $certPassword -AsPlainText -Force

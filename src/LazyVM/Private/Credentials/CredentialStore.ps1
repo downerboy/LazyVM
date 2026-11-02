@@ -1,82 +1,36 @@
 ﻿# CredentialStore.ps1 - Encrypted store for the guest and certificate passwords.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# A machine key file, readable by SYSTEM and Administrators only, rather than
-# DPAPI: credentials stored by an administrator must be readable by the
-# scheduled maintenance, which runs as SYSTEM. Anyone who is an administrator
-# on the host can therefore read them, which is acceptable for a developer VM
-# on the developer's own machine.
+# Encrypted with DPAPI for the current user (#284): only the Windows account
+# that stored a secret can read it back, so no other account can decrypt
+# it, local administrators and SYSTEM included. LazyVM's scheduled tasks run
+# as that same account, so they can read it too.
 #
-# Get- functions only read. A missing key or credential file is created only
-# by Initialize-CredentialKey and Get-OrNewStoredCredential, and nothing here
-# ever deletes a stored credential.
+# DPAPI keys follow the account's password. Changing your own password keeps
+# them; a password reset by someone else loses them, and with them every
+# secret stored here.
+#
+# Get- functions only read. A missing credential file is created only by
+# Save-StoredCredential and Get-OrNewStoredCredential, and nothing here ever
+# deletes a stored credential.
 
-function Get-CredentialKey {
-    <# The key from $Path, or $null when there is none yet. Throws when the file is not a key. #>
-    param([Parameter(Mandatory)][string]$Path)
-
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    $key = [IO.File]::ReadAllBytes($Path)
-    if ($key.Length -ne 32) {
-        throw "The credential key $Path is damaged ($($key.Length) bytes instead of 32), so the stored passwords cannot be read. Restore it from a backup, or delete it and store each VM's password again with Set-LazyVMCredential."
-    }
-    return $key
-}
-
-function New-CredentialKey {
-    <#
-      Creates a new key at $Path, readable by SYSTEM and Administrators only.
-      The file is created with that access in one step, so it is never
-      readable by anyone else, even for a moment. Returns the key.
-    #>
-    param([Parameter(Mandatory)][string]$Path)
-
-    New-Folder -Path (Split-Path -Path $Path -Parent)
-
-    $security = [System.Security.AccessControl.FileSecurity]::new()
-    $security.SetAccessRuleProtection($true, $false)
-    # SYSTEM and Administrators.
-    foreach ($sid in 'S-1-5-18', 'S-1-5-32-544') {
-        $security.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
-                [System.Security.Principal.SecurityIdentifier]::new($sid),
-                [System.Security.AccessControl.FileSystemRights]::FullControl,
-                [System.Security.AccessControl.AccessControlType]::Allow))
-    }
-
-    $key = [byte[]]::new(32)
-    [Security.Cryptography.RandomNumberGenerator]::Fill($key)
-    $stream = [System.IO.FileSystemAclExtensions]::Create([IO.FileInfo]::new($Path), [IO.FileMode]::CreateNew,
-        [System.Security.AccessControl.FileSystemRights]::FullControl, [IO.FileShare]::None, 4096, [IO.FileOptions]::None, $security)
-    try { $stream.Write($key, 0, $key.Length) }
-    finally { $stream.Dispose() }
-
-    $file = Get-Item -LiteralPath $Path -Force
-    $file.Attributes = $file.Attributes -bor [IO.FileAttributes]::Hidden
-    Write-LogEntry 'Generated a new credential key (SYSTEM and Administrators only)' 'OK'
-    return $key
-}
-
-function Initialize-CredentialKey {
-    <# The key at $Path, created first if there is none. #>
-    param([Parameter(Mandatory)][string]$Path)
-
-    $key = Get-CredentialKey -Path $Path
-    if ($key) { return $key }
-    return New-CredentialKey -Path $Path
-}
+# Marks a file as encrypted this way. Older LazyVM versions wrote files
+# without it, encrypted with a machine key file (Convert-LazyVMInstallation
+# moves them over).
+$script:CredentialProtection = 'DPAPI-CurrentUser'
 
 function Save-StoredCredential {
     param(
-        [Parameter(Mandatory)][string]$KeyPath,
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$UserName,
         [Parameter(Mandatory)][securestring]$Password
     )
 
-    $key = Initialize-CredentialKey -Path $KeyPath
+    # Without -Key, ConvertFrom-SecureString encrypts with DPAPI for the current user.
     $blob = [pscustomobject]@{
-        UserName = $UserName
-        Password = ConvertFrom-SecureString -SecureString $Password -Key $key
+        UserName   = $UserName
+        Password   = ConvertFrom-SecureString -SecureString $Password
+        Protection = $script:CredentialProtection
     }
     Write-TextFileAtomic -Path $Path -Text (ConvertTo-Json -InputObject $blob)
 }
@@ -87,23 +41,19 @@ function Get-StoredCredential {
       when one is stored but cannot be read, so "not stored" and "cannot be
       read" are never mistaken for each other.
     #>
-    param(
-        [Parameter(Mandatory)][string]$KeyPath,
-        [Parameter(Mandatory)][string]$Path
-    )
+    param([Parameter(Mandatory)][string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    $key = Get-CredentialKey -Path $KeyPath
-    if (-not $key) {
-        throw "The credential at $Path cannot be read: its key, $KeyPath, is missing. Store the password again with Set-LazyVMCredential."
+    $blob = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    if (-not $blob.PSObject.Properties['Protection'] -or $blob.Protection -ne $script:CredentialProtection) {
+        throw "The credential at $Path was stored by an older LazyVM, with a key every administrator could read. Move it over first: Convert-LazyVMInstallation"
     }
     try {
-        $blob = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
-        $secure = ConvertTo-SecureString -String $blob.Password -Key $key
+        $secure = ConvertTo-SecureString -String $blob.Password
         return [pscredential]::new($blob.UserName, $secure)
     }
     catch {
-        throw "The credential at $Path cannot be read ($($_.Exception.Message)). Store the password again with Set-LazyVMCredential."
+        throw "The credential at $Path cannot be read ($($_.Exception.Message)): only the Windows account that stored it can read it, and only while that account's password has not been reset by someone else. Store the password again with Set-LazyVMCredential."
     }
 }
 
@@ -111,11 +61,10 @@ function Get-StoredSecretTable {
     <# The name -> value table stored, encrypted, at $Path; empty when none is stored. #>
     [OutputType([hashtable])]
     param(
-        [Parameter(Mandatory)][string]$KeyPath,
         [Parameter(Mandatory)][string]$Path
     )
 
-    $stored = Get-StoredCredential -KeyPath $KeyPath -Path $Path
+    $stored = Get-StoredCredential -Path $Path
     if (-not $stored) { return @{} }
     $values = ConvertTo-PlainText -Secure $stored.Password | ConvertFrom-Json -AsHashtable
     if (-not $values) { return @{} }
@@ -126,14 +75,13 @@ function Save-StoredSecretTable {
     <# Stores a name -> value table, encrypted, at $Path, replacing what was stored. #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'The values come out of the guest as text and are encrypted here, straight away.')]
     param(
-        [Parameter(Mandatory)][string]$KeyPath,
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$UserName,
         [Parameter(Mandatory)][AllowEmptyCollection()][hashtable]$Secrets
     )
 
     $text = ConvertTo-Json -InputObject $Secrets -Depth 5 -Compress
-    Save-StoredCredential -KeyPath $KeyPath -Path $Path -UserName $UserName -Password (ConvertTo-SecureString -String $text -AsPlainText -Force)
+    Save-StoredCredential -Path $Path -UserName $UserName -Password (ConvertTo-SecureString -String $text -AsPlainText -Force)
 }
 
 function New-RandomPassword {
@@ -170,16 +118,15 @@ function Get-OrNewStoredCredential {
       Generated saying which.
     #>
     param(
-        [Parameter(Mandatory)][string]$KeyPath,
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$UserName
     )
 
-    $existing = Get-StoredCredential -KeyPath $KeyPath -Path $Path
+    $existing = Get-StoredCredential -Path $Path
     if ($existing) { return [pscustomobject]@{ Credential = $existing; Generated = $false } }
 
     $password = New-RandomPassword
-    Save-StoredCredential -KeyPath $KeyPath -Path $Path -UserName $UserName -Password $password
+    Save-StoredCredential -Path $Path -UserName $UserName -Password $password
     return [pscustomobject]@{ Credential = [pscredential]::new($UserName, $password); Generated = $true }
 }
 

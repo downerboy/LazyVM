@@ -92,7 +92,7 @@ function Read-GuestAppSettingSecret {
     [OutputType([hashtable])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    return Get-StoredSecretTable -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.AppSettingsCredFile
+    return Get-StoredSecretTable -Path $VM.Settings.AppSettingsCredFile
 }
 
 function Update-GuestAppSettingRecord {
@@ -126,7 +126,7 @@ function Update-GuestAppSettingRecord {
 
     $secretsChanged = (ConvertTo-ComparableJson (Read-GuestAppSettingSecret -VM $VM)) -ne (ConvertTo-ComparableJson $secrets)
     if ($secretsChanged) {
-        Save-StoredSecretTable -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.AppSettingsCredFile -UserName 'appsettings' -Secrets $secrets
+        Save-StoredSecretTable -Path $VM.Settings.AppSettingsCredFile -UserName 'appsettings' -Secrets $secrets
     }
 
     $change = @{ $script:GuestAppSettingName = $record }

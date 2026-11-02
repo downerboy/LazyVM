@@ -37,12 +37,10 @@ BeforeAll {
             CheckpointDir    = "D:\DevVM\$Name\Checkpoints"
             VSSettingsBackup = "D:\DevVM\$Name\Backups\VisualStudio.vssettings"
             LogFile          = "D:\DevVM\$Name\Logs\$Name.log"
-            CredStoreDir     = 'D:\DevVM\Shared\Credentials'
-            CredKeyFile      = 'D:\DevVM\Shared\Credentials\.lazyvm.key'
             GuestCredFile    = "D:\DevVM\$Name\Credentials\guest.cred"
             CertCredFile     = "D:\DevVM\$Name\Credentials\certs.cred"
             StateDir         = "D:\DevVM\$Name\State"
-            ResumeRegKey     = "HKLM:\SOFTWARE\LazyVM\$Name"
+            ResumeRegKey     = "HKCU:\SOFTWARE\LazyVM\$Name"
             ResumeTaskName   = "LazyVM-ResumeAfterReboot-$Name"
             ScheduleTaskName = "LazyVM-Maintain-$Name"
         }
@@ -138,25 +136,18 @@ Describe 'Get-VMRemovalPlan' {
             $plan.Folders | Should -BeNullOrEmpty
         }
 
-        It 'deletes the credential key, which no other VM needs' {
-            $plan.Files | Should -Be @('D:\DevVM\Shared\Credentials\.lazyvm.key')
+        It 'deletes nothing outside the VM folder' {
+            $plan.Files | Should -BeNullOrEmpty
         }
 
         It 'removes both scheduled tasks and the resume registry key' {
             $plan.Tasks | Should -Be @('LazyVM-Maintain-Alpha', 'LazyVM-ResumeAfterReboot-Alpha')
-            $plan.RegistryKey | Should -Be 'HKLM:\SOFTWARE\LazyVM\Alpha'
+            $plan.RegistryKey | Should -Be 'HKCU:\SOFTWARE\LazyVM\Alpha'
         }
 
         It 'keeps nothing back' {
             $plan.Kept | Should -BeNullOrEmpty
         }
-    }
-
-    It 'keeps the credential key while another VM uses it' {
-        $plan = Get-TestPlan -Settings (New-TestVMSetting -Name 'Alpha') -OtherSettings @(New-TestVMSetting -Name 'Beta')
-
-        $plan.Files | Should -Not -Contain 'D:\DevVM\Shared\Credentials\.lazyvm.key'
-        ($plan.Kept | Where-Object { $_.Path -eq 'D:\DevVM\Shared\Credentials\.lazyvm.key' }).Reason | Should -BeLike "*VM 'Beta'*"
     }
 
     It 'lists the <Setting> when the settings put it outside the VM folder' -ForEach @(
@@ -222,12 +213,12 @@ Describe 'Get-VMRemovalPlan' {
     }
 
     It 'keeps a registry key that holds another VM''s key' {
-        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ ResumeRegKey = 'HKLM:\SOFTWARE\LazyVM' }
+        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ ResumeRegKey = 'HKCU:\SOFTWARE\LazyVM' }
 
         $plan = Get-TestPlan -Settings $alpha -OtherSettings @(New-TestVMSetting -Name 'Beta')
 
         $plan.RegistryKey | Should -BeNullOrEmpty
-        $plan.Kept.Path | Should -Contain 'HKLM:\SOFTWARE\LazyVM'
+        $plan.Kept.Path | Should -Contain 'HKCU:\SOFTWARE\LazyVM'
     }
 }
 

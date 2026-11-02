@@ -15,7 +15,6 @@ $script:HostPathSettings = @(
     'CheckpointDir'
     'VSSettingsBackup'
     'LogFile'
-    'CredStoreDir'
     'StateDir'
 )
 
@@ -66,7 +65,6 @@ function Add-DerivedSetting {
     # New-VM -Path <Root> makes <Root>\<Name>\Virtual Machines for the
     # VM's configuration, inside the VM's own folder.
     $Settings.VMConfigDir = "$vmRoot\Virtual Machines"
-    $Settings.CredKeyFile = "$($Settings.CredStoreDir)\.lazyvm.key"
     $Settings.GuestCredFile = "$vmRoot\Credentials\guest.cred"
     $Settings.CertCredFile = "$vmRoot\Credentials\certs.cred"
     $Settings.EnvironmentCredFile = "$vmRoot\Credentials\environment.cred"

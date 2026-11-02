@@ -82,7 +82,7 @@ function Read-GuestEnvironmentSecret {
     [OutputType([hashtable])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    return Get-StoredSecretTable -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.EnvironmentCredFile
+    return Get-StoredSecretTable -Path $VM.Settings.EnvironmentCredFile
 }
 
 function Save-GuestEnvironmentSecret {
@@ -92,7 +92,7 @@ function Save-GuestEnvironmentSecret {
         [Parameter(Mandatory)][AllowEmptyCollection()][hashtable]$Secrets
     )
 
-    Save-StoredSecretTable -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.EnvironmentCredFile -UserName 'environment' -Secrets $Secrets
+    Save-StoredSecretTable -Path $VM.Settings.EnvironmentCredFile -UserName 'environment' -Secrets $Secrets
 }
 
 function Update-GuestEnvironmentRecord {

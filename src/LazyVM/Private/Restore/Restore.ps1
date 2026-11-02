@@ -78,7 +78,7 @@ function Restore-GuestWindowsState {
         return $work
     }
 
-    $certificate = Get-StoredCredential -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.CertCredFile
+    $certificate = Get-StoredCredential -Path $VM.Settings.CertCredFile
     $certPassword = if ($certificate) { ConvertTo-PlainText -Secure $certificate.Password } else { '' }
 
     $notes = @()

@@ -669,13 +669,6 @@
       "minimum": 1,
       "maximum": 1024
     },
-    "CredStoreDir": {
-      "type": "string",
-      "default": "Shared\\Credentials",
-      "description": "Where the key that encrypts every VM's stored passwords is kept. The encrypted passwords themselves are in each VM's Credentials folder. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
-      "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
-    },
     "StateDir": {
       "type": "string",
       "default": "{VM}\\State",

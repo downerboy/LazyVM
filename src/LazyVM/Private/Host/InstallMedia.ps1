@@ -18,7 +18,6 @@ function Initialize-HostFolder {
         $settings.VMRoot
         $settings.DiskDir
         (Split-Path $settings.SQLDiskPath -Parent)
-        $settings.CredStoreDir
         (Split-Path $settings.GuestCredFile -Parent)
         (Split-Path $settings.VSSettingsBackup -Parent)
         (Split-Path $settings.LogFile -Parent)

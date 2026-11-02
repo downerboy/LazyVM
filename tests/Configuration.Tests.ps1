@@ -451,7 +451,6 @@ Describe 'Add-DerivedSetting' {
             VMName       = 'Alpha'
             Root         = $root
             DiskDir      = "$root\Alpha\Disks"
-            CredStoreDir = "$root\Shared\Credentials"
         }
 
         InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Add-DerivedSetting -Settings $Settings }
@@ -460,13 +459,13 @@ Describe 'Add-DerivedSetting' {
         $settings.OSDiskPath | Should -Be "$root\Alpha\Disks\Alpha-OS.vhdx"
         $settings.VMConfigDir | Should -Be "$root\Alpha\Virtual Machines"
         $settings.SeedDiskPath | Should -Be "$root\Alpha\Disks\Alpha-Seed.iso"
-        $settings.CredKeyFile | Should -Be "$root\Shared\Credentials\.lazyvm.key"
+        $settings.ContainsKey('CredKeyFile') | Should -BeFalse
         $settings.GuestCredFile | Should -Be "$root\Alpha\Credentials\guest.cred"
         $settings.CertCredFile | Should -Be "$root\Alpha\Credentials\certs.cred"
         $settings.EnvironmentCredFile | Should -Be "$root\Alpha\Credentials\environment.cred"
         $settings.AppSettingsCredFile | Should -Be "$root\Alpha\Credentials\appsettings.cred"
         $settings.BitLockerCredFile | Should -Be "$root\Alpha\Credentials\bitlocker.cred"
-        $settings.ResumeRegKey | Should -Be 'HKLM:\SOFTWARE\LazyVM\Alpha'
+        $settings.ResumeRegKey | Should -Be 'HKCU:\SOFTWARE\LazyVM\Alpha'
         $settings.ResumeTaskName | Should -Be 'LazyVM-ResumeAfterReboot-Alpha'
         $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
     }
@@ -1820,13 +1819,8 @@ Describe 'Update-GuestEnvironmentRecord (#131)' {
             }
         }
         function New-TestEnvironmentRoot {
-            <# A root with Alpha and a credential key, as a VM LazyVM built has. #>
+            <# A root with Alpha, as a VM LazyVM built has. #>
             $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
-            $keyDir = Join-Path -Path $root -ChildPath 'Shared/Credentials'
-            New-Item -ItemType Directory -Path $keyDir -Force | Out-Null
-            $key = [byte[]]::new(32)
-            [Security.Cryptography.RandomNumberGenerator]::Fill($key)
-            [IO.File]::WriteAllBytes((Join-Path -Path $keyDir -ChildPath '.lazyvm.key'), $key)
             return $root
         }
         function New-TestSnapshot {
@@ -2211,13 +2205,8 @@ Describe 'Update-GuestAppSettingRecord (#131)' {
             }
         }
         function New-TestAppSettingRoot {
-            <# A root with Alpha and a credential key, as a VM LazyVM built has. #>
+            <# A root with Alpha, as a VM LazyVM built has. #>
             $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
-            $keyDir = Join-Path -Path $root -ChildPath 'Shared/Credentials'
-            New-Item -ItemType Directory -Path $keyDir -Force | Out-Null
-            $key = [byte[]]::new(32)
-            [Security.Cryptography.RandomNumberGenerator]::Fill($key)
-            [IO.File]::WriteAllBytes((Join-Path -Path $keyDir -ChildPath '.lazyvm.key'), $key)
             return $root
         }
         function New-TestKey {
@@ -2666,30 +2655,20 @@ Describe 'Restore-GuestSqlState (#131)' {
     }
 }
 
-Describe 'The credential store' {
-    BeforeAll {
-        function New-TestKey {
-            param([Parameter(Mandatory)][string]$Path)
-            $key = [byte[]]::new(32)
-            [Security.Cryptography.RandomNumberGenerator]::Fill($key)
-            New-Item -ItemType Directory -Path (Split-Path -Path $Path -Parent) -Force | Out-Null
-            [IO.File]::WriteAllBytes($Path, $key)
-        }
-    }
-
-    It 'reads back what it stored' {
+Describe 'The credential store (#284)' {
+    It 'reads back what it stored, marked as protected for the current user' {
         $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
-        New-TestKey -Path "$folder/.lazyvm.key"
 
         $password = InModuleScope $module -Parameters @{ Folder = $folder } {
             param($Folder)
-            Save-StoredCredential -KeyPath "$Folder/.lazyvm.key" -Path "$Folder/Alpha/guest.cred" -UserName 'sean' -Password (New-RandomPassword)
-            $stored = Get-StoredCredential -KeyPath "$Folder/.lazyvm.key" -Path "$Folder/Alpha/guest.cred"
+            Save-StoredCredential -Path "$Folder/Alpha/guest.cred" -UserName 'sean' -Password (New-RandomPassword)
+            $stored = Get-StoredCredential -Path "$Folder/Alpha/guest.cred"
             $stored.UserName | Should -Be 'sean'
             $stored.GetNetworkCredential().Password
         }
 
         $password.Length | Should -Be 24
+        (Get-Content -LiteralPath "$folder/Alpha/guest.cred" -Raw | ConvertFrom-Json).Protection | Should -Be 'DPAPI-CurrentUser'
     }
 
     It 'returns nothing when no credential is stored' {
@@ -2697,25 +2676,40 @@ Describe 'The credential store' {
 
         InModuleScope $module -Parameters @{ Folder = $folder } {
             param($Folder)
-            Get-StoredCredential -KeyPath "$Folder/.lazyvm.key" -Path "$Folder/Alpha/guest.cred"
+            Get-StoredCredential -Path "$Folder/Alpha/guest.cred"
         } | Should -BeNullOrEmpty
     }
 
-    It 'refuses <Case>, rather than treating it as not stored' -ForEach @(
-        @{ Case = 'a credential whose key is missing'; KeyBytes = 0; Message = '*its key*is missing*' }
-        @{ Case = 'a damaged key'; KeyBytes = 5; Message = '*is damaged (5 bytes instead of 32)*' }
-    ) {
+    It 'refuses a credential an older LazyVM stored with its machine key, and names the migration' {
         $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path "$folder/Alpha" -Force | Out-Null
-        Set-Content -LiteralPath "$folder/Alpha/guest.cred" -Value '{ "UserName": "sean", "Password": "x" }'
-        if ($KeyBytes) { [IO.File]::WriteAllBytes("$folder/.lazyvm.key", [byte[]]::new($KeyBytes)) }
+        Set-Content -LiteralPath "$folder/Alpha/guest.cred" -Value '{ "UserName": "sean", "Password": "76492d1116743f0423413b16050a5345" }'
 
         {
             InModuleScope $module -Parameters @{ Folder = $folder } {
                 param($Folder)
-                Get-StoredCredential -KeyPath "$Folder/.lazyvm.key" -Path "$Folder/Alpha/guest.cred"
+                Get-StoredCredential -Path "$Folder/Alpha/guest.cred"
             }
-        } | Should -Throw -ExpectedMessage $Message
+        } | Should -Throw -ExpectedMessage '*older LazyVM*Convert-LazyVMInstallation*'
+    }
+
+    It 'refuses a credential it cannot decrypt, rather than treating it as not stored' {
+        $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path "$folder/Alpha" -Force | Out-Null
+        Set-Content -LiteralPath "$folder/Alpha/guest.cred" -Value '{ "UserName": "sean", "Password": "not hex", "Protection": "DPAPI-CurrentUser" }'
+
+        {
+            InModuleScope $module -Parameters @{ Folder = $folder } {
+                param($Folder)
+                Get-StoredCredential -Path "$Folder/Alpha/guest.cred"
+            }
+        } | Should -Throw -ExpectedMessage '*cannot be read*only the Windows account that stored it*'
+    }
+
+    It 'has no key file any more' {
+        InModuleScope $module {
+            Get-Command -Name Get-CredentialKey, New-CredentialKey, Initialize-CredentialKey -ErrorAction SilentlyContinue
+        } | Should -BeNullOrEmpty
     }
 }
 

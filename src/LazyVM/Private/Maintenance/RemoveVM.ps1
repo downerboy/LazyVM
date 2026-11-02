@@ -67,7 +67,6 @@ function Get-VMOwnedPath {
         $Settings.VSSettingsBackup
         $Settings.GuestCredFile
         $Settings.CertCredFile
-        $Settings.CredKeyFile
         $Settings.LogFile
     )
     $folders = @(
@@ -130,7 +129,6 @@ function Get-VMRemovalPlan {
         $Settings.ISOSearchRoot
         $Settings.ISOPath
         (Get-ParentFolder -Path $Settings.SQLIsoPath)
-        $Settings.CredStoreDir
     ) | Where-Object { $_ }
 
     # Every path another VM's settings name, with the VM it belongs to.

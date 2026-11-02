@@ -25,7 +25,7 @@ Describe 'Get-LazyVMDiagnostic' {
         Mock -ModuleName $module Read-VMSetting {
             $settings = @{
                 ISOPath = 'C:\LazyVM\Shared\ISO\Win11.iso'; SQLIsoPath = 'C:\LazyVM\Shared\ISO\SQL.iso'
-                CredKeyFile = 'key'; GuestCredFile = 'guest.cred'; ScheduleTaskName = 'LazyVM Alpha'
+                GuestCredFile = 'guest.cred'; ScheduleTaskName = 'LazyVM Alpha'
             }
             [pscustomobject]@{ VMName = 'Alpha'; Settings = $settings }
         }
