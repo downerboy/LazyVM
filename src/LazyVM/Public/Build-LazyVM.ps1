@@ -31,7 +31,7 @@
       6  The VM: Generation 2, Secure Boot, TPM, dynamic memory, with an
          answer-file disc so Windows installs without any input
       7  Windows; the disks attached and prepared, BitLocker, Windows
-         appearance and Sysmon; then everything in the VM's tooling list:
+         appearance, Sysmon and the event logging; then everything in the VM's tooling list:
          Visual Studio and SSMS with their workloads and extensions, SQL
          Server, winget packages and official installers; then Windows
          updates
