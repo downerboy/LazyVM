@@ -68,6 +68,13 @@
             Writes   = @(@{ Label = 'VM files'; Kind = 'Hyper-V'; Store = '<new>\<VM>\'; Items = @('Virtual Machines, Checkpoints, Disks') })
         }
         @{
+            Function = 'Assert-NoVMFileLeft'
+            Area     = 'Migration'
+            Caller   = 'Invoke-InstallationMigration'
+            Note     = 'stops before any other file moves if a VM still uses a disk in the old folder, a checkpoint''s parent disk included'
+            Reads    = @(@{ Label = 'disks in use'; Kind = 'Hyper-V'; Store = 'VMs and checkpoints'; Items = @('attached disks', 'parent disks') })
+        }
+        @{
             Function = 'Dismount-LegacyDvdMedia'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'

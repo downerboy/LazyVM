@@ -36,20 +36,21 @@ $script:HyperVCommandStubs = [ordered]@{
     'Stop-VM'                  = { [CmdletBinding()] param([string[]]$Name, [switch]$Force, [switch]$TurnOff) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Restart-VM'               = { [CmdletBinding()] param([string[]]$Name, [switch]$Force, [switch]$Wait) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Get-VMIntegrationService' = { [CmdletBinding()] param([string[]]$VMName, [string[]]$Name) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
-    'Get-VMHardDiskDrive'      = { [CmdletBinding()] param([string[]]$VMName, $ControllerType, $ControllerNumber, $ControllerLocation) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Get-VMHardDiskDrive'      = { [CmdletBinding()] param([string[]]$VMName, $VMSnapshot, $ControllerType, $ControllerNumber, $ControllerLocation) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Get-VMDvdDrive'           = { [CmdletBinding()] param([string[]]$VMName, $ControllerNumber, $ControllerLocation) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Add-VMHardDiskDrive'      = { [CmdletBinding()] param([string[]]$VMName, $ControllerType, $ControllerNumber, $ControllerLocation, [string]$Path) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Move-VMStorage'           = { [CmdletBinding()] param([string]$VMName, [string]$VirtualMachinePath, [string]$SnapshotFilePath, [string]$SmartPagingFilePath, [hashtable[]]$Vhds) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Get-VHD'                  = { [CmdletBinding()] param([string[]]$Path) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Get-VMSnapshot'           = { [CmdletBinding()] param([string[]]$VMName) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Set-VMDvdDrive'           = { [CmdletBinding()] param([string[]]$VMName, $ControllerNumber, $ControllerLocation, [string]$Path) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
 }
 Add-MissingCommandStub -Stub $script:HyperVCommandStubs
 
 # The Task Scheduler cmdlets the tests mock, for a runner without them (#284).
-# Not Register-ScheduledTask: its -Password is text, which the analyzer refuses
-# in a stub; its tests run on Windows.
+# Only the builders: Register-ScheduledTask's -Password is text, which the
+# analyzer refuses in a stub, and other tests rely on Get-ScheduledTask and
+# Get-ScheduledTaskInfo being absent. Tests of those run on Windows.
 $script:ScheduledTaskCommandStubs = [ordered]@{
-    'Get-ScheduledTask'           = { [CmdletBinding()] param([string]$TaskName) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
-    'Get-ScheduledTaskInfo'       = { [CmdletBinding()] param([string]$TaskName) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'New-ScheduledTaskTrigger'    = { [CmdletBinding()] param([switch]$Daily, [int]$DaysInterval, [datetime]$At, [switch]$AtStartup) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'New-ScheduledTaskSettingsSet' = { [CmdletBinding()] param([switch]$WakeToRun, [switch]$StartWhenAvailable, [switch]$AllowStartIfOnBatteries, [switch]$DontStopIfGoingOnBatteries, [timespan]$ExecutionTimeLimit, [int]$RestartCount, [timespan]$RestartInterval) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
 }

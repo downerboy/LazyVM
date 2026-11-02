@@ -166,6 +166,15 @@ Describe 'Get-RootAccessCheck (#284)' {
         $check.Detail | Should -BeLike '*name of S-1-5-32-544*Set-LazyVMRoot -Path C:\Users\sean\LazyVM*'
     }
 
+    It 'fails, rather than stopping the other checks, when the access cannot be read' {
+        Mock -ModuleName $module Get-RootAccess { throw 'Access is denied.' }
+
+        $check = InModuleScope $module { Get-RootAccessCheck -Name 'Alpha' -Root 'C:\LazyVM' }
+
+        $check.Status | Should -Be 'FAIL'
+        $check.Detail | Should -BeLike '*Access is denied*'
+    }
+
     It 'warns when the folder inherits access from the folder above' {
         Mock -ModuleName $module Get-RootAccess { [pscustomobject]@{ Protected = $false; Sids = @('S-1-5-21-1-1001', 'S-1-5-18') } }
 
@@ -241,11 +250,12 @@ Describe 'The host tasks run as the user (#284)' {
     BeforeAll {
         $testVM = InModuleScope $module {
             $settings = @{
-                VMName           = 'Alpha'
-                MaintenanceTime  = '02:00'
-                ScheduleTaskName = 'LazyVM-Maintain-Alpha'
-                ResumeTaskName   = 'LazyVM-ResumeAfterReboot-Alpha'
-                ResumeRegKey     = 'TestRegistry:\LazyVM\Alpha'
+                VMName               = 'Alpha'
+                MaintenanceTime      = '02:00'
+                RebuildThresholdDays = 10
+                ScheduleTaskName     = 'LazyVM-Maintain-Alpha'
+                ResumeTaskName       = 'LazyVM-ResumeAfterReboot-Alpha'
+                ResumeRegKey         = 'HKCU:\SOFTWARE\LazyVM\Alpha'
             }
             [VMContext]::new($settings)
         }
@@ -259,7 +269,6 @@ Describe 'The host tasks run as the user (#284)' {
         Mock -ModuleName $module New-ScheduledTaskTrigger { [pscustomobject]@{ Delay = $null } }
         Mock -ModuleName $module New-ScheduledTaskSettingsSet { 'settings' }
         Mock -ModuleName $module Register-LazyVMHostTask { }
-        Mock -ModuleName $module Register-ScheduledTask { throw 'must register through Register-LazyVMHostTask' }
     }
 
     It 'registers the daily maintenance as the user' {
@@ -269,7 +278,8 @@ Describe 'The host tasks run as the user (#284)' {
     }
 
     It 'registers the task that resumes a build after a restart as the user' {
-        # Under Pester's TestRegistry, so nothing is left in the real registry.
+        Mock -ModuleName $module Set-ResumePhase { }
+
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Register-ResumeTask -VM $VM -Phase 3 }
 
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-ResumeAfterReboot-Alpha' }

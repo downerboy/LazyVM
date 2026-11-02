@@ -272,6 +272,35 @@ Describe 'Move-LegacyVMStorage (#284)' {
     }
 }
 
+Describe 'Assert-NoVMFileLeft (#284)' {
+    BeforeEach {
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'MSDevBox'; ConfigurationLocation = 'C:\Users\sean\LazyVM\MSDevBox'; SnapshotFileLocation = 'C:\Users\sean\LazyVM\MSDevBox\Checkpoints' } }
+        Mock -ModuleName $module Get-VMSnapshot { }
+        Mock -ModuleName $module Get-VMHardDiskDrive { [pscustomobject]@{ Path = 'C:\Users\sean\LazyVM\MSDevBox\Disks\MSDevBox-OS_8A1B.avhdx' } }
+        Mock -ModuleName $module Get-VHD { [pscustomobject]@{ Path = $Path; ParentPath = $null } }
+    }
+
+    It 'goes on when no VM uses a file in the old folder any more' {
+        { InModuleScope $module { Assert-NoVMFileLeft -OldRoot 'C:\LazyVM' } } | Should -Not -Throw
+    }
+
+    It 'stops, before any file moves, when a checkpoint''s parent disk is still in the old folder' {
+        Mock -ModuleName $module Get-VHD {
+            if ($Path -like '*.avhdx') { [pscustomobject]@{ Path = $Path; ParentPath = 'C:\LazyVM\MSDevBox\Disks\MSDevBox-OS.vhdx' } }
+            else { [pscustomobject]@{ Path = $Path; ParentPath = $null } }
+        }
+
+        { InModuleScope $module { Assert-NoVMFileLeft -OldRoot 'C:\LazyVM' } } | Should -Throw -ExpectedMessage '*MSDevBox*C:\LazyVM\MSDevBox\Disks\MSDevBox-OS.vhdx*'
+    }
+
+    It 'stops when a checkpoint still has a disk in the old folder' {
+        Mock -ModuleName $module Get-VMSnapshot { [pscustomobject]@{ VMName = 'MSDevBox'; Name = 'Tooling 20261001-020000' } }
+        Mock -ModuleName $module Get-VMHardDiskDrive { [pscustomobject]@{ Path = 'C:\LazyVM\MSDevBox\Disks\MSDevBox-SQL_1.avhdx' } } -ParameterFilter { $VMSnapshot }
+
+        { InModuleScope $module { Assert-NoVMFileLeft -OldRoot 'C:\LazyVM' } } | Should -Throw -ExpectedMessage '*MSDevBox-SQL_1.avhdx*'
+    }
+}
+
 Describe 'The ISOs attached from the old folder (#284)' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
@@ -364,6 +393,7 @@ Describe 'Invoke-InstallationMigration (#284)' {
         Mock -ModuleName $module Convert-LegacyCredential { $script:calls.Add('credentials') }
         Mock -ModuleName $module Initialize-RootFolder { $script:calls.Add("lock $Path") }
         Mock -ModuleName $module Move-LegacyVMStorage { $script:calls.Add('vm storage') }
+        Mock -ModuleName $module Assert-NoVMFileLeft { $script:calls.Add('check vm files') }
         Mock -ModuleName $module Dismount-LegacyDvdMedia { $script:calls.Add('eject'); 'media' }
         Mock -ModuleName $module Move-LegacyFile { $script:calls.Add('files') }
         Mock -ModuleName $module Mount-MovedDvdMedia { $script:calls.Add('attach') }
@@ -375,7 +405,7 @@ Describe 'Invoke-InstallationMigration (#284)' {
     It 'moves everything, then locks the new folder again, and removes the old install last' {
         InModuleScope $module { Invoke-InstallationMigration -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' }
 
-        $script:calls | Should -Be @('check tasks', 'lock C:\Users\sean\LazyVM', 'tasks', 'credentials', 'vm storage', 'eject', 'files', 'attach', 'registry', 'lock C:\Users\sean\LazyVM', 'remove legacy')
+        $script:calls | Should -Be @('check tasks', 'lock C:\Users\sean\LazyVM', 'tasks', 'credentials', 'vm storage', 'check vm files', 'eject', 'files', 'attach', 'registry', 'lock C:\Users\sean\LazyVM', 'remove legacy')
     }
 
     It 'keeps the data where it is when the new folder is the old one, and only locks it' {
@@ -394,12 +424,10 @@ Describe 'Invoke-InstallationMigration (#284)' {
     }
 
     It 'refuses a new folder inside the old one, or the other way round' -ForEach @(
-        @{ New = 'C:\LazyVM\New' }
-        @{ New = 'C:\Lazy' ; Old = 'C:\Lazy\VM' }
+        @{ Old = 'C:\LazyVM'; New = 'C:\LazyVM\New' }
+        @{ Old = 'C:\Lazy\VM'; New = 'C:\Lazy' }
     ) {
-        $oldRoot = if ($Old) { $Old } else { 'C:\LazyVM' }
-
-        { InModuleScope $module -Parameters @{ Old = $oldRoot; New = $New } { param($Old, $New) Invoke-InstallationMigration -OldRoot $Old -NewRoot $New } } |
+        { InModuleScope $module -Parameters @{ Old = $Old; New = $New } { param($Old, $New) Invoke-InstallationMigration -OldRoot $Old -NewRoot $New } } |
             Should -Throw -ExpectedMessage '*inside*'
 
         $script:calls | Should -BeNullOrEmpty
@@ -422,9 +450,9 @@ Describe 'Assert-NoRunningTask (#284)' {
 
 Describe 'Remove-LegacyInstallation (#284)' {
     BeforeAll {
-        # Not set on a runner that is not Windows.
+        # A folder that is there on any runner, for the module copy's path.
         $savedProgramFiles = $env:ProgramFiles
-        if (-not $env:ProgramFiles) { $env:ProgramFiles = $TestDrive }
+        $env:ProgramFiles = $TestDrive
     }
 
     AfterAll {

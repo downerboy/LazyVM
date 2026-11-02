@@ -60,7 +60,8 @@ function Get-RootAccessCheck {
         [Parameter(Mandatory)][string]$Root
     )
 
-    $access = Get-RootAccess -Root $Root
+    try { $access = Get-RootAccess -Root $Root }
+    catch { return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status FAIL -Detail $_.Exception.Message }
     $allowed = @((Get-CurrentUserSid).Value, 'S-1-5-18')
     $others = @($access.Sids | Where-Object { $allowed -notcontains $_ } | ForEach-Object { ConvertTo-AccountName -Sid $_ })
     $problems = @()

@@ -217,6 +217,29 @@ function Move-LegacyVMStorage {
     }
 }
 
+function Assert-NoVMFileLeft {
+    <#
+      Stops when a Hyper-V VM still uses a disk in $OldRoot after the storage
+      migration - a disk attached now or to a checkpoint, or the parent of a
+      checkpoint's differencing disk - so no file a VM needs is moved behind
+      Hyper-V's back.
+    #>
+    param([Parameter(Mandatory)][string]$OldRoot)
+
+    foreach ($machine in @(Get-VM)) {
+        $disks = @(Get-VMHardDiskDrive -VMName $machine.Name) + @(Get-VMSnapshot -VMName $machine.Name | ForEach-Object { Get-VMHardDiskDrive -VMSnapshot $_ })
+        foreach ($disk in @($disks | Where-Object { $_.Path })) {
+            $path = $disk.Path
+            while ($path) {
+                if (Test-PathWithin -Path $path -Folder $OldRoot) {
+                    throw "$($machine.Name) still uses $path, in the old folder, after Hyper-V moved its files, so nothing more is moved. Move that disk in Hyper-V Manager (Move > Move only the virtual machine's virtual hard disks), then run Convert-LazyVMInstallation again."
+                }
+                $path = (Get-VHD -Path $path).ParentPath
+            }
+        }
+    }
+}
+
 function Dismount-LegacyDvdMedia {
     <# Ejects every ISO a VM has attached from $OldRoot, so its file can move. Returns the drives, to attach again. #>
     param([Parameter(Mandatory)][string]$OldRoot)
@@ -364,6 +387,7 @@ function Invoke-InstallationMigration {
         Convert-LegacyCredential -Root $OldRoot
         if (-not $inPlace) {
             Move-LegacyVMStorage -OldRoot $OldRoot -NewRoot $NewRoot
+            Assert-NoVMFileLeft -OldRoot $OldRoot
             $media = @(Dismount-LegacyDvdMedia -OldRoot $OldRoot)
             Move-LegacyFile -OldRoot $OldRoot -NewRoot $NewRoot
             Mount-MovedDvdMedia -Media $media -OldRoot $OldRoot -NewRoot $NewRoot
