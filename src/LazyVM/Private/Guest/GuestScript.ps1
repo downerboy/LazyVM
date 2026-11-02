@@ -127,12 +127,14 @@ function Invoke-GuestTask {
         [int]$RestartAttempts = 0
     )
 
-    $setupDir = $VM.Settings.GuestSetupDir
     $userName = if ($AsGuestUser) { $VM.Runtime.GuestAdminUser } else { '' }
-    $startArguments = @($TaskName, $setupDir, $Work.ToString(), (ConvertTo-GuestTaskArgument -ArgumentList $ArgumentList), $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
+    $startArguments = @($TaskName, $VM.Settings.GuestSetupDir, $Work.ToString(), (ConvertTo-GuestTaskArgument -ArgumentList $ArgumentList), $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
+    # The task's files are in its own folder in the guest (#302); what an
+    # earlier LazyVM left of them in the setup folder goes.
     $start = {
-        param($taskName, $setupDir, $work, $argumentList, $userName, $elevated, $timeoutSeconds)
-        Start-GuestTask -TaskName $taskName -SetupDir $setupDir -Work $work -ArgumentList $argumentList -UserName $userName -Elevated:$elevated -TimeoutSeconds $timeoutSeconds
+        param($taskName, $legacySetupDir, $work, $argumentList, $userName, $elevated, $timeoutSeconds)
+        Remove-GuestLegacyTaskFile -SetupDir $legacySetupDir -TaskName $taskName
+        Start-GuestTask -TaskName $taskName -Work $work -ArgumentList $argumentList -UserName $userName -Elevated:$elevated -TimeoutSeconds $timeoutSeconds
     }
 
     $progress = @{
@@ -147,8 +149,8 @@ function Invoke-GuestTask {
         $done = Wait-Until -Activity $Activity -Timeout ([timespan]::FromMinutes($TimeoutMinutes)) -Interval ([timespan]::FromSeconds(30)) -State $progress -Condition {
             param($p)
             try {
-                $status = Invoke-GuestScript -VM $VM -Activity "checking on $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName, $setupDir) -ScriptBlock {
-                    param($taskName, $setupDir) Get-GuestTaskStatus -TaskName $taskName -SetupDir $setupDir
+                $status = Invoke-GuestScript -VM $VM -Activity "checking on $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName) -ScriptBlock {
+                    param($taskName) Get-GuestTaskStatus -TaskName $taskName
                 }
                 $p.Failures = 0
             }
@@ -194,10 +196,41 @@ function Invoke-GuestTask {
     return $done
 }
 
+function Get-GuestInstallerTaskName {
+    <# The guest task Invoke-GuestInstaller runs installer $Name as; files the installer is given go in its folder (New-GuestTaskFolder). #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Name)
+
+    return "$script:TaskPrefix$Name"
+}
+
+function New-GuestTaskFolder {
+    <#
+      Makes guest task $TaskName's private folder ready, keeping one that is
+      already right (Initialize-GuestTaskFolder in Guest.Helpers.ps1), so the
+      host can put the files the task is given there before it starts, and
+      returns its path in the guest. With -AsGuestUser, for a task that runs
+      as the guest account under its limited token
+      (Invoke-GuestScriptAsInteractiveUser), that account may change it too.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$TaskName,
+        [switch]$AsGuestUser
+    )
+
+    $userName = if ($AsGuestUser) { $VM.Runtime.GuestAdminUser } else { '' }
+    return Invoke-GuestScript -VM $VM -Activity "preparing the folder of $TaskName" -TimeoutMinutes 5 -ArgumentList @($TaskName, $userName) -ScriptBlock {
+        param($taskName, $userName) Initialize-GuestTaskFolder -TaskName $taskName -UserName $userName
+    }
+}
+
 function Invoke-GuestInstaller {
     <#
       Runs a long installer in the guest without depending on the session
-      staying open (see Invoke-GuestTask). If the guest restarts before the
+      staying open (see Invoke-GuestTask), from the folder of its task
+      (Get-GuestInstallerTaskName). If the guest restarts before the
       installer has finished, it is started again: Visual Studio and SQL
       Server setup both carry on from where they were. Returns its exit code.
     #>
@@ -210,17 +243,18 @@ function Invoke-GuestInstaller {
         [string]$Activity = $Name
     )
 
+    # Started in the task's own folder, where the task runs.
     $work = {
-        param($filePath, $argumentList, $workingDirectory)
+        param($filePath, $argumentList)
         $process = if ($argumentList) {
-            Start-Process -FilePath $filePath -ArgumentList $argumentList -Wait -PassThru -WorkingDirectory $workingDirectory
+            Start-Process -FilePath $filePath -ArgumentList $argumentList -Wait -PassThru
         }
         else {
-            Start-Process -FilePath $filePath -Wait -PassThru -WorkingDirectory $workingDirectory
+            Start-Process -FilePath $filePath -Wait -PassThru
         }
         return $process.ExitCode
     }
-    $result = Invoke-GuestTask -VM $VM -TaskName "$script:TaskPrefix$Name" -Work $work -ArgumentList @($FilePath, ($ArgumentList -join ' '), $VM.Settings.GuestSetupDir) `
+    $result = Invoke-GuestTask -VM $VM -TaskName (Get-GuestInstallerTaskName -Name $Name) -Work $work -ArgumentList @($FilePath, ($ArgumentList -join ' ')) `
         -TimeoutMinutes $TimeoutMinutes -Activity $Activity -RestartAttempts 3
     return [int]$result
 }

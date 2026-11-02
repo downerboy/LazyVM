@@ -37,8 +37,25 @@ Describe 'Install-ToolingProduct' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Write-LogError { }
-        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ FilePath = 'C:\LazyVMSetup\bootstrap-community.exe'; Arguments = @('--quiet') } }
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ FilePath = 'C:\Program Files\LazyVM\Tasks\LazyVM-install-community\bootstrap-community.exe'; Arguments = @('--quiet') } }
+        Mock -ModuleName $module New-GuestTaskFolder { "C:\Program Files\LazyVM\Tasks\$TaskName" }
         Mock -ModuleName $module Add-ProductExtension { @() }
+    }
+
+    It 'downloads the bootstrapper into the install task''s own folder, which only administrators can change (#302)' {
+        Mock -ModuleName $module Invoke-GuestInstaller { 1 }
+        Mock -ModuleName $module Get-GuestInstallerProduct { }
+
+        InModuleScope $module -Parameters @{ Product = $product; Settings = $settings } {
+            param($Product, $Settings)
+            Install-ToolingProduct -VM ([VMContext]::new($Settings)) -Tooling ([ToolingRecord]::FromObject(@{ Products = @($Product) }))
+        }
+
+        Should -Invoke -ModuleName $module New-GuestTaskFolder -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-install-community' -and -not $AsGuestUser }
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $Activity -like '*download' -and $ArgumentList[2] -eq 'C:\Program Files\LazyVM\Tasks\LazyVM-install-community'
+        }
+        Should -Invoke -ModuleName $module Invoke-GuestInstaller -Times 1 -Exactly -ParameterFilter { $Name -eq 'install-community' }
     }
 
     It 'installs the product with its components only, then adds its extensions' {
@@ -166,6 +183,7 @@ Describe 'Add-ProductExtension' {
         # The guest's installer exits 1 for any batch holding an unsigned theme.
         Mock -ModuleName $module Write-LogError { }
         $guest = @{ Config = '' }
+        Mock -ModuleName $module New-GuestTaskFolder { "C:\Program Files\LazyVM\Tasks\$TaskName" }
         Mock -ModuleName $module Invoke-GuestScript { $guest.Config = $ArgumentList[1]; [pscustomobject]@{ FilePath = 'C:\Installer\setup.exe'; Arguments = @('modify') } }
         Mock -ModuleName $module Invoke-GuestInstaller { if ($guest.Config -like '*Theme*') { 1 } else { 0 } }
 
@@ -253,8 +271,9 @@ Describe 'Restore-GuestVisualStudioSetting' {
         Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' } }
         $markers = [System.Collections.Generic.List[string]]::new()
         Mock -ModuleName $module Write-VisualStudioSettingMarker { $markers.Add("$InstanceId=$(if (Get-Variable -Name Pending -ValueOnly -ErrorAction SilentlyContinue) { 'Pending' } else { Get-Variable -Name AppliedHash -ValueOnly })") }
-        $copied = @{ Settings = $null }
-        Mock -ModuleName $module Copy-ToGuest { $copied.Settings = Get-Content -LiteralPath $HostPath -Raw }
+        $copied = @{ Settings = $null; GuestPath = $null }
+        Mock -ModuleName $module Copy-ToGuest { $copied.Settings = Get-Content -LiteralPath $HostPath -Raw; $copied.GuestPath = $GuestPath }
+        Mock -ModuleName $module New-GuestTaskFolder { "C:\Program Files\LazyVM\Tasks\$TaskName" }
         $task = @{ Work = $null; Devenv = $null }
         Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { $task.Work = $ScriptBlock }
         Mock -ModuleName $module Wait-GuestSignedIn { $true }
@@ -358,6 +377,15 @@ Describe 'Restore-GuestVisualStudioSetting' {
 
         $copied.Settings | Should -BeLike '*X:\source\repos*'
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $ArgumentList -contains 'X:\source\repos' }
+    }
+
+    It 'copies the settings into the task''s own folder, which only the guest account and administrators can change (#302)' {
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        Should -Invoke -ModuleName $module New-GuestTaskFolder -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-VSSettings' -and $AsGuestUser }
+        # ? for the path separators, which are / where the tests run on Linux.
+        $copied.GuestPath | Should -BeLike 'C:?Program Files?LazyVM?Tasks?LazyVM-VSSettings?VisualStudio.vssettings'
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-VSSettings' -and $ArgumentList[1] -eq $copied.GuestPath }
     }
 
     It 'carries the settings backup with the projects location changed' {

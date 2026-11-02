@@ -2,7 +2,8 @@
 #
 # Runs in the GUEST, under Windows PowerShell 5.1, in the signed-in user's
 # desktop session: no PowerShell 7 syntax. The build copies it to
-# <GuestSetupDir>\VisualStudioFirstLaunch.ps1 (C:\LazyVMSetup by default).
+# C:\Program Files\LazyVM\Tasks\LazyVM-VSFirstLaunch\VisualStudioFirstLaunch.ps1,
+# the folder of its task, which only that user and administrators can change.
 #
 # The build (Complete-GuestVisualStudioFirstLaunch) runs it with -DevenvPath,
 # -Control, -TimeoutMinutes and -ProcessIdPath: it starts Visual Studio with
@@ -21,7 +22,7 @@
 # Studio in the VM and, while a first-launch screen shows, run in Windows
 # PowerShell:
 #
-#   powershell.exe -ExecutionPolicy Bypass -File C:\LazyVMSetup\VisualStudioFirstLaunch.ps1 -TreePath "$env:USERPROFILE\Desktop\VSFirstLaunch.txt"
+#   powershell.exe -ExecutionPolicy Bypass -File "C:\Program Files\LazyVM\Tasks\LazyVM-VSFirstLaunch\VisualStudioFirstLaunch.ps1" -TreePath "$env:USERPROFILE\Desktop\VSFirstLaunch.txt"
 #
 # It adds every Visual Studio window's tree (ControlType, Name, AutomationId,
 # ClassName of each element) to that file and changes nothing. Run it again

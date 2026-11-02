@@ -179,19 +179,23 @@ function Install-ToolingProduct {
         $extensions = $product.ExtensionLinks()
         $edition = $product.Edition()
         Write-LogEntry "Installing $label from $url ($(@($product.Components).Count) workload/component id(s); up to $($VM.Settings.VSInstallMinutes) minutes)..." 'INFO'
+        $installerName = "install-$edition"
         try {
+            # The bootstrapper and its .vsconfig go in the install task's own
+            # folder, which no other guest user can change, as the task runs
+            # them as SYSTEM (#302).
+            $folder = New-GuestTaskFolder -VM $VM -TaskName (Get-GuestInstallerTaskName -Name $installerName)
             $prepared = Invoke-GuestScript -VM $VM -Activity "$label download" -TimeoutMinutes 15 `
-                -ArgumentList @($url, "bootstrap-$edition.exe", $VM.Settings.GuestSetupDir, (ConvertTo-VsConfig -Product $product), $product.IncludeRecommended) -ScriptBlock {
-                param($url, $bootstrapperName, $setupDir, $configJson, $includeRecommended)
+                -ArgumentList @($url, "bootstrap-$edition.exe", $folder, (ConvertTo-VsConfig -Product $product), $product.IncludeRecommended) -ScriptBlock {
+                param($url, $bootstrapperName, $folder, $configJson, $includeRecommended)
                 $ErrorActionPreference = 'Stop'
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                New-GuestFolder -Path $setupDir
 
-                $bootstrapper = Join-Path $setupDir $bootstrapperName
+                $bootstrapper = Join-Path $folder $bootstrapperName
                 Invoke-WebRequest -Uri $url -OutFile $bootstrapper -UseBasicParsing -TimeoutSec 600
 
                 # Without a byte-order mark: the installer reads it as JSON.
-                $configPath = Join-Path $setupDir "$bootstrapperName.vsconfig"
+                $configPath = Join-Path $folder "$bootstrapperName.vsconfig"
                 [IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
 
                 $arguments = @('--quiet', '--wait', '--norestart', '--config', "`"$configPath`"")
@@ -199,7 +203,7 @@ function Install-ToolingProduct {
                 return [pscustomobject]@{ FilePath = $bootstrapper; Arguments = $arguments }
             }
             $exitCode = Invoke-GuestInstaller -VM $VM -FilePath $prepared.FilePath -ArgumentList $prepared.Arguments `
-                -Name "install-$edition" -TimeoutMinutes $VM.Settings.VSInstallMinutes -Activity "the $label install"
+                -Name $installerName -TimeoutMinutes $VM.Settings.VSInstallMinutes -Activity "the $label install"
             if (-not (Test-InstallExitCode -Product $label -ExitCode $exitCode)) {
                 Write-LogEntry "  $script:GuestInstallerLogHint" 'INFO'
                 continue
@@ -341,13 +345,15 @@ function Invoke-ProductModify {
     )
 
     $label = $Product.DisplayName
+    $installerName = 'add-extensions'
     try {
+        # In the modify task's own folder, as the task runs it as SYSTEM (#302).
+        $folder = New-GuestTaskFolder -VM $VM -TaskName (Get-GuestInstallerTaskName -Name $installerName)
         $prepared = Invoke-GuestScript -VM $VM -Activity "$label extension list" -TimeoutMinutes 5 `
-            -ArgumentList @($VM.Settings.GuestSetupDir, (ConvertTo-VsConfig -Product $Product -Links $Links), $InstallPath, [bool]$AllowUnsigned) -ScriptBlock {
-            param($setupDir, $configJson, $installPath, $allowUnsigned)
+            -ArgumentList @($folder, (ConvertTo-VsConfig -Product $Product -Links $Links), $InstallPath, [bool]$AllowUnsigned) -ScriptBlock {
+            param($folder, $configJson, $installPath, $allowUnsigned)
             $ErrorActionPreference = 'Stop'
-            New-GuestFolder -Path $setupDir
-            $configPath = Join-Path $setupDir 'extensions.vsconfig'
+            $configPath = Join-Path $folder 'extensions.vsconfig'
             [IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
             $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
             if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
@@ -356,7 +362,7 @@ function Invoke-ProductModify {
             return [pscustomobject]@{ FilePath = $installer; Arguments = $arguments }
         }
         $exitCode = Invoke-GuestInstaller -VM $VM -FilePath $prepared.FilePath -ArgumentList $prepared.Arguments `
-            -Name 'add-extensions' -TimeoutMinutes 60 -Activity "adding extensions to $label"
+            -Name $installerName -TimeoutMinutes 60 -Activity "adding extensions to $label"
         return (Test-InstallSucceeded -ExitCode $exitCode)
     }
     catch {
@@ -556,7 +562,10 @@ function Import-GuestVisualStudioSetting {
         [Parameter(Mandatory)][object]$Settings
     )
 
-    $guestPath = Join-Path $VM.Settings.GuestSetupDir 'VisualStudio.vssettings'
+    # In the task's own folder, which only the guest account and
+    # administrators can change, as that account applies it (#302).
+    $taskName = "${script:TaskPrefix}VSSettings"
+    $guestPath = Join-Path (New-GuestTaskFolder -VM $VM -TaskName $taskName -AsGuestUser) 'VisualStudio.vssettings'
     $staging = Join-Path -Path ([IO.Path]::GetTempPath()) -ChildPath ("LazyVM-" + [guid]::NewGuid().ToString('N'))
     try {
         New-Folder -Path $staging
@@ -572,7 +581,7 @@ function Import-GuestVisualStudioSetting {
     # that stops devenv and says why, not the host giving up on the task.
     $devenvMinutes = 10
     $projects = $Settings.ProjectsLocation
-    Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName "${script:TaskPrefix}VSSettings" -Activity 'Visual Studio settings restore' -TimeoutMinutes ($devenvMinutes + 3) `
+    Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName $taskName -Activity 'Visual Studio settings restore' -TimeoutMinutes ($devenvMinutes + 3) `
         -ArgumentList @($VisualStudio.DevEnvPath, $guestPath, $projects, $devenvMinutes) -ScriptBlock {
         param($devenv, $settingsPath, $projects, $devenvMinutes)
         if (-not (Test-Path $devenv)) { throw "devenv.exe not found at $devenv" }

@@ -101,7 +101,8 @@ Describe 'Install-WingetPackage' {
 
 Describe 'Start-GuestTask' {
     BeforeEach {
-        Mock New-GuestFolder { }
+        Mock Initialize-GuestTaskFolder { 'C:\Program Files\LazyVM\Tasks\LazyVM-winget' }
+        Mock Remove-Item { }
         Mock Set-Content { }
         Mock Unregister-ScheduledTask { }
         # The New-ScheduledTask* builders only make objects, so they run for real.
@@ -111,13 +112,13 @@ Describe 'Start-GuestTask' {
     }
 
     It 'runs as the user with their full token when told to run elevated' {
-        Start-GuestTask -TaskName 'LazyVM-winget' -SetupDir 'C:\LazyVM\Setup' -Work 'return 1' -UserName 'devadmin' -Elevated -TimeoutSeconds 60
+        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -UserName 'devadmin' -Elevated -TimeoutSeconds 60
 
         Should -Invoke Register-ScheduledTask -Times 1 -Exactly -ParameterFilter { $Principal.UserId -eq 'devadmin' -and "$($Principal.RunLevel)" -eq 'Highest' }
     }
 
     It 'runs as the user with their limited token otherwise' {
-        Start-GuestTask -TaskName 'LazyVM-settings' -SetupDir 'C:\LazyVM\Setup' -Work 'return 1' -UserName 'devadmin' -TimeoutSeconds 60
+        Start-GuestTask -TaskName 'LazyVM-settings' -Work 'return 1' -UserName 'devadmin' -TimeoutSeconds 60
 
         Should -Invoke Register-ScheduledTask -Times 1 -Exactly -ParameterFilter { $Principal.UserId -eq 'devadmin' -and "$($Principal.RunLevel)" -eq 'Limited' }
     }

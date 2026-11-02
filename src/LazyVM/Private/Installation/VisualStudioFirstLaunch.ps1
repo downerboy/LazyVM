@@ -27,7 +27,8 @@ function Complete-GuestVisualStudioFirstLaunch {
       signed-in guest user's desktop session, presses the controls in
       $script:VisualStudioFirstLaunchControl, and lets it close itself.
       The script gets $timeoutMinutes; on any mismatch it describes Visual
-      Studio's windows in <GuestSetupDir>\VisualStudioFirstLaunch.txt and
+      Studio's windows in VisualStudioFirstLaunch.txt, in its task's folder
+      (Get-GuestTaskFolder in Guest.Helpers.ps1), and
       stops Visual Studio with everything it started. When the guest task
       does not finish, the Visual Studio it started is stopped by its process
       id (Stop-GuestVisualStudioFirstLaunch). Whether Visual Studio has been
@@ -42,10 +43,7 @@ function Complete-GuestVisualStudioFirstLaunch {
         [Parameter(Mandatory)][object]$VisualStudio
     )
 
-    $setupDir = $VM.Settings.GuestSetupDir
-    $guestScript = Join-Path -Path $setupDir -ChildPath 'VisualStudioFirstLaunch.ps1'
-    $treePath = Join-Path -Path $setupDir -ChildPath 'VisualStudioFirstLaunch.txt'
-    $processIdPath = Join-Path -Path $setupDir -ChildPath 'VisualStudioFirstLaunch.pid'
+    $taskName = "${script:TaskPrefix}VSFirstLaunch"
     # The guest task gets a few minutes more than the script, so it is the
     # guest that stops Visual Studio and says why, not the host giving up.
     $timeoutMinutes = 10
@@ -58,10 +56,16 @@ function Complete-GuestVisualStudioFirstLaunch {
         }
 
         Write-LogEntry "Opening Visual Studio once to answer its first-launch window (up to $timeoutMinutes minutes)..." 'INFO'
+        # In the task's own folder, which only the guest account and
+        # administrators can change, as that account runs the script (#302).
+        $folder = New-GuestTaskFolder -VM $VM -TaskName $taskName -AsGuestUser
+        $guestScript = Join-Path -Path $folder -ChildPath 'VisualStudioFirstLaunch.ps1'
+        $treePath = Join-Path -Path $folder -ChildPath 'VisualStudioFirstLaunch.txt'
+        $processIdPath = Join-Path -Path $folder -ChildPath 'VisualStudioFirstLaunch.pid'
         Copy-ToGuest -VM $VM -HostPath (Join-Path -Path $script:DataDir -ChildPath 'Guest.VisualStudioFirstLaunch.ps1') -GuestPath $guestScript
         $guestError = $null
         try {
-            Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName "${script:TaskPrefix}VSFirstLaunch" -Activity "Visual Studio's first launch" -TimeoutMinutes ($timeoutMinutes + 3) `
+            Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName $taskName -Activity "Visual Studio's first launch" -TimeoutMinutes ($timeoutMinutes + 3) `
                 -ArgumentList @($guestScript, $treePath, $processIdPath, $VisualStudio.DevEnvPath, $script:VisualStudioFirstLaunchControl, $timeoutMinutes) -ScriptBlock {
                 param($scriptPath, $treePath, $processIdPath, $devenv, $control, $timeoutMinutes)
                 & $scriptPath -TreePath $treePath -ProcessIdPath $processIdPath -DevenvPath $devenv -Control $control -TimeoutMinutes $timeoutMinutes

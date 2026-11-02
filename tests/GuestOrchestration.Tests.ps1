@@ -271,6 +271,55 @@ Describe 'Invoke-GuestTask' {
     }
 }
 
+Describe 'Guest task files (#302)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Start-Sleep { }
+        Mock -ModuleName $module Invoke-GuestScript {
+            switch -Wildcard ($Activity) {
+                'starting *' { 'boot1' }
+                'checking on *' { New-TaskStatus -Done '0' -TaskState 'Ready' }
+            }
+        }
+    }
+
+    It 'deletes what an earlier LazyVM left of the task in the setup folder when it starts it' {
+        InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            Invoke-GuestTask -VM ([VMContext]::new($Settings)) -TaskName 'LazyVM-test' -Work { 'OK' } -TimeoutMinutes 5 -Activity 'test'
+        }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $Activity -like 'starting *' -and $ArgumentList[0] -eq 'LazyVM-test' -and $ArgumentList[1] -eq 'C:\LazyVMSetup' -and
+            "$ScriptBlock" -match 'Remove-GuestLegacyTaskFile -SetupDir \$legacySetupDir' -and "$ScriptBlock" -notmatch 'Start-GuestTask[^\r\n]*SetupDir'
+        }
+    }
+
+    It 'reads the result from the task''s own folder, not the setup folder' {
+        InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            Invoke-GuestTask -VM ([VMContext]::new($Settings)) -TaskName 'LazyVM-test' -Work { 'OK' } -TimeoutMinutes 5 -Activity 'test'
+        }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $Activity -like 'checking on *' -and @($ArgumentList).Count -eq 1 -and $ArgumentList[0] -eq 'LazyVM-test'
+        }
+    }
+
+    It 'runs an installer as the task Get-GuestInstallerTaskName names, and gives it nothing from the setup folder' {
+        Mock -ModuleName $module Invoke-GuestTask { '0' }
+
+        $null = InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            Invoke-GuestInstaller -VM ([VMContext]::new($Settings)) -FilePath 'E:\setup.exe' -ArgumentList @('/Q') -Name 'install-sqlserver'
+        }
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
+            $TaskName -eq 'LazyVM-install-sqlserver' -and ($ArgumentList -join '|') -eq 'E:\setup.exe|/Q'
+        }
+    }
+}
+
 Describe 'Set-GuestCustomization' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }

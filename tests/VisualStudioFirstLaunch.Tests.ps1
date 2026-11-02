@@ -30,6 +30,7 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
         Mock -ModuleName $module Copy-ToGuest { $copied.Text = Get-Content -LiteralPath $HostPath -Raw; $copied.GuestPath = $GuestPath }
         Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { }
         Mock -ModuleName $module Stop-GuestVisualStudioFirstLaunch { }
+        Mock -ModuleName $module New-GuestTaskFolder { 'C:\Program Files\LazyVM\Tasks\LazyVM-VSFirstLaunch' }
         $vs = [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' }
         $complete = { InModuleScope $module -Parameters @{ Settings = $settings; VisualStudio = $vs } { param($Settings, $VisualStudio) Complete-GuestVisualStudioFirstLaunch -VM ([VMContext]::new($Settings)) -VisualStudio $VisualStudio } }
     }
@@ -43,16 +44,19 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 0 -Exactly
     }
 
-    It 'puts the UI Automation script in the guest, where it can also be run by hand, and runs it in the signed-in user''s session' {
+    It 'puts the UI Automation script in its task''s own folder in the guest, where it can also be run by hand, and runs it in the signed-in user''s session' {
         & $complete | Should -BeTrue
 
+        # Only the guest account and administrators can change the folder (#302).
+        Should -Invoke -ModuleName $module New-GuestTaskFolder -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-VSFirstLaunch' -and $AsGuestUser }
         # ? for the path separators, which are / where the tests run on Linux.
-        $copied.GuestPath | Should -BeLike 'C:?LazyVMSetup?VisualStudioFirstLaunch.ps1'
+        $copied.GuestPath | Should -BeLike 'C:?Program Files?LazyVM?Tasks?LazyVM-VSFirstLaunch?VisualStudioFirstLaunch.ps1'
         $copied.Text | Should -Be (Get-Content -LiteralPath $guestScript -Raw)
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter {
-            $ArgumentList[0] -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.ps1' -and
-            $ArgumentList[1] -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.txt' -and
-            $ArgumentList[2] -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.pid' -and
+            $TaskName -eq 'LazyVM-VSFirstLaunch' -and
+            $ArgumentList[0] -like 'C:?Program Files?LazyVM?Tasks?LazyVM-VSFirstLaunch?VisualStudioFirstLaunch.ps1' -and
+            $ArgumentList[1] -like 'C:?Program Files?LazyVM?Tasks?LazyVM-VSFirstLaunch?VisualStudioFirstLaunch.txt' -and
+            $ArgumentList[2] -like 'C:?Program Files?LazyVM?Tasks?LazyVM-VSFirstLaunch?VisualStudioFirstLaunch.pid' -and
             $ArgumentList[3] -eq 'C:\VS\devenv.exe'
         }
     }
@@ -95,7 +99,7 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
 
         & $complete
 
-        Should -Invoke -ModuleName $module Stop-GuestVisualStudioFirstLaunch -Times 1 -Exactly -ParameterFilter { $ProcessIdPath -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.pid' }
+        Should -Invoke -ModuleName $module Stop-GuestVisualStudioFirstLaunch -Times 1 -Exactly -ParameterFilter { $ProcessIdPath -like 'C:?Program Files?LazyVM?Tasks?LazyVM-VSFirstLaunch?VisualStudioFirstLaunch.pid' }
     }
 
     It 'stops nothing when the guest task finished' {

@@ -449,6 +449,7 @@ The module itself is installed in `%ProgramFiles%\LazyVM\Modules\LazyVM`. Nothin
 | `W:` | The Dev Drive: working repositories, package caches, build output. |
 | `U:` | The User disk: `Documents`, `Desktop` and `Downloads` are redirected here, and `%USERPROFILE%\.ssh` and `%USERPROFILE%\source\repos` are links to folders here. |
 | `C:\LazyVMSetup` | The folder LazyVM uses for installers and staging. |
+| `C:\Program Files\LazyVM\Tasks` | A folder for each of LazyVM's scheduled tasks, with the script it runs, the files it is given, its result and its transcript (`<task>.log`). Only administrators and SYSTEM can change them; a task that runs as the guest account, not elevated, also gives that account access to its own folder. |
 
 ### Credential storage
 
@@ -542,12 +543,12 @@ The build finds the dialog's buttons by their UI Automation id (`AutomationId`),
 2. Open **Windows PowerShell** (not PowerShell 7) and run:
 
    ```powershell
-   powershell.exe -ExecutionPolicy Bypass -File C:\LazyVMSetup\VisualStudioFirstLaunch.ps1 -TreePath "$env:USERPROFILE\Desktop\VSFirstLaunch.txt"
+   powershell.exe -ExecutionPolicy Bypass -File "C:\Program Files\LazyVM\Tasks\LazyVM-VSFirstLaunch\VisualStudioFirstLaunch.ps1" -TreePath "$env:USERPROFILE\Desktop\VSFirstLaunch.txt"
    ```
 
 3. Answer that screen, and run the same command again on each later screen.
 
-Each run adds every Visual Studio window's tree to the file, one line per element with its control type, name, `AutomationId` and class name, and changes nothing. The build copies the script to `GuestSetupDir` (`C:\LazyVMSetup` by default) when it first tries the first launch. When the build's own attempt does not match, it writes the same description of the windows Visual Studio had open to `C:\LazyVMSetup\VisualStudioFirstLaunch.txt`.
+Each run adds every Visual Studio window's tree to the file, one line per element with its control type, name, `AutomationId` and class name, and changes nothing. The build copies the script to its task's folder, `C:\Program Files\LazyVM\Tasks\LazyVM-VSFirstLaunch`, when it first tries the first launch. When the build's own attempt does not match, it writes the same description of the windows Visual Studio had open to `VisualStudioFirstLaunch.txt` in that folder.
 
 ## 8. Settings
 
