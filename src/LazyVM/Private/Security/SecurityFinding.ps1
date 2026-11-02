@@ -139,10 +139,12 @@ function Get-DefenderStatusFinding {
 function Get-DefenderDetectionFinding {
     <#
       Each threat Defender detected since the last scan ($Since; every one
-      it still lists on the first scan), and each it still lists as active,
-      however long ago it was found, by its detection id, so each detection
-      is a finding of its own. A detection is not resolved by time passing:
-      it stays a finding while Defender lists its threat as active.
+      it still lists on the first scan), and, for each threat it still
+      lists as active, its newest detection, however long ago it was found.
+      The Id is the threat's id and the detection's id, so each detection
+      is a finding of its own, whatever name Defender gives the threat. A
+      detection is not resolved by time passing: it stays a finding while
+      Defender lists its threat as active.
     #>
     [OutputType([SecurityFinding])]
     param(
@@ -151,11 +153,18 @@ function Get-DefenderDetectionFinding {
     )
 
     $active = @($Fact.ActiveThreatIds | ForEach-Object { "$_" })
+    $detections = @($Fact.Detections | Sort-Object -Property { [datetimeoffset]::Parse([string]$_.DetectedAt, [cultureinfo]::InvariantCulture) } -Descending)
+    $newestOfActive = @{}
+    foreach ($detection in $detections) {
+        $threat = "$($detection.ThreatId)"
+        if ($threat -in $active -and -not $newestOfActive.ContainsKey($threat)) { $newestOfActive[$threat] = "$($detection.DetectionId)" }
+    }
     foreach ($detection in @($Fact.Detections)) {
         $detectedAt = [datetimeoffset]::Parse([string]$detection.DetectedAt, [cultureinfo]::InvariantCulture)
         $isActive = "$($detection.ThreatId)" -in $active
         $isNew = $null -eq $Since -or $detectedAt -gt [datetimeoffset]$Since
-        if (-not $isNew -and -not $isActive) { continue }
+        $isNewestOfActive = $isActive -and $newestOfActive["$($detection.ThreatId)"] -eq "$($detection.DetectionId)"
+        if (-not $isNew -and -not $isNewestOfActive) { continue }
 
         $status = [int]$detection.ThreatStatusId
         $done = if ($script:DefenderThreatStatus.ContainsKey($status)) { $script:DefenderThreatStatus[$status] } else { "reported status $status" }
@@ -168,7 +177,7 @@ function Get-DefenderDetectionFinding {
         else {
             'Open Windows Security, choose Virus and threat protection, then Protection history, and choose the action Defender recommends. Then run a full scan. If you cannot remove it, rebuild the VM with Invoke-LazyVMRebuild.'
         }
-        New-SecurityFinding -Id "DefenderDetection:$($detection.ThreatName):$($detection.DetectionId)" -Severity $(if ($handled) { 'Medium' } else { 'High' }) `
+        New-SecurityFinding -Id "DefenderDetection:$($detection.ThreatId):$($detection.DetectionId)" -Severity $(if ($handled) { 'Medium' } else { 'High' }) `
             -Title "Defender found $($detection.ThreatName)" `
             -WhatWeFound "Defender found $($detection.ThreatName) on $($detectedAt.ToLocalTime().ToString('yyyy-MM-dd HH:mm')). Defender $done.$still" `
             -WhyItMatters 'Malware got into this VM. Whatever brought it in may bring more.' `
@@ -344,9 +353,9 @@ function Get-WindowsUpdatePauseFinding {
             if ([datetimeoffset]::TryParse([string]$_, [cultureinfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)) { $parsed }
         } | Where-Object { $_ -gt $ScannedAt } | Sort-Object -Descending)
     if ($until.Count -gt 0) {
-        $date = $until[0].ToLocalTime().ToString('yyyy-MM-dd')
-        New-SecurityFinding -Id "WindowsUpdate:PausedUntil:$date" -Severity Medium -Title 'Windows updates are paused' `
-            -WhatWeFound "Windows Update is paused until $date." `
+        # The Id's date in UTC, so it does not depend on the host's time zone.
+        New-SecurityFinding -Id "WindowsUpdate:PausedUntil:$($until[0].UtcDateTime.ToString('yyyy-MM-dd'))" -Severity Medium -Title 'Windows updates are paused' `
+            -WhatWeFound "Windows Update is paused until $($until[0].ToLocalTime().ToString('yyyy-MM-dd'))." `
             -WhyItMatters 'Security fixes do not install while updates are paused, and nightly maintenance cannot install them either.' `
             -HowToFix 'In the VM, open Settings, then Windows Update, and choose Resume updates.'
     }

@@ -190,11 +190,11 @@ Describe 'ConvertTo-SecurityFinding' {
         $check.WindowsUpdate.PausedUntil = @('2026-10-01T00:00:00Z')
         @(ConvertTo-TestFinding -Check $check).Count | Should -Be 0
 
-        $check.WindowsUpdate.PausedUntil = @('2026-10-01T00:00:00Z', '2026-11-20T08:00:00Z', 'not a date')
+        $check.WindowsUpdate.PausedUntil = @('2026-10-01T00:00:00Z', '2026-11-20T23:30:00Z', 'not a date')
         $found = @(ConvertTo-TestFinding -Check $check)
-        $found.Id | Should -Be @('WindowsUpdate:PausedUntil:' + ([datetimeoffset]'2026-11-20T08:00:00Z').ToLocalTime().ToString('yyyy-MM-dd'))
+        $found.Id | Should -Be @('WindowsUpdate:PausedUntil:2026-11-20')
         $found[0].Severity | Should -Be 'Medium'
-        $found[0].WhatWeFound | Should -BeLike '*2026-11-20*'
+        $found[0].WhatWeFound | Should -BeLike ('*' + ([datetimeoffset]'2026-11-20T23:30:00Z').ToLocalTime().ToString('yyyy-MM-dd') + '*')
     }
 
     It 'leaves out an area the guest could not read' {
@@ -224,7 +224,8 @@ Describe 'ConvertTo-SecurityFinding' {
         It 'reports each detection since the last scan, by its detection id, Medium when Defender dealt with it and High when not' {
             $found = @(ConvertTo-TestFinding -Check (New-DetectionCheck -Detection $quarantined, $notRemoved, $old) -Since $since)
 
-            $found.Id | Should -Be @('DefenderDetection:Trojan:Win32/Sample:{D1}', 'DefenderDetection:Backdoor:Win32/Other:{D2}')
+            $found.Id | Should -Be @('DefenderDetection:101:{D1}', 'DefenderDetection:102:{D2}')
+            $found[0].Title | Should -Be 'Defender found Trojan:Win32/Sample'
             $found[0].Severity | Should -Be 'Medium'
             $found[0].WhatWeFound | Should -BeLike '*Trojan:Win32/Sample*quarantined*'
             $found[0].Where | Should -Be @('C:\Users\dev\Downloads\x.exe')
@@ -235,9 +236,17 @@ Describe 'ConvertTo-SecurityFinding' {
         It 'keeps reporting, as High, an older detection whose threat Defender still lists as active' {
             $found = @(ConvertTo-TestFinding -Check (New-DetectionCheck -Detection $old -Active '100') -Since $since)
 
-            $found.Id | Should -Be @('DefenderDetection:Trojan:Win32/Old:{D0}')
+            $found.Id | Should -Be @('DefenderDetection:100:{D0}')
             $found[0].Severity | Should -Be 'High'
             $found[0].WhatWeFound | Should -BeLike '*still lists it as active*'
+        }
+
+        It 'reports only the newest detection of a threat that is still active, not its older ones' {
+            $older = [pscustomobject]@{ DetectionId = '{D9}'; ThreatId = '100'; ThreatName = 'Trojan:Win32/Old'; DetectedAt = '2026-10-01T10:00:00.0000000Z'; Resources = @(); ThreatStatusId = 4; ActionSuccess = $true }
+
+            $found = @(ConvertTo-TestFinding -Check (New-DetectionCheck -Detection $older, $old -Active '100') -Since $since)
+
+            $found.Id | Should -Be @('DefenderDetection:100:{D0}')
         }
 
         It 'reports every detection Defender still lists on the first scan' {
@@ -467,6 +476,22 @@ Describe 'Invoke-GuestSecurityScan' {
         $vm.Settings.SecurityFindingsFile | Should -Not -Exist
     }
 
+    It 'takes a kept finding with <Case> as unreadable, so as a first scan' -ForEach @(
+        @{ Case = 'no FirstSeen'; Field = 'FirstSeen'; Value = $null }
+        @{ Case = 'a status it does not know'; Field = 'Status'; Value = 'Closed' }
+    ) {
+        $vm = New-TestVM -Root (New-TestRoot)
+        $finding = (New-TestFinding).ToRecord()
+        $finding[$Field] = $Value
+        New-Item -ItemType Directory -Path (Split-Path -Path $vm.Settings.SecurityFindingsFile -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $vm.Settings.SecurityFindingsFile -Value (ConvertTo-Json -InputObject @{ ScannedAt = '2026-11-01T10:40:00Z'; Findings = @($finding) } -Depth 4)
+
+        $record = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Read-SecurityFindingRecord -VM $VM }
+
+        $record | Should -BeNullOrEmpty
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*could not be read*first scan*' -and $Level -eq 'WARN' }
+    }
+
     It 'takes findings it cannot read as a first scan, and says so' {
         $vm = New-TestVM -Root (New-TestRoot)
         New-Item -ItemType Directory -Path (Split-Path -Path $vm.Settings.SecurityFindingsFile -Parent) -Force | Out-Null
@@ -541,7 +566,7 @@ Describe 'Publish-GuestSecurityFinding' {
 }
 
 Describe 'Install-GuestSecurityFindingOpener' {
-    It 'registers the task at sign-in, connect and unlock, with the opener as its command, and removes the old opener file' {
+    It 'registers the task at sign-in, connect and unlock, with the opener as its command' {
         Mock -ModuleName $module Invoke-GuestScript { }
         $vm = New-TestVM -Root (New-TestRoot)
         $argument = InModuleScope $module { Get-SecurityFindingOpenerArgument }
@@ -550,7 +575,7 @@ Describe 'Install-GuestSecurityFindingOpener' {
 
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
             $ArgumentList[0] -eq 'LazyVM-SecurityFindings' -and $ArgumentList[1] -eq $argument -and
-            "$($ArgumentList[2])" -eq '1 3 8' -and $ArgumentList[3] -like '*SecurityFindingOpener.ps1'
+            "$($ArgumentList[2])" -eq '1 3 8' -and $ArgumentList.Count -eq 3
         }
     }
 }

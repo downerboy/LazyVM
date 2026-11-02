@@ -376,9 +376,9 @@ Status: New
 ```
 
 - **Severity** is High, Medium, Low or Info.
-- **Id** is made from what was found, so the same thing found again has the same Id, and when it changes, so does the Id: `WindowsUpdate:PausedUntil:2026-11-20`, for one, carries the date. Treat Ids as opaque names, not something to take apart. A Defender detection's Id includes Defender's detection id, so each detection is a finding of its own.
+- **Id** is made from what was found, so the same thing found again has the same Id, and when it changes, so does the Id: `WindowsUpdate:PausedUntil:2026-11-20`, for one, carries the date. Treat Ids as opaque names, not something to take apart. A Defender detection's Id is `DefenderDetection:<threat id>:<detection id>`, so each detection is a finding of its own, whatever name Defender gives the threat; the name is in the title.
 - **Where**, only on a finding about files, such as a Defender detection, lists them by full path. The copy on the VM's desktop, which every user of the VM can read, shows only their names.
-- **Status** compares the scan with the one before: **New**, **Still open**, or **Resolved** when it is no longer found. A resolved finding is listed once, by the scan that no longer found it. A Defender detection is reported by the scan after it happened, and stays open while Defender lists its threat as active; it is resolved once Defender no longer does.
+- **Status** compares the scan with the one before: **New**, **Still open**, or **Resolved** when it is no longer found. A resolved finding is listed once, by the scan that no longer found it. A Defender detection is reported by the scan after it happened, and, for a threat Defender still lists as active, its newest detection stays open; it is resolved once Defender no longer lists the threat as active.
 
 Where you see the findings:
 

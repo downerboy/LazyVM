@@ -464,9 +464,12 @@ class SecurityFinding {
         $finding = [SecurityFinding]::new([RecordReader]::Text($item, 'Id'), [RecordReader]::Text($item, 'Severity'), [RecordReader]::Text($item, 'Title'),
             [RecordReader]::Text($item, 'WhatWeFound'), [RecordReader]::Text($item, 'WhyItMatters'), [RecordReader]::Text($item, 'HowToFix'))
         $finding.Where = [RecordReader]::Strings($item, 'Where')
+        # A kept finding always has both, so one without them is not one LazyVM kept.
         $seen = [RecordReader]::Text($item, 'FirstSeen')
-        if ($seen) { $finding.FirstSeen = [datetimeoffset]::Parse($seen, [cultureinfo]::InvariantCulture) }
+        if (-not $seen) { throw "The security finding '$($finding.Id)' has no FirstSeen." }
+        $finding.FirstSeen = [datetimeoffset]::Parse($seen, [cultureinfo]::InvariantCulture)
         $finding.Status = [RecordReader]::Text($item, 'Status')
+        if ($finding.Status -notin [SecurityFinding]::Statuses) { throw "The security finding '$($finding.Id)' has the status '$($finding.Status)', not one of $([SecurityFinding]::Statuses -join ', ')." }
         return $finding
     }
 

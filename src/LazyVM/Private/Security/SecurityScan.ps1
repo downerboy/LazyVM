@@ -27,8 +27,6 @@ $script:GuestSecurityAlertValueName = 'SecurityFindingsAlert'
 # console (1), connected remotely (3) or unlocked (8): the
 # MSFT_TaskSessionStateChangeTrigger states.
 $script:GuestSecurityFindingsSessionStates = @(1, 3, 8)
-# The opener's script file of an earlier version, removed.
-$script:GuestSecurityFindingOpenerFileName = 'SecurityFindingOpener.ps1'
 
 function Invoke-GuestSecurityScan {
     <#
@@ -140,16 +138,13 @@ function Install-GuestSecurityFindingOpener {
       Registers, again each night, the guest task that runs the opener at
       every user's sign-in, console or remote connect and unlock, in their
       own session with their normal rights (BUILTIN\Users, by its SID). The
-      opener is the task's -Command, so no file holds it; the script file an
-      earlier version used is removed.
+      opener is the task's -Command, so no file holds it.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    # A guest path, so joined as text: the host may not have its drive.
-    $oldOpenerFile = '{0}\{1}' -f $VM.Settings.GuestSetupDir.TrimEnd('\'), $script:GuestSecurityFindingOpenerFileName
-    $arguments = @($script:GuestSecurityFindingsTaskName, (Get-SecurityFindingOpenerArgument), $script:GuestSecurityFindingsSessionStates, $oldOpenerFile)
+    $arguments = @($script:GuestSecurityFindingsTaskName, (Get-SecurityFindingOpenerArgument), $script:GuestSecurityFindingsSessionStates)
     $null = Invoke-GuestScript -VM $VM -Activity 'security findings opener' -TimeoutMinutes 5 -ArgumentList $arguments -ScriptBlock {
-        param($taskName, $openerArgument, $sessionStates, $oldOpenerFile)
+        param($taskName, $openerArgument, $sessionStates)
         $ErrorActionPreference = 'Stop'
 
         $sessionClass = Get-CimClass -Namespace 'Root/Microsoft/Windows/TaskScheduler' -ClassName 'MSFT_TaskSessionStateChangeTrigger'
@@ -164,8 +159,6 @@ function Install-GuestSecurityFindingOpener {
         $principal = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel Limited
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
         Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Force | Out-Null
-
-        Remove-Item -LiteralPath $oldOpenerFile -Force -ErrorAction SilentlyContinue
     }
 }
 
