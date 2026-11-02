@@ -118,6 +118,9 @@ function New-UnattendXml {
           </LocalAccount>
         </LocalAccounts>
       </UserAccounts>
+      <!-- LogonCount is required and has no "no limit" value. The first-logon
+           command below deletes the count Windows keeps (AutoLogonCount), and
+           without it Winlogon signs the account in at every start (#278). -->
       <AutoLogon>
         <Enabled>true</Enabled>
         <Username>@@USER@@</Username>
@@ -135,6 +138,11 @@ function New-UnattendXml {
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>2</Order>
+          <Description>Keep automatic sign-in on with no limit</Description>
+          <CommandLine>reg delete "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoLogonCount /f</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>3</Order>
           <Description>Signal provisioning complete</Description>
           <CommandLine>reg add "@@MARKERKEY@@" /v Provisioned /t REG_DWORD /d 1 /f</CommandLine>
         </SynchronousCommand>

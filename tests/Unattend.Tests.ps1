@@ -74,6 +74,39 @@ Describe 'New-UnattendXml' {
     }
 }
 
+Describe 'New-UnattendXml automatic sign-in (#278)' {
+    BeforeAll {
+        $xml = [xml](New-TestUnattendXml -Locale @{ Locale = 'en-US' })
+        $ns = @{ u = 'urn:schemas-microsoft-com:unattend' }
+        $shell = (Select-Xml -Xml $xml -Namespace $ns -XPath "/u:unattend/u:settings[@pass='oobeSystem']/u:component[@name='Microsoft-Windows-Shell-Setup']").Node
+        $commands = @($shell.FirstLogonCommands.SynchronousCommand)
+    }
+
+    It 'signs the guest account in automatically' {
+        $shell.AutoLogon.Enabled | Should -Be 'true'
+        $shell.AutoLogon.Username | Should -Be 'devadmin'
+    }
+
+    It 'removes the logon count at the first sign-in, so automatic sign-in never runs out' {
+        $removeCount = @($commands | Where-Object { $_.CommandLine -eq 'reg delete "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoLogonCount /f' })
+
+        $removeCount.Count | Should -Be 1
+    }
+
+    It 'removes the logon count before marking the guest provisioned' {
+        $removeCount = $commands | Where-Object { $_.CommandLine -match 'AutoLogonCount' }
+        $marker = $commands | Where-Object { $_.CommandLine -match 'Provisioned' }
+
+        [int]$removeCount.Order | Should -BeLessThan ([int]$marker.Order)
+    }
+
+    It 'gives each first-logon command its own order' {
+        $orders = @($commands | ForEach-Object { [int]$_.Order })
+
+        @($orders | Select-Object -Unique).Count | Should -Be $orders.Count
+    }
+}
+
 Describe 'The guest locale settings' {
     It 'default to en-US with the keyboard following the locale' {
         $defaults = InModuleScope $module { Get-DefaultSetting }
