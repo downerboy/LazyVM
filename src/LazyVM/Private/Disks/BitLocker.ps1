@@ -12,7 +12,9 @@
 # encrypts anything with it: the store always holds a password that works.
 # Passwords for earlier OS disks are kept, so a retired OS disk can still be
 # unlocked. No recovery password is ever written to VM.json, a log or an
-# error message.
+# error message. Beside each password is the key ID BitLocker gave it in the
+# guest, which its recovery screen shows, so the copy the user exports
+# (Export-LazyVMRecoveryKey, #286) can be matched to the disk that asks.
 #
 # Windows RE cannot sit on a BitLocker-encrypted C:; Expand-GuestSystemDrive
 # keeps it on its own partition after C: (see GuestOSDisk.ps1).
@@ -47,11 +49,56 @@ function New-BitLockerRecoveryPassword {
 }
 
 function Read-RecoveryPasswordTable {
-    <# The VM's stored recovery passwords: disk GUID -> @{ Disk; RecoveryPassword; Recorded }; empty when none are stored. #>
+    <# The VM's stored recovery passwords: disk GUID -> @{ Disk; RecoveryPassword; Recorded; KeyId }; empty when none are stored. #>
     [OutputType([hashtable])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
     return Get-StoredSecretTable -Path $VM.Settings.BitLockerCredFile
+}
+
+function Get-StoredRecoveryKey {
+    <#
+      The VM's stored recovery passwords, one per disk, by disk and date:
+      each with its disk GUID, BitLocker's key ID for it (empty until the
+      guest has reported it) and when it was recorded.
+    #>
+    [OutputType('LazyVM.RecoveryPassword')]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $table = Read-RecoveryPasswordTable -VM $VM
+    $keys = foreach ($guid in $table.Keys) {
+        [pscustomobject]@{
+            PSTypeName       = 'LazyVM.RecoveryPassword'
+            Name             = $VM.Name
+            Disk             = $table[$guid]['Disk']
+            DiskGuid         = $guid
+            KeyId            = [string]$table[$guid]['KeyId']
+            Recorded         = $table[$guid]['Recorded']
+            RecoveryPassword = $table[$guid]['RecoveryPassword']
+        }
+    }
+    return @($keys | Sort-Object -Property Disk, Recorded)
+}
+
+function Set-RecoveryKeyId {
+    <#
+      Records $KeyId, the key protector ID BitLocker gave the recovery
+      password stored for the disk with GPT disk GUID $Guid, when it is new.
+      BitLocker's recovery screen shows it as the recovery key ID, so the
+      exported file can be matched to the disk that asks (#286).
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$Guid,
+        [AllowEmptyString()][string]$KeyId
+    )
+
+    if (-not $KeyId) { return }
+    $key = $Guid.ToUpperInvariant()
+    $table = Read-RecoveryPasswordTable -VM $VM
+    if (-not $table.ContainsKey($key) -or [string]$table[$key]['KeyId'] -eq $KeyId) { return }
+    $table[$key]['KeyId'] = $KeyId
+    Save-StoredSecretTable -Path $VM.Settings.BitLockerCredFile -UserName 'bitlocker' -Secrets $table
 }
 
 function Get-OrNewRecoveryPassword {
@@ -100,12 +147,16 @@ function Protect-GuestSystemDrive {
         Write-LogEntry "  ejected $($drive.Path) from the DVD drive, since BitLocker will not use the TPM while it is there" 'INFO'
     }
 
-    $notes = Invoke-GuestScript -VM $VM -Activity 'BitLocker on C:' -TimeoutMinutes 10 -ArgumentList @($password, [bool]$UsedSpaceOnly) -ScriptBlock {
+    $result = Invoke-GuestScript -VM $VM -Activity 'BitLocker on C:' -TimeoutMinutes 10 -ArgumentList @($password, [bool]$UsedSpaceOnly) -ScriptBlock {
         param($password, $usedSpaceOnly)
         $ErrorActionPreference = 'Stop'
-        Protect-GuestVolume -MountPoint 'C:' -RecoveryPassword $password -System -UsedSpaceOnly:$usedSpaceOnly
+        [pscustomobject]@{
+            Notes = @(Protect-GuestVolume -MountPoint 'C:' -RecoveryPassword $password -System -UsedSpaceOnly:$usedSpaceOnly)
+            KeyId = Get-GuestRecoveryKeyId -MountPoint 'C:' -RecoveryPassword $password
+        }
     }
-    Write-GuestNote -Notes $notes
+    Write-GuestNote -Notes $result.Notes
+    Set-RecoveryKeyId -VM $VM -Guid $guid -KeyId $result.KeyId
 }
 
 function Protect-GuestDataDisk {
@@ -130,7 +181,7 @@ function Protect-GuestDataDisk {
     }
 
     $password = Get-OrNewRecoveryPassword -VM $VM -Guid $identity.Guid -Disk $Disk.Label
-    $notes = Invoke-GuestScript -VM $VM -Activity "BitLocker on the $($Disk.Label)" -TimeoutMinutes 10 -ArgumentList @(
+    $result = Invoke-GuestScript -VM $VM -Activity "BitLocker on the $($Disk.Label)" -TimeoutMinutes 10 -ArgumentList @(
         $Disk.Label, $identity.Guid, $identity.Location, $identity.FileLocation, $password, [bool]$UsedSpaceOnly
     ) -ScriptBlock {
         param($label, $guid, $location, $fileLocation, $password, $usedSpaceOnly)
@@ -138,9 +189,13 @@ function Protect-GuestDataDisk {
         $disk = (Find-GuestDataDisk -Label $label -Guid $guid -Location $location -FileLocation $fileLocation).Disk
         $mountPoint = Get-GuestVolumeMountPoint -Disk $disk
         if (-not $mountPoint) { throw "the $label holds no volume" }
-        Protect-GuestVolume -MountPoint $mountPoint -RecoveryPassword $password -UsedSpaceOnly:$usedSpaceOnly
+        [pscustomobject]@{
+            Notes = @(Protect-GuestVolume -MountPoint $mountPoint -RecoveryPassword $password -UsedSpaceOnly:$usedSpaceOnly)
+            KeyId = Get-GuestRecoveryKeyId -MountPoint $mountPoint -RecoveryPassword $password
+        }
     }
-    Write-GuestNote -Notes $notes
+    Write-GuestNote -Notes $result.Notes
+    Set-RecoveryKeyId -VM $VM -Guid $identity.Guid -KeyId $result.KeyId
 }
 
 function Protect-GuestPersistentDisk {

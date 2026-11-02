@@ -318,7 +318,8 @@ Describe 'Protect-GuestSystemDrive' {
             [pscustomobject]@{ ControllerNumber = 0; ControllerLocation = 5; Path = $null }
         }
         Mock -ModuleName $module Set-VMDvdDrive { $script:order += "eject $ControllerLocation" }
-        Mock -ModuleName $module Invoke-GuestScript { $script:order += $Activity; if ($Activity -eq 'OS disk identity') { $sqlGuid } }
+        Mock -ModuleName $module Set-RecoveryKeyId { }
+        Mock -ModuleName $module Invoke-GuestScript { $script:order += $Activity; if ($Activity -eq 'OS disk identity') { $sqlGuid } else { [pscustomobject]@{ Notes = @(); KeyId = '' } } }
 
         InModuleScope $module -Parameters @{ Settings = (New-TestSetting -Root (New-TestRoot)) } {
             param($Settings)
@@ -327,6 +328,24 @@ Describe 'Protect-GuestSystemDrive' {
 
         $script:order | Should -Be @('OS disk identity', 'eject 1', 'BitLocker on C:')
         Should -Invoke -ModuleName $module Set-VMDvdDrive -Times 1 -Exactly -ParameterFilter { [string]::IsNullOrEmpty($Path) -and $VMName -eq 'Alpha' }
+    }
+
+    It 'records the key ID BitLocker gave C:''s recovery password, for the exported file (#286)' {
+        Mock -ModuleName $module Write-GuestNote { }
+        Mock -ModuleName $module Get-OrNewRecoveryPassword { $password }
+        Mock -ModuleName $module Get-VMDvdDrive { }
+        Mock -ModuleName $module Set-RecoveryKeyId { }
+        Mock -ModuleName $module Invoke-GuestScript {
+            if ($Activity -eq 'OS disk identity') { $sqlGuid } else { [pscustomobject]@{ Notes = @(@{ Level = 'OK'; Text = 'on' }); KeyId = '{33333333-0000-0000-0000-000000000000}' } }
+        }
+
+        InModuleScope $module -Parameters @{ Settings = (New-TestSetting -Root (New-TestRoot)) } {
+            param($Settings)
+            Protect-GuestSystemDrive -VM ([VMContext]::new($Settings))
+        }
+
+        Should -Invoke -ModuleName $module Set-RecoveryKeyId -Times 1 -Exactly -ParameterFilter { $Guid -eq $sqlGuid -and $KeyId -eq '{33333333-0000-0000-0000-000000000000}' }
+        Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter { @($Notes).Count -eq 1 }
     }
 }
 

@@ -25,6 +25,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Expand-GuestSystemDrive { 'stray' }
         Mock -ModuleName $module Install-UserDisk { 'stray' }
         Mock -ModuleName $module Protect-GuestPersistentDisk { 'stray' }
+        Mock -ModuleName $module Write-RecoveryKeyReminder { 'stray' }
         Mock -ModuleName $module Backup-UserDisk { 'stray' }
         Mock -ModuleName $module Update-ToolingRecord { }
         Mock -ModuleName $module Update-GuestEnvironmentRecord { }
@@ -96,6 +97,18 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Protect-GuestPersistentDisk -Times 1 -Exactly
+    }
+
+    It 'checks every day, after BitLocker, for a recovery password not exported yet (#286)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        $script:order = @()
+        Mock -ModuleName $module Protect-GuestPersistentDisk { $script:order += 'bitlocker' }
+        Mock -ModuleName $module Write-RecoveryKeyReminder { $script:order += 'reminder' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        $script:order | Should -Be @('bitlocker', 'reminder')
     }
 
     It 'backs up the User disk every day, and carries on when that fails (#139)' {

@@ -118,6 +118,7 @@ function Get-LazyVMDiagnostic {
     Get-TrustedCodeCheck -Name $vmName
     Get-IsoCheck -Name $vmName -Check 'Windows ISO' -Path $settings.ISOPath
     Get-IsoCheck -Name $vmName -Check 'SQL Server ISO' -Path $settings.SQLIsoPath -Downloadable
+    Get-RecoveryKeyCheck -VM ([VMContext]::new($settings))
 
     $machine = Get-VM -Name $vmName -ErrorAction SilentlyContinue
     if (-not $machine) {

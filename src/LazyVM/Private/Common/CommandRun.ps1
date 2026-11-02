@@ -92,7 +92,10 @@ function Initialize-CommandRun {
     }
 
     Sync-GuestUserFromStore -VM $vm
-    if (-not (Test-Unattended)) { Write-MaintenanceTaskWarning -VM $vm }
+    if (-not (Test-Unattended)) {
+        Write-MaintenanceTaskWarning -VM $vm
+        Write-RecoveryKeyReminder -VM $vm
+    }
     return $vm
 }
 

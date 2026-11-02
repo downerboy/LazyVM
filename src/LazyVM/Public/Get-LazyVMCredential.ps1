@@ -17,9 +17,11 @@ function Get-LazyVMCredential {
 
     With -RecoveryPassword, returns the BitLocker recovery password of each
     disk LazyVM encrypted: C: and every earlier OS disk, the SQL data disk,
-    the Dev Drive and the User disk, each with its GPT disk GUID and when it
-    was recorded. Needed only when a disk asks for it, such as a retired OS
-    disk put back after a failed rebuild.
+    the Dev Drive and the User disk, each with its GPT disk GUID, the key ID
+    BitLocker's recovery screen shows for it, and when it was recorded.
+    Needed only when a disk asks for it, such as a retired OS disk put back
+    after a failed rebuild. To keep a copy offline, use
+    Export-LazyVMRecoveryKey.
 
     .PARAMETER Name
     The VM. May be left out while there is only one.
@@ -79,20 +81,9 @@ function Get-LazyVMCredential {
         $configuration = Read-VMSetting -Root (Resolve-LazyVMRoot).Path -VMName $Name
 
         if ($RecoveryPassword) {
-            $table = Get-StoredSecretTable -Path $configuration.Settings.BitLockerCredFile
-            if ($table.Count -eq 0) {
-                throw "No BitLocker recovery password is stored for '$($configuration.VMName)' yet. Build-LazyVM and the daily maintenance turn BitLocker on and store them."
-            }
-            return $table.Keys | ForEach-Object {
-                [pscustomobject]@{
-                    PSTypeName       = 'LazyVM.RecoveryPassword'
-                    Name             = $configuration.VMName
-                    Disk             = $table[$_]['Disk']
-                    DiskGuid         = $_
-                    Recorded         = $table[$_]['Recorded']
-                    RecoveryPassword = $table[$_]['RecoveryPassword']
-                }
-            } | Sort-Object -Property Disk, Recorded
+            $keys = Get-StoredRecoveryKey -VM ([VMContext]::new($configuration.Settings))
+            if (-not $keys) { throw (Get-NoRecoveryKeyMessage -VMName $configuration.VMName) }
+            return $keys
         }
 
         $credential = Get-StoredCredential -Path $configuration.Settings.GuestCredFile

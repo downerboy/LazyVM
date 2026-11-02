@@ -30,11 +30,12 @@
             )
         }
         @{
-            Function = 'Get-StoredSecretTable'
-            Area     = 'Credentials'
+            Function = 'Get-StoredRecoveryKey'
+            Area     = 'Disks'
             Note     = 'with -RecoveryPassword, instead: every disk''s BitLocker recovery password'
+            Includes = @('Get-NoRecoveryKeyMessage')
             Reads    = @(@{ Label = 'recovery passwords'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\bitlocker.cred') })
-            Writes   = @(@{ Label = 'recovery passwords'; Kind = 'output'; Store = 'Pipeline'; Items = @('Disk, DiskGuid, Recorded,', 'RecoveryPassword') })
+            Writes   = @(@{ Label = 'recovery passwords'; Kind = 'output'; Store = 'Pipeline'; Items = @('Disk, DiskGuid, KeyId,', 'Recorded, RecoveryPassword') })
         }
         @{
             Function = 'Set-ClipboardSecret'

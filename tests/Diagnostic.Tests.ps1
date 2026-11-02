@@ -31,6 +31,7 @@ Describe 'Get-LazyVMDiagnostic' {
         }
         Mock -ModuleName $module Get-TrustedCodeCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Code the tasks run'; Status = 'OK'; Detail = '' } }
         Mock -ModuleName $module Get-CloudSyncCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'OneDrive'; Status = 'OK'; Detail = '' } }
+        Mock -ModuleName $module Get-RecoveryKeyCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Recovery keys'; Status = 'OK'; Detail = '' } }
         Mock -ModuleName $module Get-RootAccessCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'LazyVM folder access'; Status = 'OK'; Detail = '' } }
         Mock -ModuleName $module Test-IsoFile { $true }
         Mock -ModuleName $module Get-Item { [pscustomobject]@{ Length = 6GB } }
@@ -52,6 +53,7 @@ Describe 'Get-LazyVMDiagnostic' {
         $checks['LazyVM folder access'].Status | Should -Be 'OK'
         $checks['PowerShell Direct'].Status | Should -Be 'OK'
         $checks['Maintenance task'].Status | Should -Be 'OK'
+        $checks['Recovery keys'].Status | Should -Be 'OK'
     }
 
     It 'fails a Windows ISO that is missing or not an ISO image' {

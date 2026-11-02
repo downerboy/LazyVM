@@ -97,6 +97,7 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | `Get-LazyVM`                                                | Lists the VMs, their state and their maintenance.                                                      |
 | `Get-LazyVMSetting`                                         | Every setting as a VM uses it, where the value came from, and what it does.                            |
 | `Set-LazyVMCredential` / `Get-LazyVMCredential`           | The administrator account LazyVM uses inside the VM.                                                   |
+| `Export-LazyVMRecoveryKey`                                  | Writes the VMs' BitLocker recovery passwords to a file you keep offline, such as on a USB drive.       |
 | `Get-LazyVMLicense`                                         | Evaluation days and rearms left, and what maintenance will do.                                         |
 | `Get-LazyVMTooling`                                         | What is installed in the VM, and what the next maintenance run would record.                           |
 | `Save-LazyVMTooling`                                        | Records tooling changes now, with a checkpoint.                                                        |
