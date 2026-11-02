@@ -56,7 +56,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="160" text-anchor="middle">«settings»</text>
 <text class="nm" x="147.5" y="176" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="183" x2="275" y2="183"/>
-<text class="at" x="30" y="198">HKLM:\SOFTWARE\LazyVM Root</text>
+<text class="at" x="30" y="198">HKCU:\SOFTWARE\LazyVM Root</text>
 <text class="at" x="30" y="215">Shared\Config\LazyVM.Settings.json</text>
 <text class="at" x="30" y="232">&lt;VM&gt;\Config\VM.json</text>
 <text class="at" x="30" y="249">&lt;VM&gt;\Credentials\guest.cred</text>
@@ -73,14 +73,14 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="335" y1="329" x2="640" y2="329"/>
 <g class="sn"><circle cx="351" cy="313" r="10"/><text x="351" y="317" text-anchor="middle">2</text></g>
 <text class="at" x="345" y="344">refuses without a stored credential or a</text>
-<text class="at" x="345" y="361">valid HH:mm MaintenanceTime</text>
+<text class="at" x="345" y="361">valid HH:mm MaintenanceTime; asks for</text>
+<text class="at" x="345" y="378">your Windows password once per session</text>
 </g>
 <g class="bx-store"><rect x="20" y="292" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="306" text-anchor="middle">«file»</text>
 <text class="nm" x="147.5" y="322" text-anchor="middle">Credential store</text>
 <line class="div" x1="20" y1="329" x2="275" y2="329"/>
-<text class="at" x="30" y="344">Shared\Credentials\.lazyvm.key</text>
-<text class="at" x="30" y="361">&lt;VM&gt;\Credentials\guest.cred</text>
+<text class="at" x="30" y="344">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="292" width="270" height="152" rx="3"/>
 <text class="st" x="875" y="306" text-anchor="middle">«task»</text>
@@ -88,7 +88,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="740" y1="329" x2="1010" y2="329"/>
 <text class="at" x="750" y="344">LazyVM-Maintain-&lt;VM&gt;</text>
 <text class="at" x="750" y="361">daily at MaintenanceTime</text>
-<text class="at" x="750" y="378">SYSTEM</text>
+<text class="at" x="750" y="378">as you, elevated,</text>
 <text class="at" x="750" y="395">wake to run,</text>
 <text class="at" x="750" y="412">6 h limit</text>
 <text class="at" x="750" y="429">2 retries</text>

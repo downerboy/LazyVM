@@ -58,7 +58,7 @@
             Area     = 'script'
             Note     = 'only when every check passed: copies the newest built version and unblocks it'
             Reads    = @(@{ Label = 'built module'; Kind = 'folder'; Store = 'out\LazyVM\'; Items = @('<version>\') })
-            Writes   = @(@{ Label = 'module installed for all users, SYSTEM included'; Kind = 'folder'; Store = '$env:ProgramFiles\PowerShell\'; Items = @('Modules\LazyVM\<version>\') })
+            Writes   = @(@{ Label = 'module installed for you only'; Kind = 'folder'; Store = 'Documents\PowerShell\'; Items = @('Modules\LazyVM\<version>\') })
         }
     )
 }

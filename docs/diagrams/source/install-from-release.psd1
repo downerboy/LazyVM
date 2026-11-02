@@ -4,7 +4,7 @@
     Command    = '.\LazyVM\Install.ps1'
     Parameters = @()
     External   = $true
-    Summary    = 'Copies the module from a downloaded release to where PowerShell 7 and the SYSTEM maintenance task find it, replacing an earlier copy of the same version, and unblocks it.'
+    Summary    = 'Copies the module from a downloaded release to your own module folder, where PowerShell 7 and your maintenance tasks find it, replacing an earlier copy of the same version, and unblocks it. Needs no elevation; warns when a copy installed for every user is still in Program Files.'
     Covers     = @()
     Omits      = @{}
     Steps      = @(
@@ -17,7 +17,7 @@
                 @{ Label = 'module from the zip'; Kind = 'folder'; Store = 'LazyVM\LazyVM\'; Items = @('<version>\') }
             )
             Writes   = @(
-                @{ Label = 'module installed for all users'; Kind = 'folder'; Store = '$env:ProgramFiles\PowerShell\'; Items = @('Modules\LazyVM\', '<version>\') }
+                @{ Label = 'module installed for you only'; Kind = 'folder'; Store = 'Documents\PowerShell\'; Items = @('Modules\LazyVM\', '<version>\') }
             )
         }
         @{

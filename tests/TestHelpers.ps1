@@ -45,8 +45,9 @@ $script:HyperVCommandStubs = [ordered]@{
 Add-MissingCommandStub -Stub $script:HyperVCommandStubs
 
 # The Task Scheduler cmdlets the tests mock, for a runner without them (#284).
+# Not Register-ScheduledTask: its -Password is text, which the analyzer refuses
+# in a stub; its tests run on Windows.
 $script:ScheduledTaskCommandStubs = [ordered]@{
-    'Register-ScheduledTask'      = { [CmdletBinding()] param([string]$TaskName, $Action, $Trigger, $Settings, [string]$User, [string]$Password, [string]$RunLevel, [switch]$Force) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Get-ScheduledTask'           = { [CmdletBinding()] param([string]$TaskName) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Get-ScheduledTaskInfo'       = { [CmdletBinding()] param([string]$TaskName) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'New-ScheduledTaskTrigger'    = { [CmdletBinding()] param([switch]$Daily, [int]$DaysInterval, [datetime]$At, [switch]$AtStartup) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }

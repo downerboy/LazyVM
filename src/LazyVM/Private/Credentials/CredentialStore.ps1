@@ -19,9 +19,10 @@
 # moves them over).
 $script:CredentialProtection = 'DPAPI-CurrentUser'
 
-function Save-StoredCredential {
+function ConvertTo-StoredCredentialText {
+    <# The text of a credential file: the user name, and the password encrypted for the current user. #>
+    [OutputType([string])]
     param(
-        [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$UserName,
         [Parameter(Mandatory)][securestring]$Password
     )
@@ -32,7 +33,46 @@ function Save-StoredCredential {
         Password   = ConvertFrom-SecureString -SecureString $Password
         Protection = $script:CredentialProtection
     }
-    Write-TextFileAtomic -Path $Path -Text (ConvertTo-Json -InputObject $blob)
+    return ConvertTo-Json -InputObject $blob
+}
+
+function ConvertFrom-StoredCredentialText {
+    <# The credential in the text of a credential file read from $Path. Throws when it cannot be read. #>
+    [OutputType([pscredential])]
+    param(
+        [Parameter(Mandatory)][string]$Text,
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    $blob = $Text | ConvertFrom-Json
+    if (-not (Test-ProtectedCredentialBlob -Blob $blob)) {
+        throw "The credential at $Path was stored by an older LazyVM, with a key every administrator could read. Move it over first: Convert-LazyVMInstallation"
+    }
+    try {
+        $secure = ConvertTo-SecureString -String $blob.Password
+        return [pscredential]::new($blob.UserName, $secure)
+    }
+    catch {
+        throw "The credential at $Path cannot be read ($($_.Exception.Message)): only the Windows account that stored it can read it, and only while that account's password has not been reset by someone else. Store the password again with Set-LazyVMCredential."
+    }
+}
+
+function Test-ProtectedCredentialBlob {
+    <# Whether a credential file's content is encrypted for the current user, rather than with an older LazyVM's machine key. #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][psobject]$Blob)
+
+    return [bool]($Blob.PSObject.Properties['Protection'] -and $Blob.Protection -eq $script:CredentialProtection)
+}
+
+function Save-StoredCredential {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$UserName,
+        [Parameter(Mandatory)][securestring]$Password
+    )
+
+    Write-TextFileAtomic -Path $Path -Text (ConvertTo-StoredCredentialText -UserName $UserName -Password $Password)
 }
 
 function Get-StoredCredential {
@@ -44,17 +84,7 @@ function Get-StoredCredential {
     param([Parameter(Mandatory)][string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    $blob = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
-    if (-not $blob.PSObject.Properties['Protection'] -or $blob.Protection -ne $script:CredentialProtection) {
-        throw "The credential at $Path was stored by an older LazyVM, with a key every administrator could read. Move it over first: Convert-LazyVMInstallation"
-    }
-    try {
-        $secure = ConvertTo-SecureString -String $blob.Password
-        return [pscredential]::new($blob.UserName, $secure)
-    }
-    catch {
-        throw "The credential at $Path cannot be read ($($_.Exception.Message)): only the Windows account that stored it can read it, and only while that account's password has not been reset by someone else. Store the password again with Set-LazyVMCredential."
-    }
+    return ConvertFrom-StoredCredentialText -Text (Get-Content -LiteralPath $Path -Raw) -Path $Path
 }
 
 function Get-StoredSecretTable {

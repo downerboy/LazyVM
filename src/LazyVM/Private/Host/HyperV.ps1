@@ -206,10 +206,7 @@ function Register-ResumeTask {
     )
 
     $settings = $VM.Settings
-    if (-not (Test-Path -LiteralPath $settings.ResumeRegKey)) {
-        New-Item -Path $settings.ResumeRegKey -Force | Out-Null
-    }
-    Set-ItemProperty -Path $settings.ResumeRegKey -Name 'ResumePhase' -Value $Phase -Type DWord
+    Set-ResumePhase -Key $settings.ResumeRegKey -Phase $Phase
 
     # Build-LazyVM reads the resume phase from the registry key above.
     $action = New-LazyVMTaskAction -Command "Build-LazyVM -Name '$($VM.Name)'"
@@ -219,6 +216,19 @@ function Register-ResumeTask {
     Register-LazyVMHostTask -TaskName $settings.ResumeTaskName -Action $action -Trigger $trigger -Settings $taskSettings
 
     Write-LogEntry "Resume task '$($settings.ResumeTaskName)' registered (resumes at Phase $Phase after reboot)" 'OK'
+}
+
+function Set-ResumePhase {
+    <# Records under $Key the phase a build interrupted by a restart carries on from. #>
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [Parameter(Mandatory)][int]$Phase
+    )
+
+    if (-not (Test-Path -LiteralPath $Key)) {
+        New-Item -Path $Key -Force | Out-Null
+    }
+    Set-ItemProperty -Path $Key -Name 'ResumePhase' -Value $Phase -Type DWord
 }
 
 function Unregister-ResumeTask {

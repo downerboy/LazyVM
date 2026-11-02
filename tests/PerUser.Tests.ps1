@@ -240,8 +240,14 @@ Describe 'Register-LazyVMHostTask (#284)' {
 Describe 'The host tasks run as the user (#284)' {
     BeforeAll {
         $testVM = InModuleScope $module {
-            [VMContext]::new(@{ VMName = 'Alpha'; MaintenanceTime = '02:00'; RebuildThresholdDays = 10; ScheduleTaskName = 'LazyVM-Maintain-Alpha'
-                    ResumeTaskName = 'LazyVM-ResumeAfterReboot-Alpha'; ResumeRegKey = 'TestRegistry:\LazyVM\Alpha' })
+            $settings = @{
+                VMName           = 'Alpha'
+                MaintenanceTime  = '02:00'
+                ScheduleTaskName = 'LazyVM-Maintain-Alpha'
+                ResumeTaskName   = 'LazyVM-ResumeAfterReboot-Alpha'
+                ResumeRegKey     = 'TestRegistry:\LazyVM\Alpha'
+            }
+            [VMContext]::new($settings)
         }
     }
 

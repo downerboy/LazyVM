@@ -132,21 +132,23 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="500.5" y="210" text-anchor="middle">Initialize-BuildTarget()</text>
 <line class="div" x1="335" y1="217" x2="640" y2="217"/>
 <g class="sn"><circle cx="351" cy="201" r="10"/><text x="351" y="205" text-anchor="middle">1</text></g>
-<text class="at" x="345" y="232">first run: picks the root and creates</text>
-<text class="at" x="345" y="249">the profile, from -ConfigTemplate when</text>
-<text class="at" x="345" y="266">given</text>
+<text class="at" x="345" y="232">stops while a machine-wide install is</text>
+<text class="at" x="345" y="249">still there; first run: creates</text>
+<text class="at" x="345" y="266">%USERPROFILE%\LazyVM, open to you and</text>
+<text class="at" x="345" y="283">SYSTEM only, and the profile, from</text>
+<text class="at" x="345" y="300">-ConfigTemplate when given</text>
 </g>
 <g class="bx-store"><rect x="20" y="180" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="194" text-anchor="middle">«registry»</text>
-<text class="nm" x="147.5" y="210" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<text class="nm" x="147.5" y="210" text-anchor="middle">HKCU:\SOFTWARE\LazyVM</text>
 <line class="div" x1="20" y1="217" x2="275" y2="217"/>
 <text class="at" x="30" y="232">Root, if already set</text>
 </g>
 <g class="bx-store"><rect x="20" y="276" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="290" text-anchor="middle">«host»</text>
-<text class="nm" x="147.5" y="306" text-anchor="middle">Fixed drives</text>
+<text class="st" x="147.5" y="290" text-anchor="middle">«registry»</text>
+<text class="nm" x="147.5" y="306" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
 <line class="div" x1="20" y1="313" x2="275" y2="313"/>
-<text class="at" x="30" y="328">NTFS, free space</text>
+<text class="at" x="30" y="328">Root, if still there</text>
 </g>
 <g class="bx-store"><rect x="20" y="372" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="386" text-anchor="middle">«file»</text>
@@ -157,9 +159,9 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="180" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="194" text-anchor="middle">«registry»</text>
-<text class="nm" x="875" y="210" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<text class="nm" x="875" y="210" text-anchor="middle">HKCU:\SOFTWARE\LazyVM</text>
 <line class="div" x1="740" y1="217" x2="1010" y2="217"/>
-<text class="at" x="750" y="232">Root = X:\LazyVM</text>
+<text class="at" x="750" y="232">Root = %USERPROFILE%\LazyVM</text>
 </g>
 <g class="bx-store"><rect x="740" y="276" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="290" text-anchor="middle">«file»</text>
@@ -179,7 +181,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="498" text-anchor="middle">«settings»</text>
 <text class="nm" x="147.5" y="514" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="521" x2="275" y2="521"/>
-<text class="at" x="30" y="536">HKLM:\SOFTWARE\LazyVM Root</text>
+<text class="at" x="30" y="536">HKCU:\SOFTWARE\LazyVM Root</text>
 <text class="at" x="30" y="553">Shared\Config\LazyVM.Settings.json</text>
 <text class="at" x="30" y="570">&lt;VM&gt;\Config\VM.json</text>
 <text class="at" x="30" y="587">&lt;VM&gt;\Credentials\guest.cred</text>
@@ -229,7 +231,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="854" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="868" text-anchor="middle">«registry»</text>
-<text class="nm" x="147.5" y="884" text-anchor="middle">HKLM:\SOFTWARE\LazyVM\&lt;VM&gt;</text>
+<text class="nm" x="147.5" y="884" text-anchor="middle">HKCU:\SOFTWARE\LazyVM\&lt;VM&gt;</text>
 <line class="div" x1="20" y1="891" x2="275" y2="891"/>
 <text class="at" x="30" y="906">ResumePhase</text>
 </g>
@@ -301,7 +303,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="1500" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="1514" text-anchor="middle">«registry»</text>
-<text class="nm" x="875" y="1530" text-anchor="middle">HKLM:\SOFTWARE\LazyVM\&lt;VM&gt;</text>
+<text class="nm" x="875" y="1530" text-anchor="middle">HKCU:\SOFTWARE\LazyVM\&lt;VM&gt;</text>
 <line class="div" x1="740" y1="1537" x2="1010" y2="1537"/>
 <text class="at" x="750" y="1552">ResumePhase = 3</text>
 </g>
@@ -377,15 +379,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="2064" text-anchor="middle">«file»</text>
 <text class="nm" x="147.5" y="2080" text-anchor="middle">Credential store</text>
 <line class="div" x1="20" y1="2087" x2="275" y2="2087"/>
-<text class="at" x="30" y="2102">Shared\Credentials\.lazyvm.key</text>
-<text class="at" x="30" y="2119">&lt;VM&gt;\Credentials\guest.cred</text>
+<text class="at" x="30" y="2102">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="2050" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="2064" text-anchor="middle">«file»</text>
 <text class="nm" x="875" y="2080" text-anchor="middle">Credential store</text>
 <line class="div" x1="740" y1="2087" x2="1010" y2="2087"/>
-<text class="at" x="750" y="2102">Shared\Credentials\.lazyvm.key</text>
-<text class="at" x="750" y="2119">&lt;VM&gt;\Credentials\guest.cred</text>
+<text class="at" x="750" y="2102">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-mod"><rect x="335" y="2196" width="305" height="101" rx="3"/>
 <text class="st" x="500.5" y="2210" text-anchor="middle">«Host»</text>
@@ -543,8 +543,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="3172" text-anchor="middle">«file»</text>
 <text class="nm" x="147.5" y="3188" text-anchor="middle">Credential store</text>
 <line class="div" x1="20" y1="3195" x2="275" y2="3195"/>
-<text class="at" x="30" y="3210">Shared\Credentials\.lazyvm.key</text>
-<text class="at" x="30" y="3227">&lt;VM&gt;\Credentials\guest.cred</text>
+<text class="at" x="30" y="3210">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="3158" width="270" height="101" rx="3"/>
 <text class="st" x="875" y="3172" text-anchor="middle">«task»</text>
@@ -552,6 +551,6 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="740" y1="3195" x2="1010" y2="3195"/>
 <text class="at" x="750" y="3210">LazyVM-Maintain-&lt;VM&gt;</text>
 <text class="at" x="750" y="3227">daily at MaintenanceTime</text>
-<text class="at" x="750" y="3244">runs as SYSTEM</text>
+<text class="at" x="750" y="3244">runs as you</text>
 </g>
 </svg>

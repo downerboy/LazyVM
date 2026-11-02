@@ -1,0 +1,287 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 1713" width="1030" height="1713" role="img" aria-labelledby="t-convert-installation">
+<title id="t-convert-installation">Move a machine-wide install to your account: calls in order, with data flowing in from the left and out to the right</title>
+<style>
+svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
+@media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
+text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(--fg)}
+.bg{fill:var(--bg)}
+.cap{font:600 11px system-ui,"Segoe UI",sans-serif;letter-spacing:.12em;fill:var(--muted)}
+.bx-cmd rect{fill:var(--cmd);stroke:var(--fg);stroke-width:1.6}
+.bx-caller rect{fill:var(--cmd);stroke:var(--call);stroke-width:1.2;stroke-dasharray:3 3}
+.bx-mod rect{fill:var(--mod);stroke:var(--line);stroke-width:1.2}
+.bx-store rect{fill:var(--store);stroke:var(--data);stroke-width:1.2;stroke-dasharray:6 3}
+.st{font-size:10px;fill:var(--muted)}
+.nm{font-size:13px;font-weight:600}
+.div{stroke:var(--line)}
+.at{font-size:11.5px;fill:var(--muted)}
+.cl{fill:none;stroke:var(--call);stroke-width:2}
+.df{fill:none;stroke:var(--data);stroke-width:2;stroke-dasharray:7 4}
+.sn circle{fill:var(--call)} .sn text{font:600 10px system-ui,sans-serif;fill:var(--on)}
+.bd circle{fill:var(--data)} .bd text{font:600 9px system-ui,sans-serif;fill:var(--on)}
+.mk-c{fill:var(--call)} .mk-d{fill:var(--data)}
+</style>
+<defs>
+<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1030" height="1713"/>
+<text class="cap" x="20" y="16">INPUTS</text>
+<text class="cap" x="335" y="16">CALLS IN ORDER</text>
+<text class="cap" x="740" y="16">OUTPUTS</text>
+<path class="cl" d="M335,76 L305,76 L305,1585"/>
+<path class="cl" d="M305,166 L335,166" marker-end="url(#ac)"/>
+<path class="df" d="M275,188 L335,188" marker-end="url(#ad)"/>
+<path class="cl" d="M305,278 L335,278" marker-end="url(#ac)"/>
+<path class="df" d="M640,300 L740,300" marker-end="url(#ad)"/>
+<path class="cl" d="M305,407 L335,407" marker-end="url(#ac)"/>
+<path class="df" d="M275,429 L335,429" marker-end="url(#ad)"/>
+<path class="cl" d="M305,519 L335,519" marker-end="url(#ac)"/>
+<path class="df" d="M640,541 L740,541" marker-end="url(#ad)"/>
+<path class="cl" d="M305,665 L335,665" marker-end="url(#ac)"/>
+<path class="df" d="M275,687 L335,687" marker-end="url(#ad)"/>
+<path class="df" d="M640,687 L740,687" marker-end="url(#ad)"/>
+<path class="cl" d="M305,811 L335,811" marker-end="url(#ac)"/>
+<path class="df" d="M275,833 L335,833" marker-end="url(#ad)"/>
+<path class="df" d="M640,833 L740,833" marker-end="url(#ad)"/>
+<path class="cl" d="M305,957 L335,957" marker-end="url(#ac)"/>
+<path class="df" d="M275,979 L335,979" marker-end="url(#ad)"/>
+<path class="df" d="M640,979 L740,979" marker-end="url(#ad)"/>
+<path class="cl" d="M305,1103 L335,1103" marker-end="url(#ac)"/>
+<path class="df" d="M640,1125 L740,1125" marker-end="url(#ad)"/>
+<path class="cl" d="M305,1215 L335,1215" marker-end="url(#ac)"/>
+<path class="df" d="M640,1237 L740,1237" marker-end="url(#ad)"/>
+<path class="cl" d="M305,1344 L335,1344" marker-end="url(#ac)"/>
+<path class="df" d="M640,1366 L740,1366" marker-end="url(#ad)"/>
+<path class="cl" d="M305,1473 L335,1473" marker-end="url(#ac)"/>
+<path class="df" d="M640,1495 L740,1495" marker-end="url(#ad)"/>
+<path class="cl" d="M305,1585 L335,1585" marker-end="url(#ac)"/>
+<path class="df" d="M640,1624 L740,1624" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="188" r="10"/><text x="293" y="191.5" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="690" cy="300" r="10"/><text x="690" y="303.5" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="293" cy="429" r="10"/><text x="293" y="432.5" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="690" cy="541" r="10"/><text x="690" y="544.5" text-anchor="middle">D4</text></g>
+<g class="bd"><circle cx="293" cy="687" r="10"/><text x="293" y="690.5" text-anchor="middle">D5</text></g>
+<g class="bd"><circle cx="690" cy="687" r="10"/><text x="690" y="690.5" text-anchor="middle">D6</text></g>
+<g class="bd"><circle cx="293" cy="833" r="10"/><text x="293" y="836.5" text-anchor="middle">D7</text></g>
+<g class="bd"><circle cx="690" cy="833" r="10"/><text x="690" y="836.5" text-anchor="middle">D8</text></g>
+<g class="bd"><circle cx="293" cy="979" r="10"/><text x="293" y="982.5" text-anchor="middle">D9</text></g>
+<g class="bd"><circle cx="690" cy="979" r="10"/><text x="690" y="982.5" text-anchor="middle">D10</text></g>
+<g class="bd"><circle cx="690" cy="1125" r="10"/><text x="690" y="1128.5" text-anchor="middle">D11</text></g>
+<g class="bd"><circle cx="690" cy="1237" r="10"/><text x="690" y="1240.5" text-anchor="middle">D12</text></g>
+<g class="bd"><circle cx="690" cy="1366" r="10"/><text x="690" y="1369.5" text-anchor="middle">D13</text></g>
+<g class="bd"><circle cx="690" cy="1495" r="10"/><text x="690" y="1498.5" text-anchor="middle">D14</text></g>
+<g class="bd"><circle cx="690" cy="1624" r="10"/><text x="690" y="1627.5" text-anchor="middle">D15</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
+<text class="nm" x="487.5" y="64" text-anchor="middle">Convert-LazyVMInstallation</text>
+<line class="div" x1="335" y1="71" x2="640" y2="71"/>
+<text class="at" x="345" y="86">-Path &lt;new folder&gt; (optional)</text>
+</g>
+<g class="bx-mod"><rect x="335" y="146" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="160" text-anchor="middle">«Settings»</text>
+<text class="nm" x="500.5" y="176" text-anchor="middle">Get-LegacyRoot()</text>
+<line class="div" x1="335" y1="183" x2="640" y2="183"/>
+<g class="sn"><circle cx="351" cy="167" r="10"/><text x="351" y="171" text-anchor="middle">1</text></g>
+<text class="at" x="345" y="198">nothing to move without one</text>
+</g>
+<g class="bx-store"><rect x="20" y="146" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="160" text-anchor="middle">«registry»</text>
+<text class="nm" x="147.5" y="176" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<line class="div" x1="20" y1="183" x2="275" y2="183"/>
+<text class="at" x="30" y="198">Root</text>
+</g>
+<g class="bx-mod"><rect x="335" y="258" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="272" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="288" text-anchor="middle">Invoke-InstallationMigration()</text>
+<line class="div" x1="335" y1="295" x2="640" y2="295"/>
+<g class="sn"><circle cx="351" cy="279" r="10"/><text x="351" y="283" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="310">runs the steps below, logging to</text>
+<text class="at" x="345" y="327">Shared\Logs\Migration.log in the new</text>
+<text class="at" x="345" y="344">folder</text>
+</g>
+<g class="bx-store"><rect x="740" y="258" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="272" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="288" text-anchor="middle">&lt;new&gt;\Shared\Logs\</text>
+<line class="div" x1="740" y1="295" x2="1010" y2="295"/>
+<text class="at" x="750" y="310">Migration.log</text>
+</g>
+<g class="bx-mod"><rect x="335" y="387" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="401" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="417" text-anchor="middle">Assert-NoRunningTask()</text>
+<line class="div" x1="335" y1="424" x2="640" y2="424"/>
+<g class="sn"><circle cx="351" cy="408" r="10"/><text x="351" y="412" text-anchor="middle">3</text></g>
+<text class="at" x="345" y="439">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="456">stops while a LazyVM task is running</text>
+</g>
+<g class="bx-store"><rect x="20" y="387" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="401" text-anchor="middle">«task»</text>
+<text class="nm" x="147.5" y="417" text-anchor="middle">Task Scheduler</text>
+<line class="div" x1="20" y1="424" x2="275" y2="424"/>
+<text class="at" x="30" y="439">LazyVM-* state</text>
+</g>
+<g class="bx-mod"><rect x="335" y="499" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="513" text-anchor="middle">«Settings»</text>
+<text class="nm" x="500.5" y="529" text-anchor="middle">Initialize-RootFolder()</text>
+<line class="div" x1="335" y1="536" x2="640" y2="536"/>
+<g class="sn"><circle cx="351" cy="520" r="10"/><text x="351" y="524" text-anchor="middle">4</text></g>
+<text class="at" x="345" y="551">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="568">the new folder, open to you and SYSTEM</text>
+<text class="at" x="345" y="585">only; again at the end, so everything</text>
+<text class="at" x="345" y="602">moved in inherits it</text>
+</g>
+<g class="bx-store"><rect x="740" y="499" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="513" text-anchor="middle">«folder»</text>
+<text class="nm" x="875" y="529" text-anchor="middle">&lt;new&gt;</text>
+<line class="div" x1="740" y1="536" x2="1010" y2="536"/>
+<text class="at" x="750" y="551">you + SYSTEM</text>
+<text class="at" x="750" y="568">nothing inherited</text>
+</g>
+<g class="bx-mod"><rect x="335" y="645" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="659" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="675" text-anchor="middle">Move-LegacyTask()</text>
+<line class="div" x1="335" y1="682" x2="640" y2="682"/>
+<g class="sn"><circle cx="351" cy="666" r="10"/><text x="351" y="670" text-anchor="middle">5</text></g>
+<text class="at" x="345" y="697">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="714">first, so no nightly run starts</text>
+<text class="at" x="345" y="731">mid-move; asks for your Windows password</text>
+<text class="at" x="345" y="748">once</text>
+</g>
+<g class="bx-store"><rect x="20" y="645" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="659" text-anchor="middle">«task»</text>
+<text class="nm" x="147.5" y="675" text-anchor="middle">Task Scheduler</text>
+<line class="div" x1="20" y1="682" x2="275" y2="682"/>
+<text class="at" x="30" y="697">LazyVM-Maintain-&lt;VM&gt;</text>
+<text class="at" x="30" y="714">LazyVM-ResumeAfterReboot-&lt;VM&gt;</text>
+</g>
+<g class="bx-store"><rect x="740" y="645" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="659" text-anchor="middle">«task»</text>
+<text class="nm" x="875" y="675" text-anchor="middle">Task Scheduler</text>
+<line class="div" x1="740" y1="682" x2="1010" y2="682"/>
+<text class="at" x="750" y="697">elevated, signed in or not</text>
+</g>
+<g class="bx-mod"><rect x="335" y="791" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="805" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="821" text-anchor="middle">Convert-LegacyCredential()</text>
+<line class="div" x1="335" y1="828" x2="640" y2="828"/>
+<g class="sn"><circle cx="351" cy="812" r="10"/><text x="351" y="816" text-anchor="middle">6</text></g>
+<text class="at" x="345" y="843">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="860">re-encrypts each credential, reads it</text>
+<text class="at" x="345" y="877">back, then replaces the file; deletes</text>
+<text class="at" x="345" y="894">the key once all are done</text>
+</g>
+<g class="bx-store"><rect x="20" y="791" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="805" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="821" text-anchor="middle">&lt;old&gt;</text>
+<line class="div" x1="20" y1="828" x2="275" y2="828"/>
+<text class="at" x="30" y="843">Shared\Credentials\.lazyvm.key</text>
+<text class="at" x="30" y="860">&lt;VM&gt;\Credentials\*.cred</text>
+</g>
+<g class="bx-store"><rect x="740" y="791" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="805" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="821" text-anchor="middle">&lt;old&gt;\&lt;VM&gt;\Credentials\</text>
+<line class="div" x1="740" y1="828" x2="1010" y2="828"/>
+<text class="at" x="750" y="843">*.cred (DPAPI)</text>
+<text class="at" x="750" y="860">key deleted</text>
+</g>
+<g class="bx-mod"><rect x="335" y="937" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="951" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="967" text-anchor="middle">Move-LegacyVMStorage()</text>
+<line class="div" x1="335" y1="974" x2="640" y2="974"/>
+<g class="sn"><circle cx="351" cy="958" r="10"/><text x="351" y="962" text-anchor="middle">7</text></g>
+<text class="at" x="345" y="989">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="1006">unless the folder stays: Hyper-V storage</text>
+<text class="at" x="345" y="1023">migration, the VM keeps running; checks</text>
+<text class="at" x="345" y="1040">free space first</text>
+</g>
+<g class="bx-store"><rect x="20" y="937" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="951" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="147.5" y="967" text-anchor="middle">VMs in &lt;old&gt;</text>
+<line class="div" x1="20" y1="974" x2="275" y2="974"/>
+<text class="at" x="30" y="989">configuration, checkpoints, disks</text>
+</g>
+<g class="bx-store"><rect x="740" y="937" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="951" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875" y="967" text-anchor="middle">&lt;new&gt;\&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="974" x2="1010" y2="974"/>
+<text class="at" x="750" y="989">Virtual Machines, Checkpoints,</text>
+<text class="at" x="750" y="1006">Disks</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1083" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="1097" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="1113" text-anchor="middle">Dismount-LegacyDvdMedia()</text>
+<line class="div" x1="335" y1="1120" x2="640" y2="1120"/>
+<g class="sn"><circle cx="351" cy="1104" r="10"/><text x="351" y="1108" text-anchor="middle">8</text></g>
+<text class="at" x="345" y="1135">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="1152">ejects ISOs attached from the old folder</text>
+</g>
+<g class="bx-store"><rect x="740" y="1083" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="1097" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875" y="1113" text-anchor="middle">VMs</text>
+<line class="div" x1="740" y1="1120" x2="1010" y2="1120"/>
+<text class="at" x="750" y="1135">ejected</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1195" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="1209" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="1225" text-anchor="middle">Move-LegacyFile()</text>
+<line class="div" x1="335" y1="1232" x2="640" y2="1232"/>
+<g class="sn"><circle cx="351" cy="1216" r="10"/><text x="351" y="1220" text-anchor="middle">9</text></g>
+<text class="at" x="345" y="1247">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="1264">every other file, one at a time, to the</text>
+<text class="at" x="345" y="1281">same place</text>
+</g>
+<g class="bx-store"><rect x="740" y="1195" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="1209" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="1225" text-anchor="middle">&lt;new&gt;</text>
+<line class="div" x1="740" y1="1232" x2="1010" y2="1232"/>
+<text class="at" x="750" y="1247">Shared\</text>
+<text class="at" x="750" y="1264">&lt;VM&gt;\</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1324" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="1338" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="1354" text-anchor="middle">Mount-MovedDvdMedia()</text>
+<line class="div" x1="335" y1="1361" x2="640" y2="1361"/>
+<g class="sn"><circle cx="351" cy="1345" r="10"/><text x="351" y="1349" text-anchor="middle">10</text></g>
+<text class="at" x="345" y="1376">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="1393">attaches the ISOs again from the new</text>
+<text class="at" x="345" y="1410">folder</text>
+</g>
+<g class="bx-store"><rect x="740" y="1324" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="1338" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875" y="1354" text-anchor="middle">VMs</text>
+<line class="div" x1="740" y1="1361" x2="1010" y2="1361"/>
+<text class="at" x="750" y="1376">ISO from &lt;new&gt;</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1453" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="1467" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="1483" text-anchor="middle">Copy-LegacyRegistry()</text>
+<line class="div" x1="335" y1="1490" x2="640" y2="1490"/>
+<g class="sn"><circle cx="351" cy="1474" r="10"/><text x="351" y="1478" text-anchor="middle">11</text></g>
+<text class="at" x="345" y="1505">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="1522">the folder and any interrupted build</text>
+</g>
+<g class="bx-store"><rect x="740" y="1453" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="1467" text-anchor="middle">«registry»</text>
+<text class="nm" x="875" y="1483" text-anchor="middle">HKCU:\SOFTWARE\LazyVM</text>
+<line class="div" x1="740" y1="1490" x2="1010" y2="1490"/>
+<text class="at" x="750" y="1505">Root = &lt;new&gt;</text>
+<text class="at" x="750" y="1522">&lt;VM&gt; ResumePhase</text>
+</g>
+<g class="bx-mod"><rect x="335" y="1565" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="1579" text-anchor="middle">«Migration»</text>
+<text class="nm" x="500.5" y="1595" text-anchor="middle">Remove-LegacyInstallation()</text>
+<line class="div" x1="335" y1="1602" x2="640" y2="1602"/>
+<g class="sn"><circle cx="351" cy="1586" r="10"/><text x="351" y="1590" text-anchor="middle">12</text></g>
+<text class="at" x="345" y="1617">called by Invoke-InstallationMigration</text>
+<text class="at" x="345" y="1634">last: the old folder once empty, the</text>
+<text class="at" x="345" y="1651">Program Files copy, then the HKLM key</text>
+</g>
+<g class="bx-store"><rect x="740" y="1565" width="270" height="118" rx="3"/>
+<text class="st" x="875" y="1579" text-anchor="middle">«registry»</text>
+<text class="nm" x="875" y="1595" text-anchor="middle">Machine-wide</text>
+<line class="div" x1="740" y1="1602" x2="1010" y2="1602"/>
+<text class="at" x="750" y="1617">&lt;old&gt; (if empty)</text>
+<text class="at" x="750" y="1634">Program</text>
+<text class="at" x="750" y="1651">Files\PowerShell\Modules\LazyVM</text>
+<text class="at" x="750" y="1668">HKLM:\SOFTWARE\LazyVM</text>
+</g>
+</svg>

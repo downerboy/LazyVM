@@ -12,7 +12,7 @@
             Area     = 'Settings'
             Note     = 'the LazyVM folder; stops if none has been chosen yet'
             Reads    = @(
-                @{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root') }
+                @{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root') }
             )
         }
         @{

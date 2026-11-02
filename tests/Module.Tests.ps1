@@ -37,7 +37,7 @@ Describe 'The module' {
     It 'lets every command that changes something be tried with -WhatIf and confirmed with -Confirm' {
         # Build and Invoke run whole unattended operations, which a WhatIf
         # could not meaningfully preview; the verbs below change one thing.
-        $changing = 'New', 'Set', 'Remove', 'Restore', 'Save', 'Register'
+        $changing = 'New', 'Set', 'Remove', 'Restore', 'Save', 'Register', 'Convert'
         foreach ($command in Get-Command -Module 'LazyVM' | Where-Object { $changing -contains $_.Verb }) {
             $command.Parameters.Keys | Should -Contain 'WhatIf' -Because "$($command.Name) changes something"
         }

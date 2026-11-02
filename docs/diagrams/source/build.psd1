@@ -12,14 +12,15 @@
         @{
             Function = 'Initialize-BuildTarget'
             Area     = 'Settings'
-            Note     = 'first run: picks the root and creates the profile, from -ConfigTemplate when given'
+            Note     = 'stops while a machine-wide install is still there; first run: creates %USERPROFILE%\LazyVM, open to you and SYSTEM only, and the profile, from -ConfigTemplate when given'
+            Includes = @('Assert-NoLegacyInstallation', 'Get-DefaultRoot', 'Initialize-RootFolder')
             Reads    = @(
-                @{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root, if already set') }
-                @{ Label = 'drive with most free space'; Kind = 'host'; Store = 'Fixed drives'; Items = @('NTFS, free space') }
+                @{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root, if already set') }
+                @{ Label = 'machine-wide install'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root, if still there') }
                 @{ Label = 'config template, with -ConfigTemplate'; Kind = 'file'; Store = 'Config templates'; Items = @('Data\Templates\*.json', 'Shared\Templates\*.json') }
             )
             Writes   = @(
-                @{ Label = 'LazyVM folder, first run'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root = X:\LazyVM') }
+                @{ Label = 'LazyVM folder, first run'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root = %USERPROFILE%\LazyVM') }
                 @{ Label = 'settings file and profile, if new'; Kind = 'file'; Store = 'Settings files'; Items = @('Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json') }
             )
         }
@@ -27,7 +28,7 @@
             Function = 'Initialize-CommandRun'
             Area     = 'Common'
             Note     = 'builds the VM context and opens the log'
-            Reads    = @(@{ Label = 'settings, VM profile, guest user name'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKLM:\SOFTWARE\LazyVM  Root', 'Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json', '<VM>\Credentials\guest.cred') })
+            Reads    = @(@{ Label = 'settings, VM profile, guest user name'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKCU:\SOFTWARE\LazyVM  Root', 'Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json', '<VM>\Credentials\guest.cred') })
             Writes   = @(@{ Label = 'run log'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('<VM>.log  (appended)') })
         }
         @{
@@ -47,7 +48,7 @@
             Area     = 'Host'
             Caller   = 'Invoke-VMBuild'
             Note     = 'picks up after a host restart'
-            Reads    = @(@{ Label = 'phase to resume at'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase') })
+            Reads    = @(@{ Label = 'phase to resume at'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase') })
         }
         @{
             Function = 'Invoke-BuildPhase'
@@ -79,7 +80,7 @@
             Note     = 'phase 2; returns RestartPending when the host must restart'
             Writes   = @(
                 @{ Label = 'resume task, only if a restart is needed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-ResumeAfterReboot-<VM>') }
-                @{ Label = 'where to resume'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase = 3') }
+                @{ Label = 'where to resume'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase = 3') }
             )
         }
         @{
@@ -110,8 +111,8 @@
             Area     = 'Credentials'
             Caller   = 'Invoke-BuildPhase'
             Note     = 'phase 6, for a VM that does not exist yet, without -NoUnattend: generates the account if there is none'
-            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('Shared\Credentials\.lazyvm.key', '<VM>\Credentials\guest.cred') })
-            Writes   = @(@{ Label = 'credential, if new'; Kind = 'file'; Store = 'Credential store'; Items = @('Shared\Credentials\.lazyvm.key', '<VM>\Credentials\guest.cred') })
+            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') })
+            Writes   = @(@{ Label = 'credential, if new'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') })
         }
         @{
             Function = 'New-UnattendSeedDisk'
@@ -167,8 +168,8 @@
             Function = 'Register-RebuildSchedule'
             Area     = 'Maintenance'
             Note     = 'a failure here is logged; the build still stands'
-            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('Shared\Credentials\.lazyvm.key', '<VM>\Credentials\guest.cred') })
-            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'runs as SYSTEM') })
+            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') })
+            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'runs as you') })
         }
     )
 }

@@ -23,7 +23,7 @@
             Area     = 'Credentials'
             Note     = 'decrypts with the key'
             Reads    = @(
-                @{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('Shared\Credentials\.lazyvm.key', '<VM>\Credentials\guest.cred') }
+                @{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') }
             )
             Writes   = @(
                 @{ Label = 'credential'; Kind = 'output'; Store = 'Pipeline'; Items = @('PSCredential', 'or user name', 'and password as text') }

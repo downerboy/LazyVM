@@ -11,7 +11,7 @@
             Function = 'Resolve-LazyVMRoot'
             Area     = 'Settings'
             Note     = 'the LazyVM folder'
-            Reads    = @(@{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root') })
+            Reads    = @(@{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root') })
         }
         @{
             Function = 'Resolve-VMSelection'

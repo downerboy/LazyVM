@@ -57,7 +57,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="146" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="160" text-anchor="middle">«folder»</text>
-<text class="nm" x="875" y="176" text-anchor="middle">$env:ProgramFiles\PowerShell\</text>
+<text class="nm" x="875" y="176" text-anchor="middle">Documents\PowerShell\</text>
 <line class="div" x1="740" y1="183" x2="1010" y2="183"/>
 <text class="at" x="750" y="198">Modules\LazyVM\</text>
 <text class="at" x="750" y="215">&lt;version&gt;\</text>

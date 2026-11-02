@@ -144,7 +144,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="64" text-anchor="middle">LazyVM-Maintain-&lt;VM&gt;</text>
 <line class="div" x1="20" y1="71" x2="275" y2="71"/>
 <text class="at" x="30" y="86">daily at MaintenanceTime</text>
-<text class="at" x="30" y="103">as SYSTEM</text>
+<text class="at" x="30" y="103">as the user</text>
 </g>
 <g class="bx-cmd"><rect x="335" y="34" width="305" height="84" rx="3"/>
 <text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
@@ -166,7 +166,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="160" text-anchor="middle">«settings»</text>
 <text class="nm" x="147.5" y="176" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="183" x2="275" y2="183"/>
-<text class="at" x="30" y="198">HKLM:\SOFTWARE\LazyVM Root</text>
+<text class="at" x="30" y="198">HKCU:\SOFTWARE\LazyVM Root</text>
 <text class="at" x="30" y="215">Shared\Config\LazyVM.Settings.json</text>
 <text class="at" x="30" y="232">&lt;VM&gt;\Config\VM.json</text>
 <text class="at" x="30" y="249">&lt;VM&gt;\Credentials\guest.cred</text>
@@ -239,8 +239,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="643" text-anchor="middle">«file»</text>
 <text class="nm" x="147.5" y="659" text-anchor="middle">Credential store</text>
 <line class="div" x1="20" y1="666" x2="275" y2="666"/>
-<text class="at" x="30" y="681">Shared\Credentials\.lazyvm.key</text>
-<text class="at" x="30" y="698">&lt;VM&gt;\Credentials\guest.cred</text>
+<text class="at" x="30" y="681">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
 <g class="bx-store"><rect x="740" y="629" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="643" text-anchor="middle">«Hyper-V»</text>
