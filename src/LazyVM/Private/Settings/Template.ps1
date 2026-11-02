@@ -1,8 +1,11 @@
 ﻿# Template.ps1 - Config templates: named starting points for a new VM.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# A config template is a JSON file with two fields:
+# A config template is a JSON file with these fields:
 #   Name       what it is called, which -ConfigTemplate takes; not the file name
+#   Automatic  true in the one LazyVM keeps up to date for each VM,
+#              <VM>-latest (#292); left out of the user's own
+#   ProfileId  in that one, the ProfileId of the VM it follows
 #   Settings   the settings it changes, like LazyVM.Settings.json
 # The built-in ones are in the module's Data\Templates folder, the user's own
 # in <Root>\Shared\Templates, where Export-LazyVMTemplate saves them.
@@ -44,14 +47,17 @@ function Assert-TemplateName {
 
 function Read-VMTemplateFile {
     <#
-      One config template file: its Name, its path and the settings it
-      changes, checked against the schema. Field names match whatever their
-      case. Throws, saying what is wrong, when it cannot be used.
+      One config template file: its Name, its path, whether LazyVM
+      keeps it up to date (Automatic) and the settings it changes, checked
+      against the schema. Field names match whatever their case. Throws,
+      saying what is wrong, when it cannot be used.
     #>
     [OutputType([pscustomobject])]
     param([Parameter(Mandatory)][string]$Path)
 
     $name = $null
+    $automatic = $false
+    $profileId = $null
     $settings = $null
     $misplaced = [System.Collections.Generic.List[string]]::new()
     $document = Read-SettingsJson -Path $Path
@@ -59,6 +65,8 @@ function Read-VMTemplateFile {
         switch ($key) {
             '$schema' { break }
             'Name' { $name = $document[$key]; break }
+            'Automatic' { $automatic = $document[$key]; break }
+            'ProfileId' { $profileId = $document[$key]; break }
             'Settings' { $settings = $document[$key]; break }
             default { $misplaced.Add("'$key'") }
         }
@@ -70,6 +78,12 @@ function Read-VMTemplateFile {
         throw "This config template needs a Name, such as `"Name`": `"WebDev`":`n  $Path"
     }
     Assert-TemplateName -Name $name -Path $Path
+    if ($automatic -isnot [bool]) {
+        throw "This config template's `"Automatic`" must be true or false; leave it out of your own templates:`n  $Path"
+    }
+    if ($null -ne $profileId -and $profileId -isnot [string]) {
+        throw "This config template's `"ProfileId`" must be text; leave it out of your own templates:`n  $Path"
+    }
     if ($settings -isnot [System.Collections.IDictionary]) {
         throw "This config template needs a Settings table holding the settings it changes, such as `"Settings`": { `"vCPU`": 8 }:`n  $Path"
     }
@@ -82,18 +96,21 @@ function Read-VMTemplateFile {
     }
 
     return [pscustomobject]@{
-        Name     = $name
-        Path     = $Path
-        Settings = $checked
-        Problem  = $null
+        Name      = $name
+        Path      = $Path
+        Automatic = $automatic
+        ProfileId = $profileId
+        Settings  = $checked
+        Problem   = $null
     }
 }
 
 function Get-VMTemplate {
     <#
       Every config template file: the built-in ones, then, with -Root, the
-      user's. Each has its Name, Path, Settings, BuiltIn and Problem; a file
-      that cannot be read has only its Path, BuiltIn and the Problem.
+      user's. Each has its Name, Path, Automatic, Settings, BuiltIn and
+      Problem; a file that cannot be read has only its Path, BuiltIn and the
+      Problem.
     #>
     [OutputType([pscustomobject[]])]
     param([string]$Root)
@@ -108,7 +125,7 @@ function Get-VMTemplate {
                 $template = Read-VMTemplateFile -Path $file.FullName
             }
             catch {
-                $template = [pscustomobject]@{ Name = $null; Path = $file.FullName; Settings = $null; Problem = $_.Exception.Message }
+                $template = [pscustomobject]@{ Name = $null; Path = $file.FullName; Automatic = $false; ProfileId = $null; Settings = $null; Problem = $_.Exception.Message }
             }
             $template | Add-Member -NotePropertyName 'BuiltIn' -NotePropertyValue $folder.BuiltIn -PassThru
         }
@@ -212,21 +229,117 @@ function Export-VMTemplate {
         [Parameter(Mandatory)][string]$TemplateName
     )
 
-    $path = Get-UserTemplatePath -Root $Root -TemplateName $TemplateName
-    # The template points at the schema copies in Shared\Config, for the editor.
-    Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $Root)
     # The tooling list goes in the template, so an older VM's Tooling.json
     # must be in its VM.json first.
     $null = Move-ToolingIntoProfile -Root $Root -Name $Name
-    $settings = Get-ShareableSetting -Root $Root -Name $Name
+    return Write-VMTemplate -Root $Root -TemplateName $TemplateName -Settings (Get-ShareableSetting -Root $Root -Name $Name)
+}
+
+function Write-VMTemplate {
+    <#
+      Writes $Settings as the config template named $TemplateName in
+      <Root>\Shared\Templates; -AutomaticFor marks it as the one LazyVM
+      keeps up to date for the VM with that ProfileId. Returns the template
+      file's path.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$TemplateName,
+        [Parameter(Mandatory)][AllowEmptyCollection()][hashtable]$Settings,
+        [string]$AutomaticFor
+    )
+
+    $path = Get-UserTemplatePath -Root $Root -TemplateName $TemplateName
+    # The template points at the schema copies in Shared\Config, for the editor.
+    Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $Root)
     $document = [ordered]@{
         '$schema' = "../$script:ConfigFolderName/$script:TemplateSchemaFileName"
         Name      = $TemplateName
-        Settings  = [ordered]@{}
     }
-    foreach ($key in @($settings.Keys | Sort-Object)) { $document.Settings[$key] = $settings[$key] }
+    if ($AutomaticFor) {
+        $document.Automatic = $true
+        $document.ProfileId = $AutomaticFor
+    }
+    $document.Settings = [ordered]@{}
+    foreach ($key in @($Settings.Keys | Sort-Object)) { $document.Settings[$key] = $Settings[$key] }
 
     New-Folder -Path (Split-Path -Path $path -Parent)
     Write-TextFileAtomic -Path $path -Text ((ConvertTo-Json -InputObject $document -Depth 20) + [Environment]::NewLine)
+    return $path
+}
+
+function Get-AutomaticTemplateName {
+    <# The name of the config template LazyVM keeps up to date for the VM $Name: <VM>-latest (#292). #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Name)
+
+    return "$Name-$script:AutomaticTemplateSuffix"
+}
+
+function Update-AutomaticTemplate {
+    <#
+      Keeps the config template <VM>-latest, in <Root>\Shared\Templates\
+      <VM>-latest.json, the same as the VM's VM.json, so new VMs can start
+      from it (#292). Update-VMProfile calls it after every change. Its
+      tooling list is what was recorded inside the VM, and its ProfileId the
+      VM's. Writes nothing for a VM not built yet (no VM.Template.json) or
+      with no ProfileId yet, and writes only when the
+      settings a template can hold differ from that file's or, before there
+      is one, from the configuration the VM was first built from (one that
+      cannot be read counts as different). Writes nothing, and the log says
+      why, when another template file has that name, or the file cannot be
+      read, is the user's own (it has no "Automatic": true) or was kept
+      from an earlier VM of the same name (another ProfileId). Returns the
+      template's path when it was written.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    $asBuiltPath = Get-VMAsBuiltProfilePath -Root $Root -Name $Name
+    if (-not (Test-Path -LiteralPath $asBuiltPath -PathType Leaf)) { return }
+    $current = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $Name)
+    $profileId = $current[$script:ProfileIdSettingName]
+    if (-not $profileId) { return }
+
+    $templateName = Get-AutomaticTemplateName -Name $Name
+    $path = Get-UserTemplatePath -Root $Root -TemplateName $templateName
+    $fileName = Split-Path -Path $path -Leaf
+    $userTemplates = @(Get-VMTemplate -Root $Root | Where-Object { -not $_.BuiltIn })
+    $file = @($userTemplates | Where-Object { (Split-Path -Path $_.Path -Leaf) -eq $fileName }) | Select-Object -First 1
+    $sameName = @($userTemplates | Where-Object { $_.Name -eq $templateName -and (Split-Path -Path $_.Path -Leaf) -ne $fileName })
+    $notUpdated = "The config template '$templateName' was not updated from this VM's latest configuration"
+    if ($sameName.Count -gt 0) {
+        Write-LogEntry "$notUpdated, as there would be two config templates named '$templateName'. Rename or delete this one:`n$(($sameName | ForEach-Object { "  $($_.Path)" }) -join "`n")" 'WARN'
+        return
+    }
+    if ($file -and $file.Problem) {
+        Write-LogEntry "$notUpdated, as its file cannot be read; fix or delete it:`n$($file.Problem)" 'WARN'
+        return
+    }
+    if ($file -and -not $file.Automatic) {
+        Write-LogEntry "$notUpdated, as $fileName has no `"Automatic`": true: it is one of your own, and LazyVM never writes over yours. Rename or move it to let LazyVM keep '$templateName':`n  $($file.Path)" 'WARN'
+        return
+    }
+    if ($file -and $file.ProfileId -ne $profileId) {
+        Write-LogEntry "$notUpdated, as $fileName was kept from an earlier VM named $Name, and LazyVM never replaces it. Rename or delete it to let this VM keep its own '$templateName' up to date:`n  $($file.Path)" 'WARN'
+        return
+    }
+
+    $latest = Select-ShareableSetting -Settings $current
+    $previous = if ($file) {
+        $file.Settings
+    }
+    else {
+        try { Select-ShareableSetting -Settings (Read-SettingsFile -Path $asBuiltPath) }
+        catch { $null }
+    }
+    if ($null -ne $previous -and (ConvertTo-ComparableJson $latest) -eq (ConvertTo-ComparableJson $previous)) { return }
+
+    $null = Write-VMTemplate -Root $Root -TemplateName $templateName -Settings $latest -AutomaticFor $profileId
+    Write-LogEntry "Saved this VM's latest configuration as the config template '$templateName'. Its tooling list is what LazyVM recorded inside the VM; build a new VM from it with -ConfigTemplate $templateName`:`n  $path" 'INFO'
     return $path
 }

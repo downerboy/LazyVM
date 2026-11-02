@@ -18,6 +18,14 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,63}$",
       "description": "The template's name, which -ConfigTemplate takes and Tab lists: 1-64 letters, digits or hyphens, starting with a letter or digit. It names the template, not the file, and is never a setting of the VMs built from it."
     },
+    "Automatic": {
+      "type": "boolean",
+      "description": "true in <VM>-latest, the template LazyVM keeps for each VM: LazyVM rewrites it to match the VM, so your edits are replaced unless you remove Automatic. Its tooling list is what LazyVM recorded inside the VM. Leave it out of your own templates."
+    },
+    "ProfileId": {
+      "type": "string",
+      "description": "In <VM>-latest: the ProfileId of the VM it follows, so a new VM of the same name never replaces it. Leave it out of your own templates."
+    },
     "Settings": {
       "$ref": "LazyVM.Settings.schema.json",
       "description": "The settings the template changes, like LazyVM.Settings.json. It cannot hold the settings each VM has its own of: file locations, the computer name, the maintenance time, disk identities and what LazyVM recorded inside a VM."
