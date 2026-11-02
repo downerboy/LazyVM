@@ -127,6 +127,23 @@ $script:WingetExitMeanings = @{
 # break a working install of either. Wildcards as -like takes them.
 $script:WingetUpgradeNever = @('Microsoft.VisualStudio.*', 'Microsoft.SQLServer.*', 'Microsoft.SQLServerManagementStudio*')
 
+# What the Visual Studio Installer's exit codes mean, so a failed nightly
+# update explains itself (#293). From the installer's documentation:
+# https://learn.microsoft.com/visualstudio/install/use-command-line-parameters-to-install-visual-studio#error-codes
+$script:VisualStudioInstallerExitMeanings = @{
+    740         = 'elevation required'
+    1001        = 'the Visual Studio Installer was already running'
+    1003        = 'Visual Studio is in use'
+    1602        = 'the update was canceled'
+    1618        = 'another installation was running'
+    5003        = 'the installer could not be downloaded'
+    5004        = 'the update was canceled'
+    5007        = 'the computer does not meet the requirements'
+    8006        = 'Visual Studio processes were running'
+    -1073720687 = 'the guest could not connect to the internet'
+    -1073741510 = 'the Visual Studio Installer was stopped'
+}
+
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.
 $script:TaskPrefix = 'LazyVM-'

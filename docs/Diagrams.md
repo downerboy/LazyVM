@@ -346,24 +346,32 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM, with -Ro
    - Writes D33, settings applied: Visual Studio (imported settings, pending flag cleared)
 18. `Update-GuestWingetPackage` (Maintenance, called by Invoke-DailyMaintenance): winget upgrades, except Visual Studio, SQL Server, pinned packages and running programs
    - Writes D34, upgraded packages: Running guest (new versions; the tooling list is unchanged)
-19. `Update-GuestWindows` (Maintenance, called by Invoke-DailyMaintenance): quality and security updates; restarts only when nobody can be disturbed
-   - Reads D35, updates: Windows Update (quality and security updates)
-   - Writes D36, patched Windows: Running guest (updates installed, restart now or left pending)
-20. `Get-GuestLicenseStatus` (Maintenance, called by Invoke-DailyMaintenance): days left, rearms left
-   - Reads D37, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
-21. `Get-MaintenanceDecision` (Maintenance, called by Invoke-DailyMaintenance): more than the threshold left, or no countdown: none; rearms left: rearm; otherwise: rebuild
-   - Reads D38, threshold: VM settings (RebuildThresholdDays = 10)
-22. `Test-GuestStateChanged` (Capture, called by Invoke-DailyMaintenance): decision none: has anything only a capture keeps changed since the last capture?
-   - Reads D39, fingerprint now: Running guest (certificates, Visual Studio settings)
-   - Reads D40, fingerprint then: <VM>\State\ (manifest.json)
-23. `Save-GuestState` (Capture, called by Invoke-DailyMaintenance): on a rearm or rebuild, or when the state changed (see Capture state)
-   - Reads D41, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
-   - Writes D42, captured state: <VM>\State\ (Captures\<stamp>\  vs\  windows\, manifest.json, D:\SQLBackup\<database>.bak)
-24. `Invoke-GuestRearm` (Maintenance, called by Invoke-DailyMaintenance): decision rearm: slmgr rearm, then a restart
-   - Writes D43, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
-25. `Stop-GuestGracefully` (Maintenance, called by Invoke-Maintenance): only if the run started the VM, and not before a rebuild
-   - Writes D44, VM back off: VM <VM> (off)
-26. `Invoke-Rebuild -SkipCapture` (Maintenance): only when no rearms are left or the rearm failed (see Rebuild a VM); without -SkipCapture when there is no VM
+19. `Update-GuestVisualStudio` (Maintenance, called by Invoke-DailyMaintenance): Visual Studio Installer update command, for each Visual Studio nobody is using
+   - Writes D35, updated Visual Studio: Visual Studio (new version; the tooling list is unchanged)
+20. `Update-GuestGalleryModule` (Maintenance, called by Invoke-DailyMaintenance): Update-Module for each PowerShell Gallery module, in Windows PowerShell and PowerShell 7
+   - Reads D36, modules: PowerShell Gallery (newer module versions)
+   - Writes D37, updated modules: Running guest (new versions beside the old)
+21. `Update-GuestDotnetTool` (Maintenance, called by Invoke-DailyMaintenance): dotnet tool update for each of the guest account's global tools
+   - Reads D38, tools: NuGet (newer tool versions)
+   - Writes D39, updated tools: Running guest (%USERPROFILE%\.dotnet\tools)
+22. `Update-GuestWindows` (Maintenance, called by Invoke-DailyMaintenance): quality and security updates; restarts only when nobody can be disturbed
+   - Reads D40, updates: Windows Update (quality and security updates)
+   - Writes D41, patched Windows: Running guest (updates installed, restart now or left pending)
+23. `Get-GuestLicenseStatus` (Maintenance, called by Invoke-DailyMaintenance): days left, rearms left
+   - Reads D42, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
+24. `Get-MaintenanceDecision` (Maintenance, called by Invoke-DailyMaintenance): more than the threshold left, or no countdown: none; rearms left: rearm; otherwise: rebuild
+   - Reads D43, threshold: VM settings (RebuildThresholdDays = 10)
+25. `Test-GuestStateChanged` (Capture, called by Invoke-DailyMaintenance): decision none: has anything only a capture keeps changed since the last capture?
+   - Reads D44, fingerprint now: Running guest (certificates, Visual Studio settings)
+   - Reads D45, fingerprint then: <VM>\State\ (manifest.json)
+26. `Save-GuestState` (Capture, called by Invoke-DailyMaintenance): on a rearm or rebuild, or when the state changed (see Capture state)
+   - Reads D46, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
+   - Writes D47, captured state: <VM>\State\ (Captures\<stamp>\  vs\  windows\, manifest.json, D:\SQLBackup\<database>.bak)
+27. `Invoke-GuestRearm` (Maintenance, called by Invoke-DailyMaintenance): decision rearm: slmgr rearm, then a restart
+   - Writes D48, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
+28. `Stop-GuestGracefully` (Maintenance, called by Invoke-Maintenance): only if the run started the VM, and not before a rebuild
+   - Writes D49, VM back off: VM <VM> (off)
+29. `Invoke-Rebuild -SkipCapture` (Maintenance): only when no rearms are left or the rearm failed (see Rebuild a VM); without -SkipCapture when there is no VM
 
 <a id="register-maintenance"></a>
 

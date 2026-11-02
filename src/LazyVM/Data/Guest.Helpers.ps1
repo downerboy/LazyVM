@@ -997,6 +997,196 @@ function Get-GuestInstallerInstance {
     foreach ($instance in (($raw -join "`n") | ConvertFrom-Json)) { $instance }
 }
 
+function Get-GuestVisualStudioInstaller {
+    <# The Visual Studio Installer's setup.exe. Throws when the guest has no installer. #>
+    $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+    if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
+    return $installer
+}
+
+function Get-GuestProcessInFolder {
+    <# The names of the processes running from $Folder or a folder below it, each once. #>
+    param([Parameter(Mandatory)][string]$Folder)
+
+    $prefix = $Folder.TrimEnd('\') + '\'
+    return @(Get-CimInstance -ClassName Win32_Process |
+            Where-Object { "$($_.ExecutablePath)".StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } |
+            ForEach-Object { $_.Name } | Sort-Object -Unique)
+}
+
+# ── Nightly updates from other sources (#293) ────────────────────────────────
+#
+# Each source's helpers list what it has in the guest, each item as
+# @{ Name; Label; Version } (Label is what the log calls it), and update the
+# list with Invoke-GuestItemUpdate, which returns a note for each.
+
+function Invoke-GuestItemUpdate {
+    <#
+      Updates each of $Items with $Update, which is given the item, returns
+      its version afterwards and throws when the update failed. Returns a
+      note for each: updated, up to date, or failed. Once $BudgetMinutes,
+      counted from now, are up, no update starts, so none is cut off halfway
+      by the time limit of the session it runs in.
+    #>
+    [OutputType([pscustomobject])]
+    param(
+        [AllowEmptyCollection()][object[]]$Items = @(),
+        [Parameter(Mandatory)][int]$BudgetMinutes,
+        [Parameter(Mandatory)][scriptblock]$Update
+    )
+
+    $deadline = (Get-Date).AddMinutes($BudgetMinutes)
+    foreach ($item in $Items) {
+        $label = "$($item.Label)"
+        if ((Get-Date) -ge $deadline) {
+            New-GuestNote -Level INFO -Text "not started: $label - tonight's time for updates ran out; tried again tomorrow"
+            continue
+        }
+        try { $after = "$(& $Update $item)" }
+        catch {
+            New-GuestNote -Level WARN -Text "update failed: $label - $($_.Exception.Message)"
+            continue
+        }
+        if ($after -eq "$($item.Version)") { New-GuestNote -Level INFO -Text "up to date: $label $after" }
+        else { New-GuestNote -Level OK -Text "updated: $label $($item.Version) -> $after" }
+    }
+}
+
+function Find-GuestDotnet {
+    <# dotnet.exe, or $null when .NET is not installed. #>
+    $command = Get-Command -Name dotnet -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($command) { return $command.Source }
+    return $null
+}
+
+function ConvertFrom-GuestDotnetToolList {
+    <#
+      The tools in what dotnet tool list printed, each as @{ Name; Version }:
+      the rows under its line of dashes, package id first, version second.
+    #>
+    [OutputType([pscustomobject])]
+    param([AllowEmptyCollection()][string[]]$Lines = @())
+
+    $inTable = $false
+    foreach ($line in $Lines) {
+        if ($line -match '^-{3,}\s*$') { $inTable = $true; continue }
+        $fields = @($line.Trim() -split '\s+')
+        if ($inTable -and $fields.Count -ge 2) { [pscustomobject]@{ Name = $fields[0]; Version = $fields[1] } }
+    }
+}
+
+function Get-GuestDotnetTool {
+    <#
+      The dotnet global tools of the account this runs as, each as
+      @{ Name; Label; Version }; nothing when .NET is not installed.
+    #>
+    [OutputType([pscustomobject])]
+    param()
+
+    $dotnet = Find-GuestDotnet
+    if (-not $dotnet) { return }
+    $lines = @(& $dotnet tool list --global 2>&1 | ForEach-Object { "$_" })
+    foreach ($tool in @(ConvertFrom-GuestDotnetToolList -Lines $lines)) {
+        [pscustomobject]@{ Name = $tool.Name; Label = $tool.Name; Version = $tool.Version }
+    }
+}
+
+function Invoke-GuestDotnetToolUpdate {
+    <# Updates the dotnet global tools $Tools (Get-GuestDotnetTool) one at a time, and returns a note for each (Invoke-GuestItemUpdate). #>
+    [OutputType([pscustomobject])]
+    param(
+        [AllowEmptyCollection()][object[]]$Tools = @(),
+        [Parameter(Mandatory)][int]$BudgetMinutes
+    )
+
+    Invoke-GuestItemUpdate -Items $Tools -BudgetMinutes $BudgetMinutes -Update {
+        param($tool)
+        $output = @(& (Find-GuestDotnet) tool update --global $tool.Name 2>&1 | ForEach-Object { "$_" } | Where-Object { $_.Trim() })
+        if ($LASTEXITCODE -ne 0) { throw "dotnet tool update exit ${LASTEXITCODE}: $(if ($output) { $output[-1] })" }
+        return @(Get-GuestDotnetTool | Where-Object { $_.Name -eq $tool.Name })[0].Version
+    }
+}
+
+function Get-GuestPowerShellEdition {
+    <# The PowerShell editions in the guest, each as @{ Edition; Path }: Windows PowerShell, and PowerShell 7 when it is installed. #>
+    [OutputType([pscustomobject])]
+    param()
+
+    [pscustomobject]@{ Edition = 'Windows PowerShell'; Path = "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" }
+    $pwsh = Get-Command -Name pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($pwsh) { [pscustomobject]@{ Edition = 'PowerShell 7'; Path = $pwsh.Source } }
+}
+
+function Invoke-GuestPowerShellEdition {
+    <#
+      Runs $ScriptBlock in a process of the PowerShell at $Path, without its
+      profile, and returns its output; throws with its error when it fails.
+      Each edition has its own module folders and PowerShellGet, so a module
+      is listed and updated by the edition it was installed in.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock,
+        [object[]]$ArgumentList = @()
+    )
+
+    # Given a script block, PowerShell passes it and its arguments to the other process encoded, never as text to parse.
+    $output = @(& $Path -NoProfile -NonInteractive -Command $ScriptBlock -args $ArgumentList 2>&1)
+    $errors = @($output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+    if ($LASTEXITCODE -ne 0) { throw $(if ($errors) { "$($errors[-1])" } else { "$Path exited with $LASTEXITCODE" }) }
+    return @($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
+}
+
+function Get-GuestGalleryModule {
+    <#
+      The modules installed from the PowerShell Gallery in each PowerShell
+      edition, each as @{ Name; Label; Version; Shell }, Shell being the
+      edition's PowerShell. An edition that cannot be asked is left out.
+    #>
+    [OutputType([pscustomobject])]
+    param()
+
+    foreach ($edition in @(Get-GuestPowerShellEdition)) {
+        try {
+            $modules = @(Invoke-GuestPowerShellEdition -Path $edition.Path -ScriptBlock {
+                    Get-InstalledModule -ErrorAction SilentlyContinue | Where-Object { $_.Repository -eq 'PSGallery' } |
+                        ForEach-Object { [pscustomobject]@{ Name = $_.Name; Version = "$($_.Version)" } }
+                })
+        }
+        catch { continue }
+        foreach ($module in $modules) {
+            [pscustomobject]@{ Name = $module.Name; Label = "$($module.Name) ($($edition.Edition))"; Version = $module.Version; Shell = $edition.Path }
+        }
+    }
+}
+
+function Invoke-GuestGalleryModuleUpdate {
+    <#
+      Updates the PowerShell Gallery modules $Modules (Get-GuestGalleryModule)
+      one at a time with Update-Module, each in its own edition, and returns
+      a note for each (Invoke-GuestItemUpdate). The new version is installed
+      beside the old one, so a session using the module is not disturbed.
+    #>
+    [OutputType([pscustomobject])]
+    param(
+        [AllowEmptyCollection()][object[]]$Modules = @(),
+        [Parameter(Mandatory)][int]$BudgetMinutes
+    )
+
+    Invoke-GuestItemUpdate -Items $Modules -BudgetMinutes $BudgetMinutes -Update {
+        param($module)
+        $version = Invoke-GuestPowerShellEdition -Path $module.Shell -ArgumentList @($module.Name) -ScriptBlock {
+            param($name)
+            $ErrorActionPreference = 'Stop'
+            # Windows PowerShell may offer only TLS 1.0, which the Gallery refuses (https://devblogs.microsoft.com/powershell/powershell-gallery-tls-support/).
+            [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+            Update-Module -Name $name -Force
+            "$((Get-InstalledModule -Name $name).Version)"
+        }
+        return @($version)[-1]
+    }
+}
+
 # ── One-shot scheduled tasks ─────────────────────────────────────────────────
 #
 # Work that must outlive the PowerShell Direct session (long installers), or

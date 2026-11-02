@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 4214" width="1030" height="4214" role="img" aria-labelledby="t-maintenance">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 4618" width="1030" height="4618" role="img" aria-labelledby="t-maintenance">
 <title id="t-maintenance">Daily maintenance: calls in order, with data flowing in from the left and out to the right</title>
 <style>
 svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
@@ -24,11 +24,11 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
 <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
 </defs>
-<rect class="bg" x="0" y="0" width="1030" height="4214"/>
+<rect class="bg" x="0" y="0" width="1030" height="4618"/>
 <text class="cap" x="20" y="16">INPUTS</text>
 <text class="cap" x="335" y="16">CALLS IN ORDER</text>
 <text class="cap" x="740" y="16">OUTPUTS</text>
-<path class="cl" d="M335,76 L305,76 L305,4103"/>
+<path class="cl" d="M335,76 L305,76 L305,4507"/>
 <path class="cl" d="M275,58 L335,58" marker-end="url(#ac)"/>
 <path class="cl" d="M305,166 L335,166" marker-end="url(#ac)"/>
 <path class="df" d="M275,205 L335,205" marker-end="url(#ad)"/>
@@ -83,23 +83,31 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <path class="cl" d="M305,2975 L335,2975" marker-end="url(#ac)"/>
 <path class="df" d="M640,2997 L740,2997" marker-end="url(#ad)"/>
 <path class="cl" d="M305,3121 L335,3121" marker-end="url(#ac)"/>
-<path class="df" d="M275,3143 L335,3143" marker-end="url(#ad)"/>
 <path class="df" d="M640,3143 L740,3143" marker-end="url(#ad)"/>
 <path class="cl" d="M305,3250 L335,3250" marker-end="url(#ac)"/>
 <path class="df" d="M275,3272 L335,3272" marker-end="url(#ad)"/>
-<path class="cl" d="M305,3362 L335,3362" marker-end="url(#ac)"/>
-<path class="df" d="M275,3384 L335,3384" marker-end="url(#ad)"/>
-<path class="cl" d="M305,3508 L335,3508" marker-end="url(#ac)"/>
-<path class="df" d="M275,3530 L335,3530" marker-end="url(#ad)"/>
-<path class="df" d="M275,3626 L335,3626" marker-end="url(#ad)"/>
-<path class="cl" d="M305,3716 L335,3716" marker-end="url(#ac)"/>
-<path class="df" d="M275,3746.5 L335,3746.5" marker-end="url(#ad)"/>
-<path class="df" d="M640,3746.5 L740,3746.5" marker-end="url(#ad)"/>
-<path class="cl" d="M305,3845 L335,3845" marker-end="url(#ac)"/>
-<path class="df" d="M640,3867 L740,3867" marker-end="url(#ad)"/>
-<path class="cl" d="M305,3974 L335,3974" marker-end="url(#ac)"/>
-<path class="df" d="M640,3996 L740,3996" marker-end="url(#ad)"/>
-<path class="cl" d="M305,4103 L335,4103" marker-end="url(#ac)"/>
+<path class="df" d="M640,3272 L740,3272" marker-end="url(#ad)"/>
+<path class="cl" d="M305,3396 L335,3396" marker-end="url(#ac)"/>
+<path class="df" d="M275,3418 L335,3418" marker-end="url(#ad)"/>
+<path class="df" d="M640,3418 L740,3418" marker-end="url(#ad)"/>
+<path class="cl" d="M305,3525 L335,3525" marker-end="url(#ac)"/>
+<path class="df" d="M275,3547 L335,3547" marker-end="url(#ad)"/>
+<path class="df" d="M640,3547 L740,3547" marker-end="url(#ad)"/>
+<path class="cl" d="M305,3654 L335,3654" marker-end="url(#ac)"/>
+<path class="df" d="M275,3676 L335,3676" marker-end="url(#ad)"/>
+<path class="cl" d="M305,3766 L335,3766" marker-end="url(#ac)"/>
+<path class="df" d="M275,3788 L335,3788" marker-end="url(#ad)"/>
+<path class="cl" d="M305,3912 L335,3912" marker-end="url(#ac)"/>
+<path class="df" d="M275,3934 L335,3934" marker-end="url(#ad)"/>
+<path class="df" d="M275,4030 L335,4030" marker-end="url(#ad)"/>
+<path class="cl" d="M305,4120 L335,4120" marker-end="url(#ac)"/>
+<path class="df" d="M275,4150.5 L335,4150.5" marker-end="url(#ad)"/>
+<path class="df" d="M640,4150.5 L740,4150.5" marker-end="url(#ad)"/>
+<path class="cl" d="M305,4249 L335,4249" marker-end="url(#ac)"/>
+<path class="df" d="M640,4271 L740,4271" marker-end="url(#ad)"/>
+<path class="cl" d="M305,4378 L335,4378" marker-end="url(#ac)"/>
+<path class="df" d="M640,4400 L740,4400" marker-end="url(#ad)"/>
+<path class="cl" d="M305,4507 L335,4507" marker-end="url(#ac)"/>
 <g class="bd"><circle cx="293" cy="205" r="10"/><text x="293" y="208.5" text-anchor="middle">D1</text></g>
 <g class="bd"><circle cx="293" cy="318" r="10"/><text x="293" y="321.5" text-anchor="middle">D2</text></g>
 <g class="bd"><circle cx="690" cy="188" r="10"/><text x="690" y="191.5" text-anchor="middle">D3</text></g>
@@ -134,16 +142,21 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <g class="bd"><circle cx="293" cy="2834" r="10"/><text x="293" y="2837.5" text-anchor="middle">D32</text></g>
 <g class="bd"><circle cx="690" cy="2834" r="10"/><text x="690" y="2837.5" text-anchor="middle">D33</text></g>
 <g class="bd"><circle cx="690" cy="2997" r="10"/><text x="690" y="3000.5" text-anchor="middle">D34</text></g>
-<g class="bd"><circle cx="293" cy="3143" r="10"/><text x="293" y="3146.5" text-anchor="middle">D35</text></g>
-<g class="bd"><circle cx="690" cy="3143" r="10"/><text x="690" y="3146.5" text-anchor="middle">D36</text></g>
-<g class="bd"><circle cx="293" cy="3272" r="10"/><text x="293" y="3275.5" text-anchor="middle">D37</text></g>
-<g class="bd"><circle cx="293" cy="3384" r="10"/><text x="293" y="3387.5" text-anchor="middle">D38</text></g>
-<g class="bd"><circle cx="293" cy="3530" r="10"/><text x="293" y="3533.5" text-anchor="middle">D39</text></g>
-<g class="bd"><circle cx="293" cy="3626" r="10"/><text x="293" y="3629.5" text-anchor="middle">D40</text></g>
-<g class="bd"><circle cx="293" cy="3746.5" r="10"/><text x="293" y="3750" text-anchor="middle">D41</text></g>
-<g class="bd"><circle cx="690" cy="3746.5" r="10"/><text x="690" y="3750" text-anchor="middle">D42</text></g>
-<g class="bd"><circle cx="690" cy="3867" r="10"/><text x="690" y="3870.5" text-anchor="middle">D43</text></g>
-<g class="bd"><circle cx="690" cy="3996" r="10"/><text x="690" y="3999.5" text-anchor="middle">D44</text></g>
+<g class="bd"><circle cx="690" cy="3143" r="10"/><text x="690" y="3146.5" text-anchor="middle">D35</text></g>
+<g class="bd"><circle cx="293" cy="3272" r="10"/><text x="293" y="3275.5" text-anchor="middle">D36</text></g>
+<g class="bd"><circle cx="690" cy="3272" r="10"/><text x="690" y="3275.5" text-anchor="middle">D37</text></g>
+<g class="bd"><circle cx="293" cy="3418" r="10"/><text x="293" y="3421.5" text-anchor="middle">D38</text></g>
+<g class="bd"><circle cx="690" cy="3418" r="10"/><text x="690" y="3421.5" text-anchor="middle">D39</text></g>
+<g class="bd"><circle cx="293" cy="3547" r="10"/><text x="293" y="3550.5" text-anchor="middle">D40</text></g>
+<g class="bd"><circle cx="690" cy="3547" r="10"/><text x="690" y="3550.5" text-anchor="middle">D41</text></g>
+<g class="bd"><circle cx="293" cy="3676" r="10"/><text x="293" y="3679.5" text-anchor="middle">D42</text></g>
+<g class="bd"><circle cx="293" cy="3788" r="10"/><text x="293" y="3791.5" text-anchor="middle">D43</text></g>
+<g class="bd"><circle cx="293" cy="3934" r="10"/><text x="293" y="3937.5" text-anchor="middle">D44</text></g>
+<g class="bd"><circle cx="293" cy="4030" r="10"/><text x="293" y="4033.5" text-anchor="middle">D45</text></g>
+<g class="bd"><circle cx="293" cy="4150.5" r="10"/><text x="293" y="4154" text-anchor="middle">D46</text></g>
+<g class="bd"><circle cx="690" cy="4150.5" r="10"/><text x="690" y="4154" text-anchor="middle">D47</text></g>
+<g class="bd"><circle cx="690" cy="4271" r="10"/><text x="690" y="4274.5" text-anchor="middle">D48</text></g>
+<g class="bd"><circle cx="690" cy="4400" r="10"/><text x="690" y="4403.5" text-anchor="middle">D49</text></g>
 <g class="bx-caller"><rect x="20" y="34" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="48" text-anchor="middle">«task»</text>
 <text class="nm" x="147.5" y="64" text-anchor="middle">LazyVM-Maintain-&lt;VM&gt;</text>
@@ -562,143 +575,202 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-mod"><rect x="335" y="3101" width="305" height="101" rx="3"/>
 <text class="st" x="500.5" y="3115" text-anchor="middle">«Maintenance»</text>
-<text class="nm" x="500.5" y="3131" text-anchor="middle">Update-GuestWindows()</text>
+<text class="nm" x="500.5" y="3131" text-anchor="middle">Update-GuestVisualStudio()</text>
 <line class="div" x1="335" y1="3138" x2="640" y2="3138"/>
 <g class="sn"><circle cx="351" cy="3122" r="10"/><text x="351" y="3126" text-anchor="middle">19</text></g>
 <text class="at" x="345" y="3153">called by Invoke-DailyMaintenance</text>
-<text class="at" x="345" y="3170">quality and security updates; restarts</text>
-<text class="at" x="345" y="3187">only when nobody can be disturbed</text>
-</g>
-<g class="bx-store"><rect x="20" y="3101" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="3115" text-anchor="middle">«web»</text>
-<text class="nm" x="147.5" y="3131" text-anchor="middle">Windows Update</text>
-<line class="div" x1="20" y1="3138" x2="275" y2="3138"/>
-<text class="at" x="30" y="3153">quality and security updates</text>
+<text class="at" x="345" y="3170">Visual Studio Installer update command,</text>
+<text class="at" x="345" y="3187">for each Visual Studio nobody is using</text>
 </g>
 <g class="bx-store"><rect x="740" y="3101" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="3115" text-anchor="middle">«guest»</text>
-<text class="nm" x="875" y="3131" text-anchor="middle">Running guest</text>
+<text class="nm" x="875" y="3131" text-anchor="middle">Visual Studio</text>
 <line class="div" x1="740" y1="3138" x2="1010" y2="3138"/>
-<text class="at" x="750" y="3153">updates installed</text>
-<text class="at" x="750" y="3170">restart now or left pending</text>
+<text class="at" x="750" y="3153">new version; the tooling list is</text>
+<text class="at" x="750" y="3170">unchanged</text>
 </g>
-<g class="bx-mod"><rect x="335" y="3230" width="305" height="84" rx="3"/>
+<g class="bx-mod"><rect x="335" y="3230" width="305" height="118" rx="3"/>
 <text class="st" x="500.5" y="3244" text-anchor="middle">«Maintenance»</text>
-<text class="nm" x="500.5" y="3260" text-anchor="middle">Get-GuestLicenseStatus()</text>
+<text class="nm" x="500.5" y="3260" text-anchor="middle">Update-GuestGalleryModule()</text>
 <line class="div" x1="335" y1="3267" x2="640" y2="3267"/>
 <g class="sn"><circle cx="351" cy="3251" r="10"/><text x="351" y="3255" text-anchor="middle">20</text></g>
 <text class="at" x="345" y="3282">called by Invoke-DailyMaintenance</text>
-<text class="at" x="345" y="3299">days left, rearms left</text>
+<text class="at" x="345" y="3299">Update-Module for each PowerShell</text>
+<text class="at" x="345" y="3316">Gallery module, in Windows PowerShell</text>
+<text class="at" x="345" y="3333">and PowerShell 7</text>
 </g>
 <g class="bx-store"><rect x="20" y="3230" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="3244" text-anchor="middle">«guest»</text>
-<text class="nm" x="147.5" y="3260" text-anchor="middle">Running guest</text>
+<text class="st" x="147.5" y="3244" text-anchor="middle">«web»</text>
+<text class="nm" x="147.5" y="3260" text-anchor="middle">PowerShell Gallery</text>
 <line class="div" x1="20" y1="3267" x2="275" y2="3267"/>
-<text class="at" x="30" y="3282">SoftwareLicensingProduct</text>
-<text class="at" x="30" y="3299">SoftwareLicensingService</text>
+<text class="at" x="30" y="3282">newer module versions</text>
 </g>
-<g class="bx-mod"><rect x="335" y="3342" width="305" height="118" rx="3"/>
-<text class="st" x="500.5" y="3356" text-anchor="middle">«Maintenance»</text>
-<text class="nm" x="500.5" y="3372" text-anchor="middle">Get-MaintenanceDecision()</text>
-<line class="div" x1="335" y1="3379" x2="640" y2="3379"/>
-<g class="sn"><circle cx="351" cy="3363" r="10"/><text x="351" y="3367" text-anchor="middle">21</text></g>
-<text class="at" x="345" y="3394">called by Invoke-DailyMaintenance</text>
-<text class="at" x="345" y="3411">more than the threshold left, or no</text>
-<text class="at" x="345" y="3428">countdown: none; rearms left: rearm;</text>
-<text class="at" x="345" y="3445">otherwise: rebuild</text>
+<g class="bx-store"><rect x="740" y="3230" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="3244" text-anchor="middle">«guest»</text>
+<text class="nm" x="875" y="3260" text-anchor="middle">Running guest</text>
+<line class="div" x1="740" y1="3267" x2="1010" y2="3267"/>
+<text class="at" x="750" y="3282">new versions beside the old</text>
 </g>
-<g class="bx-store"><rect x="20" y="3342" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="3356" text-anchor="middle">«setting»</text>
-<text class="nm" x="147.5" y="3372" text-anchor="middle">VM settings</text>
-<line class="div" x1="20" y1="3379" x2="275" y2="3379"/>
-<text class="at" x="30" y="3394">RebuildThresholdDays = 10</text>
+<g class="bx-mod"><rect x="335" y="3376" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="3390" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="500.5" y="3406" text-anchor="middle">Update-GuestDotnetTool()</text>
+<line class="div" x1="335" y1="3413" x2="640" y2="3413"/>
+<g class="sn"><circle cx="351" cy="3397" r="10"/><text x="351" y="3401" text-anchor="middle">21</text></g>
+<text class="at" x="345" y="3428">called by Invoke-DailyMaintenance</text>
+<text class="at" x="345" y="3445">dotnet tool update for each of the guest</text>
+<text class="at" x="345" y="3462">account&apos;s global tools</text>
 </g>
-<g class="bx-mod"><rect x="335" y="3488" width="305" height="180" rx="3"/>
-<text class="st" x="500.5" y="3502" text-anchor="middle">«Capture»</text>
-<text class="nm" x="500.5" y="3518" text-anchor="middle">Test-GuestStateChanged()</text>
-<line class="div" x1="335" y1="3525" x2="640" y2="3525"/>
-<g class="sn"><circle cx="351" cy="3509" r="10"/><text x="351" y="3513" text-anchor="middle">22</text></g>
-<text class="at" x="345" y="3540">called by Invoke-DailyMaintenance</text>
-<text class="at" x="345" y="3557">decision none: has anything only a</text>
-<text class="at" x="345" y="3574">capture keeps changed since the last</text>
-<text class="at" x="345" y="3591">capture?</text>
+<g class="bx-store"><rect x="20" y="3376" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="3390" text-anchor="middle">«web»</text>
+<text class="nm" x="147.5" y="3406" text-anchor="middle">NuGet</text>
+<line class="div" x1="20" y1="3413" x2="275" y2="3413"/>
+<text class="at" x="30" y="3428">newer tool versions</text>
 </g>
-<g class="bx-store"><rect x="20" y="3488" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="3502" text-anchor="middle">«guest»</text>
-<text class="nm" x="147.5" y="3518" text-anchor="middle">Running guest</text>
-<line class="div" x1="20" y1="3525" x2="275" y2="3525"/>
-<text class="at" x="30" y="3540">certificates, Visual Studio</text>
-<text class="at" x="30" y="3557">settings</text>
+<g class="bx-store"><rect x="740" y="3376" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="3390" text-anchor="middle">«guest»</text>
+<text class="nm" x="875" y="3406" text-anchor="middle">Running guest</text>
+<line class="div" x1="740" y1="3413" x2="1010" y2="3413"/>
+<text class="at" x="750" y="3428">%USERPROFILE%\.dotnet\tools</text>
 </g>
-<g class="bx-store"><rect x="20" y="3584" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="3598" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="3614" text-anchor="middle">&lt;VM&gt;\State\</text>
-<line class="div" x1="20" y1="3621" x2="275" y2="3621"/>
-<text class="at" x="30" y="3636">manifest.json</text>
+<g class="bx-mod"><rect x="335" y="3505" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="3519" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="500.5" y="3535" text-anchor="middle">Update-GuestWindows()</text>
+<line class="div" x1="335" y1="3542" x2="640" y2="3542"/>
+<g class="sn"><circle cx="351" cy="3526" r="10"/><text x="351" y="3530" text-anchor="middle">22</text></g>
+<text class="at" x="345" y="3557">called by Invoke-DailyMaintenance</text>
+<text class="at" x="345" y="3574">quality and security updates; restarts</text>
+<text class="at" x="345" y="3591">only when nobody can be disturbed</text>
 </g>
-<g class="bx-mod"><rect x="335" y="3696" width="305" height="101" rx="3"/>
-<text class="st" x="500.5" y="3710" text-anchor="middle">«Capture»</text>
-<text class="nm" x="500.5" y="3726" text-anchor="middle">Save-GuestState()</text>
-<line class="div" x1="335" y1="3733" x2="640" y2="3733"/>
-<g class="sn"><circle cx="351" cy="3717" r="10"/><text x="351" y="3721" text-anchor="middle">23</text></g>
-<text class="at" x="345" y="3748">called by Invoke-DailyMaintenance</text>
-<text class="at" x="345" y="3765">on a rearm or rebuild, or when the state</text>
-<text class="at" x="345" y="3782">changed (see Capture state)</text>
+<g class="bx-store"><rect x="20" y="3505" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="3519" text-anchor="middle">«web»</text>
+<text class="nm" x="147.5" y="3535" text-anchor="middle">Windows Update</text>
+<line class="div" x1="20" y1="3542" x2="275" y2="3542"/>
+<text class="at" x="30" y="3557">quality and security updates</text>
 </g>
-<g class="bx-store"><rect x="20" y="3696" width="255" height="101" rx="3"/>
-<text class="st" x="147.5" y="3710" text-anchor="middle">«guest»</text>
-<text class="nm" x="147.5" y="3726" text-anchor="middle">Running guest</text>
-<line class="div" x1="20" y1="3733" x2="275" y2="3733"/>
-<text class="at" x="30" y="3748">VS settings</text>
-<text class="at" x="30" y="3765">SQL databases + logins</text>
-<text class="at" x="30" y="3782">env, certs, tasks, apps</text>
+<g class="bx-store"><rect x="740" y="3505" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="3519" text-anchor="middle">«guest»</text>
+<text class="nm" x="875" y="3535" text-anchor="middle">Running guest</text>
+<line class="div" x1="740" y1="3542" x2="1010" y2="3542"/>
+<text class="at" x="750" y="3557">updates installed</text>
+<text class="at" x="750" y="3574">restart now or left pending</text>
 </g>
-<g class="bx-store"><rect x="740" y="3696" width="270" height="101" rx="3"/>
-<text class="st" x="875" y="3710" text-anchor="middle">«folder»</text>
-<text class="nm" x="875" y="3726" text-anchor="middle">&lt;VM&gt;\State\</text>
-<line class="div" x1="740" y1="3733" x2="1010" y2="3733"/>
-<text class="at" x="750" y="3748">Captures\&lt;stamp&gt;\ vs\ windows\</text>
-<text class="at" x="750" y="3765">manifest.json</text>
-<text class="at" x="750" y="3782">D:\SQLBackup\&lt;database&gt;.bak</text>
+<g class="bx-mod"><rect x="335" y="3634" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="3648" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="500.5" y="3664" text-anchor="middle">Get-GuestLicenseStatus()</text>
+<line class="div" x1="335" y1="3671" x2="640" y2="3671"/>
+<g class="sn"><circle cx="351" cy="3655" r="10"/><text x="351" y="3659" text-anchor="middle">23</text></g>
+<text class="at" x="345" y="3686">called by Invoke-DailyMaintenance</text>
+<text class="at" x="345" y="3703">days left, rearms left</text>
 </g>
-<g class="bx-mod"><rect x="335" y="3825" width="305" height="101" rx="3"/>
-<text class="st" x="500.5" y="3839" text-anchor="middle">«Maintenance»</text>
-<text class="nm" x="500.5" y="3855" text-anchor="middle">Invoke-GuestRearm()</text>
-<line class="div" x1="335" y1="3862" x2="640" y2="3862"/>
-<g class="sn"><circle cx="351" cy="3846" r="10"/><text x="351" y="3850" text-anchor="middle">24</text></g>
-<text class="at" x="345" y="3877">called by Invoke-DailyMaintenance</text>
-<text class="at" x="345" y="3894">decision rearm: slmgr rearm, then a</text>
-<text class="at" x="345" y="3911">restart</text>
+<g class="bx-store"><rect x="20" y="3634" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="3648" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="3664" text-anchor="middle">Running guest</text>
+<line class="div" x1="20" y1="3671" x2="275" y2="3671"/>
+<text class="at" x="30" y="3686">SoftwareLicensingProduct</text>
+<text class="at" x="30" y="3703">SoftwareLicensingService</text>
 </g>
-<g class="bx-store"><rect x="740" y="3825" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="3839" text-anchor="middle">«guest»</text>
-<text class="nm" x="875" y="3855" text-anchor="middle">Running guest</text>
-<line class="div" x1="740" y1="3862" x2="1010" y2="3862"/>
-<text class="at" x="750" y="3877">evaluation reset to 90 days</text>
-<text class="at" x="750" y="3894">one rearm used</text>
+<g class="bx-mod"><rect x="335" y="3746" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="3760" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="500.5" y="3776" text-anchor="middle">Get-MaintenanceDecision()</text>
+<line class="div" x1="335" y1="3783" x2="640" y2="3783"/>
+<g class="sn"><circle cx="351" cy="3767" r="10"/><text x="351" y="3771" text-anchor="middle">24</text></g>
+<text class="at" x="345" y="3798">called by Invoke-DailyMaintenance</text>
+<text class="at" x="345" y="3815">more than the threshold left, or no</text>
+<text class="at" x="345" y="3832">countdown: none; rearms left: rearm;</text>
+<text class="at" x="345" y="3849">otherwise: rebuild</text>
 </g>
-<g class="bx-mod"><rect x="335" y="3954" width="305" height="101" rx="3"/>
-<text class="st" x="500.5" y="3968" text-anchor="middle">«Maintenance»</text>
-<text class="nm" x="500.5" y="3984" text-anchor="middle">Stop-GuestGracefully()</text>
-<line class="div" x1="335" y1="3991" x2="640" y2="3991"/>
-<g class="sn"><circle cx="351" cy="3975" r="10"/><text x="351" y="3979" text-anchor="middle">25</text></g>
-<text class="at" x="345" y="4006">called by Invoke-Maintenance</text>
-<text class="at" x="345" y="4023">only if the run started the VM, and not</text>
-<text class="at" x="345" y="4040">before a rebuild</text>
+<g class="bx-store"><rect x="20" y="3746" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="3760" text-anchor="middle">«setting»</text>
+<text class="nm" x="147.5" y="3776" text-anchor="middle">VM settings</text>
+<line class="div" x1="20" y1="3783" x2="275" y2="3783"/>
+<text class="at" x="30" y="3798">RebuildThresholdDays = 10</text>
 </g>
-<g class="bx-store"><rect x="740" y="3954" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="3968" text-anchor="middle">«Hyper-V»</text>
-<text class="nm" x="875" y="3984" text-anchor="middle">VM &lt;VM&gt;</text>
-<line class="div" x1="740" y1="3991" x2="1010" y2="3991"/>
-<text class="at" x="750" y="4006">off</text>
+<g class="bx-mod"><rect x="335" y="3892" width="305" height="180" rx="3"/>
+<text class="st" x="500.5" y="3906" text-anchor="middle">«Capture»</text>
+<text class="nm" x="500.5" y="3922" text-anchor="middle">Test-GuestStateChanged()</text>
+<line class="div" x1="335" y1="3929" x2="640" y2="3929"/>
+<g class="sn"><circle cx="351" cy="3913" r="10"/><text x="351" y="3917" text-anchor="middle">25</text></g>
+<text class="at" x="345" y="3944">called by Invoke-DailyMaintenance</text>
+<text class="at" x="345" y="3961">decision none: has anything only a</text>
+<text class="at" x="345" y="3978">capture keeps changed since the last</text>
+<text class="at" x="345" y="3995">capture?</text>
 </g>
-<g class="bx-mod"><rect x="335" y="4083" width="305" height="101" rx="3"/>
-<text class="st" x="500.5" y="4097" text-anchor="middle">«Maintenance»</text>
-<text class="nm" x="500.5" y="4113" text-anchor="middle">Invoke-Rebuild -SkipCapture</text>
-<line class="div" x1="335" y1="4120" x2="640" y2="4120"/>
-<g class="sn"><circle cx="351" cy="4104" r="10"/><text x="351" y="4108" text-anchor="middle">26</text></g>
-<text class="at" x="345" y="4135">only when no rearms are left or the</text>
-<text class="at" x="345" y="4152">rearm failed (see Rebuild a VM); without</text>
-<text class="at" x="345" y="4169">-SkipCapture when there is no VM</text>
+<g class="bx-store"><rect x="20" y="3892" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="3906" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="3922" text-anchor="middle">Running guest</text>
+<line class="div" x1="20" y1="3929" x2="275" y2="3929"/>
+<text class="at" x="30" y="3944">certificates, Visual Studio</text>
+<text class="at" x="30" y="3961">settings</text>
+</g>
+<g class="bx-store"><rect x="20" y="3988" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="4002" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="4018" text-anchor="middle">&lt;VM&gt;\State\</text>
+<line class="div" x1="20" y1="4025" x2="275" y2="4025"/>
+<text class="at" x="30" y="4040">manifest.json</text>
+</g>
+<g class="bx-mod"><rect x="335" y="4100" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="4114" text-anchor="middle">«Capture»</text>
+<text class="nm" x="500.5" y="4130" text-anchor="middle">Save-GuestState()</text>
+<line class="div" x1="335" y1="4137" x2="640" y2="4137"/>
+<g class="sn"><circle cx="351" cy="4121" r="10"/><text x="351" y="4125" text-anchor="middle">26</text></g>
+<text class="at" x="345" y="4152">called by Invoke-DailyMaintenance</text>
+<text class="at" x="345" y="4169">on a rearm or rebuild, or when the state</text>
+<text class="at" x="345" y="4186">changed (see Capture state)</text>
+</g>
+<g class="bx-store"><rect x="20" y="4100" width="255" height="101" rx="3"/>
+<text class="st" x="147.5" y="4114" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="4130" text-anchor="middle">Running guest</text>
+<line class="div" x1="20" y1="4137" x2="275" y2="4137"/>
+<text class="at" x="30" y="4152">VS settings</text>
+<text class="at" x="30" y="4169">SQL databases + logins</text>
+<text class="at" x="30" y="4186">env, certs, tasks, apps</text>
+</g>
+<g class="bx-store"><rect x="740" y="4100" width="270" height="101" rx="3"/>
+<text class="st" x="875" y="4114" text-anchor="middle">«folder»</text>
+<text class="nm" x="875" y="4130" text-anchor="middle">&lt;VM&gt;\State\</text>
+<line class="div" x1="740" y1="4137" x2="1010" y2="4137"/>
+<text class="at" x="750" y="4152">Captures\&lt;stamp&gt;\ vs\ windows\</text>
+<text class="at" x="750" y="4169">manifest.json</text>
+<text class="at" x="750" y="4186">D:\SQLBackup\&lt;database&gt;.bak</text>
+</g>
+<g class="bx-mod"><rect x="335" y="4229" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="4243" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="500.5" y="4259" text-anchor="middle">Invoke-GuestRearm()</text>
+<line class="div" x1="335" y1="4266" x2="640" y2="4266"/>
+<g class="sn"><circle cx="351" cy="4250" r="10"/><text x="351" y="4254" text-anchor="middle">27</text></g>
+<text class="at" x="345" y="4281">called by Invoke-DailyMaintenance</text>
+<text class="at" x="345" y="4298">decision rearm: slmgr rearm, then a</text>
+<text class="at" x="345" y="4315">restart</text>
+</g>
+<g class="bx-store"><rect x="740" y="4229" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="4243" text-anchor="middle">«guest»</text>
+<text class="nm" x="875" y="4259" text-anchor="middle">Running guest</text>
+<line class="div" x1="740" y1="4266" x2="1010" y2="4266"/>
+<text class="at" x="750" y="4281">evaluation reset to 90 days</text>
+<text class="at" x="750" y="4298">one rearm used</text>
+</g>
+<g class="bx-mod"><rect x="335" y="4358" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="4372" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="500.5" y="4388" text-anchor="middle">Stop-GuestGracefully()</text>
+<line class="div" x1="335" y1="4395" x2="640" y2="4395"/>
+<g class="sn"><circle cx="351" cy="4379" r="10"/><text x="351" y="4383" text-anchor="middle">28</text></g>
+<text class="at" x="345" y="4410">called by Invoke-Maintenance</text>
+<text class="at" x="345" y="4427">only if the run started the VM, and not</text>
+<text class="at" x="345" y="4444">before a rebuild</text>
+</g>
+<g class="bx-store"><rect x="740" y="4358" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="4372" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875" y="4388" text-anchor="middle">VM &lt;VM&gt;</text>
+<line class="div" x1="740" y1="4395" x2="1010" y2="4395"/>
+<text class="at" x="750" y="4410">off</text>
+</g>
+<g class="bx-mod"><rect x="335" y="4487" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="4501" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="500.5" y="4517" text-anchor="middle">Invoke-Rebuild -SkipCapture</text>
+<line class="div" x1="335" y1="4524" x2="640" y2="4524"/>
+<g class="sn"><circle cx="351" cy="4508" r="10"/><text x="351" y="4512" text-anchor="middle">29</text></g>
+<text class="at" x="345" y="4539">only when no rearms are left or the</text>
+<text class="at" x="345" y="4556">rearm failed (see Rebuild a VM); without</text>
+<text class="at" x="345" y="4573">-SkipCapture when there is no VM</text>
 </g>
 </svg>
