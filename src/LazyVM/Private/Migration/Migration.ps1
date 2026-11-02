@@ -5,9 +5,10 @@
 # default) and registry key (HKLM) were shared, its tasks ran as SYSTEM and
 # its credentials were encrypted with a key file every administrator could
 # read. Each step here first looks at what is already done, so running the
-# migration again after an interruption carries on where it stopped. Nothing
-# of the old install is removed until every step has succeeded, and the HKLM
-# key, which marks the install as not yet moved, goes last.
+# migration again after an interruption carries on where it stopped. What
+# has moved stays moved; the old install's key, module copy and empty folder
+# are removed only once every step has succeeded, and the HKLM key, which
+# marks the install as not yet moved, goes last.
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CREDENTIALS: the old key file -> DPAPI for the current user
@@ -128,14 +129,20 @@ function Assert-NoRunningTask {
 function Move-LegacyTask {
     <#
       Re-registers each LazyVM task that runs as SYSTEM to run as the
-      current user, with the same actions, triggers and settings. A task of
-      the same name replaces it in one step. Tasks of other users are left
-      alone.
+      current user, keeping when it runs (its triggers and settings). Its
+      action is made again, as this version makes it, from the task's name.
+      A task of the same name replaces it in one step. Tasks of other users
+      are left alone.
     #>
     $system = 'SYSTEM', 'NT AUTHORITY\SYSTEM', 'S-1-5-18'
     foreach ($task in @(Get-ScheduledTask -TaskName "$script:TaskPrefix*" -ErrorAction SilentlyContinue)) {
         if ($system -notcontains "$($task.Principal.UserId)") { continue }
-        Register-LazyVMHostTask -TaskName $task.TaskName -Action $task.Actions -Trigger $task.Triggers -Settings $task.Settings
+        $command = Get-HostTaskCommand -TaskName $task.TaskName
+        if (-not $command) {
+            Write-LogEntry "Task '$($task.TaskName)' is not one LazyVM makes, so it is left as it was" 'WARN'
+            continue
+        }
+        Register-LazyVMHostTask -TaskName $task.TaskName -Action (New-LazyVMTaskAction -Command $command) -Trigger $task.Triggers -Settings $task.Settings
         Write-LogEntry "Task '$($task.TaskName)' now runs as $(Get-TaskUserName) instead of SYSTEM" 'OK'
     }
 }
@@ -152,7 +159,7 @@ function ConvertTo-NewRootPath {
     )
 
     if (-not $Path -or -not (Test-PathWithin -Path $Path -Folder $OldRoot)) { return $null }
-    return $NewRoot.TrimEnd('\') + $Path.TrimEnd('\').Substring($OldRoot.TrimEnd('\').Length)
+    return $NewRoot.TrimEnd('\', '/') + $Path.TrimEnd('\', '/').Substring($OldRoot.TrimEnd('\', '/').Length)
 }
 
 function Get-FolderSize {
@@ -164,12 +171,43 @@ function Get-FolderSize {
     return [long]$sum
 }
 
-function Get-FreeSpace {
-    <# The bytes free on the drive that holds $Path. #>
-    [OutputType([long])]
-    param([Parameter(Mandatory)][string]$Path)
+function Assert-FreeSpace {
+    <#
+      Stops when the drive that holds $Path has less than $Bytes free for
+      $What. When the free space cannot be read, says so and goes on: the
+      copy itself then fails cleanly if the drive fills.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][long]$Bytes,
+        [Parameter(Mandatory)][string]$What
+    )
 
-    return [IO.DriveInfo]::new([IO.Path]::GetPathRoot($Path)).AvailableFreeSpace
+    $freeGB = Get-FreeSpaceGB -Path $Path
+    if ($freeGB -lt 0) {
+        Write-LogEntry "Could not read the free space on the drive of $Path; $What needs $(Format-Size $Bytes)" 'WARN'
+        return
+    }
+    if ($freeGB * 1GB -lt $Bytes) {
+        throw "Not enough free space for $($What): it needs $(Format-Size $Bytes) free on the drive of $Path, and $freeGB GB is free. Make room, then run Convert-LazyVMInstallation again."
+    }
+}
+
+function Get-VMMoveSize {
+    <# The bytes Hyper-V copies to move a VM: the disks being moved, and its configuration and checkpoint files. #>
+    [OutputType([long])]
+    param(
+        [Parameter(Mandatory)]$Machine,
+        [Parameter(Mandatory)][AllowEmptyCollection()][hashtable[]]$Vhds
+    )
+
+    [long]$bytes = 0
+    foreach ($vhd in $Vhds) { $bytes += (Get-Item -LiteralPath $vhd.SourceFilePath -Force).Length }
+    # Hyper-V keeps a VM's own files in these folders under its locations.
+    foreach ($folder in "$($Machine.ConfigurationLocation)\Virtual Machines", "$($Machine.SnapshotFileLocation)\Snapshots") {
+        $bytes += Get-FolderSize -Path $folder
+    }
+    return $bytes
 }
 
 function Move-LegacyVMStorage {
@@ -180,6 +218,12 @@ function Move-LegacyVMStorage {
       running and Hyper-V gives each VM access to its files again. Hyper-V
       copies the files, so the drive needs room for the VM a second time.
       A VM with nothing left in $OldRoot is skipped.
+
+      Each location is given its own place, not one destination folder for
+      everything, which would put the disks beside the configuration and
+      out of the <VM>\Disks folder the VM's settings name. Assert-NoVMFileLeft
+      then checks nothing a VM uses, such as a checkpoint's parent disk, was
+      left behind.
     #>
     param(
         [Parameter(Mandatory)][string]$OldRoot,
@@ -206,11 +250,8 @@ function Move-LegacyVMStorage {
         if ($vhds.Count -gt 0) { $move.Vhds = $vhds }
         if ($move.Count -eq 0) { continue }
 
-        $needed = Get-FolderSize -Path $machine.ConfigurationLocation
-        $free = Get-FreeSpace -Path $NewRoot
-        if ($free -lt $needed) {
-            throw "Not enough free space to move $($machine.Name): Hyper-V copies its files, which needs $(Format-Size $needed) free on the drive of $NewRoot, and $(Format-Size $free) is free. Make room, then run Convert-LazyVMInstallation again."
-        }
+        $needed = Get-VMMoveSize -Machine $machine -Vhds $vhds
+        Assert-FreeSpace -Path $NewRoot -Bytes $needed -What "Hyper-V's copy of $($machine.Name)"
         Write-LogEntry "Moving $($machine.Name)'s files to $NewRoot with Hyper-V ($(Format-Size $needed)); the VM keeps running..." 'INFO'
         Move-VMStorage -VMName $machine.Name @move -ErrorAction Stop
         Write-LogEntry "Moved $($machine.Name)'s files" 'OK'
@@ -219,14 +260,20 @@ function Move-LegacyVMStorage {
 
 function Assert-NoVMFileLeft {
     <#
-      Stops when a Hyper-V VM still uses a disk in $OldRoot after the storage
-      migration - a disk attached now or to a checkpoint, or the parent of a
+      Stops when a Hyper-V VM still uses anything in $OldRoot after the
+      storage migration - its configuration, checkpoint or smart paging
+      folder, a disk attached now or to a checkpoint, or the parent of a
       checkpoint's differencing disk - so no file a VM needs is moved behind
       Hyper-V's back.
     #>
     param([Parameter(Mandatory)][string]$OldRoot)
 
     foreach ($machine in @(Get-VM)) {
+        foreach ($location in @($machine.ConfigurationLocation, $machine.SnapshotFileLocation, $machine.SmartPagingFilePath | Where-Object { $_ })) {
+            if (Test-PathWithin -Path $location -Folder $OldRoot) {
+                throw "$($machine.Name) still keeps files in $location, in the old folder, after Hyper-V moved its files, so nothing more is moved. Move them in Hyper-V Manager (Move > Move the virtual machine's data to different locations), then run Convert-LazyVMInstallation again."
+            }
+        }
         $disks = @(Get-VMHardDiskDrive -VMName $machine.Name) + @(Get-VMSnapshot -VMName $machine.Name | ForEach-Object { $_.HardDrives })
         foreach ($disk in @($disks | Where-Object { $_.Path })) {
             $path = $disk.Path
@@ -240,33 +287,73 @@ function Assert-NoVMFileLeft {
     }
 }
 
-function Dismount-LegacyDvdMedia {
-    <# Ejects every ISO a VM has attached from $OldRoot, so its file can move. Returns the drives, to attach again. #>
-    param([Parameter(Mandatory)][string]$OldRoot)
+function Get-EjectedMediaPath {
+    <# Where the migration notes the ISOs it ejected, in the new folder, until they are attached again. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$NewRoot)
 
-    $media = @(foreach ($machine in @(Get-VM)) {
-            Get-VMDvdDrive -VMName $machine.Name | Where-Object { $_.Path -and (Test-PathWithin -Path $_.Path -Folder $OldRoot) }
-        })
-    foreach ($drive in $media) {
-        Set-VMDvdDrive -VMName $drive.VMName -ControllerNumber $drive.ControllerNumber -ControllerLocation $drive.ControllerLocation -Path $null -ErrorAction Stop
-        Write-LogEntry "Ejected $($drive.Path) from $($drive.VMName) to move it" 'INFO'
-    }
-    return $media
+    return Join-Path -Path $NewRoot -ChildPath "$script:SharedFolderName/$script:EjectedMediaFileName"
 }
 
-function Mount-MovedDvdMedia {
-    <# Attaches each ISO Dismount-LegacyDvdMedia ejected again, from its place under $NewRoot. #>
+function Read-EjectedMedia {
+    <# The ISOs the migration ejected and has not attached again yet: VM, controller, location and old path. #>
+    [OutputType([psobject])]
+    param([Parameter(Mandatory)][string]$NewRoot)
+
+    $path = Get-EjectedMediaPath -NewRoot $NewRoot
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return }
+    Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+}
+
+function Dismount-LegacyDvdMedia {
+    <#
+      Ejects every ISO a VM has attached from $OldRoot, so its file can move.
+      Each drive is noted in the new folder first, so it is attached again
+      even if the migration stops in between.
+    #>
     param(
-        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Media,
         [Parameter(Mandatory)][string]$OldRoot,
         [Parameter(Mandatory)][string]$NewRoot
     )
 
-    foreach ($drive in $Media) {
+    $drives = @(foreach ($machine in @(Get-VM)) {
+            Get-VMDvdDrive -VMName $machine.Name | Where-Object { $_.Path -and (Test-PathWithin -Path $_.Path -Folder $OldRoot) }
+        })
+    if ($drives.Count -eq 0) { return }
+
+    $noted = @(Read-EjectedMedia -NewRoot $NewRoot) + @($drives | ForEach-Object {
+            [pscustomobject]@{ VMName = $_.VMName; ControllerNumber = $_.ControllerNumber; ControllerLocation = $_.ControllerLocation; Path = $_.Path }
+        })
+    Write-TextFileAtomic -Path (Get-EjectedMediaPath -NewRoot $NewRoot) -Text (ConvertTo-Json -InputObject $noted -Depth 3)
+    foreach ($drive in $drives) {
+        Set-VMDvdDrive -VMName $drive.VMName -ControllerNumber $drive.ControllerNumber -ControllerLocation $drive.ControllerLocation -Path $null -ErrorAction Stop
+        Write-LogEntry "Ejected $($drive.Path) from $($drive.VMName) to move it" 'INFO'
+    }
+}
+
+function Mount-MovedDvdMedia {
+    <#
+      Attaches each ISO Dismount-LegacyDvdMedia noted again, from its place
+      under $NewRoot, then forgets them. A VM that no longer exists is
+      skipped; any other failure stops, keeping the note for the next run.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$OldRoot,
+        [Parameter(Mandatory)][string]$NewRoot
+    )
+
+    $media = @(Read-EjectedMedia -NewRoot $NewRoot)
+    if ($media.Count -eq 0) { return }
+    foreach ($drive in $media) {
         $path = ConvertTo-NewRootPath -Path $drive.Path -OldRoot $OldRoot -NewRoot $NewRoot
+        if (-not (Get-VM -Name $drive.VMName -ErrorAction SilentlyContinue)) {
+            Write-LogEntry "$($drive.VMName) is gone, so $path was not attached to it again" 'WARN'
+            continue
+        }
         Set-VMDvdDrive -VMName $drive.VMName -ControllerNumber $drive.ControllerNumber -ControllerLocation $drive.ControllerLocation -Path $path -ErrorAction Stop
         Write-LogEntry "Attached $path to $($drive.VMName) again" 'OK'
     }
+    Remove-Item -LiteralPath (Get-EjectedMediaPath -NewRoot $NewRoot) -Force
 }
 
 function Move-LegacyFile {
@@ -282,8 +369,12 @@ function Move-LegacyFile {
     )
 
     $files = @(Get-ChildItem -LiteralPath $OldRoot -Recurse -File -Force)
+    # On the same drive a move only renames; to another it copies.
+    if (-not ([IO.Path]::GetPathRoot($OldRoot)).Equals([IO.Path]::GetPathRoot($NewRoot), [StringComparison]::OrdinalIgnoreCase)) {
+        Assert-FreeSpace -Path $NewRoot -Bytes ([long]($files | Measure-Object -Property Length -Sum).Sum) -What "the files in $OldRoot"
+    }
     foreach ($file in $files) {
-        $target = $NewRoot.TrimEnd('\', '/') + $file.FullName.Substring($OldRoot.TrimEnd('\', '/').Length)
+        $target = ConvertTo-NewRootPath -Path $file.FullName -OldRoot $OldRoot -NewRoot $NewRoot
         New-Folder -Path (Split-Path -Path $target -Parent)
         Move-Item -LiteralPath $file.FullName -Destination $target -Force
     }
@@ -322,18 +413,41 @@ function Copy-LegacyRegistry {
     Write-LogEntry "Recorded $NewRoot in $script:RootRegistryKey" 'OK'
 }
 
+function Get-UserModuleFolder {
+    <# The current user's own PowerShell 7 module folder, Documents\PowerShell\Modules, where Install.ps1 puts LazyVM. #>
+    [OutputType([string])]
+    param()
+
+    return Join-Path -Path ([Environment]::GetFolderPath('MyDocuments')) -ChildPath 'PowerShell/Modules'
+}
+
+function Test-MachineWideModuleRemovable {
+    <#
+      Whether the copy of LazyVM installed for every user, in $Path, can go:
+      only when this LazyVM is not running from it and the user has a copy
+      of their own, so LazyVM and its tasks still load afterwards.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (Test-PathWithin -Path (Get-LazyVMModuleBase) -Folder $Path) { return $false }
+    $userFolder = Get-UserModuleFolder
+    return @(Get-Module -ListAvailable -Name 'LazyVM' | Where-Object { Test-PathWithin -Path $_.ModuleBase -Folder $userFolder }).Count -gt 0
+}
+
 function Remove-LegacyInstallation {
     <#
       Removes what is left of the old install, once everything has moved:
-      the old folder when it is empty, the module copy in Program Files and,
-      last, the HKLM key.
+      the old folder when it is empty (unless the data stayed in it), the
+      module copy in Program Files when the user has their own and, last,
+      the HKLM key.
     #>
     param(
         [Parameter(Mandatory)][string]$OldRoot,
-        [Parameter(Mandatory)][string]$NewRoot
+        [switch]$InPlace
     )
 
-    if (-not $OldRoot.TrimEnd('\').Equals($NewRoot.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $OldRoot)) {
+    if (-not $InPlace -and (Test-Path -LiteralPath $OldRoot)) {
         $left = @(Get-ChildItem -LiteralPath $OldRoot -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_ -is [IO.FileInfo] })
         if ($left.Count -eq 0) {
             Remove-Item -LiteralPath $OldRoot -Recurse -Force
@@ -346,8 +460,13 @@ function Remove-LegacyInstallation {
 
     $machineWide = Join-Path -Path $env:ProgramFiles -ChildPath 'PowerShell\Modules\LazyVM'
     if (Test-Path -LiteralPath $machineWide) {
-        Remove-Item -LiteralPath $machineWide -Recurse -Force
-        Write-LogEntry "Removed the copy of LazyVM installed for every user, $machineWide" 'OK'
+        if (Test-MachineWideModuleRemovable -Path $machineWide) {
+            Remove-Item -LiteralPath $machineWide -Recurse -Force
+            Write-LogEntry "Removed the copy of LazyVM installed for every user, $machineWide" 'OK'
+        }
+        else {
+            Write-LogEntry "Kept the copy of LazyVM installed for every user, ${machineWide}: LazyVM is running from it, or you have no copy of your own in $(Get-UserModuleFolder). Install LazyVM for yourself (Install.ps1), then delete it as administrator." 'WARN'
+        }
     }
 
     if (Test-Path -LiteralPath $script:LegacyRootRegistryKey) {
@@ -359,26 +478,42 @@ function Remove-LegacyInstallation {
 # ─────────────────────────────────────────────────────────────────────────────
 #  THE WHOLE MIGRATION
 # ─────────────────────────────────────────────────────────────────────────────
-function Invoke-InstallationMigration {
+function Assert-MigrationTarget {
     <#
-      Moves the install in $OldRoot to the current user, with its data in
-      $NewRoot; with $NewRoot the same folder, the data stays where it is.
-      The steps run in an order that keeps every VM and credential safe:
-      the tasks first (so a nightly run cannot start mid-move), then the
-      credentials, the VMs' files, the rest of the files, the registry,
-      and the old install's leftovers last.
+      Everything checked before Convert-LazyVMInstallation asks to go ahead:
+      the new folder is not inside the old one or the other way round, it
+      holds nothing else LazyVM would lock away, and no LazyVM task is
+      running.
     #>
     param(
         [Parameter(Mandatory)][string]$OldRoot,
         [Parameter(Mandatory)][string]$NewRoot
     )
 
-    $inPlace = $OldRoot.TrimEnd('\').Equals($NewRoot.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)
-    if (-not $inPlace -and ((Test-PathWithin -Path $NewRoot -Folder $OldRoot) -or (Test-PathWithin -Path $OldRoot -Folder $NewRoot))) {
+    if (-not (Test-SamePath -Path $OldRoot -Other $NewRoot) -and ((Test-PathWithin -Path $NewRoot -Folder $OldRoot) -or (Test-PathWithin -Path $OldRoot -Folder $NewRoot))) {
         throw "The new LazyVM folder, $NewRoot, cannot be inside the old one, $OldRoot, or the other way round. Choose another, such as $(Get-DefaultRoot)."
     }
-
+    Assert-RootFolderUsable -Path $NewRoot
     Assert-NoRunningTask
+}
+
+function Invoke-InstallationMigration {
+    <#
+      Moves the install in $OldRoot to the current user, with its data in
+      $NewRoot; with $NewRoot the same folder, the data stays where it is.
+      Assert-MigrationTarget has checked the folders. The steps run in an
+      order that keeps every VM and credential safe: the tasks first (so a
+      nightly run cannot start mid-move), then the credentials, the VMs'
+      files, the rest of the files, the registry, and the old install's
+      leftovers last. Once the old folder is gone, a run again goes
+      straight to the registry and the leftovers.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$OldRoot,
+        [Parameter(Mandatory)][string]$NewRoot
+    )
+
+    $inPlace = Test-SamePath -Path $OldRoot -Other $NewRoot
     Initialize-RootFolder -Path $NewRoot
     Start-Log -Path "$($NewRoot.TrimEnd('\'))\$script:SharedFolderName\Logs\Migration.log" -MaxSizeMB 10
     try {
@@ -386,20 +521,22 @@ function Invoke-InstallationMigration {
         Move-LegacyTask
         Convert-LegacyCredential -Root $OldRoot
         if (-not $inPlace) {
-            Move-LegacyVMStorage -OldRoot $OldRoot -NewRoot $NewRoot
-            Assert-NoVMFileLeft -OldRoot $OldRoot
-            $media = @(Dismount-LegacyDvdMedia -OldRoot $OldRoot)
-            Move-LegacyFile -OldRoot $OldRoot -NewRoot $NewRoot
-            Mount-MovedDvdMedia -Media $media -OldRoot $OldRoot -NewRoot $NewRoot
+            if (Test-Path -LiteralPath $OldRoot) {
+                Move-LegacyVMStorage -OldRoot $OldRoot -NewRoot $NewRoot
+                Assert-NoVMFileLeft -OldRoot $OldRoot
+                Dismount-LegacyDvdMedia -OldRoot $OldRoot -NewRoot $NewRoot
+                Move-LegacyFile -OldRoot $OldRoot -NewRoot $NewRoot
+            }
+            Mount-MovedDvdMedia -OldRoot $OldRoot -NewRoot $NewRoot
         }
         Copy-LegacyRegistry -NewRoot $NewRoot
         # Again, now that everything is in it, so every file inherits it.
         Initialize-RootFolder -Path $NewRoot
-        Remove-LegacyInstallation -OldRoot $OldRoot -NewRoot $NewRoot
+        Remove-LegacyInstallation -OldRoot $OldRoot -InPlace:$inPlace
         Write-LogEntry "LazyVM is now yours alone, in $NewRoot" 'OK'
     }
     catch {
-        Write-LogError 'Moving LazyVM stopped; nothing of the old install was removed. Fix the problem and run Convert-LazyVMInstallation again: it carries on where it stopped.' $_
+        Write-LogError 'Moving LazyVM stopped. What has moved stays moved; the old install''s registry key and module copy are kept. Fix the problem and run Convert-LazyVMInstallation again: it carries on where it stopped.' $_
         throw
     }
     finally {

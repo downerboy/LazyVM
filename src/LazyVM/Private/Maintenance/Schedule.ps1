@@ -10,9 +10,6 @@ function Register-RebuildSchedule {
     $settings = $VM.Settings
     Write-LogEntry "Daily Maintenance Schedule - $($VM.Name)" 'PHASE'
 
-    # Refuse to schedule an unattended run that cannot possibly authenticate.
-    $null = Assert-GuestCredential -VM $VM
-
     # The time of day comes from the VM's MaintenanceTime, so each VM on the
     # host is maintained at its own time.
     [datetime]$time = [datetime]::MinValue
@@ -31,7 +28,7 @@ function Register-RebuildSchedule {
     # Registering again replaces the task, which is how an existing one is
     # updated.
     $trigger = New-ScheduledTaskTrigger -Daily -DaysInterval 1 -At $nextRun
-    $action = New-LazyVMTaskAction -Command "Invoke-LazyVMMaintenance -Name '$($VM.Name)'"
+    $action = New-LazyVMTaskAction -Command (Get-HostTaskCommand -TaskName $settings.ScheduleTaskName)
     $taskSettings = New-ScheduledTaskSettingsSet `
         -WakeToRun `
         -StartWhenAvailable `

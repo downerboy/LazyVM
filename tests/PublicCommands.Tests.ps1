@@ -130,6 +130,8 @@ Describe 'Build-LazyVM' {
     BeforeEach {
         Mock -ModuleName $module Initialize-BuildTarget { }
         Mock -ModuleName $module Register-RebuildSchedule { }
+        # Someone is there to give the Windows password.
+        Mock -ModuleName $module Test-Unattended { $false }
         Mock -ModuleName $module Assert-Administrator { }
         # GetNewClosure keeps only this block's own variables.
         $vm = $testVM
@@ -171,7 +173,7 @@ Describe 'Build-LazyVM' {
         Should -Invoke -ModuleName $module Invoke-VMBuild -ParameterFilter { $FromPhase -eq 7 -and $NoUnattend }
     }
 
-    It 'schedules the daily maintenance after a successful build' {
+    It 'schedules the daily maintenance for a successful build' {
         Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
 
         Build-LazyVM -Name Alpha
@@ -187,12 +189,12 @@ Describe 'Build-LazyVM' {
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*could not be scheduled*' }
     }
 
-    It 'does not schedule maintenance while the host restarts' {
+    It 'has the maintenance scheduled already when the host restarts part-way, since the build that carries on is unattended (#284)' {
         Mock -ModuleName $module Invoke-VMBuild { 'RestartPending' }
 
         Build-LazyVM -Name Alpha
 
-        Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 0
+        Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 1 -Exactly
     }
 
     It 'sets up nothing and builds nothing with -WhatIf (#18)' {
@@ -393,6 +395,8 @@ Describe 'Initialize-BuildTarget' {
     BeforeEach {
         $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
         Mock -ModuleName $module Set-RegisteredRoot { }
+        # No machine-wide install from before #284.
+        Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
         Mock -ModuleName $module Get-DefaultRoot { $root }.GetNewClosure()
         # The folder's access is tested in PerUser.Tests.ps1; here it only has to be there.
         Mock -ModuleName $module Initialize-RootFolder { New-Item -ItemType Directory -Path $Path -Force | Out-Null }

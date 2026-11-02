@@ -12,7 +12,10 @@
     The folder is open to you and SYSTEM only: no other account, local
     administrators included, can open it, and everything in it inherits
     that. Hyper-V adds each VM's own access to its files. Running
-    Set-LazyVMRoot again on the same folder locks it again.
+    Set-LazyVMRoot again on the same folder locks it again. A folder that
+    already holds other files is refused, so nothing else is locked away;
+    choose an empty or new folder. It asks before locking the folder;
+    -Confirm:$false skips the question.
 
     The folder is created if needed, along with Shared\Config\LazyVM.Settings.json
     (your settings) and a copy of the settings schema beside it, so VS Code
@@ -29,7 +32,7 @@
     .OUTPUTS
     LazyVM.Root: the folder and its settings file.
     #>
-    [CmdletBinding(SupportsShouldProcess)]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     [OutputType('LazyVM.Root')]
     param(
         [Parameter(Mandatory, Position = 0)]
@@ -39,13 +42,14 @@
     Assert-Administrator
     Assert-NoLegacyInstallation
     $root = Resolve-SettingsRoot -Path $Path -Source 'the -Path parameter'
+    Assert-RootFolderUsable -Path $root
 
     $previous = Get-RegisteredRoot
     if ($previous -and $previous -ne $root) {
         Write-Warning "LazyVM was using $previous. Nothing there is moved: VMs built under it keep their disks there, but LazyVM will now look for VMs in $root."
     }
 
-    if (-not $PSCmdlet.ShouldProcess($root, 'Keep LazyVM''s VMs and settings in this folder')) {
+    if (-not $PSCmdlet.ShouldProcess($root, 'Keep LazyVM''s VMs and settings in this folder, and lock it to you and SYSTEM')) {
         return
     }
 

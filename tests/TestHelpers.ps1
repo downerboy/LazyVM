@@ -46,12 +46,3 @@ $script:HyperVCommandStubs = [ordered]@{
 }
 Add-MissingCommandStub -Stub $script:HyperVCommandStubs
 
-# The Task Scheduler cmdlets the tests mock, for a runner without them (#284).
-# Only the builders: Register-ScheduledTask's -Password is text, which the
-# analyzer refuses in a stub, and other tests rely on Get-ScheduledTask and
-# Get-ScheduledTaskInfo being absent. Tests of those run on Windows.
-$script:ScheduledTaskCommandStubs = [ordered]@{
-    'New-ScheduledTaskTrigger'    = { [CmdletBinding()] param([switch]$Daily, [int]$DaysInterval, [datetime]$At, [switch]$AtStartup) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
-    'New-ScheduledTaskSettingsSet' = { [CmdletBinding()] param([switch]$WakeToRun, [switch]$StartWhenAvailable, [switch]$AllowStartIfOnBatteries, [switch]$DontStopIfGoingOnBatteries, [timespan]$ExecutionTimeLimit, [int]$RestartCount, [timespan]$RestartInterval) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
-}
-Add-MissingCommandStub -Stub $script:ScheduledTaskCommandStubs

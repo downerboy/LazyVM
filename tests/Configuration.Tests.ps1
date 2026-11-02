@@ -378,6 +378,11 @@ Describe 'Resolve-SettingsRoot' {
 }
 
 Describe 'Resolve-LazyVMRoot' {
+    BeforeEach {
+        # No machine-wide install from before #284.
+        Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
+    }
+
     It 'prefers -Root to the registered folder' {
         InModuleScope $module {
             Mock Get-RegisteredRoot { 'F:\Registered' }

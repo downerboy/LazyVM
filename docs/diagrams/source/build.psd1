@@ -3,7 +3,7 @@
     Title      = 'Build a VM'
     Command    = 'Build-LazyVM'
     Parameters = @('-Name <VM>', '-ConfigTemplate <Template>  (optional)', '-FromPhase 0-8  (optional)', '-NoUnattend  (optional)')
-    Summary    = 'Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then schedules maintenance. Running it again finishes an interrupted build.'
+    Summary    = 'Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skipping work already done. Running it again finishes an interrupted build.'
     Covers     = @('Build-LazyVM', 'Invoke-VMBuild', 'Invoke-BuildPhase', 'Get-BuildPhase', 'Install-GuestSoftware', 'Complete-GuestConfiguration')
     Omits      = @{
         'Test-BuildPhaseNumber' = 'validates -FromPhase before the command runs'
@@ -13,7 +13,7 @@
             Function = 'Initialize-BuildTarget'
             Area     = 'Settings'
             Note     = 'stops while a machine-wide install is still there; first run: creates %USERPROFILE%\LazyVM, open to you and SYSTEM only, and the profile, from -ConfigTemplate when given'
-            Includes = @('Assert-NoLegacyInstallation', 'Get-DefaultRoot', 'Initialize-RootFolder')
+            Includes = @('Assert-NoLegacyInstallation', 'Get-DefaultRoot', 'Assert-RootFolderUsable', 'Initialize-RootFolder')
             Reads    = @(
                 @{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root, if already set') }
                 @{ Label = 'machine-wide install'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root, if still there') }
@@ -37,6 +37,13 @@
             Note     = 'fills in any setting VM.json lacks from the shared template'
             Reads    = @(@{ Label = 'shared template'; Kind = 'file'; Store = 'Shared\Config\'; Items = @('LazyVM.Settings.json') })
             Writes   = @(@{ Label = 'complete profile'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json', 'VM.Template.json  (first time only)') })
+        }
+        @{
+            Function = 'Register-RebuildSchedule'
+            Area     = 'Maintenance'
+            Note     = 'before the phases, unless no one is there: asks for your Windows password so the schedule is in place even if the host restarts; a failure here is logged and the build goes on'
+            Includes = @('Test-Unattended', 'Register-LazyVMHostTask')
+            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'runs as you') })
         }
         @{
             Function = 'Invoke-VMBuild'
@@ -163,13 +170,6 @@
             Caller   = 'Invoke-VMBuild'
             Note     = 'unless the host is restarting'
             Writes   = @(@{ Label = 'resume entries removed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('resume task deleted', 'ResumePhase cleared') })
-        }
-        @{
-            Function = 'Register-RebuildSchedule'
-            Area     = 'Maintenance'
-            Note     = 'a failure here is logged; the build still stands'
-            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') })
-            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'runs as you') })
         }
     )
 }

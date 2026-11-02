@@ -434,6 +434,7 @@ function Initialize-BuildTarget {
     $root = Get-RegisteredRoot
     if (-not $root) {
         $root = Get-DefaultRoot
+        Assert-RootFolderUsable -Path $root
         Initialize-RootFolder -Path $root
         Set-RegisteredRoot -Path $root
         Write-Information "LazyVM keeps its VMs in $root. To use another folder, run Set-LazyVMRoot first." -InformationAction Continue

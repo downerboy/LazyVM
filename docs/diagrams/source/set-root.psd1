@@ -13,7 +13,7 @@
             Function = 'Assert-NoLegacyInstallation'
             Area     = 'Settings'
             Note     = 'stops while a machine-wide install is still there, naming Convert-LazyVMInstallation'
-            Includes = @('Get-LegacyRoot')
+            Includes = @('Get-RegisteredRoot')
             Reads    = @(
                 @{ Label = 'machine-wide install'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root, if still there') }
             )
@@ -30,6 +30,11 @@
             Reads    = @(
                 @{ Label = 'previous folder'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root') }
             )
+        }
+        @{
+            Function = 'Assert-RootFolderUsable'
+            Area     = 'Settings'
+            Note     = 'refuses a folder that holds anything but LazyVM''s own files, before asking'
         }
         @{
             Function = 'Initialize-RootFolder'

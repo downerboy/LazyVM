@@ -209,7 +209,7 @@ function Register-ResumeTask {
     Set-ResumePhase -Key $settings.ResumeRegKey -Phase $Phase
 
     # Build-LazyVM reads the resume phase from the registry key above.
-    $action = New-LazyVMTaskAction -Command "Build-LazyVM -Name '$($VM.Name)'"
+    $action = New-LazyVMTaskAction -Command (Get-HostTaskCommand -TaskName $settings.ResumeTaskName)
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $trigger.Delay = 'PT2M'   # let services settle before the build resumes
     $taskSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 6) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable

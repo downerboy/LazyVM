@@ -126,6 +126,14 @@ $script:LogonFailureResult = [long]2147943726
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.
 $script:TaskPrefix = 'LazyVM-'
+# The host's tasks for one VM, each followed by the VM's name: its daily
+# maintenance, and the build that carries on after a host restart.
+$script:MaintenanceTaskPrefix = "${script:TaskPrefix}Maintain-"
+$script:ResumeTaskPrefix = "${script:TaskPrefix}ResumeAfterReboot-"
+
+# In <Root>\Shared during Convert-LazyVMInstallation: the ISOs it ejected to
+# move them, until it attaches them again (Migration.ps1).
+$script:EjectedMediaFileName = 'Migration.EjectedMedia.json'
 
 # Settings LazyVM once had and no longer uses, deleted from the schema. A
 # settings file that still names one is read without it rather than

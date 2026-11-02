@@ -64,7 +64,7 @@ function Initialize-CommandRun {
     }
 
     Sync-GuestUserFromStore -VM $vm
-    if (-not (Test-Unattended)) { Write-TaskLogonWarning -VM $vm }
+    if (-not (Test-Unattended)) { Write-MaintenanceTaskWarning -VM $vm }
     return $vm
 }
 
@@ -126,13 +126,21 @@ function Set-ForceConfirmation {
     }
 }
 
+function Get-LazyVMModuleBase {
+    <# The folder this LazyVM module was loaded from. #>
+    [OutputType([string])]
+    param()
+
+    return $MyInvocation.MyCommand.Module.ModuleBase
+}
+
 function Get-ModuleImportCommand {
     <#
       How a scheduled task loads this module. By name when it is installed
       where PowerShell looks for modules, so an updated version is picked up
       automatically; otherwise by the path it was loaded from.
     #>
-    $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
+    $moduleBase = Get-LazyVMModuleBase
     foreach ($searchPath in @($env:PSModulePath -split [IO.Path]::PathSeparator | Where-Object { $_ })) {
         $folder = $searchPath.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
         if ($moduleBase.StartsWith($folder, [StringComparison]::OrdinalIgnoreCase)) {

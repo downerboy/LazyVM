@@ -37,6 +37,8 @@ function Register-LazyVMMaintenance {
         Invoke-CommandRun -Title 'Schedule maintenance' -Name $Name -FailureMessage 'Scheduling maintenance failed' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
             if ($PSCmdlet.ShouldProcess($VM.Settings.ScheduleTaskName, "Run maintenance of $($VM.Name) daily at $($VM.Settings.MaintenanceTime)")) {
+                # Refuse to schedule an unattended run that cannot possibly authenticate.
+                $null = Assert-GuestCredential -VM $VM
                 Register-RebuildSchedule -VM $VM
             }
         }

@@ -180,20 +180,31 @@ Describe 'Convert-LegacyCredential (#284)' {
 }
 
 Describe 'Move-LegacyTask (#284)' {
+    BeforeAll {
+        # Real task parts, as Get-ScheduledTask returns them.
+        $script:oldTrigger = New-ScheduledTaskTrigger -Daily -At '02:00'
+        $script:oldSettings = New-ScheduledTaskSettingsSet
+        $script:oldAction = New-ScheduledTaskAction -Execute 'pwsh.exe' -Argument "Import-Module 'C:\Program Files\PowerShell\Modules\LazyVM\5.2.4\LazyVM.psd1'"
+    }
+
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Register-LazyVMHostTask { }
         Mock -ModuleName $module Get-ScheduledTask {
-            [pscustomobject]@{ TaskName = 'LazyVM-Maintain-Alpha'; Principal = [pscustomobject]@{ UserId = 'SYSTEM' }; Actions = @('maintain'); Triggers = @('daily'); Settings = 'settings' }
-            [pscustomobject]@{ TaskName = 'LazyVM-Maintain-Other'; Principal = [pscustomobject]@{ UserId = 'MIKEPC\kim' }; Actions = @('other'); Triggers = @('daily'); Settings = 'settings' }
+            [pscustomobject]@{ TaskName = 'LazyVM-Maintain-Alpha'; Principal = [pscustomobject]@{ UserId = 'SYSTEM' }; Actions = @($script:oldAction); Triggers = @($script:oldTrigger); Settings = $script:oldSettings }
+            [pscustomobject]@{ TaskName = 'LazyVM-Maintain-Other'; Principal = [pscustomobject]@{ UserId = 'MIKEPC\kim' }; Actions = @($script:oldAction); Triggers = @($script:oldTrigger); Settings = $script:oldSettings }
+            [pscustomobject]@{ TaskName = 'LazyVM-Unknown'; Principal = [pscustomobject]@{ UserId = 'SYSTEM' }; Actions = @($script:oldAction); Triggers = @($script:oldTrigger); Settings = $script:oldSettings }
         }
     }
 
-    It 're-registers each task that runs as SYSTEM to run as the user, keeping what it does and when' {
+    It 're-registers each task that runs as SYSTEM to run as the user, keeping when it runs and making its action again' {
         InModuleScope $module { Move-LegacyTask }
 
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter {
-            $TaskName -eq 'LazyVM-Maintain-Alpha' -and @($Action) -contains 'maintain' -and @($Trigger) -contains 'daily' -and $Settings -eq 'settings'
+            $TaskName -eq 'LazyVM-Maintain-Alpha' -and
+            "$(@($Action)[0].Arguments)" -like "*Invoke-LazyVMMaintenance -Name 'Alpha'*" -and
+            "$(@($Action)[0].Arguments)" -notlike '*5.2.4*' -and
+            @($Trigger)[0] -eq $script:oldTrigger -and $Settings -eq $script:oldSettings
         }
     }
 
@@ -203,13 +214,19 @@ Describe 'Move-LegacyTask (#284)' {
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 0 -ParameterFilter { $TaskName -eq 'LazyVM-Maintain-Other' }
     }
 
+    It 'leaves a task LazyVM does not make as it was, and says so' {
+        InModuleScope $module { Move-LegacyTask }
+
+        Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 0 -ParameterFilter { $TaskName -eq 'LazyVM-Unknown' }
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*LazyVM-Unknown*left as it was*' -and $Level -eq 'WARN' }
+    }
+
     It 'looks only at LazyVM''s tasks' {
         InModuleScope $module { Move-LegacyTask }
 
         Should -Invoke -ModuleName $module Get-ScheduledTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-*' }
     }
 }
-
 Describe 'ConvertTo-NewRootPath (#284)' {
     It 'maps <Path> to <Expected>' -ForEach @(
         @{ Path = 'C:\LazyVM\Alpha\Disks\Alpha-OS.vhdx'; Expected = 'C:\Users\sean\LazyVM\Alpha\Disks\Alpha-OS.vhdx' }
@@ -239,8 +256,9 @@ Describe 'Move-LegacyVMStorage (#284)' {
             }
             else { [pscustomobject]@{ Path = 'D:\Hyper-V\Elsewhere\disk.vhdx' } }
         }
-        Mock -ModuleName $module Get-FolderSize { 100GB }
-        Mock -ModuleName $module Get-FreeSpace { 500GB }
+        Mock -ModuleName $module Get-Item { [pscustomobject]@{ Length = 40GB } }
+        Mock -ModuleName $module Get-FolderSize { 1GB }
+        Mock -ModuleName $module Get-FreeSpaceGB { 500 }
         Mock -ModuleName $module Move-VMStorage { }
     }
 
@@ -263,8 +281,16 @@ Describe 'Move-LegacyVMStorage (#284)' {
         Should -Invoke -ModuleName $module Move-VMStorage -Times 0 -ParameterFilter { $VMName -eq 'Elsewhere' }
     }
 
+    It 'counts the disks it moves and Hyper-V''s own folders, and nothing else, towards the free space it needs' {
+        InModuleScope $module { Move-LegacyVMStorage -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' }
+
+        Should -Invoke -ModuleName $module Get-Item -Times 2 -Exactly -ParameterFilter { $LiteralPath -like 'C:\LazyVM\MSDevBox\Disks\*' }
+        Should -Invoke -ModuleName $module Get-FolderSize -Times 1 -Exactly -ParameterFilter { $Path -eq 'C:\LazyVM\MSDevBox\Virtual Machines' }
+        Should -Invoke -ModuleName $module Get-FolderSize -Times 1 -Exactly -ParameterFilter { $Path -eq 'C:\LazyVM\MSDevBox\Checkpoints\Snapshots' }
+    }
+
     It 'stops before moving anything when the drive has too little free space for the copy' {
-        Mock -ModuleName $module Get-FreeSpace { 50GB }
+        Mock -ModuleName $module Get-FreeSpaceGB { 50 }
 
         { InModuleScope $module { Move-LegacyVMStorage -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' } } | Should -Throw -ExpectedMessage '*free space*MSDevBox*'
 
@@ -274,7 +300,7 @@ Describe 'Move-LegacyVMStorage (#284)' {
 
 Describe 'Assert-NoVMFileLeft (#284)' {
     BeforeEach {
-        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'MSDevBox'; ConfigurationLocation = 'C:\Users\sean\LazyVM\MSDevBox'; SnapshotFileLocation = 'C:\Users\sean\LazyVM\MSDevBox\Checkpoints' } }
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'MSDevBox'; ConfigurationLocation = 'C:\Users\sean\LazyVM\MSDevBox'; SnapshotFileLocation = 'C:\Users\sean\LazyVM\MSDevBox\Checkpoints'; SmartPagingFilePath = 'C:\Users\sean\LazyVM\MSDevBox' } }
         Mock -ModuleName $module Get-VMSnapshot { }
         Mock -ModuleName $module Get-VMHardDiskDrive { [pscustomobject]@{ Path = 'C:\Users\sean\LazyVM\MSDevBox\Disks\MSDevBox-OS_8A1B.avhdx' } }
         Mock -ModuleName $module Get-VHD { [pscustomobject]@{ Path = $Path; ParentPath = $null } }
@@ -282,6 +308,18 @@ Describe 'Assert-NoVMFileLeft (#284)' {
 
     It 'goes on when no VM uses a file in the old folder any more' {
         { InModuleScope $module { Assert-NoVMFileLeft -OldRoot 'C:\LazyVM' } } | Should -Not -Throw
+    }
+
+    It 'stops when the VM still keeps its <Location> in the old folder' -ForEach @(
+        @{ Location = 'configuration'; Property = 'ConfigurationLocation' }
+        @{ Location = 'checkpoints'; Property = 'SnapshotFileLocation' }
+        @{ Location = 'smart paging file'; Property = 'SmartPagingFilePath' }
+    ) {
+        $machine = [pscustomobject]@{ Name = 'MSDevBox'; ConfigurationLocation = 'C:\Users\sean\LazyVM\MSDevBox'; SnapshotFileLocation = 'C:\Users\sean\LazyVM\MSDevBox\Checkpoints'; SmartPagingFilePath = 'C:\Users\sean\LazyVM\MSDevBox' }
+        $machine.$Property = 'C:\LazyVM\MSDevBox'
+        Mock -ModuleName $module Get-VM { $machine }.GetNewClosure()
+
+        { InModuleScope $module { Assert-NoVMFileLeft -OldRoot 'C:\LazyVM' } } | Should -Throw -ExpectedMessage '*MSDevBox*C:\LazyVM\MSDevBox*'
     }
 
     It 'stops, before any file moves, when a checkpoint''s parent disk is still in the old folder' {
@@ -304,6 +342,8 @@ Describe 'Assert-NoVMFileLeft (#284)' {
 
 Describe 'The ISOs attached from the old folder (#284)' {
     BeforeEach {
+        $script:newRoot = New-TestFolder
+        $script:noted = Join-Path -Path $script:newRoot -ChildPath 'Shared/Migration.EjectedMedia.json'
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'MSDevBox' } }
         Mock -ModuleName $module Get-VMDvdDrive {
@@ -311,27 +351,44 @@ Describe 'The ISOs attached from the old folder (#284)' {
             [pscustomobject]@{ VMName = 'MSDevBox'; ControllerNumber = 0; ControllerLocation = 2; Path = 'D:\ISO\tools.iso' }
             [pscustomobject]@{ VMName = 'MSDevBox'; ControllerNumber = 0; ControllerLocation = 3; Path = $null }
         }
-        Mock -ModuleName $module Set-VMDvdDrive { }
+        $script:notedWhenEjected = $null
+        Mock -ModuleName $module Set-VMDvdDrive { if (-not $Path) { $script:notedWhenEjected = Test-Path -LiteralPath $script:noted } }
     }
 
-    It 'are ejected before their files move, and only they' {
-        $media = @(InModuleScope $module { Dismount-LegacyDvdMedia -OldRoot 'C:\LazyVM' })
+    It 'are noted in the new folder before they are ejected, and only they are ejected' {
+        InModuleScope $module -Parameters @{ NewRoot = $script:newRoot } { param($NewRoot) Dismount-LegacyDvdMedia -OldRoot 'C:\LazyVM' -NewRoot $NewRoot }
 
-        $media.Count | Should -Be 1
         Should -Invoke -ModuleName $module Set-VMDvdDrive -Times 1 -Exactly -ParameterFilter { $ControllerLocation -eq 1 -and -not $Path }
+        $script:notedWhenEjected | Should -BeTrue
+        @(Get-Content -LiteralPath $script:noted -Raw | ConvertFrom-Json).Path | Should -Be @('C:\LazyVM\Shared\ISO\Win11.iso')
     }
 
-    It 'are attached again from the new folder' {
-        $media = @([pscustomobject]@{ VMName = 'MSDevBox'; ControllerNumber = 0; ControllerLocation = 1; Path = 'C:\LazyVM\Shared\ISO\Win11.iso' })
+    It 'are attached again from the new folder, on any later run, and then forgotten' {
+        InModuleScope $module -Parameters @{ NewRoot = $script:newRoot } { param($NewRoot) Dismount-LegacyDvdMedia -OldRoot 'C:\LazyVM' -NewRoot $NewRoot }
 
-        InModuleScope $module -Parameters @{ Media = $media } { param($Media) Mount-MovedDvdMedia -Media $Media -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' }
+        InModuleScope $module -Parameters @{ NewRoot = $script:newRoot } { param($NewRoot) Mount-MovedDvdMedia -OldRoot 'C:\LazyVM' -NewRoot $NewRoot }
 
         Should -Invoke -ModuleName $module Set-VMDvdDrive -Times 1 -Exactly -ParameterFilter {
-            $VMName -eq 'MSDevBox' -and $ControllerLocation -eq 1 -and $Path -eq 'C:\Users\sean\LazyVM\Shared\ISO\Win11.iso'
+            $VMName -eq 'MSDevBox' -and $ControllerLocation -eq 1 -and $Path -like '*Shared?ISO?Win11.iso' -and $Path -notlike 'C:\LazyVM*'
         }
+        $script:noted | Should -Not -Exist
+    }
+
+    It 'keeps the note when one cannot be attached again, for the next run' {
+        InModuleScope $module -Parameters @{ NewRoot = $script:newRoot } { param($NewRoot) Dismount-LegacyDvdMedia -OldRoot 'C:\LazyVM' -NewRoot $NewRoot }
+        Mock -ModuleName $module Set-VMDvdDrive { throw 'The file is in use' } -ParameterFilter { $Path }
+
+        { InModuleScope $module -Parameters @{ NewRoot = $script:newRoot } { param($NewRoot) Mount-MovedDvdMedia -OldRoot 'C:\LazyVM' -NewRoot $NewRoot } } | Should -Throw
+
+        $script:noted | Should -Exist
+    }
+
+    It 'does nothing when none were ejected' {
+        InModuleScope $module -Parameters @{ NewRoot = $script:newRoot } { param($NewRoot) Mount-MovedDvdMedia -OldRoot 'C:\LazyVM' -NewRoot $NewRoot }
+
+        Should -Invoke -ModuleName $module Set-VMDvdDrive -Times 0
     }
 }
-
 Describe 'Move-LegacyFile (#284)' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
@@ -387,32 +444,40 @@ Describe 'Invoke-InstallationMigration (#284)' {
     BeforeEach {
         $script:calls = [System.Collections.Generic.List[string]]::new()
         Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-LogError { }
         Mock -ModuleName $module Start-Log { }
         Mock -ModuleName $module Stop-Log { }
-        Mock -ModuleName $module Assert-NoRunningTask { $script:calls.Add('check tasks') }
+        Mock -ModuleName $module Test-Path { $true } -ParameterFilter { $LiteralPath -eq 'C:\LazyVM' }
         Mock -ModuleName $module Move-LegacyTask { $script:calls.Add('tasks') }
         Mock -ModuleName $module Convert-LegacyCredential { $script:calls.Add('credentials') }
         Mock -ModuleName $module Initialize-RootFolder { $script:calls.Add("lock $Path") }
         Mock -ModuleName $module Move-LegacyVMStorage { $script:calls.Add('vm storage') }
         Mock -ModuleName $module Assert-NoVMFileLeft { $script:calls.Add('check vm files') }
-        Mock -ModuleName $module Dismount-LegacyDvdMedia { $script:calls.Add('eject'); 'media' }
+        Mock -ModuleName $module Dismount-LegacyDvdMedia { $script:calls.Add('eject') }
         Mock -ModuleName $module Move-LegacyFile { $script:calls.Add('files') }
         Mock -ModuleName $module Mount-MovedDvdMedia { $script:calls.Add('attach') }
         Mock -ModuleName $module Copy-LegacyRegistry { $script:calls.Add('registry') }
-        Mock -ModuleName $module Remove-LegacyInstallation { $script:calls.Add('remove legacy') }
-        Mock -ModuleName $module Write-LogError { }
+        Mock -ModuleName $module Remove-LegacyInstallation { $script:calls.Add("remove legacy$(if ($InPlace) { ' in place' })") }
     }
 
     It 'moves everything, then locks the new folder again, and removes the old install last' {
         InModuleScope $module { Invoke-InstallationMigration -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' }
 
-        $script:calls | Should -Be @('check tasks', 'lock C:\Users\sean\LazyVM', 'tasks', 'credentials', 'vm storage', 'check vm files', 'eject', 'files', 'attach', 'registry', 'lock C:\Users\sean\LazyVM', 'remove legacy')
+        $script:calls | Should -Be @('lock C:\Users\sean\LazyVM', 'tasks', 'credentials', 'vm storage', 'check vm files', 'eject', 'files', 'attach', 'registry', 'lock C:\Users\sean\LazyVM', 'remove legacy')
     }
 
     It 'keeps the data where it is when the new folder is the old one, and only locks it' {
-        InModuleScope $module { Invoke-InstallationMigration -OldRoot 'C:\LazyVM' -NewRoot 'C:\LazyVM' }
+        InModuleScope $module { Invoke-InstallationMigration -OldRoot 'C:\LazyVM' -NewRoot 'c:\lazyvm\' }
 
-        $script:calls | Should -Be @('check tasks', 'lock C:\LazyVM', 'tasks', 'credentials', 'registry', 'lock C:\LazyVM', 'remove legacy')
+        $script:calls | Should -Be @('lock c:\lazyvm\', 'tasks', 'credentials', 'registry', 'lock c:\lazyvm\', 'remove legacy in place')
+    }
+
+    It 'goes straight to the registry and the leftovers when a run again finds the old folder gone' {
+        Mock -ModuleName $module Test-Path { $false } -ParameterFilter { $LiteralPath -eq 'C:\LazyVM' }
+
+        InModuleScope $module { Invoke-InstallationMigration -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' }
+
+        $script:calls | Should -Be @('lock C:\Users\sean\LazyVM', 'tasks', 'credentials', 'attach', 'registry', 'lock C:\Users\sean\LazyVM', 'remove legacy')
     }
 
     It 'removes nothing of the old install when a step fails' {
@@ -423,18 +488,33 @@ Describe 'Invoke-InstallationMigration (#284)' {
         $script:calls | Should -Not -Contain 'remove legacy'
         $script:calls | Should -Not -Contain 'registry'
     }
+}
+
+Describe 'Assert-MigrationTarget (#284)' {
+    BeforeEach {
+        Mock -ModuleName $module Assert-RootFolderUsable { }
+        Mock -ModuleName $module Assert-NoRunningTask { }
+    }
 
     It 'refuses a new folder inside the old one, or the other way round' -ForEach @(
         @{ Old = 'C:\LazyVM'; New = 'C:\LazyVM\New' }
         @{ Old = 'C:\Lazy\VM'; New = 'C:\Lazy' }
     ) {
-        { InModuleScope $module -Parameters @{ Old = $Old; New = $New } { param($Old, $New) Invoke-InstallationMigration -OldRoot $Old -NewRoot $New } } |
+        { InModuleScope $module -Parameters @{ Old = $Old; New = $New } { param($Old, $New) Assert-MigrationTarget -OldRoot $Old -NewRoot $New } } |
             Should -Throw -ExpectedMessage '*inside*'
+    }
 
-        $script:calls | Should -BeNullOrEmpty
+    It 'checks the new folder holds nothing else and that no LazyVM task is running' {
+        InModuleScope $module { Assert-MigrationTarget -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' }
+
+        Should -Invoke -ModuleName $module Assert-RootFolderUsable -Times 1 -Exactly -ParameterFilter { $Path -eq 'C:\Users\sean\LazyVM' }
+        Should -Invoke -ModuleName $module Assert-NoRunningTask -Times 1 -Exactly
+    }
+
+    It 'accepts the old folder itself, for a move in place' {
+        { InModuleScope $module { Assert-MigrationTarget -OldRoot 'C:\LazyVM' -NewRoot 'C:\LazyVM' } } | Should -Not -Throw
     }
 }
-
 Describe 'Assert-NoRunningTask (#284)' {
     It 'stops while a LazyVM task is running, naming it' {
         Mock -ModuleName $module Get-ScheduledTask { [pscustomobject]@{ TaskName = 'LazyVM-Maintain-MSDevBox'; State = 'Running' } }
@@ -461,44 +541,81 @@ Describe 'Remove-LegacyInstallation (#284)' {
     }
 
     BeforeEach {
+        $script:removed = [System.Collections.Generic.List[string]]::new()
         Mock -ModuleName $module Write-LogEntry { }
-        Mock -ModuleName $module Remove-Item { }
+        Mock -ModuleName $module Remove-Item { $script:removed.Add($LiteralPath) }
         Mock -ModuleName $module Test-Path { $true }
         Mock -ModuleName $module Get-ChildItem { }
+        Mock -ModuleName $module Test-MachineWideModuleRemovable { $true }
+        Mock -ModuleName $module Get-UserModuleFolder { 'C:\Users\sean\Documents\PowerShell\Modules' }
     }
 
     It 'removes the old folder once it is empty, the machine-wide module copy, and the HKLM key last' {
-        $script:removed = [System.Collections.Generic.List[string]]::new()
-        Mock -ModuleName $module Remove-Item { $script:removed.Add($LiteralPath) }
+        InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' }
 
-        InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' }
-
-        $removed = $script:removed
-        $removed[0] | Should -Be 'C:\LazyVM'
-        $removed | Should -Contain (Join-Path -Path $env:ProgramFiles -ChildPath 'PowerShell\Modules\LazyVM')
-        $removed[-1] | Should -Be 'HKLM:\SOFTWARE\LazyVM'
+        $script:removed[0] | Should -Be 'C:\LazyVM'
+        $script:removed | Should -Contain (Join-Path -Path $env:ProgramFiles -ChildPath 'PowerShell\Modules\LazyVM')
+        $script:removed[-1] | Should -Be 'HKLM:\SOFTWARE\LazyVM'
     }
 
     It 'keeps an old folder that still holds something, and says so' {
         Mock -ModuleName $module Get-ChildItem { [IO.FileInfo]::new('C:\LazyVM\stray.txt') } -ParameterFilter { $LiteralPath -eq 'C:\LazyVM' }
 
-        InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' }
+        InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' }
 
-        Should -Invoke -ModuleName $module Remove-Item -Times 0 -ParameterFilter { $LiteralPath -eq 'C:\LazyVM' }
+        $script:removed | Should -Not -Contain 'C:\LazyVM'
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*C:\LazyVM*still holds*' -and $Level -eq 'WARN' }
     }
 
-    It 'keeps the old folder when it is the new one' {
-        InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' -NewRoot 'C:\LazyVM' }
+    It 'keeps the old folder when the data stayed in it' {
+        InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' -InPlace }
 
-        Should -Invoke -ModuleName $module Remove-Item -Times 0 -ParameterFilter { $LiteralPath -eq 'C:\LazyVM' }
+        $script:removed | Should -Not -Contain 'C:\LazyVM'
+    }
+
+    It 'keeps the machine-wide module copy, and says why, when it cannot go yet' {
+        Mock -ModuleName $module Test-MachineWideModuleRemovable { $false }
+
+        InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' }
+
+        $script:removed | Should -Not -Contain (Join-Path -Path $env:ProgramFiles -ChildPath 'PowerShell\Modules\LazyVM')
+        $script:removed[-1] | Should -Be 'HKLM:\SOFTWARE\LazyVM'
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Kept the copy of LazyVM installed for every user*' -and $Level -eq 'WARN' }
     }
 }
 
+Describe 'Test-MachineWideModuleRemovable (#284)' {
+    BeforeEach {
+        Mock -ModuleName $module Get-UserModuleFolder { 'C:\Users\sean\Documents\PowerShell\Modules' }
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Users\sean\Documents\PowerShell\Modules\LazyVM\6.0.0' }
+        Mock -ModuleName $module Get-Module {
+            [pscustomobject]@{ Name = 'LazyVM'; ModuleBase = 'C:\Program Files\PowerShell\Modules\LazyVM\5.2.4' }
+            [pscustomobject]@{ Name = 'LazyVM'; ModuleBase = 'C:\Users\sean\Documents\PowerShell\Modules\LazyVM\6.0.0' }
+        } -ParameterFilter { $ListAvailable }
+    }
+
+    It 'is true when LazyVM runs from the user''s own copy' {
+        InModuleScope $module { Test-MachineWideModuleRemovable -Path 'C:\Program Files\PowerShell\Modules\LazyVM' } | Should -BeTrue
+    }
+
+    It 'is false while LazyVM runs from the machine-wide copy' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Program Files\PowerShell\Modules\LazyVM\6.0.0' }
+
+        InModuleScope $module { Test-MachineWideModuleRemovable -Path 'C:\Program Files\PowerShell\Modules\LazyVM' } | Should -BeFalse
+    }
+
+    It 'is false when the user has no copy of their own' {
+        Mock -ModuleName $module Get-Module { [pscustomobject]@{ Name = 'LazyVM'; ModuleBase = 'C:\Program Files\PowerShell\Modules\LazyVM\5.2.4' } } -ParameterFilter { $ListAvailable }
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'S:\Source\LazyVM\out\LazyVM\6.0.0' }
+
+        InModuleScope $module { Test-MachineWideModuleRemovable -Path 'C:\Program Files\PowerShell\Modules\LazyVM' } | Should -BeFalse
+    }
+}
 Describe 'Convert-LazyVMInstallation (#284)' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }
-        Mock -ModuleName $module Get-LegacyRoot { 'C:\LazyVM' }
+        Mock -ModuleName $module Get-RegisteredRoot { 'C:\LazyVM' } -ParameterFilter { $Key -like 'HKLM:*' }
+        Mock -ModuleName $module Assert-MigrationTarget { }
         Mock -ModuleName $module Invoke-InstallationMigration { }
         Mock -ModuleName $module Get-DefaultRoot { 'C:\Users\sean\LazyVM' }
     }
@@ -515,14 +632,27 @@ Describe 'Convert-LazyVMInstallation (#284)' {
         Should -Invoke -ModuleName $module Invoke-InstallationMigration -Times 1 -Exactly -ParameterFilter { $NewRoot -eq 'D:\DevVM' }
     }
 
-    It 'changes nothing with -WhatIf' {
+    It 'checks the folders and the tasks before asking, so -WhatIf reports a problem, and changes nothing with -WhatIf' {
         Convert-LazyVMInstallation -WhatIf
 
+        Should -Invoke -ModuleName $module Assert-MigrationTarget -Times 1 -Exactly -ParameterFilter { $OldRoot -eq 'C:\LazyVM' -and $NewRoot -eq 'C:\Users\sean\LazyVM' }
         Should -Invoke -ModuleName $module Invoke-InstallationMigration -Times 0
     }
 
+    It 'stops before asking when the new folder cannot be used' {
+        Mock -ModuleName $module Assert-MigrationTarget { throw 'already holds other files' }
+
+        { Convert-LazyVMInstallation -WhatIf } | Should -Throw -ExpectedMessage '*already holds other files*'
+    }
+
+    It 'refuses a default folder that is not a usable LazyVM folder, as it would a -Path' {
+        Mock -ModuleName $module Get-DefaultRoot { 'C:\Users\sean "quoted"\LazyVM' }
+
+        { Convert-LazyVMInstallation -Confirm:$false } | Should -Throw -ExpectedMessage '*must be a folder on a local drive*'
+    }
+
     It 'says there is nothing to move when LazyVM is already installed per user' {
-        Mock -ModuleName $module Get-LegacyRoot { $null }
+        Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
 
         $null = Convert-LazyVMInstallation -Confirm:$false -InformationVariable info 6> $null
 

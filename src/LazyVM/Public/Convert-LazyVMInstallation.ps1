@@ -23,15 +23,18 @@
       and SYSTEM can open;
     - the folder and any interrupted build, to your part of the registry.
     Only then are the old folder (once empty), the machine-wide copy of the
-    module in Program Files and the old registry key removed.
+    module in Program Files (when you have your own copy) and the old
+    registry key removed.
 
     If it stops part-way, fix what it reports and run it again: it carries
-    on where it stopped, and nothing of the old install is removed before
+    on where it stopped. What has moved stays moved; the old registry key,
+    the module copy and the empty old folder are removed only once
     everything has moved. Its log is Shared\Logs\Migration.log in the new
     folder.
 
     Run it in PowerShell 7 as administrator, signed in as the Windows user
-    who is to own LazyVM, while no LazyVM task is running.
+    who is to own LazyVM, while no LazyVM task is running. The new folder
+    must be empty, new, or already a LazyVM folder.
 
     .PARAMETER Path
     The new LazyVM folder. LazyVM in your profile folder
@@ -61,15 +64,19 @@
     )
 
     Assert-Administrator
-    $oldRoot = Get-LegacyRoot
+    $oldRoot = Get-RegisteredRoot -Key $script:LegacyRootRegistryKey
     if (-not $oldRoot) {
         Write-Information 'LazyVM is already installed per user: there is nothing to move.' -InformationAction Continue
         return
     }
-    $newRoot = if ($Path) { Resolve-SettingsRoot -Path $Path -Source 'the -Path parameter' } else { Get-DefaultRoot }
+    $requested = if ($Path) { $Path } else { Get-DefaultRoot }
+    $newRoot = Resolve-SettingsRoot -Path $requested -Source $(if ($Path) { 'the -Path parameter' } else { 'the default' })
+    # Before asking, so -WhatIf and -Confirm report a folder that cannot be used.
+    Assert-MigrationTarget -OldRoot $oldRoot -NewRoot $newRoot
 
-    $what = if ($oldRoot.TrimEnd('\').Equals($newRoot, [StringComparison]::OrdinalIgnoreCase)) { "keep the files in $newRoot, locked to you and SYSTEM" } else { "move its VMs and files to $newRoot" }
-    if (-not $PSCmdlet.ShouldProcess($oldRoot, "Move LazyVM, installed for every user, to $(Get-TaskUserName): its tasks, its passwords, and $what")) {
+    $what = if (Test-SamePath -Path $oldRoot -Other $newRoot) { "keep the files in $newRoot and lock it to you and SYSTEM" } else { "move its VMs and files to $newRoot, locked to you and SYSTEM" }
+    $action = "Move LazyVM, installed for every user, to $(Get-TaskUserName): its tasks and passwords; $what; then remove the old registry key and the copy of the module in Program Files"
+    if (-not $PSCmdlet.ShouldProcess($oldRoot, $action)) {
         return
     }
     Invoke-InstallationMigration -OldRoot $oldRoot -NewRoot $newRoot

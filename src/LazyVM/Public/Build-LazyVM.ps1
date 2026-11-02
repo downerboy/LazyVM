@@ -6,15 +6,16 @@
     .DESCRIPTION
     Build-LazyVM -Name DevBox is all it takes. On first use it also:
 
-      - chooses the LazyVM folder, if none has been: <drive>:\LazyVM on the
-        local drive with the most free space (Set-LazyVMRoot chooses another)
+      - chooses the LazyVM folder, if none has been: %USERPROFILE%\LazyVM,
+        open to you and SYSTEM only (Set-LazyVMRoot chooses another)
       - creates the VM's profile, if it has none (New-LazyVM is optional),
         from -ConfigTemplate when given
       - finds the Windows ISO, including in your Downloads folder, and moves
         it into the LazyVM folder; with no ISO anywhere it opens the download
         page and stops, so you download it and run the same command again
       - creates the administrator account inside the VM
-      - schedules the daily maintenance, once every phase has run
+      - schedules the daily maintenance before the first phase, asking for
+        your Windows password, so it is in place even if the host restarts
 
     The build runs these phases, skipping whatever is already done, so it is
     safe to run again after a failure:
@@ -97,20 +98,22 @@
         Invoke-CommandRun -Title 'Build' -Name $Name -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
             Sync-VMProfile -VM $VM
+            # The daily maintenance first, while someone is here to give the
+            # Windows password: a build that restarts the host carries on
+            # unattended. A problem here is reported but does not stop the build.
+            if (-not (Test-Unattended)) {
+                try {
+                    Register-RebuildSchedule -VM $VM
+                }
+                catch {
+                    Write-LogEntry "The daily maintenance could not be scheduled: $($_.Exception.Message)" 'WARN'
+                    Write-LogEntry "  Schedule it with: Register-LazyVMMaintenance -Name $($VM.Name)" 'INFO'
+                }
+            }
             $outcome = Invoke-VMBuild -VM $VM -FromPhase $FromPhase -NoUnattend:$NoUnattend
             if ($outcome -eq [BuildOutcome]::RestartPending) {
                 Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
                 return
-            }
-
-            # The daily maintenance, so nothing has to be remembered. A problem
-            # here is reported but does not undo a good build.
-            try {
-                Register-RebuildSchedule -VM $VM
-            }
-            catch {
-                Write-LogEntry "The daily maintenance could not be scheduled: $($_.Exception.Message)" 'WARN'
-                Write-LogEntry "  Schedule it with: Register-LazyVMMaintenance -Name $($VM.Name)" 'INFO'
             }
 
             Write-LogEntry '' 'INFO'

@@ -84,10 +84,24 @@ Describe 'Test-PathWithin' {
         @{ Path = 'D:\DevVM\State\Alpha\manifest.json'; Folder = 'D:\DevVM\State'; Expected = $true }
         @{ Path = 'D:\DevVM\State2'; Folder = 'D:\DevVM\State'; Expected = $false }
         @{ Path = 'D:\DevVM'; Folder = 'D:\DevVM\State'; Expected = $false }
+        @{ Path = '/tmp/root/Alpha/x.json'; Folder = '/tmp/root/'; Expected = $true }
     ) {
         InModuleScope $module -Parameters @{ Path = $Path; Folder = $Folder } {
             param($Path, $Folder)
             Test-PathWithin -Path $Path -Folder $Folder
+        } | Should -Be $Expected
+    }
+}
+
+Describe 'Test-SamePath (#284)' {
+    It "returns <Expected> for '<Path>' and '<Other>'" -ForEach @(
+        @{ Path = 'C:\LazyVM'; Other = 'c:\lazyvm\'; Expected = $true }
+        @{ Path = 'C:\LazyVM'; Other = 'C:\LazyVM\Alpha'; Expected = $false }
+        @{ Path = 'C:\LazyVM'; Other = 'C:\LazyVM2'; Expected = $false }
+    ) {
+        InModuleScope $module -Parameters @{ Path = $Path; Other = $Other } {
+            param($Path, $Other)
+            Test-SamePath -Path $Path -Other $Other
         } | Should -Be $Expected
     }
 }

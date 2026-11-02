@@ -31,17 +31,28 @@
 #  Hyper-V or a single real file.
 # ─────────────────────────────────────────────────────────────────────────────
 
+function Test-SamePath {
+    <# True when $Path and $Other name the same file or folder. Ignores case and trailing separators. #>
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Other
+    )
+
+    return $Path.TrimEnd('\', '/').Equals($Other.TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Test-PathWithin {
-    <# True when $Path is $Folder itself or lies anywhere inside it. Ignores case and trailing backslashes. #>
+    <# True when $Path is $Folder itself or lies anywhere inside it. Ignores case and trailing separators. #>
+    [OutputType([bool])]
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Folder
     )
 
-    $path = $Path.TrimEnd('\')
-    $folder = $Folder.TrimEnd('\')
-    if ($path.Equals($folder, [StringComparison]::OrdinalIgnoreCase)) { return $true }
-    return $path.StartsWith("$folder\", [StringComparison]::OrdinalIgnoreCase)
+    if (Test-SamePath -Path $Path -Other $Folder) { return $true }
+    $folder = $Folder.TrimEnd('\', '/')
+    return ($Path.StartsWith("$folder\", [StringComparison]::OrdinalIgnoreCase) -or $Path.StartsWith("$folder/", [StringComparison]::OrdinalIgnoreCase))
 }
 
 function Get-ParentFolder {

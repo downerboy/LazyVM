@@ -9,15 +9,22 @@
         'Assert-Administrator' = 'stops at once unless run as administrator'
         'Resolve-SettingsRoot' = 'checks -Path is a folder on a local drive'
         'Get-DefaultRoot'      = 'the new folder when -Path is left out: %USERPROFILE%\LazyVM'
-        'Test-PathWithin'      = 'refuses a new folder inside the old one, or the other way round'
+        'Test-SamePath'        = 'tells a move in place, which keeps the data where it is, from a move'
         'Get-TaskUserName'     = 'names the user in the log'
     }
     Steps      = @(
         @{
-            Function = 'Get-LegacyRoot'
+            Function = 'Get-RegisteredRoot'
             Area     = 'Settings'
             Note     = 'nothing to move without one'
             Reads    = @(@{ Label = 'machine-wide install'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root') })
+        }
+        @{
+            Function = 'Assert-MigrationTarget'
+            Area     = 'Migration'
+            Note     = 'before asking: the new folder is not inside the old one, holds nothing else, and no LazyVM task is running'
+            Includes = @('Test-PathWithin', 'Assert-RootFolderUsable', 'Assert-NoRunningTask')
+            Reads    = @(@{ Label = 'LazyVM tasks'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-*  state') })
         }
         @{
             Function = 'Invoke-InstallationMigration'
@@ -25,13 +32,6 @@
             Note     = 'runs the steps below, logging to Shared\Logs\Migration.log in the new folder'
             Includes = @('Start-Log', 'Stop-Log')
             Writes   = @(@{ Label = 'migration log'; Kind = 'file'; Store = '<new>\Shared\Logs\'; Items = @('Migration.log') })
-        }
-        @{
-            Function = 'Assert-NoRunningTask'
-            Area     = 'Migration'
-            Caller   = 'Invoke-InstallationMigration'
-            Note     = 'stops while a LazyVM task is running'
-            Reads    = @(@{ Label = 'LazyVM tasks'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-*  state') })
         }
         @{
             Function = 'Initialize-RootFolder'
@@ -44,8 +44,8 @@
             Function = 'Move-LegacyTask'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 'first, so no nightly run starts mid-move; asks for your Windows password once'
-            Includes = @('Register-LazyVMHostTask')
+            Note     = 'first, so no nightly run starts mid-move; keeps when each runs and makes its action again; asks for your Windows password once'
+            Includes = @('Get-HostTaskCommand', 'New-LazyVMTaskAction', 'Register-LazyVMHostTask')
             Reads    = @(@{ Label = 'tasks run as SYSTEM'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'LazyVM-ResumeAfterReboot-<VM>') })
             Writes   = @(@{ Label = 'same tasks, as you'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('elevated, signed in or not') })
         }
@@ -62,8 +62,8 @@
             Function = 'Move-LegacyVMStorage'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 'unless the folder stays: Hyper-V storage migration, the VM keeps running; checks free space first'
-            Includes = @('ConvertTo-NewRootPath', 'Get-FolderSize', 'Get-FreeSpace')
+            Note     = 'unless the folder stays, or is gone already: Hyper-V storage migration, each location to its own place, the VM keeps running; checks free space for the disks and Hyper-V''s folders first'
+            Includes = @('ConvertTo-NewRootPath', 'Get-VMMoveSize', 'Assert-FreeSpace')
             Reads    = @(@{ Label = 'VM files'; Kind = 'Hyper-V'; Store = 'VMs in <old>'; Items = @('configuration, checkpoints, disks') })
             Writes   = @(@{ Label = 'VM files'; Kind = 'Hyper-V'; Store = '<new>\<VM>\'; Items = @('Virtual Machines, Checkpoints, Disks') })
         }
@@ -71,28 +71,32 @@
             Function = 'Assert-NoVMFileLeft'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 'stops before any other file moves if a VM still uses a disk in the old folder, a checkpoint''s parent disk included'
+            Note     = 'stops before any other file moves if a VM still uses anything in the old folder: a location, a disk, a checkpoint''s parent disk'
             Reads    = @(@{ Label = 'disks in use'; Kind = 'Hyper-V'; Store = 'VMs and checkpoints'; Items = @('attached disks', 'parent disks') })
         }
         @{
             Function = 'Dismount-LegacyDvdMedia'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 'ejects ISOs attached from the old folder'
-            Writes   = @(@{ Label = 'DVD drives'; Kind = 'Hyper-V'; Store = 'VMs'; Items = @('ejected') })
+            Note     = 'ejects ISOs attached from the old folder, noting each first'
+            Writes   = @(
+                @{ Label = 'ejected ISOs'; Kind = 'file'; Store = '<new>\Shared\'; Items = @('Migration.EjectedMedia.json') }
+                @{ Label = 'DVD drives'; Kind = 'Hyper-V'; Store = 'VMs'; Items = @('ejected') }
+            )
         }
         @{
             Function = 'Move-LegacyFile'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 'every other file, one at a time, to the same place'
+            Note     = 'every other file, one at a time, to the same place; checks free space first when the new folder is on another drive'
             Writes   = @(@{ Label = 'settings, logs, state, ISOs'; Kind = 'file'; Store = '<new>'; Items = @('Shared\', '<VM>\') })
         }
         @{
             Function = 'Mount-MovedDvdMedia'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 'attaches the ISOs again from the new folder'
+            Note     = 'on any run: attaches the noted ISOs again from the new folder, then forgets them'
+            Reads    = @(@{ Label = 'ejected ISOs'; Kind = 'file'; Store = '<new>\Shared\'; Items = @('Migration.EjectedMedia.json') })
             Writes   = @(@{ Label = 'DVD drives'; Kind = 'Hyper-V'; Store = 'VMs'; Items = @('ISO from <new>') })
         }
         @{
@@ -107,7 +111,8 @@
             Function = 'Remove-LegacyInstallation'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 'last: the old folder once empty, the Program Files copy, then the HKLM key'
+            Note     = 'last: the old folder once empty, the Program Files copy when you have your own, then the HKLM key'
+            Includes = @('Test-MachineWideModuleRemovable')
             Writes   = @(@{ Label = 'old install removed'; Kind = 'registry'; Store = 'Machine-wide'; Items = @('<old>  (if empty)', 'Program Files\PowerShell\Modules\LazyVM', 'HKLM:\SOFTWARE\LazyVM') })
         }
     )

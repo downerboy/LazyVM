@@ -71,7 +71,7 @@ function Add-DerivedSetting {
     $Settings.AppSettingsCredFile = "$vmRoot\Credentials\appsettings.cred"
     $Settings.BitLockerCredFile = "$vmRoot\Credentials\bitlocker.cred"
     $Settings.ResumeRegKey = "$script:RootRegistryKey\$vm"
-    $Settings.ResumeTaskName = "${script:TaskPrefix}ResumeAfterReboot-$vm"
+    $Settings.ResumeTaskName = "$script:ResumeTaskPrefix$vm"
     $Settings.ScheduleTaskName = Get-MaintenanceTaskName -VMName $vm
 }
 
@@ -79,7 +79,7 @@ function Get-MaintenanceTaskName {
     <# The name of a VM's daily maintenance task. #>
     param([Parameter(Mandatory)][string]$VMName)
 
-    return "${script:TaskPrefix}Maintain-$VMName"
+    return "$script:MaintenanceTaskPrefix$VMName"
 }
 
 function Expand-VMToken {
