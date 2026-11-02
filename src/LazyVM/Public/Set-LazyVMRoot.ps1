@@ -6,8 +6,13 @@
     .DESCRIPTION
     Every VM's disks, the ISO and installers, logs, encrypted passwords,
     captured state and your settings live under one folder, the LazyVM
-    folder. Set-LazyVMRoot records it once, in the registry, for every later
-    command and for the scheduled tasks.
+    folder. Set-LazyVMRoot records it once, in your part of the registry,
+    for every later command and for the scheduled tasks.
+
+    The folder is open to you and SYSTEM only: no other account, local
+    administrators included, can open it, and everything in it inherits
+    that. Hyper-V adds each VM's own access to its files. Running
+    Set-LazyVMRoot again on the same folder locks it again.
 
     The folder is created if needed, along with Shared\Config\LazyVM.Settings.json
     (your settings) and a copy of the settings schema beside it, so VS Code
@@ -15,6 +20,8 @@
 
     .PARAMETER Path
     A folder on a local drive, such as D:\DevVM. Not the top of a drive.
+    Without Set-LazyVMRoot, LazyVM uses LazyVM in your profile folder
+    (%USERPROFILE%\LazyVM).
 
     .EXAMPLE
     Set-LazyVMRoot -Path D:\DevVM
@@ -42,7 +49,7 @@
         return
     }
 
-    New-Folder -Path $root
+    Initialize-RootFolder -Path $root
     Set-RegisteredRoot -Path $root
     $configDir = Get-ConfigDir -Root $root
     Initialize-ConfigFolder -ConfigDir $configDir

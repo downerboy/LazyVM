@@ -5,6 +5,8 @@
 # offers one, overrides it for that run. Host paths in the settings are
 # relative to it unless written as full paths (E:\VMs), which is how one
 # large item can live on another drive.
+#
+# The folder is open to the user who installed LazyVM and SYSTEM only (#284).
 
 function Test-FullHostPath {
     <# True for D:\folder or \\server\share; false for anything relative. #>
@@ -85,37 +87,57 @@ function Resolve-LazyVMRoot {
     throw "LazyVM does not know which folder to keep its VMs in yet. Choose one with: Set-LazyVMRoot -Path D:\DevVM"
 }
 
-function Select-RootVolume {
-    <#
-      The volume LazyVM's folder goes on when nobody has chosen one: the
-      local NTFS volume with the most free space, leaving out volumes on a
-      virtual disk (a VHD-backed drive is not there until something mounts
-      it, so after a restart the VMs would have no disks). Returns $null when
-      there is none.
-    #>
-    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Volumes)
-
-    return $Volumes |
-        Where-Object { $_.DriveLetter -and $_.FileSystem -eq 'NTFS' -and -not $_.IsVirtual } |
-        Sort-Object -Property SizeRemaining -Descending |
-        Select-Object -First 1
+function Get-DefaultRoot {
+    <# LazyVM in the user's profile folder (#284): the folder LazyVM uses when nobody has chosen one. #>
+    return Join-Path -Path ([Environment]::GetFolderPath('UserProfile')) -ChildPath 'LazyVM'
 }
 
-function Get-DefaultRoot {
-    <# <drive>:\LazyVM on the volume Select-RootVolume picks. #>
-    $volumes = foreach ($volume in Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }) {
-        $disk = Get-Partition -DriveLetter $volume.DriveLetter -ErrorAction SilentlyContinue | Get-Disk -ErrorAction SilentlyContinue
-        [pscustomobject]@{
-            DriveLetter   = $volume.DriveLetter
-            FileSystem    = $volume.FileSystem
-            SizeRemaining = $volume.SizeRemaining
-            IsVirtual     = ($disk -and "$($disk.BusType)" -eq 'File Backed Virtual')
-        }
-    }
+function Get-CurrentUserSid {
+    <# The security identifier of the Windows account running LazyVM. #>
+    [OutputType([System.Security.Principal.SecurityIdentifier])]
+    param()
 
-    $chosen = Select-RootVolume -Volumes @($volumes)
-    if (-not $chosen) {
-        throw 'No local NTFS drive was found for LazyVM''s VMs. Choose a folder with: Set-LazyVMRoot -Path D:\DevVM'
+    return [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+}
+
+function New-RootFolderSecurity {
+    <#
+      The access the LazyVM folder gets (#284): full control for $User and
+      SYSTEM, inherited by everything in it, and nothing inherited from the
+      folder above, so no other account, local administrators included, is
+      let in. $User owns it. Hyper-V adds each VM's own access to its files.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Makes a value; changes nothing.')]
+    [OutputType([System.Security.AccessControl.DirectorySecurity])]
+    param([Parameter(Mandatory)][System.Security.Principal.SecurityIdentifier]$User)
+
+    $security = [System.Security.AccessControl.DirectorySecurity]::new()
+    $security.SetAccessRuleProtection($true, $false)
+    $security.SetOwner($User)
+    $system = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+    foreach ($account in $User, $system) {
+        $security.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($account,
+                [System.Security.AccessControl.FileSystemRights]::FullControl,
+                [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
+                [System.Security.AccessControl.PropagationFlags]::None,
+                [System.Security.AccessControl.AccessControlType]::Allow))
     }
-    return "$($chosen.DriveLetter):\LazyVM"
+    return $security
+}
+
+function Initialize-RootFolder {
+    <#
+      Creates the LazyVM folder with the access New-RootFolderSecurity gives,
+      in one step, so it is never open to anyone else even for a moment; or
+      gives an existing folder that access, which everything in it then
+      inherits.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    $security = New-RootFolderSecurity -User (Get-CurrentUserSid)
+    if (Test-Path -LiteralPath $Path) {
+        Set-Acl -LiteralPath $Path -AclObject $security
+        return
+    }
+    $null = [System.IO.FileSystemAclExtensions]::Create([IO.DirectoryInfo]::new($Path), $security)
 }

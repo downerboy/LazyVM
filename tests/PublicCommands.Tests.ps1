@@ -394,6 +394,8 @@ Describe 'Initialize-BuildTarget' {
         $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
         Mock -ModuleName $module Set-RegisteredRoot { }
         Mock -ModuleName $module Get-DefaultRoot { $root }.GetNewClosure()
+        # The folder's access is tested in PerUser.Tests.ps1; here it only has to be there.
+        Mock -ModuleName $module Initialize-RootFolder { New-Item -ItemType Directory -Path $Path -Force | Out-Null }
     }
 
     It 'chooses and records the LazyVM folder on first use, and creates the profile' {
@@ -440,25 +442,6 @@ Describe 'Initialize-BuildTarget' {
         Mock -ModuleName $module Get-RegisteredRoot { $root }.GetNewClosure()
 
         { InModuleScope $module { Initialize-BuildTarget } } | Should -Throw -ExpectedMessage '*Build-LazyVM -Name DevBox*'
-    }
-}
-
-Describe 'Select-RootVolume' {
-    It 'picks the NTFS volume with the most free space, leaving out virtual disks' {
-        $volumes = @(
-            [pscustomobject]@{ DriveLetter = 'C'; FileSystem = 'NTFS'; SizeRemaining = 200GB; IsVirtual = $false }
-            [pscustomobject]@{ DriveLetter = 'D'; FileSystem = 'NTFS'; SizeRemaining = 900GB; IsVirtual = $false }
-            [pscustomobject]@{ DriveLetter = 'S'; FileSystem = 'ReFS'; SizeRemaining = 950GB; IsVirtual = $true }
-            [pscustomobject]@{ DriveLetter = 'V'; FileSystem = 'NTFS'; SizeRemaining = 999GB; IsVirtual = $true }
-        )
-
-        (InModuleScope $module -Parameters @{ Volumes = $volumes } { param($Volumes) Select-RootVolume -Volumes $Volumes }).DriveLetter | Should -Be 'D'
-    }
-
-    It 'returns nothing when no volume will do' {
-        $volumes = @([pscustomobject]@{ DriveLetter = 'S'; FileSystem = 'ReFS'; SizeRemaining = 1TB; IsVirtual = $true })
-
-        InModuleScope $module -Parameters @{ Volumes = $volumes } { param($Volumes) Select-RootVolume -Volumes $Volumes } | Should -BeNullOrEmpty
     }
 }
 

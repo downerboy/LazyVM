@@ -32,6 +32,46 @@ function Get-IsoCheck {
     return New-DiagnosticCheck -Name $Name -Area Host -Check $Check -Status $status -Detail "$Path $why"
 }
 
+function Get-RootAccess {
+    <# Who the LazyVM folder at $Root lets in, as security identifiers, and whether it inherits access from the folder above. #>
+    param([Parameter(Mandatory)][string]$Root)
+
+    $acl = Get-Acl -LiteralPath $Root
+    return [pscustomobject]@{
+        Protected = $acl.AreAccessRulesProtected
+        Sids      = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) |
+                Where-Object { "$($_.AccessControlType)" -eq 'Allow' } |
+                ForEach-Object { $_.IdentityReference.Value } | Select-Object -Unique)
+    }
+}
+
+function ConvertTo-AccountName {
+    <# The account name for a security identifier, or the identifier itself when it has no name. #>
+    param([Parameter(Mandatory)][string]$Sid)
+
+    try { return [System.Security.Principal.SecurityIdentifier]::new($Sid).Translate([System.Security.Principal.NTAccount]).Value }
+    catch { return $Sid }
+}
+
+function Get-RootAccessCheck {
+    <# Whether the LazyVM folder is open to the current user and SYSTEM only, as Initialize-RootFolder leaves it (#284). #>
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Root
+    )
+
+    $access = Get-RootAccess -Root $Root
+    $allowed = @((Get-CurrentUserSid).Value, 'S-1-5-18')
+    $others = @($access.Sids | Where-Object { $allowed -notcontains $_ } | ForEach-Object { ConvertTo-AccountName -Sid $_ })
+    $problems = @()
+    if (-not $access.Protected) { $problems += 'it inherits access from the folder above' }
+    if ($others.Count -gt 0) { $problems += "it is also open to $($others -join ', ')" }
+    if ($problems.Count -eq 0) {
+        return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status OK -Detail 'only you and SYSTEM'
+    }
+    return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status WARN -Detail "$($problems -join '; '). Lock it again with: Set-LazyVMRoot -Path $Root"
+}
+
 function Get-LazyVMDiagnostic {
     <#
       The checks Test-LazyVM reports, in order. Reads only: a VM that is not
@@ -56,6 +96,7 @@ function Get-LazyVMDiagnostic {
     $vmName = $configuration.VMName
     $settings = $configuration.Settings
     New-DiagnosticCheck -Name $vmName -Area Host -Check 'LazyVM folder' -Status OK -Detail "$($root.Path) (from $($root.Source))"
+    Get-RootAccessCheck -Name $vmName -Root $root.Path
     Get-IsoCheck -Name $vmName -Check 'Windows ISO' -Path $settings.ISOPath
     Get-IsoCheck -Name $vmName -Check 'SQL Server ISO' -Path $settings.SQLIsoPath -Downloadable
 

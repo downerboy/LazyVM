@@ -29,6 +29,7 @@ Describe 'Get-LazyVMDiagnostic' {
             }
             [pscustomobject]@{ VMName = 'Alpha'; Settings = $settings }
         }
+        Mock -ModuleName $module Get-RootAccessCheck { New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status OK }
         Mock -ModuleName $module Test-IsoFile { $true }
         Mock -ModuleName $module Get-Item { [pscustomobject]@{ Length = 6GB } }
         Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; Heartbeat = 'OkApplicationsHealthy' } }
@@ -46,6 +47,7 @@ Describe 'Get-LazyVMDiagnostic' {
 
         @($checks.Values | Where-Object { $_.Status -in 'WARN', 'FAIL' }).Count | Should -Be 0
         $checks['LazyVM folder'].Detail | Should -BeLike 'C:\LazyVM*registry*'
+        $checks['LazyVM folder access'].Status | Should -Be 'OK'
         $checks['PowerShell Direct'].Status | Should -Be 'OK'
         $checks['Maintenance task'].Status | Should -Be 'OK'
     }
