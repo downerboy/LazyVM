@@ -80,6 +80,15 @@ $script:LegacyToolingTemplateFileName = 'Tooling.Template.json'
 # winget's exit code for a package that is already installed and up to date.
 $script:WingetUpToDateExitCode = -1978335189
 
+# winget's exit code when Windows Installer is still busy with another
+# install (0x8A150102), as right after a large package (#265). Worth waiting
+# for: the install is tried again every WingetRetryDelaySeconds, up to
+# WingetBusyAttempts times. A network error is tried again once, after the
+# same wait.
+$script:WingetBusyExitCode = -1978334974
+$script:WingetBusyAttempts = 10
+$script:WingetRetryDelaySeconds = 30
+
 # What the winget exit codes that actually come up mean, so the log explains
 # itself; the installs and the upgrades both use it. The keys are strings
 # because the table travels to a guest task as JSON, and Windows PowerShell
@@ -91,6 +100,7 @@ $script:WingetExitMeanings = @{
     '-2147012721' = 'content decoding failed - check for a proxy intercepting HTTPS'
     '-2147012739' = 'a secure channel error - check the date, time and certificates in the guest'
     "$script:WingetUpToDateExitCode" = 'already installed and up to date'
+    "$script:WingetBusyExitCode" = 'another installation was still in progress'
     '-1978335212' = 'no package matched that identifier'
     '-1978335215' = 'no applicable installer for this system'
     '-1978334972' = 'the installer hash did not match'

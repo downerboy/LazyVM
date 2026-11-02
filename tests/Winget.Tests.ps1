@@ -1,4 +1,4 @@
-# Winget.Tests.ps1
+﻿# Winget.Tests.ps1
 # winget packages are installed by a scheduled task in the guest that the
 # host checks on, so a dropped session or a guest restart does not lose the
 # run or its report (#27). Nothing here needs Hyper-V or a guest.
@@ -75,6 +75,26 @@ Describe 'Install-WingetPackage' {
             InModuleScope $module -Parameters @{ VM = $vm; Packages = $packages } { param($VM, $Packages) Install-WingetPackage -VM $VM -Packages $Packages }
 
             Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter { @($Notes).Text -contains 'installed: Git.Git' }
+        }
+
+        It 'waits and tries again when another installation is in progress (#265)' {
+            # The stand-in winget answers 0x8A150102 once, then installs.
+            $busy = Join-Path -Path $TestDrive -ChildPath 'busy-once'
+            Set-Content -LiteralPath $busy -Value ''
+            Set-Content -LiteralPath (Join-Path -Path $TestDrive -ChildPath 'winget.cmd') -Value '@if "%1"=="list" exit /b 1', '@if exist "%~dp0busy-once" (del "%~dp0busy-once" & exit /b -1978334974)', '@exit /b 0'
+            $delay = InModuleScope $module { $script:WingetRetryDelaySeconds }
+            InModuleScope $module { $script:WingetRetryDelaySeconds = 0 }
+            try {
+                InModuleScope $module -Parameters @{ VM = $vm; Packages = $packages } { param($VM, $Packages) Install-WingetPackage -VM $VM -Packages $Packages }
+            }
+            finally {
+                InModuleScope $module -Parameters @{ Delay = $delay } { param($Delay) $script:WingetRetryDelaySeconds = $Delay }
+            }
+
+            Test-Path -LiteralPath $busy | Should -BeFalse
+            Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter {
+                @($Notes).Text -contains 'installed: Git.Git' -and @($Notes).Text -like '*retrying Git.Git*another installation*'
+            }
         }
     }
 }

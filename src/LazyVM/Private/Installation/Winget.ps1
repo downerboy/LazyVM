@@ -7,7 +7,10 @@ function Install-WingetPackage {
       already waited for the guest network: PowerShell Direct works long
       before DNS does, and without that wait installs fail with 0x80072EE7.
       Each package is independent: one that fails is reported and the rest
-      carry on, and nothing here stops the build.
+      carry on, and nothing here stops the build. A package refused because
+      another installation is in progress is tried again until Windows
+      Installer is free, up to $script:WingetBusyAttempts times; one that hit
+      a network error, once (#265).
 
       The installs run as a scheduled task in the guest (Invoke-GuestTask),
       so a dropped session does not lose them or their report, and a guest
@@ -34,13 +37,13 @@ function Install-WingetPackage {
         }
 
         $report = Invoke-GuestTask -VM $VM -TaskName "${script:TaskPrefix}winget" -Activity 'winget packages' -TimeoutMinutes 60 `
-            -AsGuestUser -Elevated -RestartAttempts 3 -ArgumentList @($winget, $tools, $script:WingetExitMeanings, $script:WingetUpToDateExitCode) -Work {
+            -AsGuestUser -Elevated -RestartAttempts 3 -ArgumentList @($winget, $tools, $script:WingetExitMeanings, $script:WingetUpToDateExitCode, $script:WingetBusyExitCode, $script:WingetBusyAttempts, $script:WingetRetryDelaySeconds) -Work {
             # $exitMeanings is $script:WingetExitMeanings; after the trip as JSON, its keys are properties.
-            param($winget, $tools, $exitMeanings, $alreadyInstalled)
+            param($winget, $tools, $exitMeanings, $alreadyInstalled, $busy, $busyAttempts, $retryDelaySeconds)
             $ErrorActionPreference = 'Continue'
 
-            # Worth one retry; everything else is a real failure.
-            $transientCodes = @(-2147012889, -2147012894, -2147012867, -2147012716)
+            # Network errors are worth one retry; everything else but $busy is a real failure.
+            $networkCodes = @(-2147012889, -2147012894, -2147012867, -2147012716)
 
             $notes = @()
             foreach ($tool in @($tools)) {
@@ -56,17 +59,24 @@ function Install-WingetPackage {
                 }
 
                 $exit = $null
-                foreach ($attempt in 1, 2) {
+                $networkRetried = $false
+                for ($attempt = 1; ; $attempt++) {
                     # winget's own output is a progress table whose last line
                     # never explains a failure; the exit code below does.
                     & $winget install --id $id --exact --silent @sourceArgs `
                         --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
                     $exit = $LASTEXITCODE
-                    if ($exit -eq 0 -or $transientCodes -notcontains $exit) { break }
-                    if ($attempt -eq 1) {
-                        $notes += [pscustomobject]@{ Level = 'INFO'; Text = "retrying $id after a network error" }
-                        Start-Sleep -Seconds 20
+                    $reason = $null
+                    if ($exit -eq $busy -and $attempt -lt $busyAttempts) {
+                        $reason = 'another installation is in progress'
                     }
+                    elseif ($networkCodes -contains $exit -and -not $networkRetried) {
+                        $networkRetried = $true
+                        $reason = 'a network error'
+                    }
+                    if (-not $reason) { break }
+                    $notes += [pscustomobject]@{ Level = 'INFO'; Text = "retrying $id in $retryDelaySeconds s: $reason" }
+                    Start-Sleep -Seconds $retryDelaySeconds
                 }
 
                 if ($exit -eq 0) { $notes += [pscustomobject]@{ Level = 'OK'; Text = "installed: $id" } }
