@@ -1,26 +1,28 @@
 ﻿#Requires -Version 7.6
+#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
 Installs LazyVM from a release download.
 
 .DESCRIPTION
-Copies the LazyVM module beside this script to your own module folder,
-%LOCALAPPDATA%\LazyVM\Modules, and adds that folder to your PSModulePath
-(once), so PowerShell 7 finds LazyVM. The folder is on this computer only:
-not Documents, which OneDrive can sync and make online-only. LazyVM's
-scheduled tasks, which run as SYSTEM, load the module from that folder by
-its path. Only you can use LazyVM: it is installed per user. An earlier
-copy of the same version is replaced; other versions are left alone.
+Copies the LazyVM module beside this script to %ProgramFiles%\LazyVM\Modules
+and adds that folder to your PSModulePath (once), so PowerShell 7 finds
+LazyVM. The folder %ProgramFiles%\LazyVM is locked: administrators and
+SYSTEM can change it, you can read and run it, and nobody else can open
+it. LazyVM's scheduled tasks run this module as SYSTEM, so nobody but an
+administrator may be able to change it. An earlier copy of the same version
+is replaced; other versions are left alone.
 
-A copy an earlier LazyVM 6 put in Documents\PowerShell\Modules is
-removed. A copy installed for every user, in Program Files, is reported:
-Convert-LazyVMInstallation moves that install to you and removes it.
+A copy an earlier LazyVM 6 put in %LOCALAPPDATA%\LazyVM\Modules or
+Documents\PowerShell\Modules is removed. LazyVM 5's copy, in
+%ProgramFiles%\PowerShell\Modules, is reported: Convert-LazyVMInstallation
+moves that install to you and removes it.
 
 Files downloaded from the internet are marked as such, and PowerShell will
 not load a marked module, so the copies are unblocked as they are installed.
 
-Run it in PowerShell 7 (pwsh), signed in as the Windows user who will use
-LazyVM. It does not need to run as administrator; LazyVM itself does.
+Run it in PowerShell 7 (pwsh) as administrator, signed in as the Windows
+user who will use LazyVM (approve the UAC prompt with your own account).
 
 .PARAMETER Path
 The folder that holds the LazyVM module folder. By default, this script's
@@ -57,11 +59,53 @@ function Add-PathListEntry {
     )
 
     $entries = @($List -split ';' | Where-Object { $_ })
-    $wanted = $Entry.TrimEnd('\')
     foreach ($existing in $entries) {
-        if ([Environment]::ExpandEnvironmentVariables($existing).TrimEnd('\') -ieq $wanted) { return $List }
+        if (Test-SameFolder -Path $existing -Other $Entry) { return $List }
     }
     return (@($entries) + $Entry) -join ';'
+}
+
+function Remove-PathListEntry {
+    <# $List (folders separated by ;) without $Entry, however it is written there. #>
+    [OutputType([string])]
+    param(
+        [AllowEmptyString()][string]$List,
+        [Parameter(Mandatory)][string]$Entry
+    )
+
+    return @($List -split ';' | Where-Object { $_ -and -not (Test-SameFolder -Path $_ -Other $Entry) }) -join ';'
+}
+
+function Test-SameFolder {
+    <# Whether $Path, environment variables expanded, names the folder $Other, in any case, with or without a trailing backslash. #>
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Other
+    )
+
+    return [Environment]::ExpandEnvironmentVariables($Path).TrimEnd('\') -ieq $Other.TrimEnd('\')
+}
+
+function Update-UserModulePath {
+    <#
+      Changes the user's PSModulePath, kept in HKCU\Environment as it is,
+      unexpanded entries included, with $Change (the value in, the value
+      out), and tells running programs when it changed. PowerShell 7 adds the
+      user's entries to the machine's when it starts.
+    #>
+    param([Parameter(Mandatory)][scriptblock]$Change)
+
+    $environment = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+    try {
+        $current = [string]$environment.GetValue('PSModulePath', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $updated = & $Change $current
+        if ($updated -eq $current) { return }
+        $kind = if ($current) { $environment.GetValueKind('PSModulePath') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+        $environment.SetValue('PSModulePath', $updated, $kind)
+        Send-EnvironmentChange
+    }
+    finally { $environment.Dispose() }
 }
 
 function Send-EnvironmentChange {
@@ -75,6 +119,37 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wP
     $null = [LazyVMInstall.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
 }
 
+function Set-InstallFolderAccess {
+    <#
+      Locks $Path: full control for Administrators and SYSTEM, read and run
+      for the user $User, inherited by everything in it, nothing inherited
+      from above, and owned by Administrators. Nobody but an administrator
+      can change what is in it.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][System.Security.Principal.SecurityIdentifier]$User
+    )
+
+    $administrators = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+    $access = [ordered]@{
+        'S-1-5-32-544' = [System.Security.AccessControl.FileSystemRights]::FullControl
+        'S-1-5-18'     = [System.Security.AccessControl.FileSystemRights]::FullControl
+        $User.Value    = [System.Security.AccessControl.FileSystemRights]::ReadAndExecute
+    }
+    $security = [System.Security.AccessControl.DirectorySecurity]::new()
+    $security.SetAccessRuleProtection($true, $false)
+    $security.SetOwner($administrators)
+    foreach ($sid in $access.Keys) {
+        $security.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+                [System.Security.Principal.SecurityIdentifier]::new($sid), $access[$sid],
+                [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
+                [System.Security.AccessControl.PropagationFlags]::None,
+                [System.Security.AccessControl.AccessControlType]::Allow))
+    }
+    Set-Acl -LiteralPath $Path -AclObject $security
+}
+
 # Only version folders, as a release download and the assembled module have
 # them: in the repository, src\LazyVM holds the module's source instead (#90).
 $versionDir = Get-ChildItem -LiteralPath (Join-Path -Path $Path -ChildPath $moduleName) -Directory -ErrorAction SilentlyContinue |
@@ -85,9 +160,13 @@ if (-not $versionDir) {
     throw "There is no $moduleName module folder in $Path. Extract the whole download and run Install.ps1 from it, or, from the repository's root folder, run: ./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out"
 }
 
-# On this computer only, never synced by OneDrive (#284). The module names
-# the same folder (Get-UserModuleFolder).
-$modulesDir = Join-Path -Path ([Environment]::GetFolderPath('LocalApplicationData')) -ChildPath 'LazyVM\Modules'
+# In Program Files, locked so only administrators can change it: the
+# scheduled tasks run it as SYSTEM (#284). The module names the same folder
+# (Get-InstalledModuleFolder).
+$installDir = Join-Path -Path $env:ProgramFiles -ChildPath $moduleName
+New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+Set-InstallFolderAccess -Path $installDir -User ([System.Security.Principal.WindowsIdentity]::GetCurrent().User)
+$modulesDir = Join-Path -Path $installDir -ChildPath 'Modules'
 $target = Join-Path -Path $modulesDir -ChildPath "$moduleName\$($versionDir.Name)"
 if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
@@ -95,32 +174,21 @@ Copy-Item -Path (Join-Path -Path $versionDir.FullName -ChildPath '*') -Destinati
 Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File
 Write-Information "Installed $moduleName $($versionDir.Name) in $target" -InformationAction Continue
 
-# The folder on the user's PSModulePath, kept in HKCU\Environment as it is,
-# unexpanded entries included. PowerShell 7 adds the user's entries to the
-# machine's when it starts.
-$environment = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
-try {
-    $current = [string]$environment.GetValue('PSModulePath', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-    $updated = Add-PathListEntry -List $current -Entry $modulesDir
-    if ($updated -ne $current) {
-        $kind = if ($current) { $environment.GetValueKind('PSModulePath') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
-        $environment.SetValue('PSModulePath', $updated, $kind)
-        Send-EnvironmentChange
-        Write-Information "Added $modulesDir to your PSModulePath" -InformationAction Continue
+# Earlier LazyVM 6 builds installed into the user's own folders, which the
+# user, or OneDrive, can change.
+$userCopy = Join-Path -Path ([Environment]::GetFolderPath('LocalApplicationData')) -ChildPath "$moduleName\Modules"
+Update-UserModulePath -Change { param($List) Add-PathListEntry -List (Remove-PathListEntry -List $List -Entry $userCopy) -Entry $modulesDir }
+$env:PSModulePath = Add-PathListEntry -List (Remove-PathListEntry -List $env:PSModulePath -Entry $userCopy) -Entry $modulesDir
+$documentsCopy = Join-Path -Path ([Environment]::GetFolderPath('MyDocuments')) -ChildPath "PowerShell\Modules\$moduleName"
+foreach ($earlier in $userCopy, $documentsCopy) {
+    if (Test-Path -LiteralPath $earlier) {
+        Remove-Item -LiteralPath $earlier -Recurse -Force
+        Write-Information "Removed the earlier copy in $earlier" -InformationAction Continue
     }
 }
-finally { $environment.Dispose() }
-$env:PSModulePath = Add-PathListEntry -List $env:PSModulePath -Entry $modulesDir
-
-# LazyVM 6 builds before this one installed into Documents, which OneDrive can sync.
-$documentsCopy = Join-Path -Path ([Environment]::GetFolderPath('MyDocuments')) -ChildPath "PowerShell\Modules\$moduleName"
-if (Test-Path -LiteralPath $documentsCopy) {
-    Remove-Item -LiteralPath $documentsCopy -Recurse -Force
-    Write-Information "Removed the earlier copy in $documentsCopy" -InformationAction Continue
-}
-# Before #284, LazyVM was installed for every user, in Program Files.
+# LazyVM 5 was installed for every user, in PowerShell's own module folder.
 $machineWide = Join-Path -Path $env:ProgramFiles -ChildPath "PowerShell\Modules\$moduleName"
 if (Test-Path -LiteralPath $machineWide) {
-    Write-Warning "An earlier LazyVM is installed for every user in $machineWide. Open a new PowerShell 7 window as administrator and run Convert-LazyVMInstallation: it moves your VMs, passwords and tasks to your account and then removes that copy."
+    Write-Warning "LazyVM 5 is installed for every user in $machineWide. Open a new PowerShell 7 window as administrator and run Convert-LazyVMInstallation: it moves your VMs, passwords and tasks to your account and then removes that copy."
 }
 Write-Information 'Open a new PowerShell 7 window as administrator, then run: Build-LazyVM -Name DevBox' -InformationAction Continue

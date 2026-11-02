@@ -383,6 +383,7 @@ Describe 'Resolve-LazyVMRoot' {
         Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
         # Its access is tested in PerUser.Tests.ps1.
         Mock -ModuleName $module Assert-RootLocked { }
+        Mock -ModuleName $module Get-CurrentUserSid { [pscustomobject]@{ Value = 'S-1-5-21-1-1001' } }
     }
 
     It 'prefers -Root to the registered folder' {

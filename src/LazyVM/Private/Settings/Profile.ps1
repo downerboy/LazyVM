@@ -429,12 +429,13 @@ function Initialize-BuildTarget {
     param(
         [string]$Name,
         [string]$ConfigTemplate,
-        [string]$Root
+        [string]$Root,
+        [string]$OwnerSid
     )
 
     Assert-NoLegacyInstallation
     # A folder handed in, as the resume task does, is used as it is.
-    $root = if ($Root) { (Resolve-LazyVMRoot -Root $Root).Path } else { Get-RegisteredRoot }
+    $root = if ($Root) { (Resolve-LazyVMRoot -Root $Root -OwnerSid $OwnerSid).Path } else { Get-RegisteredRoot }
     if (-not $root) {
         $root = Get-DefaultRoot
         Assert-RootFolderUsable -Path $root

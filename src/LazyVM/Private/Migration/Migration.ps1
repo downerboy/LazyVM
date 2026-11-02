@@ -141,7 +141,7 @@ function Update-LegacyTask {
     )
 
     foreach ($task in @(Get-ScheduledTask -TaskName "$script:TaskPrefix*" -ErrorAction SilentlyContinue)) {
-        $command = Get-HostTaskCommand -TaskName $task.TaskName -Root $NewRoot
+        $command = Get-HostTaskCommand -TaskName $task.TaskName -Root $NewRoot -OwnerSid (Get-CurrentUserSid).Value
         if (-not $command) {
             Write-LogEntry "Task '$($task.TaskName)' is not one LazyVM makes, so it is left as it was" 'WARN'
             continue
@@ -427,38 +427,40 @@ function Copy-LegacyRegistry {
     Write-LogEntry "Recorded $NewRoot in $script:RootRegistryKey" 'OK'
 }
 
-function Get-UserModuleFolder {
-    <#
-      The current user's own module folder, %LOCALAPPDATA%\LazyVM\Modules,
-      where Install.ps1 puts LazyVM: on this computer only, never synced by
-      OneDrive as Documents can be. Install.ps1 names the same folder.
-    #>
-    [OutputType([string])]
-    param()
-
-    return Join-Path -Path ([Environment]::GetFolderPath('LocalApplicationData')) -ChildPath 'LazyVM/Modules'
-}
-
 function Test-MachineWideModuleRemovable {
     <#
-      Whether the copy of LazyVM installed for every user, in $Path, can go:
-      only when this LazyVM is not running from it and the user has a copy
-      of their own, so LazyVM and its tasks still load afterwards.
+      Whether LazyVM 5's copy of the module, in $Path, can go: only when this
+      LazyVM runs from the copy Install.ps1 put in %ProgramFiles%\LazyVM,
+      which is kept, so LazyVM and its tasks still load afterwards.
     #>
     [OutputType([bool])]
     param([Parameter(Mandatory)][string]$Path)
 
-    if (Test-PathWithin -Path (Get-LazyVMModuleBase) -Folder $Path) { return $false }
-    $userFolder = Get-UserModuleFolder
-    return @(Get-Module -ListAvailable -Name 'LazyVM' | Where-Object { Test-PathWithin -Path $_.ModuleBase -Folder $userFolder }).Count -gt 0
+    $moduleBase = Get-LazyVMModuleBase
+    return (-not (Test-PathWithin -Path $moduleBase -Folder $Path)) -and (Test-PathWithin -Path $moduleBase -Folder (Get-InstalledModuleFolder))
+}
+
+function Remove-LegacyRegistry {
+    <#
+      Removes what LazyVM 5 kept under HKLM: its Root value and its VMs'
+      resume keys. The paths users allowed outside their LazyVM folders,
+      under their security identifiers, stay.
+    #>
+    if (-not (Test-Path -LiteralPath $script:LegacyRootRegistryKey)) { return }
+    Remove-ItemProperty -LiteralPath $script:LegacyRootRegistryKey -Name 'Root' -ErrorAction SilentlyContinue
+    foreach ($key in @(Get-ChildItem -LiteralPath $script:LegacyRootRegistryKey -ErrorAction SilentlyContinue)) {
+        if ($key.PSChildName -match '^S-1-') { continue }
+        Remove-Item -LiteralPath $key.PSPath -Recurse -Force
+    }
+    Write-LogEntry "Removed LazyVM 5's entries from $script:LegacyRootRegistryKey" 'OK'
 }
 
 function Remove-LegacyInstallation {
     <#
       Removes what is left of the old install, once everything has moved:
-      the old folder when it is empty (unless the data stayed in it), the
-      module copy in Program Files when the user has their own and, last,
-      the HKLM key.
+      the old folder when it is empty (unless the data stayed in it),
+      LazyVM 5's module copy when this LazyVM runs from its own install in
+      Program Files and, last, LazyVM 5's entries under HKLM.
     #>
     param(
         [Parameter(Mandatory)][string]$OldRoot,
@@ -483,14 +485,11 @@ function Remove-LegacyInstallation {
             Write-LogEntry "Removed the copy of LazyVM installed for every user, $machineWide" 'OK'
         }
         else {
-            Write-LogEntry "Kept the copy of LazyVM installed for every user, ${machineWide}: LazyVM is running from it, or you have no copy of your own in $(Get-UserModuleFolder). Install LazyVM for yourself (Install.ps1), then delete it as administrator." 'WARN'
+            Write-LogEntry "Kept LazyVM 5's copy of the module, ${machineWide}: LazyVM is not running from $(Get-InstalledModuleFolder), where Install.ps1 puts it. Install LazyVM with Install.ps1, then delete that copy as administrator." 'WARN'
         }
     }
 
-    if (Test-Path -LiteralPath $script:LegacyRootRegistryKey) {
-        Remove-Item -LiteralPath $script:LegacyRootRegistryKey -Recurse -Force
-        Write-LogEntry "Removed $script:LegacyRootRegistryKey" 'OK'
-    }
+    Remove-LegacyRegistry
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

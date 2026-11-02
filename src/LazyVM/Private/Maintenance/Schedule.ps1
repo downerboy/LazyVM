@@ -29,7 +29,7 @@ function Register-RebuildSchedule {
     # Registering again replaces the task, which is how an existing one is
     # updated.
     $trigger = New-ScheduledTaskTrigger -Daily -DaysInterval 1 -At $nextRun
-    $action = New-LazyVMTaskAction -Command (Get-HostTaskCommand -TaskName $settings.ScheduleTaskName -Root $settings.Root)
+    $action = New-LazyVMTaskAction -Command (Get-HostTaskCommand -TaskName $settings.ScheduleTaskName -Root $settings.Root -OwnerSid (Get-CurrentUserSid).Value)
     $taskSettings = New-ScheduledTaskSettingsSet `
         -WakeToRun `
         -StartWhenAvailable `

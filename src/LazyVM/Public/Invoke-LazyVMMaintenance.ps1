@@ -42,6 +42,11 @@
     your registry. It must be a LazyVM folder locked to its owner and
     SYSTEM (see Set-LazyVMRoot).
 
+    .PARAMETER OwnerSid
+    The security identifier of the user the LazyVM folder belongs to, with
+    -Root. LazyVM's scheduled tasks pass it; the folder must be locked to
+    that user and SYSTEM. The account running the command if left out.
+
     .EXAMPLE
     Invoke-LazyVMMaintenance -Name DevBox
 
@@ -59,12 +64,15 @@
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
-        [string]$Root
+        [string]$Root,
+
+        [ValidatePattern('^S-1-\d+(-\d+)+$')]
+        [string]$OwnerSid
     )
 
     process {
         # -WhatIf reads, but records nothing: not even a hardware change in VM.json.
-        Invoke-CommandRun -Title 'Maintenance' -Name $Name -Root $Root -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
+        Invoke-CommandRun -Title 'Maintenance' -Name $Name -Root $Root -OwnerSid $OwnerSid -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
             param($VM)
             if ($WhatIfPreference) {
                 $null = $PSCmdlet.ShouldProcess($VM.Name, (Get-MaintenancePreview -VM $VM))

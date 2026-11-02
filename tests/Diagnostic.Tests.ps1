@@ -29,6 +29,7 @@ Describe 'Get-LazyVMDiagnostic' {
             }
             [pscustomobject]@{ VMName = 'Alpha'; Settings = $settings }
         }
+        Mock -ModuleName $module Get-TrustedCodeCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Code the tasks run'; Status = 'OK'; Detail = '' } }
         Mock -ModuleName $module Get-CloudSyncCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'OneDrive'; Status = 'OK'; Detail = '' } }
         Mock -ModuleName $module Get-RootAccessCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'LazyVM folder access'; Status = 'OK'; Detail = '' } }
         Mock -ModuleName $module Test-IsoFile { $true }

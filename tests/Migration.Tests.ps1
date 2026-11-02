@@ -552,15 +552,16 @@ Describe 'Remove-LegacyInstallation (#284)' {
         Mock -ModuleName $module Test-Path { $true }
         Mock -ModuleName $module Get-ChildItem { }
         Mock -ModuleName $module Test-MachineWideModuleRemovable { $true }
-        Mock -ModuleName $module Get-UserModuleFolder { 'C:\Users\sean\AppData\Local\LazyVM\Modules' }
+        Mock -ModuleName $module Get-InstalledModuleFolder { 'C:\Program Files\LazyVM\Modules' }
+        Mock -ModuleName $module Remove-LegacyRegistry { $script:removed.Add('legacy registry') }
     }
 
-    It 'removes the old folder once it is empty, the machine-wide module copy, and the HKLM key last' {
+    It 'removes the old folder once it is empty, LazyVM 5''s module copy, and LazyVM 5''s HKLM entries last' {
         InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' }
 
         $script:removed[0] | Should -Be 'C:\LazyVM'
         $script:removed | Should -Contain (Join-Path -Path $env:ProgramFiles -ChildPath 'PowerShell\Modules\LazyVM')
-        $script:removed[-1] | Should -Be 'HKLM:\SOFTWARE\LazyVM'
+        $script:removed[-1] | Should -Be 'legacy registry'
     }
 
     It 'keeps an old folder that still holds something, and says so' {
@@ -578,42 +579,55 @@ Describe 'Remove-LegacyInstallation (#284)' {
         $script:removed | Should -Not -Contain 'C:\LazyVM'
     }
 
-    It 'keeps the machine-wide module copy, and says why, when it cannot go yet' {
+    It 'keeps LazyVM 5''s module copy, and says why, while LazyVM does not run from its Program Files install' {
         Mock -ModuleName $module Test-MachineWideModuleRemovable { $false }
 
         InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' }
 
         $script:removed | Should -Not -Contain (Join-Path -Path $env:ProgramFiles -ChildPath 'PowerShell\Modules\LazyVM')
-        $script:removed[-1] | Should -Be 'HKLM:\SOFTWARE\LazyVM'
-        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Kept the copy of LazyVM installed for every user*' -and $Level -eq 'WARN' }
+        $script:removed[-1] | Should -Be 'legacy registry'
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Kept LazyVM 5''s copy of the module*' -and $Level -eq 'WARN' }
     }
 }
 
 Describe 'Test-MachineWideModuleRemovable (#284)' {
     BeforeEach {
-        Mock -ModuleName $module Get-UserModuleFolder { 'C:\Users\sean\AppData\Local\LazyVM\Modules' }
-        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Users\sean\AppData\Local\LazyVM\Modules\LazyVM\6.0.0' }
-        Mock -ModuleName $module Get-Module {
-            [pscustomobject]@{ Name = 'LazyVM'; ModuleBase = 'C:\Program Files\PowerShell\Modules\LazyVM\5.2.4' }
-            [pscustomobject]@{ Name = 'LazyVM'; ModuleBase = 'C:\Users\sean\AppData\Local\LazyVM\Modules\LazyVM\6.0.0' }
-        } -ParameterFilter { $ListAvailable }
+        Mock -ModuleName $module Get-InstalledModuleFolder { 'C:\Program Files\LazyVM\Modules' }
     }
 
-    It 'is true when LazyVM runs from the user''s own copy' {
+    It 'is true when LazyVM runs from its own install in Program Files, which is kept' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Program Files\LazyVM\Modules\LazyVM\6.0.0' }
+
         InModuleScope $module { Test-MachineWideModuleRemovable -Path 'C:\Program Files\PowerShell\Modules\LazyVM' } | Should -BeTrue
     }
 
-    It 'is false while LazyVM runs from the machine-wide copy' {
-        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Program Files\PowerShell\Modules\LazyVM\6.0.0' }
+    It 'is false while LazyVM runs from <Case>' -ForEach @(
+        @{ Case = 'LazyVM 5''s copy'; Base = 'C:\Program Files\PowerShell\Modules\LazyVM\6.0.0' }
+        @{ Case = 'anywhere else'; Base = 'S:\Source\LazyVM\out\LazyVM\6.0.0' }
+    ) {
+        $base = $Base
+        Mock -ModuleName $module Get-LazyVMModuleBase { $base }.GetNewClosure()
 
         InModuleScope $module { Test-MachineWideModuleRemovable -Path 'C:\Program Files\PowerShell\Modules\LazyVM' } | Should -BeFalse
     }
+}
 
-    It 'is false when the user has no copy of their own' {
-        Mock -ModuleName $module Get-Module { [pscustomobject]@{ Name = 'LazyVM'; ModuleBase = 'C:\Program Files\PowerShell\Modules\LazyVM\5.2.4' } } -ParameterFilter { $ListAvailable }
-        Mock -ModuleName $module Get-LazyVMModuleBase { 'S:\Source\LazyVM\out\LazyVM\6.0.0' }
+Describe 'Remove-LegacyRegistry (#284)' {
+    It 'removes LazyVM 5''s Root value and VM keys, keeping the paths users allowed under their identifiers' {
+        $script:removedKeys = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Test-Path { $true } -ParameterFilter { $LiteralPath -eq 'HKLM:\SOFTWARE\LazyVM' }
+        Mock -ModuleName $module Remove-ItemProperty { }
+        Mock -ModuleName $module Get-ChildItem {
+            [pscustomobject]@{ PSChildName = 'MSDevBox'; PSPath = 'HKLM:\SOFTWARE\LazyVM\MSDevBox' }
+            [pscustomobject]@{ PSChildName = 'S-1-5-21-111-222-333-1001'; PSPath = 'HKLM:\SOFTWARE\LazyVM\S-1-5-21-111-222-333-1001' }
+        } -ParameterFilter { $LiteralPath -eq 'HKLM:\SOFTWARE\LazyVM' }
+        Mock -ModuleName $module Remove-Item { $script:removedKeys.Add($LiteralPath) }
 
-        InModuleScope $module { Test-MachineWideModuleRemovable -Path 'C:\Program Files\PowerShell\Modules\LazyVM' } | Should -BeFalse
+        InModuleScope $module { Remove-LegacyRegistry }
+
+        Should -Invoke -ModuleName $module Remove-ItemProperty -Times 1 -Exactly -ParameterFilter { $Name -eq 'Root' }
+        $script:removedKeys | Should -Be @('HKLM:\SOFTWARE\LazyVM\MSDevBox')
     }
 }
 Describe 'Convert-LazyVMInstallation (#284)' {

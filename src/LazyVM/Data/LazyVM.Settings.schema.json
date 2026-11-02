@@ -484,24 +484,12 @@
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
-    "ISODownloadPage": {
-      "type": "string",
-      "default": "https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise",
-      "description": "Where to download the Windows 11 Enterprise evaluation. Opened for you when no ISO is found.",
-      "format": "uri"
-    },
     "SQLIsoPath": {
       "type": "string",
       "default": "Shared\\Installers\\SQLServer2025-x64-ENU-EntDev.iso",
-      "description": "The SQL Server installation ISO. Downloaded from SQLIsoUrl when missing. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "description": "The SQL Server installation ISO. Downloaded from Microsoft when missing. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
-    },
-    "SQLIsoUrl": {
-      "type": "string",
-      "default": "https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso",
-      "description": "Where the SQL Server ISO is downloaded from: the SQL Server 2025 Enterprise Developer ISO, from which LazyVM installs the Standard Developer edition, free for development and test, so code cannot come to depend on Enterprise-only features.",
-      "format": "uri"
     },
     "SQLDiskPath": {
       "type": "string",

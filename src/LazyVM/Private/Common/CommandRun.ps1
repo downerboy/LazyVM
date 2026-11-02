@@ -31,13 +31,22 @@ function Initialize-CommandRun {
         [Parameter(Mandatory)][string]$Title,
         [string]$Name,
         [string]$Root,
+        [string]$OwnerSid,
         [switch]$RecordHardware
     )
 
-    $folder = Resolve-LazyVMRoot -Root $Root
+    $folder = Resolve-LazyVMRoot -Root $Root -OwnerSid $OwnerSid
+    # Every write under it is checked for reparse points (PathSafety.ps1).
+    $script:RunRoot = $folder.Path
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $folder.Path)
     $configuration = Read-VMSetting -Root $folder.Path -VMName $Name -Unattended:(Test-Unattended)
     $vm = [VMContext]::new($configuration.Settings)
+    # A scheduled task, as SYSTEM, acts only on paths the owner allowed,
+    # the log among them.
+    if (Test-Unattended) {
+        $owner = if ($OwnerSid) { $OwnerSid } else { (Get-CurrentUserSid).Value }
+        Assert-HostPathTrusted -Settings $vm.Settings -OwnerSid $owner
+    }
 
     Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
     $rule = '========================================================'
@@ -75,6 +84,7 @@ function Complete-CommandRun {
 
     if ($VM) { Remove-GuestSession -VM $VM }
     Stop-Log
+    $script:RunRoot = $null
 }
 
 function Invoke-CommandRun {
@@ -95,13 +105,14 @@ function Invoke-CommandRun {
         [System.Management.Automation.PSCmdlet]$Cmdlet,
         [scriptblock]$ScriptBlock,
         [string]$Root,
+        [string]$OwnerSid,
         [switch]$RecordHardware
     )
 
     Assert-Administrator
     $context = $null
     try {
-        $context = Initialize-CommandRun -Title $Title -Name $Name -Root $Root -RecordHardware:$RecordHardware
+        $context = Initialize-CommandRun -Title $Title -Name $Name -Root $Root -OwnerSid $OwnerSid -RecordHardware:$RecordHardware
         & $ScriptBlock $context
     }
     catch {
@@ -137,22 +148,11 @@ function Get-LazyVMModuleBase {
 }
 
 function Get-ModuleImportCommand {
-    <#
-      How a scheduled task loads this module. Always by path: the tasks run
-      as SYSTEM, whose module path does not include the user's module
-      folder. Installed (in <folder>\LazyVM\<version>), by the LazyVM folder
-      above the version, so PowerShell loads the newest version installed
-      and an update is picked up without registering the tasks again;
-      otherwise by the manifest it was loaded from.
-    #>
+    <# How a scheduled task loads this module: by the path Get-ModuleImportPath gives. #>
     [OutputType([string])]
     param()
 
-    $moduleBase = (Get-LazyVMModuleBase).TrimEnd('\', '/')
-    $parent = Split-Path -Path $moduleBase -Parent
-    $path = if ((Split-Path -Path $moduleBase -Leaf) -as [version] -and (Split-Path -Path $parent -Leaf) -eq 'LazyVM') { $parent }
-    else { [IO.Path]::Combine($moduleBase, 'LazyVM.psd1') }
-    return "Import-Module -Name '$($path.Replace("'", "''"))'"
+    return "Import-Module -Name '$((Get-ModuleImportPath).Replace("'", "''"))'"
 }
 
 function New-LazyVMTaskAction {

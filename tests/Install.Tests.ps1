@@ -21,22 +21,23 @@ Describe 'Install.ps1' {
         { & $installScript -Path $path } | Should -Throw -ExpectedMessage '*There is no LazyVM module folder*./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out*'
     }
 
-    It 'installs for the current user only, in a local folder OneDrive does not sync, without elevation (#284)' {
+    It 'installs in Program Files, locked so only administrators can change it, which needs elevation (#284)' {
         $text = Get-Content -LiteralPath $installScript -Raw
 
-        $text | Should -Not -Match '#Requires -RunAsAdministrator'
-        $text | Should -Match "\`$modulesDir = Join-Path -Path \(\[Environment\]::GetFolderPath\('LocalApplicationData'\)\)"
-        $text | Should -Not -Match "\`$modulesDir = Join-Path -Path \(\[Environment\]::GetFolderPath\('MyDocuments'\)\)"
-        $text | Should -Not -Match '\$target = Join-Path -Path \$env:ProgramFiles'
+        $text | Should -Match '#Requires -RunAsAdministrator'
+        $text | Should -Match '\$installDir = Join-Path -Path \$env:ProgramFiles -ChildPath \$moduleName'
+        $text | Should -Match 'Set-InstallFolderAccess -Path \$installDir'
     }
 }
 
-Describe 'Add-PathListEntry, in Install.ps1 (#284)' {
+Describe 'The user''s PSModulePath, in Install.ps1 (#284)' {
     BeforeAll {
         # The function on its own, without running the installer.
         $ast = [System.Management.Automation.Language.Parser]::ParseFile($installScript, [ref]$null, [ref]$null)
-        $definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Add-PathListEntry' }, $true)
-        . ([scriptblock]::Create($definition.Extent.Text))
+        foreach ($name in 'Add-PathListEntry', 'Remove-PathListEntry', 'Test-SameFolder') {
+            $definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }.GetNewClosure(), $true)
+            . ([scriptblock]::Create($definition.Extent.Text))
+        }
     }
 
     It 'adds <Entry> to ''<List>'', giving ''<Expected>''' -ForEach @(
@@ -54,6 +55,12 @@ Describe 'Add-PathListEntry, in Install.ps1 (#284)' {
     ) {
         $env:LAZYVM_TEST_ROOT = 'C:\L'
         try { Add-PathListEntry -List $List -Entry 'C:\L\Modules' | Should -Be $List }
+        finally { Remove-Item -Path Env:\LAZYVM_TEST_ROOT }
+    }
+
+    It 'takes out an earlier module folder however it is written, keeping the rest' {
+        $env:LAZYVM_TEST_ROOT = 'C:\L'
+        try { Remove-PathListEntry -List 'D:\Modules;%LAZYVM_TEST_ROOT%\Modules\;E:\M' -Entry 'C:\L\Modules' | Should -Be 'D:\Modules;E:\M' }
         finally { Remove-Item -Path Env:\LAZYVM_TEST_ROOT }
     }
 }

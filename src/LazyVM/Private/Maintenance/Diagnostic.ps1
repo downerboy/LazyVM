@@ -60,6 +60,17 @@ function Get-RootAccessCheck {
     return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status WARN -Detail "$($problems -join '; '). Lock it again with: Set-LazyVMRoot -Path $Root"
 }
 
+function Get-TrustedCodeCheck {
+    <# Whether only administrators, SYSTEM and TrustedInstaller can change the code the scheduled tasks run (#284). #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    try { Assert-TrustedCode }
+    catch {
+        return New-DiagnosticCheck -Name $Name -Area Host -Check 'Code the tasks run' -Status FAIL -Detail "$($_.Exception.Message) Install LazyVM with Install.ps1, as administrator."
+    }
+    return New-DiagnosticCheck -Name $Name -Area Host -Check 'Code the tasks run' -Status OK -Detail "only administrators can change it ($(Get-ModuleImportPath))"
+}
+
 function Get-CloudSyncCheck {
     <#
       Whether the LazyVM folder or the module LazyVM runs from is in
@@ -104,6 +115,7 @@ function Get-LazyVMDiagnostic {
     New-DiagnosticCheck -Name $vmName -Area Host -Check 'LazyVM folder' -Status OK -Detail "$($root.Path) (from $($root.Source))"
     Get-RootAccessCheck -Name $vmName -Root $root.Path
     Get-CloudSyncCheck -Name $vmName -Root $root.Path
+    Get-TrustedCodeCheck -Name $vmName
     Get-IsoCheck -Name $vmName -Check 'Windows ISO' -Path $settings.ISOPath
     Get-IsoCheck -Name $vmName -Check 'SQL Server ISO' -Path $settings.SQLIsoPath -Downloadable
 

@@ -5,18 +5,23 @@
 # run as SYSTEM, elevated, whether or not anyone is signed in: the account
 # needs no password, which a Windows Hello account does not have. SYSTEM
 # cannot read the user's registry, so each task's command names the LazyVM
-# folder (-Root), and loads the module by its folder (Get-ModuleImportCommand).
+# folder (-Root) and its owner (-OwnerSid), and loads the module by its
+# folder in Program Files (Get-ModuleImportCommand, TrustedCode.ps1).
 
 function Get-HostTaskCommand {
     <#
       The LazyVM command a host task runs, worked out from its name, for the
-      LazyVM folder $Root; $null for a name LazyVM does not give its tasks.
+      LazyVM folder $Root of the user $OwnerSid; $null for a name LazyVM
+      does not give its tasks.
     #>
     [OutputType([string])]
     param(
         [Parameter(Mandatory)][string]$TaskName,
-        [Parameter(Mandatory)][string]$Root
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$OwnerSid
     )
+
+    if ($OwnerSid -notmatch '^S-1-\d+(-\d+)+$') { throw "'$OwnerSid' is not a security identifier." }
 
     $commands = [ordered]@{
         $script:MaintenanceTaskPrefix = 'Invoke-LazyVMMaintenance'
@@ -24,7 +29,7 @@ function Get-HostTaskCommand {
     }
     foreach ($prefix in $commands.Keys) {
         if ($TaskName.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-            return "$($commands[$prefix]) -Name '$($TaskName.Substring($prefix.Length))' -Root '$Root'"
+            return "$($commands[$prefix]) -Name '$($TaskName.Substring($prefix.Length))' -Root '$($Root.Replace("'", "''"))' -OwnerSid '$OwnerSid'"
         }
     }
     return $null
@@ -33,7 +38,8 @@ function Get-HostTaskCommand {
 function Register-LazyVMHostTask {
     <#
       Registers a LazyVM task on the host to run as SYSTEM, elevated,
-      whether or not anyone is signed in, replacing a task of the same name.
+      whether or not anyone is signed in, replacing a task of the same name;
+      only when the code it runs is administrators' alone to change.
     #>
     param(
         [Parameter(Mandatory)][string]$TaskName,
@@ -42,6 +48,7 @@ function Register-LazyVMHostTask {
         [Parameter(Mandatory)][CimInstance]$Settings
     )
 
+    Assert-TrustedCode
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Principal $principal -Force -ErrorAction Stop | Out-Null
 }

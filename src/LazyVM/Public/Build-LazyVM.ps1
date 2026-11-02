@@ -61,6 +61,11 @@
     your registry. It must be a LazyVM folder locked to its owner and
     SYSTEM (see Set-LazyVMRoot).
 
+    .PARAMETER OwnerSid
+    The security identifier of the user the LazyVM folder belongs to, with
+    -Root. LazyVM's scheduled tasks pass it; the folder must be locked to
+    that user and SYSTEM. The account running the command if left out.
+
     .PARAMETER NoUnattend
     Do not give the VM an answer file: Windows Setup has to be completed by
     hand in VMConnect, and Phase 7 waits for that.
@@ -93,7 +98,10 @@
 
         [switch]$NoUnattend,
 
-        [string]$Root
+        [string]$Root,
+
+        [ValidatePattern('^S-1-\d+(-\d+)+$')]
+        [string]$OwnerSid
     )
 
     process {
@@ -102,10 +110,13 @@
         $setup = if ($NoUnattend) { ', with Windows Setup completed by hand' } else { '' }
         $vmProfile = if ($ConfigTemplate) { "profile (from the config template '$ConfigTemplate')" } else { 'profile' }
         if (-not $PSCmdlet.ShouldProcess($target, "Build from phase $FromPhase$setup, first setting up the LazyVM folder, $vmProfile and Windows ISO if they are missing")) { return }
-        Initialize-BuildTarget -Name $Name -ConfigTemplate $ConfigTemplate -Root $Root
-        Invoke-CommandRun -Title 'Build' -Name $Name -Root $Root -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+        Initialize-BuildTarget -Name $Name -ConfigTemplate $ConfigTemplate -Root $Root -OwnerSid $OwnerSid
+        Invoke-CommandRun -Title 'Build' -Name $Name -Root $Root -OwnerSid $OwnerSid -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
             Sync-VMProfile -VM $VM
+            # Run by its owner: the places outside the LazyVM folder its
+            # settings name are allowed for the scheduled tasks.
+            if (-not (Test-Unattended)) { Register-TrustedHostPath -Settings $VM.Settings }
             # The daily maintenance first, so it is in place even if the host
             # restarts part-way. A problem here is reported but does not stop the build.
             try {

@@ -11,6 +11,11 @@
     the host was off. Running this again replaces the task, for example
     after changing MaintenanceTime or moving the LazyVM folder.
 
+    A setting that names a place outside the LazyVM folder, such as
+    BackupDir on another drive, is allowed for the task here: the task, as
+    SYSTEM, uses no place outside the folder that you have not allowed this
+    way, in PowerShell run as administrator.
+
     A guest credential must be stored first: Build-LazyVM stores one, or use
     Set-LazyVMCredential.
 
@@ -33,6 +38,7 @@
             if ($PSCmdlet.ShouldProcess($VM.Settings.ScheduleTaskName, "Run maintenance of $($VM.Name) daily at $($VM.Settings.MaintenanceTime)")) {
                 # Refuse to schedule an unattended run that cannot possibly authenticate.
                 $null = Assert-GuestCredential -VM $VM
+                Register-TrustedHostPath -Settings $VM.Settings
                 Register-RebuildSchedule -VM $VM
             }
         }

@@ -65,7 +65,7 @@ These are detected and reported by name rather than migrated. Doing them correct
 
 ### Installing LazyVM
 
-LazyVM is a PowerShell module, installed for you alone, in `%LOCALAPPDATA%\LazyVM\Modules`, on this computer only: not Documents, which OneDrive can sync and make online-only. The installer adds that folder to your `PSModulePath`. Installing does not need administrator rights; using LazyVM does. Sign in as the Windows user who will use LazyVM. The simplest way to install it is from a [release](https://github.com/downerboy/LazyVM/releases): download the zip, then, in PowerShell 7, in the folder you saved it to:
+LazyVM is a PowerShell module, installed in `%ProgramFiles%\LazyVM\Modules`: only administrators can change it, because LazyVM's scheduled tasks run it as SYSTEM, and only you (and administrators) can read it. The installer adds that folder to your `PSModulePath`. Install it in PowerShell 7 run as administrator, signed in as the Windows user who will use LazyVM (approve the UAC prompt with your own account). The simplest way to install it is from a [release](https://github.com/downerboy/LazyVM/releases): download the zip, then, in PowerShell 7 as administrator, in the folder you saved it to:
 
 ```powershell
 Unblock-File .\LazyVM-*.zip
@@ -75,7 +75,7 @@ Expand-Archive .\LazyVM-*.zip -DestinationPath .\LazyVM -Force
 
 `Unblock-File` matters: Windows marks downloaded files, and PowerShell will not run a marked script. To update, do the same with the newer release.
 
-Or build it from the repository, in PowerShell 7:
+Or build it from the repository, in PowerShell 7 as administrator:
 
 ```powershell
 git clone https://github.com/downerboy/LazyVM S:\Source\LazyVM
@@ -83,9 +83,9 @@ cd S:\Source\LazyVM
 ./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out
 ```
 
-Instead of typing those, you can double-click `Install-FromRepository.cmd` in the repository folder. It runs the same two commands in PowerShell 7 and keeps its window open so you can read the result.
+Instead of typing those, you can double-click `Install-FromRepository.cmd` in the repository folder. It asks for administrator rights, runs the same two commands in PowerShell 7, and keeps its window open so you can read the result.
 
-`Invoke-AnalyzerAndTest.ps1` assembles the module, checks it with PSScriptAnalyzer and runs the Pester tests; only if they all pass does `Install.ps1` install it, for you. The scheduled tasks, which run as SYSTEM, load it from that folder by its path, always the newest version installed. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Once installed, PowerShell loads it by itself the first time you use one of its commands.
+`Invoke-AnalyzerAndTest.ps1` assembles the module, checks it with PSScriptAnalyzer and runs the Pester tests; only if they all pass does `Install.ps1` install it, for you. The scheduled tasks, which run as SYSTEM, load it from that folder by its path, always the newest version installed, and only while nobody but administrators can change it, nor PowerShell itself. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Once installed, PowerShell loads it by itself the first time you use one of its commands.
 
 Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the module, and reports its commands as not recognized. To update, pull the repository and run the same commands again. The scheduled tasks pick up the new version on their next run.
 
@@ -93,11 +93,11 @@ Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the mod
 
 LazyVM belongs to the Windows user who installed it. Other standard users on the host cannot use it or read what it stores:
 
-- **The module** is in your `%LOCALAPPDATA%\LazyVM\Modules`.
+- **The module** is in `%ProgramFiles%\LazyVM\Modules`, which administrators and SYSTEM can change and only you can read.
 - **The LazyVM folder** ([below](#choosing-the-lazyvm-folder)) is open to you and SYSTEM only, with nothing inherited from the folder above. Hyper-V adds each VM's own access to its disks and configuration.
 - **Stored passwords**, the VMs' BitLocker recovery passwords among them, are encrypted with Windows DPAPI for this computer ([Credential storage](#credential-storage)), in the locked folder: they cannot be read on another computer, and only you and SYSTEM can open the files.
 - **The registry key**, `HKCU:\SOFTWARE\LazyVM`, is in your part of the registry. It records the LazyVM folder for your commands.
-- **The scheduled tasks** run as SYSTEM, whether or not you are signed in, so they need no password. SYSTEM cannot read your registry, so each task's command names the LazyVM folder (`-Root`), and LazyVM uses it only if it is a LazyVM folder locked to its owner and SYSTEM.
+- **The scheduled tasks** run as SYSTEM, whether or not you are signed in, so they need no password. SYSTEM cannot read your registry, so each task's command names the LazyVM folder (`-Root`) and you, by your security identifier (`-OwnerSid`); only an administrator can change a task. LazyVM uses the folder only if it is not a reparse point and is locked to you and SYSTEM. Because SYSTEM reads your folder, a task acts only on places inside it, or outside it where you allowed them while elevated (`Build-LazyVM` and `Register-LazyVMMaintenance` record them, under HKLM); it writes through no junction or link in it; and it runs only code administrators alone can change, so the module lives in Program Files.
 
 What this does not protect against: a local administrator can take ownership of the files, the `.vhdx` disks included, or run a program as SYSTEM, and so read LazyVM's files and decrypt its stored passwords. The data inside each VM stays protected by [BitLocker](#bitlocker). Deleting your Windows profile deletes the LazyVM folder in it, and the VMs with it. Keep the LazyVM folder out of OneDrive: LazyVM refuses a folder there, and `Test-LazyVM` warns if the folder or the module is in it.
 
@@ -436,7 +436,7 @@ D:\DevVM\
 
 `Shared` cannot be used as a VM name.
 
-The module itself is installed in `%LOCALAPPDATA%\LazyVM\Modules\LazyVM`. Nothing of yours is kept there.
+The module itself is installed in `%ProgramFiles%\LazyVM\Modules\LazyVM`. Nothing of yours is kept there.
 
 ### Inside the VM
 
@@ -615,7 +615,6 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `DevDriveLetter` | W | Where the Dev Drive appears in the VM. |
 | `UserDiskLetter` | U | Where the User disk appears in the VM. |
 | `BackupDir` | none | Where the daily maintenance keeps its one copy of the User disk, such as a folder on an external disk. Unset, the copy is `<VM>\Backups\<VM>-User.vhdx`. The copy is made from a checkpoint while the VM runs, only when the files on the disk changed and once BitLocker has encrypted all of it, so it is still encrypted. When the folder is not there, the copy is skipped with a warning. To restore, swap the copy for the User disk's VHDX while the VM is off. |
-| `SQLIsoUrl` | SQL Server 2025 Enterprise Developer | Where the SQL Server ISO is downloaded from. LazyVM installs the Standard Developer edition from it, so code can't come to depend on Enterprise-only features. |
 | `SwitchName` | Default Switch | The virtual switch. See the note below. |
 | `GuestRemoveApps` | News, Microsoft 365, Xbox | Built-in apps removed at every build, so they stay gone after a rebuild. Your list replaces the default, so copy it and add to it. |
 | `GuestRemoveOneDrive` | true | Removes OneDrive and stops it installing for new users. |
@@ -908,13 +907,13 @@ The log is the first place to look: `D:\DevVM\DevBox\Logs\DevBox.log`. Every lin
 | The VM never becomes reachable | Open the VM's console. Windows Setup may be waiting on something, or the stored password may not match the account. Check by signing in at the console with the password `Get-LazyVMCredential -AsPlainText` shows. |
 | The password cannot be pasted into the VM's sign-in box | A basic VMConnect session has no clipboard. Copy the password on the host, then in VMConnect choose Clipboard > Type clipboard text: it types the text as keystrokes, so the VM's keyboard layout must match the host's. Or connect with an [enhanced session](#enhanced-session-mode), whose sign-in dialog accepts a paste. |
 | "No valid Windows installation ISO" | The file at the configured path is not a real ISO, most often the registration page saved with an `.iso` name. Download the image by hand and save it in the `Shared\ISO` folder. |
-| "SQL Server ISO - download failed" | The download address may have changed. Download the SQL Server 2025 Enterprise Developer ISO by hand and save it as the path the message gives, or set `SQLIsoUrl`. |
+| "SQL Server ISO - download failed" | The download address may have changed. Download the SQL Server 2025 Enterprise Developer ISO by hand and save it as the path the message gives. |
 | "This settings file has N problem(s), so none of it was used" | The message lists every problem, with the file and the setting. Open the file in VS Code: the same problems are underlined. |
 | A warning that a last good copy of a settings file was used | The scheduled maintenance found the file broken and used the copy from the last time it loaded cleanly. Fix the file; the next run uses it. |
 | A rebuild failed verification | The old Windows disk was kept, and the log gives the exact rollback commands. Nothing is lost. |
 | Databases did not come back | The log says, for each database, whether it was attached or restored from its backup, and why not. `VM.json` records each database's files under `GuestSql`; the files and backups live on the SQL data disk (`D:\SQLData`, `D:\SQLLog`, `D:\SQLBackup`). `Get-LazyVMLicense` shows how many backups the last capture made. |
 | SSMS says "The certificate chain was issued by an authority that is not trusted" | SSMS 21 and later encrypt the connection by default, and SQL Server in the VM uses a self-signed certificate. In the connection dialog, tick **Trust server certificate**. The VM's administrator is a sysadmin, so SSMS run normally (not as administrator) signs in with Windows authentication. |
-| The scheduled task never runs, or `LastTaskResult` is 1 | Check `Get-LazyVM` shows it registered, and read the log. It runs as SYSTEM and loads the module from `%LOCALAPPDATA%\LazyVM\Modules`; it needs a stored credential, and the LazyVM folder locked to you and SYSTEM (`Set-LazyVMRoot -Path <folder>` locks it again). |
+| The scheduled task never runs, or `LastTaskResult` is 1 | Check `Get-LazyVM` shows it registered, and read the log. It runs as SYSTEM and loads the module from `%ProgramFiles%\LazyVM\Modules`; it needs a stored credential, and the LazyVM folder locked to you and SYSTEM (`Set-LazyVMRoot -Path <folder>` locks it again). |
 | The Dev Drive is not trusted | Run `fsutil devdrv enable` then `fsutil devdrv trust W:` in the VM as administrator. Trust does not survive a rebuild by design, and phase 7 normally reapplies it. |
 | "The SQL data disk was not found in the guest" (or the Dev Drive disk) | No disk in the VM matches what `VM.json` records for it, so nothing was formatted. Check in Hyper-V Manager that the `.vhdx` file is attached to the VM's SCSI controller 0. If you replaced the disk on purpose, clear its `...Guid` and `...ScsiLocation` settings in `VM.json` and run the build again. |
 | The Dev Drive came back as NTFS | The designation was refused on this disk. The volume still works and still persists; only the ReFS speed-ups are missing. The log records the exact refusal. |

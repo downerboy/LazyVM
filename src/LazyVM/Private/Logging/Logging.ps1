@@ -19,6 +19,7 @@ function Start-Log {
     )
 
     New-Folder -Path (Split-Path -Path $Path -Parent)
+    Assert-NoReparsePoint -Path $Path
     if ((Test-Path -LiteralPath $Path) -and ((Get-Item -LiteralPath $Path).Length / 1MB) -gt $MaxSizeMB) {
         $stem = [IO.Path]::Combine((Split-Path -Path $Path -Parent), [IO.Path]::GetFileNameWithoutExtension($Path))
         Move-Item -LiteralPath $Path -Destination ('{0}.{1}.log' -f $stem, (Get-Stamp)) -Force

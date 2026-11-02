@@ -251,6 +251,7 @@ function Remove-PathWithRetry {
     <# Deletes a file or folder, retrying briefly while Hyper-V lets go of a disk it has just released. #>
     param([Parameter(Mandatory)][string]$Path)
 
+    Assert-NoReparsePoint -Path $Path
     for ($attempt = 1; $attempt -le 6; $attempt++) {
         try {
             Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop

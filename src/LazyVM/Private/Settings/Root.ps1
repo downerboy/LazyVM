@@ -26,9 +26,9 @@ function Resolve-SettingsRoot {
 
     # A folder on a local drive, not the top of a drive: Hyper-V disks belong
     # on local storage, and a bare drive root would scatter folders across it.
-    # Double quotes are refused because the path is quoted into the
+    # Quotes are refused because the path is quoted into the
     # scheduled-task command lines.
-    if ($root -notmatch '^[A-Za-z]:\\[^\\]' -or $root.Contains('"')) {
+    if ($root -notmatch '^[A-Za-z]:\\[^\\]' -or $root.Contains('"') -or $root.Contains("'")) {
         throw "The LazyVM folder must be a folder on a local drive, such as D:\DevVM. Got '$Path' from $Source."
     }
     return $root
@@ -70,14 +70,22 @@ function Assert-NoLegacyInstallation {
 }
 
 function Resolve-LazyVMRoot {
-    <# The root folder for this run: -Root if given, else the registered one. #>
-    param([string]$Root)
+    <#
+      The root folder for this run: -Root if given, which must be locked to
+      its owner ($OwnerSid, or else the account running LazyVM) and SYSTEM;
+      else the registered one.
+    #>
+    param(
+        [string]$Root,
+        [string]$OwnerSid
+    )
 
     Assert-NoLegacyInstallation
     if ($Root) {
         $source = 'the -Root parameter'
         $path = Resolve-SettingsRoot -Path $Root -Source $source
-        Assert-RootLocked -Root $path
+        $owner = if ($OwnerSid) { $OwnerSid } else { (Get-CurrentUserSid).Value }
+        Assert-RootLocked -Root $path -OwnerSid $owner
         return [pscustomobject]@{ Path = $path; Source = $source }
     }
     $registered = Get-RegisteredRoot
@@ -104,11 +112,20 @@ function Get-RootAccess {
 function Assert-RootLocked {
     <#
       Stops unless $Root is a LazyVM folder locked as Initialize-RootFolder
-      leaves it: its settings file is there, it inherits nothing, and it is
-      open to SYSTEM and one other account, its owner, only. Checked when a
-      command is handed the folder with -Root, as the scheduled tasks are.
+      leaves it for $OwnerSid: it is not a reparse point, its settings file
+      is there, it inherits nothing, and it is open to SYSTEM and $OwnerSid
+      only. Checked when a command is handed the folder with -Root, as the
+      scheduled tasks are; their command names the owner too, and only an
+      administrator can change it.
     #>
-    param([Parameter(Mandatory)][string]$Root)
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$OwnerSid
+    )
+
+    if ((Test-Path -LiteralPath $Root) -and (Test-ReparsePoint -Path $Root)) {
+        throw "$Root is a reparse point (a junction or link), so LazyVM will not use it as its folder."
+    }
 
     $settings = Join-Path -Path $Root -ChildPath "$script:SharedFolderName/$script:ConfigFolderName/$script:SettingsFileName"
     if (-not (Test-Path -LiteralPath $settings -PathType Leaf)) {
@@ -116,7 +133,7 @@ function Assert-RootLocked {
     }
     $access = Get-RootAccess -Root $Root
     $others = @($access.Sids | Where-Object { $_ -ne 'S-1-5-18' })
-    if (-not $access.Protected -or $others.Count -ne 1) {
+    if (-not $access.Protected -or $others.Count -ne 1 -or $others[0] -ne $OwnerSid) {
         throw "$Root is not locked to its owner and SYSTEM, so LazyVM will not use it. As the user it belongs to, lock it with: Set-LazyVMRoot -Path $Root"
     }
 }

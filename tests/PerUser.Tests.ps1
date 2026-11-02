@@ -197,6 +197,7 @@ Describe 'Register-LazyVMHostTask (#284)' {
     }
 
     It 'registers the task as SYSTEM, elevated, with no password, replacing one of the same name' {
+        Mock -ModuleName $module Assert-TrustedCode { }
         Mock -ModuleName $module Register-ScheduledTask { }
 
         InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts }
@@ -207,12 +208,12 @@ Describe 'Register-LazyVMHostTask (#284)' {
     }
 }
 Describe 'Get-HostTaskCommand (#284)' {
-    It 'is the command <TaskName> runs, naming the LazyVM folder' -ForEach @(
-        @{ TaskName = 'LazyVM-Maintain-Alpha'; Expected = "Invoke-LazyVMMaintenance -Name 'Alpha' -Root 'C:\Users\sean\LazyVM'" }
-        @{ TaskName = 'LazyVM-ResumeAfterReboot-Alpha'; Expected = "Build-LazyVM -Name 'Alpha' -Root 'C:\Users\sean\LazyVM'" }
+    It 'is the command <TaskName> runs, naming the LazyVM folder and its owner' -ForEach @(
+        @{ TaskName = 'LazyVM-Maintain-Alpha'; Expected = "Invoke-LazyVMMaintenance -Name 'Alpha' -Root 'C:\Users\sean\LazyVM' -OwnerSid 'S-1-5-21-1-2-3-1001'" }
+        @{ TaskName = 'LazyVM-ResumeAfterReboot-Alpha'; Expected = "Build-LazyVM -Name 'Alpha' -Root 'C:\Users\sean\LazyVM' -OwnerSid 'S-1-5-21-1-2-3-1001'" }
         @{ TaskName = 'LazyVM-Something-Else'; Expected = $null }
     ) {
-        InModuleScope $module -Parameters @{ TaskName = $TaskName } { param($TaskName) Get-HostTaskCommand -TaskName $TaskName -Root 'C:\Users\sean\LazyVM' } | Should -Be $Expected
+        InModuleScope $module -Parameters @{ TaskName = $TaskName } { param($TaskName) Get-HostTaskCommand -TaskName $TaskName -Root 'C:\Users\sean\LazyVM' -OwnerSid 'S-1-5-21-1-2-3-1001' } | Should -Be $Expected
     }
 }
 Describe 'The host tasks (#284)' {
@@ -234,6 +235,7 @@ Describe 'The host tasks (#284)' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Assert-GuestCredential { }
+        Mock -ModuleName $module Get-CurrentUserSid { [pscustomobject]@{ Value = 'S-1-5-21-1-2-3-1001' } }
         Mock -ModuleName $module Register-LazyVMHostTask { }
     }
 
@@ -241,7 +243,7 @@ Describe 'The host tasks (#284)' {
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Register-RebuildSchedule -VM $VM }
 
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter {
-            $TaskName -eq 'LazyVM-Maintain-Alpha' -and "$(@($Action)[0].Arguments)" -like "*Invoke-LazyVMMaintenance -Name 'Alpha' -Root 'C:\Users\sean\LazyVM'*"
+            $TaskName -eq 'LazyVM-Maintain-Alpha' -and "$(@($Action)[0].Arguments)" -like "*Invoke-LazyVMMaintenance -Name 'Alpha' -Root 'C:\Users\sean\LazyVM' -OwnerSid 'S-1-5-21-1-2-3-1001'*"
         }
         Should -Invoke -ModuleName $module Assert-GuestCredential -Times 0
     }
@@ -252,7 +254,7 @@ Describe 'The host tasks (#284)' {
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Register-ResumeTask -VM $VM -Phase 3 }
 
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter {
-            $TaskName -eq 'LazyVM-ResumeAfterReboot-Alpha' -and "$(@($Action)[0].Arguments)" -like "*Build-LazyVM -Name 'Alpha' -Root 'C:\Users\sean\LazyVM'*"
+            $TaskName -eq 'LazyVM-ResumeAfterReboot-Alpha' -and "$(@($Action)[0].Arguments)" -like "*Build-LazyVM -Name 'Alpha' -Root 'C:\Users\sean\LazyVM' -OwnerSid 'S-1-5-21-1-2-3-1001'*"
         }
     }
 }
@@ -294,6 +296,8 @@ Describe 'Build-LazyVM schedules the maintenance first (#284)' {
         Mock -ModuleName $module Sync-VMProfile { }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Register-RebuildSchedule { $script:calls.Add('schedule') }
+        Mock -ModuleName $module Register-TrustedHostPath { }
+        Mock -ModuleName $module Test-Unattended { $false }
         Mock -ModuleName $module Invoke-VMBuild { $script:calls.Add('build'); $script:complete }
     }
 
@@ -475,12 +479,13 @@ Describe 'Assert-RootLocked (#284)' {
     BeforeEach {
         $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType File -Path (Join-Path -Path $root -ChildPath 'Shared/Config/LazyVM.Settings.json') -Force | Out-Null
+        Mock -ModuleName $module Test-ReparsePoint { $false }
     }
 
     It 'accepts a LazyVM folder open to its owner and SYSTEM only' {
         Mock -ModuleName $module Get-RootAccess { [pscustomobject]@{ Protected = $true; Sids = @('S-1-5-21-1-1001', 'S-1-5-18') } }
 
-        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Assert-RootLocked -Root $Root } } | Should -Not -Throw
+        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Assert-RootLocked -Root $Root -OwnerSid 'S-1-5-21-1-1001' } } | Should -Not -Throw
     }
 
     It 'refuses a folder <Case>' -ForEach @(
@@ -490,18 +495,19 @@ Describe 'Assert-RootLocked (#284)' {
         $access = [pscustomobject]@{ Protected = $Protected; Sids = $Sids }
         Mock -ModuleName $module Get-RootAccess { $access }.GetNewClosure()
 
-        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Assert-RootLocked -Root $Root } } | Should -Throw -ExpectedMessage '*not locked*Set-LazyVMRoot*'
+        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Assert-RootLocked -Root $Root -OwnerSid 'S-1-5-21-1-1001' } } | Should -Throw -ExpectedMessage '*not locked*Set-LazyVMRoot*'
     }
 
     It 'refuses a folder that is not a LazyVM folder' {
         $other = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $other | Out-Null
 
-        { InModuleScope $module -Parameters @{ Root = $other } { param($Root) Assert-RootLocked -Root $Root } } | Should -Throw -ExpectedMessage '*not a LazyVM folder*'
+        { InModuleScope $module -Parameters @{ Root = $other } { param($Root) Assert-RootLocked -Root $Root -OwnerSid 'S-1-5-21-1-1001' } } | Should -Throw -ExpectedMessage '*not a LazyVM folder*'
     }
 
     It 'is checked for a folder handed to a command with -Root, as the scheduled tasks do' {
         Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
+        Mock -ModuleName $module Get-CurrentUserSid { [pscustomobject]@{ Value = 'S-1-5-21-1-1001' } }
         Mock -ModuleName $module Assert-RootLocked { throw 'not locked' }
 
         { InModuleScope $module { Resolve-LazyVMRoot -Root 'D:\DevVM' } } | Should -Throw -ExpectedMessage '*not locked*'

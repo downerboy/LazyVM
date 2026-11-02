@@ -19,6 +19,13 @@
             )
         }
         @{
+            Function = 'Register-TrustedHostPath'
+            Area     = 'Settings'
+            Note     = 'allows the places outside the LazyVM folder the settings name, such as BackupDir, for the task'
+            Includes = @('Get-OutsideHostPath', 'Add-TrustedHostPath')
+            Writes   = @(@{ Label = 'places outside the LazyVM folder, allowed for the tasks'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('<your SID>\HostPaths') })
+        }
+        @{
             Function = 'Register-RebuildSchedule'
             Area     = 'Maintenance'
             Note     = 'refuses without a stored credential or a valid HH:mm MaintenanceTime; the task runs as SYSTEM and names the LazyVM folder'

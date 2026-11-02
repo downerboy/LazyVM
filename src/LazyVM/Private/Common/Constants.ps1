@@ -6,10 +6,15 @@
 # the root folder itself (Get-HostTaskCommand).
 $script:RootRegistryKey = 'HKCU:\SOFTWARE\LazyVM'
 
-# Where a machine-wide install, before #284, recorded its root folder, with
-# the VMs' resume points as subkeys. Read only to find and move such an
-# install (Convert-LazyVMInstallation).
-$script:LegacyRootRegistryKey = 'HKLM:\SOFTWARE\LazyVM'
+# LazyVM's key for the computer, which only an administrator can change.
+# Each user's allowed paths outside their LazyVM folder are under it, by
+# security identifier (HostPathTrust.ps1).
+$script:MachineRegistryKey = 'HKLM:\SOFTWARE\LazyVM'
+
+# Where a machine-wide install, before #284, recorded its root folder (the
+# Root value), with the VMs' resume points as subkeys. Read only to find and
+# move such an install (Convert-LazyVMInstallation).
+$script:LegacyRootRegistryKey = $script:MachineRegistryKey
 
 # Inside the guest: the answer file's first-logon command sets Provisioned=1
 # here once Windows Setup and OOBE are done.
@@ -140,8 +145,17 @@ $script:EjectedMediaFileName = 'Migration.EjectedMedia.json'
 # settings file that still names one is read without it rather than
 # refused, and VM.json is written back without it (#273).
 # CredStoreDir held the machine key file credentials were encrypted with
-# before #284.
-$script:RetiredSettingNames = @('GuestProjectPaths', 'ProjectExcludeDirs', 'MaxProjectCaptureGB', 'GuestRestoreRoot', 'CredStoreDir')
+# before #284. SQLIsoUrl and ISODownloadPage became fixed addresses below
+# (#284): a setting in the user's folder must not choose what the
+# scheduled task, running as SYSTEM, downloads or opens.
+$script:RetiredSettingNames = @('GuestProjectPaths', 'ProjectExcludeDirs', 'MaxProjectCaptureGB', 'GuestRestoreRoot', 'CredStoreDir', 'SQLIsoUrl', 'ISODownloadPage')
+
+# Microsoft's addresses for the install media (InstallMedia.ps1). The
+# Windows evaluation sits behind a registration form, so its page is opened
+# for the user; the SQL Server 2025 Enterprise Developer ISO, from which
+# LazyVM installs the Standard Developer edition, is downloaded.
+$script:WindowsIsoDownloadPage = 'https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise'
+$script:SqlIsoUrl = 'https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso'
 
 # Checkpoint names: '<prefix> <yyyyMMdd-HHmmss>[ <note>]'.
 $script:ToolingCheckpointPrefix = 'Tooling'

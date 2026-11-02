@@ -129,7 +129,8 @@ Describe 'Build-LazyVM' {
     BeforeEach {
         Mock -ModuleName $module Initialize-BuildTarget { }
         Mock -ModuleName $module Register-RebuildSchedule { }
-        # Someone is there to give the Windows password.
+        Mock -ModuleName $module Register-TrustedHostPath { }
+        # Run by its owner, not a scheduled task.
         Mock -ModuleName $module Test-Unattended { $false }
         Mock -ModuleName $module Assert-Administrator { }
         # GetNewClosure keeps only this block's own variables.

@@ -39,11 +39,18 @@
             Writes   = @(@{ Label = 'complete profile'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json', 'VM.Template.json  (first time only)') })
         }
         @{
+            Function = 'Register-TrustedHostPath'
+            Area     = 'Settings'
+            Note     = 'run by you, not a task (Test-Unattended): allows the places outside the LazyVM folder the settings name, such as BackupDir'
+            Includes = @('Test-Unattended', 'Get-OutsideHostPath', 'Add-TrustedHostPath')
+            Writes   = @(@{ Label = 'places outside the LazyVM folder, allowed for the tasks'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('<your SID>\HostPaths') })
+        }
+        @{
             Function = 'Register-RebuildSchedule'
             Area     = 'Maintenance'
             Note     = 'before the phases, so the schedule is in place even if the host restarts; a failure here is logged and the build goes on'
             Includes = @('Get-HostTaskCommand', 'Register-LazyVMHostTask')
-            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'as SYSTEM, with -Root') })
+            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'as SYSTEM, with -Root, -OwnerSid') })
         }
         @{
             Function = 'Invoke-VMBuild'
