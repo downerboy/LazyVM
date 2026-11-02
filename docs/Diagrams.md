@@ -76,40 +76,44 @@ Once, after updating from LazyVM 5. Moves C:\LazyVM, its tasks, passwords and re
 
 ![Move a machine-wide install to your account: call order and data flow](diagrams/convert-installation.svg)
 
-1. `Get-LegacyRoot` (Settings): nothing to move without one
+1. `Get-RegisteredRoot` (Settings): nothing to move without one
    - Reads D1, machine-wide install: HKLM:\SOFTWARE\LazyVM (Root)
-2. `Invoke-InstallationMigration` (Migration): runs the steps below, logging to Shared\Logs\Migration.log in the new folder
+2. `Assert-MigrationTarget` (Migration): before asking: the new folder is not inside the old one, holds nothing else, and no LazyVM task is running
+   - Also runs `Test-PathWithin`, `Assert-RootFolderUsable`, `Assert-NoRunningTask`
+   - Reads D2, LazyVM tasks: Task Scheduler (LazyVM-*  state)
+3. `Invoke-InstallationMigration` (Migration): runs the steps below, logging to Shared\Logs\Migration.log in the new folder
    - Also runs `Start-Log`, `Stop-Log`
-   - Writes D2, migration log: <new>\Shared\Logs\ (Migration.log)
-3. `Assert-NoRunningTask` (Migration, called by Invoke-InstallationMigration): stops while a LazyVM task is running
-   - Reads D3, LazyVM tasks: Task Scheduler (LazyVM-*  state)
+   - Writes D3, migration log: <new>\Shared\Logs\ (Migration.log)
 4. `Initialize-RootFolder` (Settings, called by Invoke-InstallationMigration): the new folder, open to you and SYSTEM only; again at the end, so everything moved in inherits it
    - Writes D4, folder access: <new> (you + SYSTEM, nothing inherited)
-5. `Move-LegacyTask` (Migration, called by Invoke-InstallationMigration): first, so no nightly run starts mid-move; asks for your Windows password once
-   - Also runs `Register-LazyVMHostTask`
+5. `Move-LegacyTask` (Migration, called by Invoke-InstallationMigration): first, so no nightly run starts mid-move; keeps when each runs and makes its action again; asks for your Windows password once
+   - Also runs `Get-HostTaskCommand`, `New-LazyVMTaskAction`, `Register-LazyVMHostTask`
    - Reads D5, tasks run as SYSTEM: Task Scheduler (LazyVM-Maintain-<VM>, LazyVM-ResumeAfterReboot-<VM>)
    - Writes D6, same tasks, as you: Task Scheduler (elevated, signed in or not)
 6. `Convert-LegacyCredential` (Migration, called by Invoke-InstallationMigration): re-encrypts each credential, reads it back, then replaces the file; deletes the key once all are done
    - Also runs `Get-LegacyCredentialKeyPath`, `Convert-LegacyCredentialFile`
    - Reads D7, old key and credentials: <old> (Shared\Credentials\.lazyvm.key, <VM>\Credentials\*.cred)
    - Writes D8, credentials for you only: <old>\<VM>\Credentials\ (*.cred  (DPAPI), key deleted)
-7. `Move-LegacyVMStorage` (Migration, called by Invoke-InstallationMigration): unless the folder stays: Hyper-V storage migration, the VM keeps running; checks free space first
-   - Also runs `ConvertTo-NewRootPath`, `Get-FolderSize`, `Get-FreeSpace`
+7. `Move-LegacyVMStorage` (Migration, called by Invoke-InstallationMigration): unless the folder stays, or is gone already: Hyper-V storage migration, each location to its own place, the VM keeps running; checks free space for the disks and Hyper-V's folders first
+   - Also runs `ConvertTo-NewRootPath`, `Get-VMMoveSize`, `Assert-FreeSpace`
    - Reads D9, VM files: VMs in <old> (configuration, checkpoints, disks)
    - Writes D10, VM files: <new>\<VM>\ (Virtual Machines, Checkpoints, Disks)
-8. `Assert-NoVMFileLeft` (Migration, called by Invoke-InstallationMigration): stops before any other file moves if a VM still uses a disk in the old folder, a checkpoint's parent disk included
+8. `Assert-NoVMFileLeft` (Migration, called by Invoke-InstallationMigration): stops before any other file moves if a VM still uses anything in the old folder: a location, a disk, a checkpoint's parent disk
    - Reads D11, disks in use: VMs and checkpoints (attached disks, parent disks)
-9. `Dismount-LegacyDvdMedia` (Migration, called by Invoke-InstallationMigration): ejects ISOs attached from the old folder
-   - Writes D12, DVD drives: VMs (ejected)
-10. `Move-LegacyFile` (Migration, called by Invoke-InstallationMigration): every other file, one at a time, to the same place
-   - Writes D13, settings, logs, state, ISOs: <new> (Shared\, <VM>\)
-11. `Mount-MovedDvdMedia` (Migration, called by Invoke-InstallationMigration): attaches the ISOs again from the new folder
-   - Writes D14, DVD drives: VMs (ISO from <new>)
+9. `Dismount-LegacyDvdMedia` (Migration, called by Invoke-InstallationMigration): ejects ISOs attached from the old folder, noting each first
+   - Writes D12, ejected ISOs: <new>\Shared\ (Migration.EjectedMedia.json)
+   - Writes D13, DVD drives: VMs (ejected)
+10. `Move-LegacyFile` (Migration, called by Invoke-InstallationMigration): every other file, one at a time, to the same place; checks free space first when the new folder is on another drive
+   - Writes D14, settings, logs, state, ISOs: <new> (Shared\, <VM>\)
+11. `Mount-MovedDvdMedia` (Migration, called by Invoke-InstallationMigration): on any run: attaches the noted ISOs again from the new folder, then forgets them
+   - Reads D15, ejected ISOs: <new>\Shared\ (Migration.EjectedMedia.json)
+   - Writes D16, DVD drives: VMs (ISO from <new>)
 12. `Copy-LegacyRegistry` (Migration, called by Invoke-InstallationMigration): the folder and any interrupted build
    - Also runs `Get-LegacyResumePhase`, `Set-ResumePhase`, `Set-RegisteredRoot`
-   - Writes D15, your registry: HKCU:\SOFTWARE\LazyVM (Root = <new>, <VM>  ResumePhase)
-13. `Remove-LegacyInstallation` (Migration, called by Invoke-InstallationMigration): last: the old folder once empty, the Program Files copy, then the HKLM key
-   - Writes D16, old install removed: Machine-wide (<old>  (if empty), Program Files\PowerShell\Modules\LazyVM, HKLM:\SOFTWARE\LazyVM)
+   - Writes D17, your registry: HKCU:\SOFTWARE\LazyVM (Root = <new>, <VM>  ResumePhase)
+13. `Remove-LegacyInstallation` (Migration, called by Invoke-InstallationMigration): last: the old folder once empty, the Program Files copy when you have your own, then the HKLM key
+   - Also runs `Test-MachineWideModuleRemovable`
+   - Writes D18, old install removed: Machine-wide (<old>  (if empty), Program Files\PowerShell\Modules\LazyVM, HKLM:\SOFTWARE\LazyVM)
 
 <a id="show"></a>
 
@@ -141,17 +145,18 @@ Optional. Without it, Build-LazyVM uses %USERPROFILE%\LazyVM. The folder is open
 ![Choose the LazyVM folder: call order and data flow](diagrams/set-root.svg)
 
 1. `Assert-NoLegacyInstallation` (Settings): stops while a machine-wide install is still there, naming Convert-LazyVMInstallation
-   - Also runs `Get-LegacyRoot`
+   - Also runs `Get-RegisteredRoot`
    - Reads D1, machine-wide install: HKLM:\SOFTWARE\LazyVM (Root, if still there)
 2. `Resolve-SettingsRoot` (Settings): checks it is a full local path
 3. `Get-RegisteredRoot` (Settings): warns if a different folder was in use
    - Reads D2, previous folder: HKCU:\SOFTWARE\LazyVM (Root)
-4. `Initialize-RootFolder` (Settings): creates the folder, or locks it again: full control for you and SYSTEM only, inherited by everything in it
+4. `Assert-RootFolderUsable` (Settings): refuses a folder that holds anything but LazyVM's own files, before asking
+5. `Initialize-RootFolder` (Settings): creates the folder, or locks it again: full control for you and SYSTEM only, inherited by everything in it
    - Also runs `New-RootFolderSecurity`, `Get-CurrentUserSid`
    - Writes D3, folder access: D:\DevVM (you + SYSTEM, nothing inherited)
-5. `Set-RegisteredRoot` (Settings): records it
+6. `Set-RegisteredRoot` (Settings): records it
    - Writes D4, new folder, read by every later run: HKCU:\SOFTWARE\LazyVM (Root = D:\DevVM)
-6. `Initialize-ConfigFolder` (Settings): copies the schema for VS Code autocomplete; returns the folder and its settings file
+7. `Initialize-ConfigFolder` (Settings): copies the schema for VS Code autocomplete; returns the folder and its settings file
    - Also runs `Get-ConfigDir`
    - Reads D5, settings schema: Module Data\ (LazyVM.Settings.schema.json)
    - Writes D6, schema copy, empty settings file: D:\DevVM\Shared\Config\ (LazyVM.Settings.schema.json, LazyVM.Settings.json (if new))
@@ -203,12 +208,12 @@ Optional before a build: Build-LazyVM generates an account if none is stored. Th
 
 `Build-LazyVM` `-Name <VM>` `-ConfigTemplate <Template>  (optional)` `-FromPhase 0-8  (optional)` `-NoUnattend  (optional)`
 
-Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then schedules maintenance. Running it again finishes an interrupted build.
+Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skipping work already done. Running it again finishes an interrupted build.
 
 ![Build a VM: call order and data flow](diagrams/build.svg)
 
 1. `Initialize-BuildTarget` (Settings): stops while a machine-wide install is still there; first run: creates %USERPROFILE%\LazyVM, open to you and SYSTEM only, and the profile, from -ConfigTemplate when given
-   - Also runs `Assert-NoLegacyInstallation`, `Get-DefaultRoot`, `Initialize-RootFolder`
+   - Also runs `Assert-NoLegacyInstallation`, `Get-DefaultRoot`, `Assert-RootFolderUsable`, `Initialize-RootFolder`
    - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root, if already set)
    - Reads D2, machine-wide install: HKLM:\SOFTWARE\LazyVM (Root, if still there)
    - Reads D3, config template, with -ConfigTemplate: Config templates (Data\Templates\*.json, Shared\Templates\*.json)
@@ -220,51 +225,51 @@ Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then
 3. `Sync-VMProfile` (Settings): fills in any setting VM.json lacks from the shared template
    - Reads D8, shared template: Shared\Config\ (LazyVM.Settings.json)
    - Writes D9, complete profile: <VM>\Config\ (VM.json, VM.Template.json  (first time only))
-4. `Invoke-VMBuild` (Host): runs the phases from -FromPhase or the resume point, whichever is later
-5. `Get-ResumePhase` (Host, called by Invoke-VMBuild): picks up after a host restart
-   - Reads D10, phase to resume at: HKCU:\SOFTWARE\LazyVM\<VM> (ResumePhase)
-6. `Invoke-BuildPhase` (Host, called by Invoke-VMBuild): runs each phase of Get-BuildPhase in order (steps 7-18); when a phase throws, deletes the answer-file disc first
+4. `Register-RebuildSchedule` (Maintenance): before the phases, unless no one is there: asks for your Windows password so the schedule is in place even if the host restarts; a failure here is logged and the build goes on
+   - Also runs `Test-Unattended`, `Register-LazyVMHostTask`
+   - Writes D10, daily maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, daily at MaintenanceTime, runs as you)
+5. `Invoke-VMBuild` (Host): runs the phases from -FromPhase or the resume point, whichever is later
+6. `Get-ResumePhase` (Host, called by Invoke-VMBuild): picks up after a host restart
+   - Reads D11, phase to resume at: HKCU:\SOFTWARE\LazyVM\<VM> (ResumePhase)
+7. `Invoke-BuildPhase` (Host, called by Invoke-VMBuild): runs each phase of Get-BuildPhase in order (steps 7-18); when a phase throws, deletes the answer-file disc first
    - Also runs `Get-BuildPhase`, `Remove-UnattendSeedDisk`
-7. `Initialize-InstallationIso` (Host, called by Invoke-BuildPhase): the Windows ISO, before anything changes; opens the download page and stops if there is none
-   - Reads D11, Windows ISO: Shared\ISO\  or  Downloads\ (Windows 11 Enterprise, Evaluation ISO)
-   - Writes D12, Windows ISO in place: Shared\ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
-8. `Repair-HyperVService` and `Test-HostReadiness` (Host, called by Invoke-BuildPhase): phases 0 and 1: the Hyper-V services, then CPU, SLAT, memory and free space
-   - Reads D13, host checks: This PC (vmms, vmcompute, CPU, SLAT, RAM, free space)
-9. `Enable-HyperVFeature` (Host, called by Invoke-BuildPhase): phase 2; returns RestartPending when the host must restart
-   - Writes D14, resume task, only if a restart is needed: Task Scheduler (LazyVM-ResumeAfterReboot-<VM>)
-   - Writes D15, where to resume: HKCU:\SOFTWARE\LazyVM\<VM> (ResumePhase = 3)
-10. `Initialize-HostFolder` (Host, called by Invoke-BuildPhase): phase 3
-   - Writes D16, folders created if missing: <Root>\ (Shared\ ISO, Installers, Credentials, <VM>\ Disks, Credentials, Backups,, Logs, Checkpoints)
-11. `Initialize-SqlServerIso` (Host, called by Invoke-BuildPhase): phase 4: downloads the SQL Server ISO if it is missing
-   - Reads D17, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
-   - Writes D18, SQL Server ISO in place: Shared\Installers\ (SQLServer2025-x64-ENU-EntDev.iso)
-12. `Initialize-SqlDataVhd`, `Initialize-DevDriveVhd` and `Initialize-UserDataVhd` (Host, called by Invoke-BuildPhase): phase 5: existing disks are never overwritten
-   - Writes D19, data disk, Dev Drive and User disk: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB), <VM>-User.vhdx  (20 GB))
-13. `Initialize-GuestCredential` (Credentials, called by Invoke-BuildPhase): phase 6, for a VM that does not exist yet, without -NoUnattend: generates the account if there is none
-   - Reads D20, guest credential: Credential store (<VM>\Credentials\guest.cred)
-   - Writes D21, credential, if new: Credential store (<VM>\Credentials\guest.cred)
-14. `New-UnattendSeedDisk` (Host, called by Invoke-BuildPhase): phase 6: the answer file for Setup, in the same cases
-   - Writes D22, answer-file disc: <VM>\Disks\ (<VM>-Seed.iso)
-15. `New-GuestVM` (Host, called by Invoke-BuildPhase): phase 6: Gen 2, Secure Boot, TPM, dynamic memory
-   - Reads D23, install discs: Shared\ISO\  <VM>\Disks\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
-   - Writes D24, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
-   - Writes D25, new VM: VM <VM> (created, not started yet)
-16. `Install-GuestSoftware` (Installation, called by Invoke-BuildPhase): phase 7: starts the VM, waits for Setup and deletes the answer-file disc; attaches and prepares D:, W: and U: and puts the personal folders on U:; extends C:; BitLocker; Enhanced Session; removes built-in apps and applies the appearance and Developer Mode; Sysmon; then the tooling list: Visual Studio Installer products, SQL Server, winget packages, official installers; Windows updates, and after their restart waits for the guest to settle (no further restart, automatic sign-in done); records the tooling list
+8. `Initialize-InstallationIso` (Host, called by Invoke-BuildPhase): the Windows ISO, before anything changes; opens the download page and stops if there is none
+   - Reads D12, Windows ISO: Shared\ISO\  or  Downloads\ (Windows 11 Enterprise, Evaluation ISO)
+   - Writes D13, Windows ISO in place: Shared\ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
+9. `Repair-HyperVService` and `Test-HostReadiness` (Host, called by Invoke-BuildPhase): phases 0 and 1: the Hyper-V services, then CPU, SLAT, memory and free space
+   - Reads D14, host checks: This PC (vmms, vmcompute, CPU, SLAT, RAM, free space)
+10. `Enable-HyperVFeature` (Host, called by Invoke-BuildPhase): phase 2; returns RestartPending when the host must restart
+   - Writes D15, resume task, only if a restart is needed: Task Scheduler (LazyVM-ResumeAfterReboot-<VM>)
+   - Writes D16, where to resume: HKCU:\SOFTWARE\LazyVM\<VM> (ResumePhase = 3)
+11. `Initialize-HostFolder` (Host, called by Invoke-BuildPhase): phase 3
+   - Writes D17, folders created if missing: <Root>\ (Shared\ ISO, Installers, Credentials, <VM>\ Disks, Credentials, Backups,, Logs, Checkpoints)
+12. `Initialize-SqlServerIso` (Host, called by Invoke-BuildPhase): phase 4: downloads the SQL Server ISO if it is missing
+   - Reads D18, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
+   - Writes D19, SQL Server ISO in place: Shared\Installers\ (SQLServer2025-x64-ENU-EntDev.iso)
+13. `Initialize-SqlDataVhd`, `Initialize-DevDriveVhd` and `Initialize-UserDataVhd` (Host, called by Invoke-BuildPhase): phase 5: existing disks are never overwritten
+   - Writes D20, data disk, Dev Drive and User disk: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB), <VM>-User.vhdx  (20 GB))
+14. `Initialize-GuestCredential` (Credentials, called by Invoke-BuildPhase): phase 6, for a VM that does not exist yet, without -NoUnattend: generates the account if there is none
+   - Reads D21, guest credential: Credential store (<VM>\Credentials\guest.cred)
+   - Writes D22, credential, if new: Credential store (<VM>\Credentials\guest.cred)
+15. `New-UnattendSeedDisk` (Host, called by Invoke-BuildPhase): phase 6: the answer file for Setup, in the same cases
+   - Writes D23, answer-file disc: <VM>\Disks\ (<VM>-Seed.iso)
+16. `New-GuestVM` (Host, called by Invoke-BuildPhase): phase 6: Gen 2, Secure Boot, TPM, dynamic memory
+   - Reads D24, install discs: Shared\ISO\  <VM>\Disks\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
+   - Writes D25, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
+   - Writes D26, new VM: VM <VM> (created, not started yet)
+17. `Install-GuestSoftware` (Installation, called by Invoke-BuildPhase): phase 7: starts the VM, waits for Setup and deletes the answer-file disc; attaches and prepares D:, W: and U: and puts the personal folders on U:; extends C:; BitLocker; Enhanced Session; removes built-in apps and applies the appearance and Developer Mode; Sysmon; then the tooling list: Visual Studio Installer products, SQL Server, winget packages, official installers; Windows updates, and after their restart waits for the guest to settle (no further restart, automatic sign-in done); records the tooling list
    - Also runs `Test-SeedDiskAttached`, `Assert-GuestCredential`, `Start-VMFromInstallMedia`, `Wait-GuestReady`, `Remove-UnattendSeedDisk`, `Add-SqlDataDisk`, `Add-DevDriveDisk`, `Add-UserDataDisk`, `Connect-Guest`, `Expand-GuestSystemDrive`, `Unlock-GuestDataDisk`, `Initialize-GuestSqlDisk`, `Initialize-GuestDevDrive`, `Initialize-GuestUserDisk`, `Protect-GuestPersistentDisk`, `Enable-GuestEnhancedSession`, `Set-GuestCustomization`, `Set-GuestSysmon`, `Get-BuildTooling`, `Wait-GuestNetwork`, `Install-ToolingProduct`, `Install-SqlServerIfMissing`, `Install-WingetPackage`, `Install-OfficialInstaller`, `Update-GuestWindows`, `Wait-GuestSettled`, `Initialize-VMTooling`, `Write-ToolingReinstallReport`
-   - Reads D26, tooling list: <VM>\Config\ (VM.json, its Tooling,, or the shared template's)
-   - Reads D27, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
-   - Reads D28, updates and packages: Internet (VS bootstrappers, Marketplace,, winget, Windows Update)
-   - Writes D29, installed and configured guest: Guest (D: data disk, W: Dev Drive,, U: User disk, BitLocker, Sysmon, appearance, VS + SSMS, extensions, SQL Server 2025, winget apps, Windows updates)
-   - Writes D30, tooling list, what needs a manual install: <VM>\ (Config\VM.json, State\reinstall-by-hand.txt)
-17. `Complete-GuestConfiguration` (Installation, called by Invoke-BuildPhase): phase 8: 8a the SQL data disk, 8b moves SQL data files onto it, 8c answers Visual Studio's first launch and imports its settings; a step that fails does not stop the others
+   - Reads D27, tooling list: <VM>\Config\ (VM.json, its Tooling,, or the shared template's)
+   - Reads D28, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
+   - Reads D29, updates and packages: Internet (VS bootstrappers, Marketplace,, winget, Windows Update)
+   - Writes D30, installed and configured guest: Guest (D: data disk, W: Dev Drive,, U: User disk, BitLocker, Sysmon, appearance, VS + SSMS, extensions, SQL Server 2025, winget apps, Windows updates)
+   - Writes D31, tooling list, what needs a manual install: <VM>\ (Config\VM.json, State\reinstall-by-hand.txt)
+18. `Complete-GuestConfiguration` (Installation, called by Invoke-BuildPhase): phase 8: 8a the SQL data disk, 8b moves SQL data files onto it, 8c answers Visual Studio's first launch and imports its settings; a step that fails does not stop the others
    - Also runs `Connect-Guest`, `Assert-GuestCredential`, `Invoke-IsolatedStep`, `Add-SqlDataDisk`, `Unlock-GuestDataDisk`, `Initialize-GuestSqlDisk`, `Move-GuestSqlDataFile`, `Restore-GuestVisualStudioSetting`
-   - Reads D31, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
-   - Writes D32, configured guest: Guest (user databases on D:\SQLData, VS settings imported, or pending, for nightly maintenance)
-18. `Unregister-ResumeTask` (Host, called by Invoke-VMBuild): unless the host is restarting
-   - Writes D33, resume entries removed: Task Scheduler (resume task deleted, ResumePhase cleared)
-19. `Register-RebuildSchedule` (Maintenance): a failure here is logged; the build still stands
-   - Reads D34, guest credential: Credential store (<VM>\Credentials\guest.cred)
-   - Writes D35, daily maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, daily at MaintenanceTime, runs as you)
+   - Reads D32, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
+   - Writes D33, configured guest: Guest (user databases on D:\SQLData, VS settings imported, or pending, for nightly maintenance)
+19. `Unregister-ResumeTask` (Host, called by Invoke-VMBuild): unless the host is restarting
+   - Writes D34, resume entries removed: Task Scheduler (resume task deleted, ResumePhase cleared)
 
 <a id="maintenance"></a>
 

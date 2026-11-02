@@ -110,11 +110,12 @@ Convert-LazyVMInstallation -WhatIf   # where it would go; changes nothing
 Convert-LazyVMInstallation
 ```
 
-It moves, in this order: the tasks, to run as you (it asks for your Windows password); the passwords, re-encrypted for your account and each read back before the old one is replaced, then the old key file is deleted; each VM's files, with Hyper-V's storage migration, so a running VM keeps running; every other file; and the folder and any interrupted build, to your registry. Only then are the old folder (once empty), the copy of the module in Program Files and the HKLM key removed. Its log is `Shared\Logs\Migration.log` in the new folder.
+Before asking, it checks the new folder is not inside the old one, holds nothing but LazyVM's own files, and that no LazyVM task is running. It then moves, in this order: the tasks, to run as you, at the same times (it asks for your Windows password); the passwords, re-encrypted for your account and each read back before the old one is replaced, then the old key file is deleted; each VM's files, with Hyper-V's storage migration, so a running VM keeps running, after checking nothing a VM uses, such as a checkpoint's parent disk, was left behind; any ISO attached from the old folder, ejected (noted in `Shared\Migration.EjectedMedia.json` first) and attached again once moved; every other file; and the folder and any interrupted build, to your registry. Only then are the old folder (once empty), the copy of the module in Program Files (when you have your own copy, and LazyVM is not running from it) and the HKLM key removed. Its log is `Shared\Logs\Migration.log` in the new folder.
 
 - **Where the files go.** `%USERPROFILE%\LazyVM` by default. `Convert-LazyVMInstallation -Path D:\DevVM` moves them there instead, and `-Path C:\LazyVM`, the old folder itself, keeps them where they are and only locks the folder to you and SYSTEM.
 - **Free space.** Hyper-V copies a VM's files when it moves them, even on the same drive, so the drive needs room for your largest VM a second time. The command checks before moving each VM, and stops if there is not enough.
-- **If it stops part-way**, fix what it reports and run it again: each step skips what is already done, and nothing of the old install is removed before everything has moved.
+- **If it stops part-way**, fix what it reports and run it again: each step skips what is already done. What has moved stays moved; the old registry key, the module copy and the empty old folder are removed only once everything has moved.
+- **If a VM still uses a disk in the old folder** after Hyper-V moved its files, for example a checkpoint's parent disk, it stops before moving anything else and says which. Move it in Hyper-V Manager (Move > Move the virtual machine's data to different locations), then run it again.
 
 ### Choosing the LazyVM folder
 
@@ -128,7 +129,7 @@ The first `Build-LazyVM` chooses it for you: `LazyVM` in your profile folder, `%
 Set-LazyVMRoot -Path D:\DevVM
 ```
 
-Either way it is recorded in your part of the registry, under `HKCU:\SOFTWARE\LazyVM`, for every later command and for the scheduled tasks. The folder is created if needed, open to you and SYSTEM only; a folder that is already there is locked the same way, and everything in it inherits that. Running `Set-LazyVMRoot` again on the same folder locks it again, and `Test-LazyVM` warns when anyone else has been let in. So are `Shared\Config\LazyVM.Settings.json`, your settings file, and a copy of the settings schema beside it ([section 8](#8-settings)).
+Either way it is recorded in your part of the registry, under `HKCU:\SOFTWARE\LazyVM`, for every later command and for the scheduled tasks. The folder is created if needed, open to you and SYSTEM only. A folder that is already there must be empty or already a LazyVM folder, so nothing else is locked away; it is locked the same way, and everything in it inherits that. `Set-LazyVMRoot` asks before it locks a folder. Running `Set-LazyVMRoot` again on the same folder locks it again, and `Test-LazyVM` warns when anyone else has been let in. So are `Shared\Config\LazyVM.Settings.json`, your settings file, and a copy of the settings schema beside it ([section 8](#8-settings)).
 
 > **Important**
 > Choose the LazyVM folder before the first build. The VM disks, the encrypted passwords and the captured state all live under it, so moving it later means moving those files too.
@@ -258,7 +259,7 @@ Expect it to take between five and thirty minutes, depending on database size. W
 
 ### The daily watch
 
-`Build-LazyVM` schedules it when the build succeeds. If that step fails, the build still succeeds and warns you; fix the cause and run `Register-LazyVMMaintenance`. Running that again at any time is harmless.
+`Build-LazyVM` schedules it before the first phase, asking for your Windows password then, so the schedule is in place even if the host restarts part-way. If that step fails, the build goes on and warns you; fix the cause and run `Register-LazyVMMaintenance`. Running that again at any time is harmless. Every LazyVM command warns when a built VM has no maintenance task, or when its task could not start because your password changed.
 
 This registers the VM's own task, `LazyVM-Maintain-DevBox`. It runs daily as you, elevated, at the VM's `MaintenanceTime` (02:00 for the first VM), whether or not you are signed in, so the first time in a PowerShell session it asks for your Windows password ([Who can use LazyVM](#who-can-use-lazyvm)). It wakes the host if needed and catches up if the host was off. [Section 5](#5-the-90-day-cycle) lists what each run does. It checks every user database with `DBCC CHECKDB` and, only when the check passes, backs it up to `D:\SQLBackup`, keeping one good, verified backup of each: a database that fails its check keeps the backup it had, and the log says so with `[X]`. It also compares the VM's certificates and Visual Studio settings with the fingerprint the newest capture recorded, and takes a full capture when either has changed, so a change is captured the night after it is made, not only when the evaluation is about to expire. On almost every day it finds plenty of time remaining on the license and finishes within a few minutes, plus the time updates take.
 
