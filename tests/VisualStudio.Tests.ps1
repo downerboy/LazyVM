@@ -257,7 +257,7 @@ Describe 'Restore-GuestVisualStudioSetting' {
         Mock -ModuleName $module Copy-ToGuest { $copied.Settings = Get-Content -LiteralPath $HostPath -Raw }
         $task = @{ Work = $null; Devenv = $null }
         Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { $task.Work = $ScriptBlock }
-        Mock -ModuleName $module Get-GuestSignedInUser { @('devadmin') }
+        Mock -ModuleName $module Wait-GuestSignedIn { $true }
         Mock -ModuleName $module Complete-GuestVisualStudioFirstLaunch { $true }
         $devDrive = $settings.Clone()
         $devDrive.UseDevDrive = $true
@@ -287,12 +287,21 @@ Describe 'Restore-GuestVisualStudioSetting' {
         }
     }
 
-    It 'fails at once, before starting devenv, when the guest account is not signed in (#262)' {
-        Mock -ModuleName $module Get-GuestSignedInUser { @() }
+    It 'gives automatic sign-in a few minutes, and fails before starting devenv when the guest account is still not signed in (#262, #276)' {
+        Mock -ModuleName $module Wait-GuestSignedIn { $false }
 
         { InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) } } |
             Should -Throw "*'devadmin' is not signed in*retried automatically*"
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Wait-GuestSignedIn -Times 1 -Exactly -ParameterFilter { $TimeoutMinutes -eq 3 }
+    }
+
+    It 'goes on once automatic sign-in has signed the guest account in (#276)' {
+        Mock -ModuleName $module Wait-GuestSignedIn { $true }
+
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly
     }
 
     It 'records the settings as pending in the guest before starting devenv, and their hash once they are applied (#266)' {

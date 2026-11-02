@@ -7,13 +7,42 @@
 # (Start-GuestTask in Guest.Helpers.ps1) that the host checks on.
 
 function Invoke-GuestScript {
-    <# Runs a script block in the guest with a timeout. Throws on failure, so an error is never taken for success. #>
+    <#
+      Runs a script block in the guest with a timeout. Throws on failure, so
+      an error is never taken for success. With -RetryOnDisconnect, a script
+      whose session the guest dropped under it (a restart, the guest's
+      session host ending), so the session is no longer open after the
+      failure, is run once more over a new session (#276). Only
+      calls whose work is safe to run twice pass it: ones that only read, or
+      set the same values again. A dropped session says nothing about how
+      far the script got, so anything else is never repeated.
+    #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][scriptblock]$ScriptBlock,
         [object[]]$ArgumentList = @(),
         [int]$TimeoutMinutes = 15,
-        [string]$Activity = 'guest command'
+        [string]$Activity = 'guest command',
+        [switch]$RetryOnDisconnect
+    )
+
+    $run = @{ VM = $VM; ScriptBlock = $ScriptBlock; ArgumentList = $ArgumentList; TimeoutMinutes = $TimeoutMinutes; Activity = $Activity }
+    try { return Invoke-GuestScriptJob @run }
+    catch {
+        if (-not $RetryOnDisconnect -or (Test-GuestSessionOpen -VM $VM)) { throw }
+        Write-LogEntry "  The guest dropped the session during $Activity ($($_.Exception.Message)) - reconnecting and running it once more" 'WARN'
+        return Invoke-GuestScriptJob @run
+    }
+}
+
+function Invoke-GuestScriptJob {
+    <# Runs a script block once over the session (reopened when the guest dropped it), as a job with a timeout. Throws on failure. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock,
+        [object[]]$ArgumentList = @(),
+        [Parameter(Mandatory)][int]$TimeoutMinutes,
+        [Parameter(Mandatory)][string]$Activity
     )
 
     $session = Restore-GuestSession -VM $VM
@@ -28,8 +57,9 @@ function Invoke-GuestScript {
 
         $result = Receive-Job -Job $job -ErrorAction Stop
         if ($job.State -eq 'Failed') {
-            $reason = if ($job.ChildJobs -and $job.ChildJobs[0].JobStateInfo.Reason) { $job.ChildJobs[0].JobStateInfo.Reason.Message } else { 'unknown error' }
-            throw "$Activity failed in guest: $reason"
+            # The guest's own error, so its type and message are kept.
+            if ($job.ChildJobs -and $job.ChildJobs[0].JobStateInfo.Reason) { throw $job.ChildJobs[0].JobStateInfo.Reason }
+            throw "$Activity failed in guest: unknown error"
         }
         return $result
     }
@@ -37,6 +67,24 @@ function Invoke-GuestScript {
         # LazyVM's own job, so it is removed even under -WhatIf (#18).
         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue -WhatIf:$false
     }
+}
+
+function Invoke-GuestCheck {
+    <#
+      Runs a short, self-contained script block in the guest as a one-off
+      PowerShell Direct call, not over the kept session: a guest that is
+      restarting fails it at once, where the session would wait up to 15
+      minutes to reconnect. For the checks of a bounded wait, which must not
+      run past their deadline (#276). The guest helpers are not loaded. Throws
+      when the guest cannot be asked.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][pscredential]$Credential,
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock
+    )
+
+    return Invoke-Command -VMName $VM.Name -Credential $Credential -ScriptBlock $ScriptBlock -ErrorAction Stop
 }
 
 function ConvertTo-GuestTaskArgument {

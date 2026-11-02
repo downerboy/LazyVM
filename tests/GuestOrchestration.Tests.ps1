@@ -69,6 +69,94 @@ Describe 'Restore-GuestSession' {
     }
 }
 
+Describe 'Invoke-GuestScript after a dropped session (#276)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        $vm = InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) [VMContext]::new($Settings) }
+        $vm.Runtime.Session = [pscustomobject]@{ State = 'Opened' }
+        # Reopens the session as Restore-GuestSession does when the guest dropped it.
+        Mock -ModuleName $module Restore-GuestSession {
+            if ($VM.Runtime.Session.State -ne 'Opened') { $VM.Runtime.Session = [pscustomobject]@{ State = 'Opened' } }
+            $VM.Runtime.Session
+        }
+        Mock -ModuleName $module Invoke-Command { [pscustomobject]@{ State = 'Completed'; ChildJobs = @() } } -RemoveParameterType Session
+        Mock -ModuleName $module Wait-Job { $true } -RemoveParameterType Job
+        Mock -ModuleName $module Remove-Job { } -RemoveParameterType Job
+        $script:runs = 0
+        # The guest drops the session: it breaks, and the call fails.
+        $drop = { $vm.Runtime.Session.State = 'Broken'; throw 'The Hyper-V socket target process has ended.' }
+    }
+
+    It 'reconnects and runs the script once more when the guest dropped the session and the call allows it' {
+        Mock -ModuleName $module Receive-Job { $script:runs++; if ($script:runs -eq 1) { & $drop }; 'result' } -RemoveParameterType Job
+
+        $result = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'reading' -ScriptBlock { 'x' } -RetryOnDisconnect }
+
+        $result | Should -Be 'result'
+        Should -Invoke -ModuleName $module Invoke-Command -Times 2 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -match 'reading' -and $Message -match 'once more' }
+    }
+
+    It 'never runs the script again unless the call allows it, as the work may not be safe to repeat' {
+        Mock -ModuleName $module Receive-Job { & $drop } -RemoveParameterType Job
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'moving' -ScriptBlock { 'x' } } } | Should -Throw '*socket target process has ended*'
+
+        Should -Invoke -ModuleName $module Invoke-Command -Times 1 -Exactly
+    }
+
+    It 'does not run the script again when it failed with the session still open' {
+        Mock -ModuleName $module Receive-Job { throw 'The Hyper-V socket target process has ended.' } -RemoveParameterType Job
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'reading' -ScriptBlock { 'x' } -RetryOnDisconnect } } | Should -Throw '*socket target process has ended*'
+
+        Should -Invoke -ModuleName $module Invoke-Command -Times 1 -Exactly
+    }
+
+    It 'tries only once more, and then gives the error' {
+        Mock -ModuleName $module Receive-Job { & $drop } -RemoveParameterType Job
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'reading' -ScriptBlock { 'x' } -RetryOnDisconnect } } | Should -Throw '*socket target process has ended*'
+
+        Should -Invoke -ModuleName $module Invoke-Command -Times 2 -Exactly
+    }
+
+    It 'gives the error the guest job failed with, unchanged' {
+        $reason = [System.InvalidOperationException]::new('the guest said no')
+        Mock -ModuleName $module Invoke-Command { [pscustomobject]@{ State = 'Failed'; ChildJobs = @([pscustomobject]@{ JobStateInfo = [pscustomobject]@{ Reason = $reason } }) } } -RemoveParameterType Session
+        Mock -ModuleName $module Receive-Job { } -RemoveParameterType Job
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'reading' -ScriptBlock { 'x' } } } |
+            Should -Throw -ExceptionType ([System.InvalidOperationException]) -ExpectedMessage 'the guest said no'
+    }
+
+    It '<Command> lets a dropped session be retried, as it only reads, or sets the same values again' -ForEach @(
+        @{ Command = 'Get-GuestSignedInUser'; Call = 'Get-GuestSignedInUser -VM $VM' }
+        @{ Command = 'Get-GuestSqlInstance'; Call = 'Get-GuestSqlInstance -VM $VM' }
+        @{ Command = 'Set-GuestSqlDefaultFolder'; Call = 'Set-GuestSqlDefaultFolder -VM $VM -Instance MSSQLSERVER' }
+        @{ Command = 'Write-VisualStudioSettingMarker'; Call = 'Write-VisualStudioSettingMarker -VM $VM -InstanceId a1b2c3d4 -Pending' }
+    ) {
+        Mock -ModuleName $module Invoke-GuestScript { }
+
+        $null = InModuleScope $module -Parameters @{ VM = $vm; Call = $Call } { param($VM, $Call) & ([scriptblock]::Create("param(`$VM) $Call")) $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { $RetryOnDisconnect }
+    }
+
+    It 'lets the SQL data file list be retried, but never the move of a database' {
+        Mock -ModuleName $module Connect-GuestSqlInstance { [pscustomobject]@{ Instance = 'MSSQLSERVER' } }
+        Mock -ModuleName $module Invoke-GuestScript { @([pscustomobject]@{ DbName = 'Shop'; State = 'ONLINE'; LogicalName = 'Shop'; PhysicalName = 'C:\Data\Shop.mdf'; FileType = 'ROWS' }) } -ParameterFilter { $Activity -eq 'SQL data file list' }
+        Mock -ModuleName $module Invoke-GuestScript { }
+        Mock -ModuleName $module Write-GuestNote { }
+        $sqlVM = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; MoveSqlDataToDataDisk = $true }) }
+
+        InModuleScope $module -Parameters @{ VM = $sqlVM } { param($VM) Move-GuestSqlDataFile -VM $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { $Activity -eq 'SQL data file list' -and $RetryOnDisconnect }
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { $Activity -like 'moving the database*' -and -not $RetryOnDisconnect }
+    }
+}
+
 Describe 'Invoke-GuestInstaller' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
