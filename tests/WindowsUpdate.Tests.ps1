@@ -165,10 +165,10 @@ Describe 'Update-GuestWindows (#234)' {
         Mock -ModuleName $module Restart-GuestGracefully { 'stray' }
     }
 
-    It 'sets the policy, so a VM built before this gets it too, then installs the updates' {
+    It 'sets the policy, so a VM built before this gets it too, then installs the updates, and returns only whether it restarted the guest' {
         $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM })
 
-        $result.Count | Should -Be 0
+        $result | Should -Be @($true)
         Should -Invoke -ModuleName $module Set-GuestWindowsUpdatePolicy -Times 1 -Exactly
         Should -Invoke -ModuleName $module Install-GuestWindowsUpdate -Times 1 -Exactly
     }
@@ -179,6 +179,18 @@ Describe 'Update-GuestWindows (#234)' {
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM }
 
         Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 0
+    }
+
+    It 'returns that it did not restart the guest when <Case> (#276)' -ForEach @(
+        @{ Case = 'no restart is needed'; RestartNeeded = $false; SignedIn = @() }
+        @{ Case = 'the restart is left pending'; RestartNeeded = $true; SignedIn = @('sean') }
+    ) {
+        Mock -ModuleName $module Install-GuestWindowsUpdate { $RestartNeeded }
+        Mock -ModuleName $module Get-GuestSignedInUser { $SignedIn }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM })
+
+        $result | Should -Be @($false)
     }
 
     It 'restarts when nobody is signed in' {
@@ -202,5 +214,96 @@ Describe 'Update-GuestWindows (#234)' {
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM -StartedByLazyVM }
 
         Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 1 -Exactly
+    }
+}
+
+Describe 'Wait-GuestSettled (#276)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Start-Sleep { }
+        $settleVM = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; GuestWaitMinutes = 10; GuestAdminUser = 'devadmin' }) }
+        $script:bootTimes = [System.Collections.Generic.Queue[object]]::new([object[]]@('boot1', 'boot1'))
+        Mock -ModuleName $module Invoke-GuestScript { $script:bootTimes.Dequeue() } -ParameterFilter { $Activity -eq 'reading the boot time' }
+        Mock -ModuleName $module Get-GuestSignedInUser { @('devadmin') }
+    }
+
+    It 'returns once the boot time has stayed the same between two checks and the guest account is signed in' {
+        InModuleScope $module -Parameters @{ VM = $settleVM } { param($VM) Wait-GuestSettled -VM $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 2 -Exactly -ParameterFilter { $Activity -eq 'reading the boot time' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'OK' -and $Message -match 'settled' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly -ParameterFilter { $Level -eq 'WARN' }
+    }
+
+    It 'keeps waiting, and says so, when the guest restarts again' {
+        $script:bootTimes = [System.Collections.Generic.Queue[object]]::new([object[]]@('boot1', 'boot2', 'boot2'))
+
+        InModuleScope $module -Parameters @{ VM = $settleVM } { param($VM) Wait-GuestSettled -VM $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 3 -Exactly -ParameterFilter { $Activity -eq 'reading the boot time' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -match 'restarted again' -and $Message -match 'boot2' }
+    }
+
+    It 'keeps waiting, and says once what for, until automatic sign-in has signed the guest account in' {
+        $script:bootTimes = [System.Collections.Generic.Queue[object]]::new([object[]]@('boot1', 'boot1', 'boot1', 'boot1'))
+        $script:signIns = [System.Collections.Generic.Queue[object]]::new([object[]]@($null, $null, $null, 'devadmin'))
+        Mock -ModuleName $module Get-GuestSignedInUser { $script:signIns.Dequeue() }
+
+        InModuleScope $module -Parameters @{ VM = $settleVM } { param($VM) Wait-GuestSettled -VM $VM }
+
+        Should -Invoke -ModuleName $module Get-GuestSignedInUser -Times 4 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -match 'waiting for' -and $Message -match 'devadmin' }
+    }
+
+    It 'keeps waiting while PowerShell Direct does not answer' {
+        $script:bootTimes = [System.Collections.Generic.Queue[object]]::new([object[]]@($null, 'boot2', 'boot2'))
+        Mock -ModuleName $module Invoke-GuestScript {
+            $next = $script:bootTimes.Dequeue()
+            if ($null -eq $next) { throw 'The Hyper-V socket target process has ended.' }
+            $next
+        } -ParameterFilter { $Activity -eq 'reading the boot time' }
+
+        { InModuleScope $module -Parameters @{ VM = $settleVM } { param($VM) Wait-GuestSettled -VM $VM } } | Should -Not -Throw
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 3 -Exactly -ParameterFilter { $Activity -eq 'reading the boot time' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -match 'waiting for PowerShell Direct' }
+    }
+
+    It 'warns, saying what it was still waiting for, and carries on when the guest does not settle in GuestWaitMinutes' {
+        Mock -ModuleName $module Get-GuestSignedInUser { }
+        Mock -ModuleName $module Wait-Until { $null = & $Condition $State; $null = & $Condition $State; $null }
+
+        { InModuleScope $module -Parameters @{ VM = $settleVM } { param($VM) Wait-GuestSettled -VM $VM } } | Should -Not -Throw
+
+        Should -Invoke -ModuleName $module Wait-Until -Times 1 -Exactly -ParameterFilter { $Timeout -eq [timespan]::FromMinutes(10) }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -match '10 minutes' -and $Message -match 'devadmin' }
+    }
+}
+
+Describe 'Wait-GuestSignedIn (#276)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Start-Sleep { }
+        $signInVM = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; GuestAdminUser = 'devadmin' }) }
+    }
+
+    It 'returns true once automatic sign-in has signed the guest account in' {
+        $script:signIns = [System.Collections.Generic.Queue[object]]::new([object[]]@($null, @('sean'), @('devadmin', 'sean')))
+        Mock -ModuleName $module Get-GuestSignedInUser { $script:signIns.Dequeue() }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $signInVM } { param($VM) Wait-GuestSignedIn -VM $VM -TimeoutMinutes 3 })
+
+        $result | Should -Be @($true)
+        Should -Invoke -ModuleName $module Get-GuestSignedInUser -Times 3 -Exactly
+    }
+
+    It 'returns false when the guest account is not signed in within the time it is given' {
+        Mock -ModuleName $module Get-GuestSignedInUser { @('sean') }
+        Mock -ModuleName $module Wait-Until { $null = & $Condition $State; $null }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $signInVM } { param($VM) Wait-GuestSignedIn -VM $VM -TimeoutMinutes 3 })
+
+        $result | Should -Be @($false)
+        Should -Invoke -ModuleName $module Wait-Until -Times 1 -Exactly -ParameterFilter { $Timeout -eq [timespan]::FromMinutes(3) }
     }
 }

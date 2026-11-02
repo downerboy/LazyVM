@@ -5,6 +5,9 @@
 # $VM.Runtime.Session with the credential that reopens it when the guest
 # drops it (a restart, a crashed host process).
 
+# When Windows in the guest last started: a new value means it restarted.
+$script:ReadGuestBootTime = { (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime }
+
 function Import-GuestHelper {
     <# Loads Data\Guest.Helpers.ps1 into the session as an in-memory module, for the guest script blocks to call. #>
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -237,8 +240,7 @@ function Restart-GuestGracefully {
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $credential = Assert-GuestCredential -VM $VM
-    $readBootTime = { (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime }
-    $bootTime = Invoke-GuestScript -VM $VM -Activity 'reading the boot time' -TimeoutMinutes 2 -ScriptBlock $readBootTime
+    $bootTime = Invoke-GuestScript -VM $VM -Activity 'reading the boot time' -TimeoutMinutes 2 -ScriptBlock $script:ReadGuestBootTime
     $exitCode = Invoke-GuestScript -VM $VM -Activity 'restarting Windows' -TimeoutMinutes 2 -ScriptBlock {
         & shutdown.exe /r /t 10 /c 'LazyVM is restarting Windows.' | Out-Null
         return $LASTEXITCODE
@@ -250,11 +252,69 @@ function Restart-GuestGracefully {
     $null = Wait-Until -Activity 'The guest restart' -Timeout ([timespan]::FromMinutes($VM.Settings.GuestWaitMinutes)) -Interval ([timespan]::FromSeconds(20)) -Condition {
         # Each try is a one-off PowerShell Direct call: the guest goes away
         # and comes back between tries, which a kept session would not survive.
-        try { $now = Invoke-Command -VMName $VM.Name -Credential $credential -ScriptBlock $readBootTime -ErrorAction Stop }
+        try { $now = Invoke-Command -VMName $VM.Name -Credential $credential -ScriptBlock $script:ReadGuestBootTime -ErrorAction Stop }
         catch { return $false }
         return ($null -ne $now -and "$now" -ne "$bootTime")
     }
     Connect-Guest -VM $VM -Credential $credential | Out-Null
+}
+
+function Wait-GuestSettled {
+    <#
+      Waits, after a restart in the build, until the guest has settled:
+      Windows may restart again to finish updates, and automatic sign-in
+      signs the guest account in only a while after it starts, so the guest
+      answering once is not enough (#276). Settled is PowerShell Direct
+      answering, the boot time the same as at the check before (so no
+      further restart), and the guest account signed in. It says what it
+      waits for each time that changes. Bounded by GuestWaitMinutes; when
+      the guest has not settled by then it warns and returns, and the steps
+      after it say what they could not do. It never throws, so the build
+      never hangs or stops here.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $minutes = $VM.Settings.GuestWaitMinutes
+    $account = $VM.Runtime.GuestAdminUser
+    Write-LogEntry "Waiting up to $minutes minutes for the guest to settle: no further restart, and '$account' signed in..." 'INFO'
+    $progress = @{ BootTime = $null; WaitingFor = '' }
+
+    # Logs what the wait is for when that changes, not on every check.
+    $waitFor = {
+        param($p, [string]$What)
+        if ($p.WaitingFor -ne $What) { $p.WaitingFor = $What; Write-LogEntry "  waiting for $What" 'INFO' }
+    }
+
+    $settled = Wait-Until -Activity 'The guest settling' -Timeout ([timespan]::FromMinutes($minutes)) -Interval ([timespan]::FromSeconds(30)) -State $progress -NoThrow -Condition {
+        param($p)
+        try {
+            $bootTime = "$(Invoke-GuestScript -VM $VM -Activity 'reading the boot time' -TimeoutMinutes 2 -ScriptBlock $script:ReadGuestBootTime)"
+            $signedIn = @(Get-GuestSignedInUser -VM $VM) -contains $account
+        }
+        catch {
+            & $waitFor $p 'PowerShell Direct to answer (the guest is restarting)'
+            return $false
+        }
+
+        $sameBoot = $bootTime -eq $p.BootTime
+        if ($p.BootTime -and -not $sameBoot) { Write-LogEntry "  The guest restarted again (boot time $bootTime)" 'INFO' }
+        $p.BootTime = $bootTime
+        if (-not $sameBoot) {
+            & $waitFor $p 'the boot time to stay the same (no further restart)'
+            return $false
+        }
+        if (-not $signedIn) {
+            & $waitFor $p "automatic sign-in of '$account'"
+            return $false
+        }
+        return $true
+    }
+
+    if ($settled) {
+        Write-LogEntry 'The guest has settled' 'OK'
+        return
+    }
+    Write-LogEntry "The guest did not settle within $minutes minutes (still waiting for $($progress.WaitingFor)) - carrying on; the steps that need it say so" 'WARN'
 }
 
 function Stop-GuestGracefully {

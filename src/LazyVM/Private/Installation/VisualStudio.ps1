@@ -496,11 +496,15 @@ function Write-VisualStudioSettingMarker {
     )
 
     $value = if ($Pending) { $script:VisualStudioSettingPending } else { $AppliedHash }
-    $null = Invoke-GuestScript -VM $VM -Activity 'recording the Visual Studio settings' -TimeoutMinutes 2 -ArgumentList @($InstanceId, $value) -ScriptBlock {
+    $null = Invoke-GuestScript -VM $VM -Activity 'recording the Visual Studio settings' -TimeoutMinutes 2 -RetryOnDisconnect -ArgumentList @($InstanceId, $value) -ScriptBlock {
         param($instanceId, $value)
         Set-GuestVisualStudioSettingMarker -InstanceId $instanceId -Value $value
     }
 }
+
+# How long applying the Visual Studio settings waits for automatic sign-in
+# of the guest account, which comes a while after the guest starts (#276).
+$script:VisualStudioSignInWaitMinutes = 3
 
 function Restore-GuestVisualStudioSetting {
     <#
@@ -511,7 +515,8 @@ function Restore-GuestVisualStudioSetting {
       launch is answered first (Complete-GuestVisualStudioFirstLaunch, #268);
       when it cannot be, the import is left to nightly maintenance and the
       build goes on. devenv applies settings only in the guest user's desktop
-      session, so this fails at once when they are not signed in.
+      session, so this fails when automatic sign-in has not signed them in
+      within $script:VisualStudioSignInWaitMinutes minutes (#276).
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -519,7 +524,7 @@ function Restore-GuestVisualStudioSetting {
     if (-not $target) { return }
     Write-VisualStudioSettingMarker -VM $VM -InstanceId $target.VisualStudio.InstanceId -Pending
     $account = $VM.Runtime.GuestAdminUser
-    if (@(Get-GuestSignedInUser -VM $VM) -notcontains $account) {
+    if (-not (Wait-GuestSignedIn -VM $VM -TimeoutMinutes $script:VisualStudioSignInWaitMinutes)) {
         throw "'$account' is not signed in to the guest, and devenv applies Visual Studio settings only in their desktop session. The settings import is retried automatically by nightly maintenance"
     }
     if (-not (Complete-GuestVisualStudioFirstLaunch -VM $VM -VisualStudio $target.VisualStudio)) {

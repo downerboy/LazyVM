@@ -15,7 +15,7 @@ function Get-GuestSignedInUser {
     [OutputType([string[]])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $users = Invoke-GuestScript -VM $VM -Activity 'checking who is signed in' -TimeoutMinutes 2 -ScriptBlock {
+    $users = Invoke-GuestScript -VM $VM -Activity 'checking who is signed in' -TimeoutMinutes 2 -RetryOnDisconnect -ScriptBlock {
         $owners = foreach ($explorer in @(Get-CimInstance -ClassName Win32_Process -Filter "Name='explorer.exe'")) {
             $owner = Invoke-CimMethod -InputObject $explorer -MethodName GetOwner
             if ($owner.ReturnValue -eq 0) { $owner.User }
@@ -24,4 +24,30 @@ function Get-GuestSignedInUser {
     }
     # Strings back from the guest carry remoting's properties; plain names are what callers compare.
     return @($users | ForEach-Object { "$_" })
+}
+
+function Wait-GuestSignedIn {
+    <#
+      Waits up to $TimeoutMinutes for automatic sign-in to sign the guest
+      account in, as it does a little while after each start (#276), and
+      says once what it waits for. Returns whether the account is signed in.
+    #>
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][int]$TimeoutMinutes
+    )
+
+    $account = $VM.Runtime.GuestAdminUser
+    $progress = @{ Said = $false }
+    $signedIn = Wait-Until -Activity "Automatic sign-in of '$account'" -Timeout ([timespan]::FromMinutes($TimeoutMinutes)) -Interval ([timespan]::FromSeconds(15)) -State $progress -NoThrow -Condition {
+        param($p)
+        if (@(Get-GuestSignedInUser -VM $VM) -contains $account) { return $true }
+        if (-not $p.Said) {
+            $p.Said = $true
+            Write-LogEntry "  waiting up to $TimeoutMinutes minutes for automatic sign-in of '$account'" 'INFO'
+        }
+        return $false
+    }
+    return [bool]$signedIn
 }

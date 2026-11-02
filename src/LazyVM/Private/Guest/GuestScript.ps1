@@ -7,13 +7,42 @@
 # (Start-GuestTask in Guest.Helpers.ps1) that the host checks on.
 
 function Invoke-GuestScript {
-    <# Runs a script block in the guest with a timeout. Throws on failure, so an error is never taken for success. #>
+    <#
+      Runs a script block in the guest with a timeout. Throws on failure, so
+      an error is never taken for success. With -RetryOnDisconnect, a script
+      whose session the guest dropped under it (a restart, the guest's
+      session host ending) is run once more over a new session (#276). Only
+      calls whose work is safe to run twice pass it: ones that only read, or
+      set the same values again. A dropped session says nothing about how
+      far the script got, so anything else is never repeated.
+    #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][scriptblock]$ScriptBlock,
         [object[]]$ArgumentList = @(),
         [int]$TimeoutMinutes = 15,
-        [string]$Activity = 'guest command'
+        [string]$Activity = 'guest command',
+        [switch]$RetryOnDisconnect
+    )
+
+    $run = @{ VM = $VM; ScriptBlock = $ScriptBlock; ArgumentList = $ArgumentList; TimeoutMinutes = $TimeoutMinutes; Activity = $Activity }
+    try { return Invoke-GuestScriptJob @run }
+    catch {
+        if (-not ($RetryOnDisconnect -and $_.Exception -is [System.Management.Automation.Remoting.PSRemotingTransportException])) { throw }
+        Write-LogEntry "  The guest dropped the session during $Activity ($($_.Exception.Message)) - reconnecting and running it once more" 'WARN'
+        Remove-GuestSession -VM $VM -KeepCredential
+        return Invoke-GuestScriptJob @run
+    }
+}
+
+function Invoke-GuestScriptJob {
+    <# Runs a script block once over the session (reopened when the guest dropped it), as a job with a timeout. Throws on failure. #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock,
+        [object[]]$ArgumentList = @(),
+        [Parameter(Mandatory)][int]$TimeoutMinutes,
+        [Parameter(Mandatory)][string]$Activity
     )
 
     $session = Restore-GuestSession -VM $VM
