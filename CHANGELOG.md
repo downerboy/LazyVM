@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.2.3](https://github.com/downerboy/LazyVM/compare/v5.2.2...v5.2.3) (2026-11-02)
+
+
+### Bug Fixes
+
+* keep the guest's automatic sign-in on for the VM's life ([#279](https://github.com/downerboy/LazyVM/issues/279)) ([cf1d4ae](https://github.com/downerboy/LazyVM/commit/cf1d4aedc15254fadd32549a843634286584a0ed))
+
 ## [5.2.2](https://github.com/downerboy/LazyVM/compare/v5.2.1...v5.2.2) (2026-11-02)
 
 
