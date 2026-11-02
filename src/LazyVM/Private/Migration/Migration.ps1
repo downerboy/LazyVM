@@ -227,7 +227,7 @@ function Assert-NoVMFileLeft {
     param([Parameter(Mandatory)][string]$OldRoot)
 
     foreach ($machine in @(Get-VM)) {
-        $disks = @(Get-VMHardDiskDrive -VMName $machine.Name) + @(Get-VMSnapshot -VMName $machine.Name | ForEach-Object { Get-VMHardDiskDrive -VMSnapshot $_ })
+        $disks = @(Get-VMHardDiskDrive -VMName $machine.Name) + @(Get-VMSnapshot -VMName $machine.Name | ForEach-Object { $_.HardDrives })
         foreach ($disk in @($disks | Where-Object { $_.Path })) {
             $path = $disk.Path
             while ($path) {

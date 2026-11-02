@@ -294,8 +294,9 @@ Describe 'Assert-NoVMFileLeft (#284)' {
     }
 
     It 'stops when a checkpoint still has a disk in the old folder' {
-        Mock -ModuleName $module Get-VMSnapshot { [pscustomobject]@{ VMName = 'MSDevBox'; Name = 'Tooling 20261001-020000' } }
-        Mock -ModuleName $module Get-VMHardDiskDrive { [pscustomobject]@{ Path = 'C:\LazyVM\MSDevBox\Disks\MSDevBox-SQL_1.avhdx' } } -ParameterFilter { $VMSnapshot }
+        Mock -ModuleName $module Get-VMSnapshot {
+            [pscustomobject]@{ VMName = 'MSDevBox'; Name = 'Tooling 20261001-020000'; HardDrives = @([pscustomobject]@{ Path = 'C:\LazyVM\MSDevBox\Disks\MSDevBox-SQL_1.avhdx' }) }
+        }
 
         { InModuleScope $module { Assert-NoVMFileLeft -OldRoot 'C:\LazyVM' } } | Should -Throw -ExpectedMessage '*MSDevBox-SQL_1.avhdx*'
     }

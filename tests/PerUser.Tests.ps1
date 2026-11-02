@@ -186,6 +186,15 @@ Describe 'Get-RootAccessCheck (#284)' {
 }
 
 Describe 'Register-LazyVMHostTask (#284)' {
+    BeforeAll {
+        # Real task parts: Register-ScheduledTask's parameters take only these.
+        $parts = @{
+            Action   = New-ScheduledTaskAction -Execute 'pwsh.exe'
+            Trigger  = New-ScheduledTaskTrigger -AtStartup
+            Settings = New-ScheduledTaskSettingsSet
+        }
+    }
+
     BeforeEach {
         InModuleScope $module { $script:TaskCredential = $null }
         Mock -ModuleName $module Test-Unattended { $false }
@@ -199,7 +208,7 @@ Describe 'Register-LazyVMHostTask (#284)' {
     }
 
     It 'registers the task as the user, elevated, with the Windows password, replacing one of the same name' {
-        InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' }
+        InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts }
 
         Should -Invoke -ModuleName $module Register-ScheduledTask -Times 1 -Exactly -ParameterFilter {
             $TaskName -eq 'LazyVM-Maintain-Alpha' -and $User -eq 'MIKEPC\sean' -and $Password -eq 'Windows-Pass-1' -and "$RunLevel" -eq 'Highest' -and $Force
@@ -207,9 +216,10 @@ Describe 'Register-LazyVMHostTask (#284)' {
     }
 
     It 'asks for the password once per PowerShell session' {
-        InModuleScope $module {
-            Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's'
-            Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Beta' -Action 'a' -Trigger 't' -Settings 's'
+        InModuleScope $module -Parameters @{ Parts = $parts } {
+            param($Parts)
+            Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts
+            Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Beta' @Parts
         }
 
         Should -Invoke -ModuleName $module Get-Credential -Times 1 -Exactly -ParameterFilter { $UserName -eq 'MIKEPC\sean' }
@@ -221,9 +231,9 @@ Describe 'Register-LazyVMHostTask (#284)' {
             throw [Management.Automation.ErrorRecord]::new([Exception]::new('The user name or password is incorrect.'), 'HRESULT 0x8007052e,Register-ScheduledTask', 'SecurityError', $null)
         }
 
-        { InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' } } |
+        { InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts } } |
             Should -Throw -ExpectedMessage '*did not accept the password for MIKEPC\sean*not your PIN*'
-        { InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' } } | Should -Throw
+        { InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts } } | Should -Throw
 
         Should -Invoke -ModuleName $module Get-Credential -Times 2 -Exactly
     }
@@ -231,7 +241,7 @@ Describe 'Register-LazyVMHostTask (#284)' {
     It 'stops without asking when nobody is there to type the password' {
         Mock -ModuleName $module Test-Unattended { $true }
 
-        { InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' } } |
+        { InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts } } |
             Should -Throw -ExpectedMessage '*Windows password*Register-LazyVMMaintenance*'
 
         Should -Invoke -ModuleName $module Get-Credential -Times 0
@@ -241,7 +251,7 @@ Describe 'Register-LazyVMHostTask (#284)' {
     It 'stops when no password is entered' {
         Mock -ModuleName $module Get-Credential { $null }
 
-        { InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' } } |
+        { InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts } } |
             Should -Throw -ExpectedMessage '*No password*'
     }
 }
