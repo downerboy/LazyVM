@@ -18,6 +18,25 @@ function Test-Unattended {
     return -not [Environment]::UserInteractive
 }
 
+function Read-TrustedVMSetting {
+    <#
+      Read-VMSetting for a command run: in an unattended run, which acts as
+      SYSTEM, also stops when the settings name a place outside the LazyVM
+      folder that their owner $OwnerSid has not allowed. Reading and
+      checking together, no settings are used unchecked.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [string]$VMName,
+        [Parameter(Mandatory)][string]$OwnerSid
+    )
+
+    $unattended = Test-Unattended
+    $configuration = Read-VMSetting -Root $Root -VMName $VMName -Unattended:$unattended
+    if ($unattended) { Assert-HostPathTrusted -Settings $configuration.Settings -OwnerSid $OwnerSid }
+    return $configuration
+}
+
 function Initialize-CommandRun {
     <#
       The start of every command that works on a VM: reads its settings,
@@ -36,17 +55,16 @@ function Initialize-CommandRun {
     )
 
     $folder = Resolve-LazyVMRoot -Root $Root -OwnerSid $OwnerSid
-    # Every write under it is checked for reparse points (PathSafety.ps1).
+    $owner = if ($OwnerSid) { $OwnerSid } else { (Get-CurrentUserSid).Value }
+    # Every write there, and in the places outside it its owner allowed, is
+    # checked for reparse points (PathSafety.ps1).
     $script:RunRoot = $folder.Path
+    $script:RunAllowedPaths = @(Get-TrustedHostPath -OwnerSid $owner)
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $folder.Path)
-    $configuration = Read-VMSetting -Root $folder.Path -VMName $Name -Unattended:(Test-Unattended)
-    $vm = [VMContext]::new($configuration.Settings)
     # A scheduled task, as SYSTEM, acts only on paths the owner allowed,
     # the log among them.
-    if (Test-Unattended) {
-        $owner = if ($OwnerSid) { $OwnerSid } else { (Get-CurrentUserSid).Value }
-        Assert-HostPathTrusted -Settings $vm.Settings -OwnerSid $owner
-    }
+    $configuration = Read-TrustedVMSetting -Root $folder.Path -VMName $Name -OwnerSid $owner
+    $vm = [VMContext]::new($configuration.Settings)
 
     Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
     $rule = '========================================================'
@@ -69,7 +87,7 @@ function Initialize-CommandRun {
     # A rebuild must make the VM as it is now, not as it was first set up.
     if ($RecordHardware -and (Save-VMHardware -VM $vm)) { $changed = $true }
     if ($changed) {
-        $configuration = Read-VMSetting -Root $folder.Path -VMName $vm.Name -Unattended:(Test-Unattended)
+        $configuration = Read-TrustedVMSetting -Root $folder.Path -VMName $vm.Name -OwnerSid $owner
         $vm = [VMContext]::new($configuration.Settings)
     }
 
@@ -85,6 +103,7 @@ function Complete-CommandRun {
     if ($VM) { Remove-GuestSession -VM $VM }
     Stop-Log
     $script:RunRoot = $null
+    $script:RunAllowedPaths = @()
 }
 
 function Invoke-CommandRun {

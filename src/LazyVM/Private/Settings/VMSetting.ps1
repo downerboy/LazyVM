@@ -27,10 +27,16 @@ function Resolve-HostPathSetting {
 
     $problems = [System.Collections.Generic.List[string]]::new()
 
-    foreach ($name in $script:HostPathSettings) {
-        $value = [string]$Settings[$name]
-
-        if (Test-FullHostPath $value) {
+    foreach ($name in @($script:HostPathSettings) + 'BackupDir') {
+        # A relative path may start with '.\', as it always could.
+        $value = [string]$Settings[$name] -replace '^\.[\\/]', ''
+        # Any other '.' or '..' part could lead out of the LazyVM folder (#284).
+        $parts = $value -split '[\\/]'
+        if ($parts -contains '..' -or $parts -contains '.') {
+            $problems.Add("'$name' must not contain '.' or '..' parts: '$value'.")
+            continue
+        }
+        if ($name -eq 'BackupDir' -or (Test-FullHostPath $value)) {
             continue
         }
         if (-not $value -or $value -match '^[A-Za-z]:' -or $value.StartsWith('\')) {
@@ -38,8 +44,7 @@ function Resolve-HostPathSetting {
             continue
         }
 
-        $relative = $value -replace '^\.\\', ''
-        $Settings[$name] = "$Root\$relative"
+        $Settings[$name] = "$Root\$value"
     }
 
     if ($problems.Count -gt 0) {

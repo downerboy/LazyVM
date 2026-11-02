@@ -98,7 +98,7 @@ function Initialize-InstallationIso {
     if ($found -and $found.Where -eq 'Downloads') {
         New-Folder -Path (Split-Path -Path $settings.ISOPath -Parent)
         Write-LogEntry "Moving the Windows ISO from $($found.File.DirectoryName) to $($settings.ISOPath), where the scheduled rebuilds can find it..." 'INFO'
-        Move-Item -LiteralPath $found.File.FullName -Destination $settings.ISOPath
+        Move-CheckedItem -Path $found.File.FullName -Destination $settings.ISOPath
         $found = [pscustomobject]@{ File = Get-Item -LiteralPath $settings.ISOPath; Where = 'Configured' }
     }
     if ($found) {
@@ -159,18 +159,19 @@ function Initialize-SqlServerIso {
 
     $temp = "$($settings.SQLIsoPath).tmp"
     try {
-        Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        Remove-CheckedItem -Path $temp -Quiet
         # The progress bar slows a multi-gigabyte download to a crawl.
         $ProgressPreference = 'SilentlyContinue'
+        Assert-NoReparsePoint -Path $temp
         Invoke-WebRequest -Uri $script:SqlIsoUrl -OutFile $temp -UseBasicParsing
         if (-not (Test-IsoFile -Path $temp)) {
             throw "the downloaded file is not an ISO image (got $(Format-Size (Get-Item -LiteralPath $temp).Length) - the address probably returned a web page)"
         }
-        Move-Item -LiteralPath $temp -Destination $settings.SQLIsoPath -Force
+        Move-CheckedItem -Path $temp -Destination $settings.SQLIsoPath
         Write-LogEntry "SQL Server ISO - downloaded ($(Format-Size (Get-Item -LiteralPath $settings.SQLIsoPath).Length))" 'OK'
     }
     catch {
-        Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        Remove-CheckedItem -Path $temp -Quiet
         Write-LogError 'SQL Server ISO - download failed' $_
         throw "Cannot continue without the SQL Server ISO. Download it from $script:SqlIsoUrl and save it to $($settings.SQLIsoPath)."
     }

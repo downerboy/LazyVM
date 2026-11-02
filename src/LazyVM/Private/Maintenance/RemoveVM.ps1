@@ -30,28 +30,41 @@
 #  Hyper-V or a single real file.
 # ─────────────────────────────────────────────────────────────────────────────
 
+function ConvertTo-FullPath {
+    <# $Path with '.' and '..' worked out and no trailing separator, so paths compare as the file system sees them. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    return [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+}
+
 function Test-SamePath {
-    <# True when $Path and $Other name the same file or folder. Ignores case and trailing separators. #>
+    <# True when $Path and $Other name the same file or folder. Ignores case, '.' and '..', and trailing separators. #>
     [OutputType([bool])]
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Other
     )
 
-    return $Path.TrimEnd('\', '/').Equals($Other.TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)
+    return (ConvertTo-FullPath -Path $Path).Equals((ConvertTo-FullPath -Path $Other), [StringComparison]::OrdinalIgnoreCase)
 }
 
 function Test-PathWithin {
-    <# True when $Path is $Folder itself or lies anywhere inside it. Ignores case and trailing separators. #>
+    <#
+      True when $Path is $Folder itself or lies anywhere inside it, as the
+      file system resolves both: '..' cannot climb out. Ignores case and
+      trailing separators.
+    #>
     [OutputType([bool])]
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Folder
     )
 
-    if (Test-SamePath -Path $Path -Other $Folder) { return $true }
-    $folder = $Folder.TrimEnd('\', '/')
-    return ($Path.StartsWith("$folder\", [StringComparison]::OrdinalIgnoreCase) -or $Path.StartsWith("$folder/", [StringComparison]::OrdinalIgnoreCase))
+    $full = ConvertTo-FullPath -Path $Path
+    $folderFull = ConvertTo-FullPath -Path $Folder
+    if ($full.Equals($folderFull, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    return ($full.StartsWith("$folderFull\", [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith("$folderFull/", [StringComparison]::OrdinalIgnoreCase))
 }
 
 function Get-ParentFolder {

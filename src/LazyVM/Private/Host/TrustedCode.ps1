@@ -69,10 +69,22 @@ function Get-FolderWriteRule {
     }
 }
 
-function Assert-TrustedFolder {
-    <# Stops when anyone but administrators, SYSTEM and TrustedInstaller can change the folder or file at $Path. #>
+function Get-PathOwnerSid {
+    <# The security identifier of the owner of the file or folder at $Path, who can always change its permissions. #>
+    [OutputType([string])]
     param([Parameter(Mandatory)][string]$Path)
 
+    return (Get-Acl -LiteralPath $Path).GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+}
+
+function Assert-TrustedFolder {
+    <# Stops when anyone but administrators, SYSTEM and TrustedInstaller owns or can change the folder or file at $Path. #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    $owner = Get-PathOwnerSid -Path $Path
+    if ($script:TrustedCodeWriters -notcontains $owner) {
+        throw "$Path is owned by $(ConvertTo-AccountName -Sid $owner), who can change its permissions, so LazyVM's scheduled tasks, which run as SYSTEM, must not run code from it."
+    }
     $writers = @(Get-UntrustedWriter -Rule @(Get-FolderWriteRule -Path $Path))
     if ($writers.Count -gt 0) {
         throw "$Path can be changed by $(@($writers | ForEach-Object { ConvertTo-AccountName -Sid $_ }) -join ', '), so LazyVM's scheduled tasks, which run as SYSTEM, must not run code from it."
@@ -83,10 +95,19 @@ function Assert-TrustedCode {
     <#
       Stops unless the code a scheduled task runs can be changed by
       administrators, SYSTEM and TrustedInstaller only: this module, the
-      folder the task imports it from, and PowerShell.
+      folder the task imports it from, the folders above them up to
+      %ProgramFiles%\LazyVM (whoever can change one could swap what is
+      below), and PowerShell.
     #>
     $moduleBase = Get-LazyVMModuleBase
-    foreach ($path in @($moduleBase, (Get-ModuleImportPath), $PSHOME) | Select-Object -Unique) {
+    $paths = @($moduleBase, (Get-ModuleImportPath))
+    $installFolder = Split-Path -Path (Get-InstalledModuleFolder) -Parent
+    if (Test-PathWithin -Path $moduleBase -Folder $installFolder) {
+        for ($parent = Split-Path -Path $moduleBase -Parent; Test-PathWithin -Path $parent -Folder $installFolder; $parent = Split-Path -Path $parent -Parent) {
+            $paths += $parent
+        }
+    }
+    foreach ($path in @($paths + $PSHOME) | Select-Object -Unique) {
         Assert-TrustedFolder -Path $path
     }
 }

@@ -86,6 +86,6 @@ function Remove-OldProfileVersion {
     $versions = @(Get-ProfileVersion -Root $Root -Name $Name)
     foreach ($version in @($versions | Select-Object -SkipLast $script:ProfileVersionsToKeep)) {
         if ($Needed -contains $version.Stamp) { continue }
-        Remove-Item -LiteralPath $version.Path -Force
+        Remove-CheckedItem -Path $version.Path
     }
 }

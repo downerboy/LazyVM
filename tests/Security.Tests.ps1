@@ -182,10 +182,13 @@ Describe 'The paths a VM''s settings name (#284)' {
         Mock -ModuleName $module Get-CurrentUserSid { [pscustomobject]@{ Value = 'S-1-5-21-111-222-333-1001' } }
         Mock -ModuleName $module Add-TrustedHostPath { }
 
-        InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Register-TrustedHostPath -Settings $Settings }
+        $ownSettings = $settings.Clone()
+        $ownSettings.StateDir = 'D:\State'
+
+        InModuleScope $module -Parameters @{ Settings = $ownSettings } { param($Settings) Register-TrustedHostPath -Settings $Settings -Confirm:$false }
 
         Should -Invoke -ModuleName $module Add-TrustedHostPath -Times 1 -Exactly -ParameterFilter {
-            $OwnerSid -eq 'S-1-5-21-111-222-333-1001' -and @($Path | Sort-Object) -join '|' -eq 'C:\Windows\System32\State|E:\Backups'
+            $OwnerSid -eq 'S-1-5-21-111-222-333-1001' -and @($Path | Sort-Object) -join '|' -eq 'D:\State|E:\Backups'
         }
     }
 
@@ -237,6 +240,25 @@ Describe 'The code the tasks run (#284)' {
         Should -Invoke -ModuleName $module Assert-TrustedFolder -ParameterFilter { $Path -eq $PSHOME }
     }
 
+    It 'covers the folders above the module, up to LazyVM in Program Files' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { Join-Path -Path $env:ProgramFiles -ChildPath 'LazyVM\Modules\LazyVM\6.0.0' }
+        Mock -ModuleName $module Assert-TrustedFolder { }
+
+        InModuleScope $module { Assert-TrustedCode }
+
+        Should -Invoke -ModuleName $module Assert-TrustedFolder -ParameterFilter { $Path -eq (Join-Path -Path $env:ProgramFiles -ChildPath 'LazyVM\Modules') }
+        Should -Invoke -ModuleName $module Assert-TrustedFolder -ParameterFilter { $Path -eq (Join-Path -Path $env:ProgramFiles -ChildPath 'LazyVM') }
+        Should -Invoke -ModuleName $module Assert-TrustedFolder -Times 0 -ParameterFilter { $Path -eq $env:ProgramFiles }
+    }
+
+    It 'refuses a folder owned by anyone but administrators, SYSTEM and TrustedInstaller' {
+        Mock -ModuleName $module Get-FolderWriteRule { }
+        Mock -ModuleName $module Get-PathOwnerSid { 'S-1-5-21-111-222-333-1001' }
+        Mock -ModuleName $module ConvertTo-AccountName { 'MIKEPC\sean' }
+
+        { InModuleScope $module { Assert-TrustedFolder -Path 'C:\Program Files\LazyVM' } } | Should -Throw -ExpectedMessage '*owned by MIKEPC\sean*'
+    }
+
     It 'is reported by Test-LazyVM' {
         Mock -ModuleName $module Assert-TrustedCode { throw 'can be changed by S-1-5-32-545' }
 
@@ -248,5 +270,230 @@ Describe 'The code the tasks run (#284)' {
 
     It 'is installed in Program Files, where only administrators can change it' {
         InModuleScope $module { Get-InstalledModuleFolder } | Should -Be (Join-Path -Path $env:ProgramFiles -ChildPath 'LazyVM/Modules')
+    }
+}
+
+Describe 'A path that climbs out of the LazyVM folder (#284)' {
+    It 'is never taken as inside it: <Path>' -ForEach @(
+        @{ Path = 'C:\Users\sean\LazyVM\..\..\..\Windows\System32' }
+        @{ Path = 'C:\Users\sean\LazyVM\Alpha\..\..\Other' }
+    ) {
+        InModuleScope $module -Parameters @{ Path = $Path } { param($Path) Test-PathWithin -Path $Path -Folder 'C:\Users\sean\LazyVM' } | Should -BeFalse
+    }
+
+    It 'is still inside it when it only looks out and back: C:\Users\sean\LazyVM\Alpha\..\Beta' {
+        InModuleScope $module { Test-PathWithin -Path 'C:\Users\sean\LazyVM\Alpha\..\Beta' -Folder 'C:\Users\sean\LazyVM' } | Should -BeTrue
+    }
+
+    It 'is refused in a setting, in the <Form> form: <Value>' -ForEach @(
+        @{ Form = 'relative'; Name = 'LogFile'; Value = '..\..\Windows\System32\x.log' }
+        @{ Form = 'relative'; Name = 'StateDir'; Value = 'Alpha\.\State' }
+        @{ Form = 'relative'; Name = 'StateDir'; Value = '.\..\State' }
+        @{ Form = 'full'; Name = 'DiskDir'; Value = 'C:\Users\X\LazyVM\..\..\..\Windows' }
+    ) {
+        $settings = @{ $Name = $Value }
+        foreach ($other in @(InModuleScope $module { $script:HostPathSettings } | Where-Object { $_ -ne $Name })) { $settings[$other] = 'Shared\x' }
+
+        { InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Resolve-HostPathSetting -Settings $Settings -Root 'C:\Users\sean\LazyVM' } } |
+            Should -Throw -ExpectedMessage "*'$Name'*'.' or '..'*"
+    }
+
+    It 'is refused by the settings schema too, as VS Code shows it: <Name> = <Value>' -ForEach @(
+        @{ Name = 'LogFile'; Value = '..\\..\\Windows\\x.log' }
+        @{ Name = 'DiskDir'; Value = 'C:\\Users\\X\\LazyVM\\..\\..\\Windows' }
+        @{ Name = 'BackupDir'; Value = 'F:\\Backup\\..\\..\\Windows' }
+        @{ Name = 'StateDir'; Value = '.\\..\\Windows' }
+    ) {
+        $path = Join-Path -Path $TestDrive -ChildPath "$([guid]::NewGuid().ToString('N')).json"
+        Set-Content -LiteralPath $path -Value "{ `"$Name`": `"$Value`" }"
+
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage "*$Name*"
+    }
+}
+
+Describe 'A task name that is not a VM''s (#284)' {
+    It 'gets no command: <TaskName>' -ForEach @(
+        @{ TaskName = "LazyVM-Maintain-x';Remove-Item C:\;'" }
+        @{ TaskName = 'LazyVM-Maintain-Shared' }
+    ) {
+        { InModuleScope $module -Parameters @{ TaskName = $TaskName; Owner = $owner } { param($TaskName, $Owner) Get-HostTaskCommand -TaskName $TaskName -Root 'C:\LazyVM' -OwnerSid $Owner } } |
+            Should -Throw -ExpectedMessage '*not a VM name*'
+    }
+
+    It 'is left alone by the migration, which says so' {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Register-LazyVMHostTask { }
+        Mock -ModuleName $module Get-ScheduledTask { [pscustomobject]@{ TaskName = "LazyVM-Maintain-x';Remove-Item C:\;'"; Triggers = @(); Settings = $null } }
+
+        InModuleScope $module { Update-LegacyTask -OldRoot 'C:\LazyVM' -NewRoot 'C:\Users\sean\LazyVM' }
+
+        Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 0
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Level -eq 'WARN' -and $Message -like '*not a VM name*left as it was*' }
+    }
+}
+
+Describe 'Allowing a place outside the LazyVM folder (#284)' {
+    BeforeEach {
+        Mock -ModuleName $module Get-CurrentUserSid { [pscustomobject]@{ Value = 'S-1-5-21-111-222-333-1001' } }
+        Mock -ModuleName $module Get-TrustedHostPath { @() }
+        Mock -ModuleName $module Add-TrustedHostPath { }
+        Mock -ModuleName $module Write-LogEntry { }
+    }
+
+    It 'asks first, as a high-impact change, naming each new place' {
+        $command = InModuleScope $module { Get-Command -Name Register-TrustedHostPath }
+        $binding = $command.ScriptBlock.Attributes | Where-Object { $_ -is [System.Management.Automation.CmdletBindingAttribute] }
+
+        "$($binding.ConfirmImpact)" | Should -Be 'High'
+        $binding.SupportsShouldProcess | Should -BeTrue
+    }
+
+    It 'allows nothing with -WhatIf' {
+        InModuleScope $module { Register-TrustedHostPath -Settings @{ VMName = 'Alpha'; Root = 'C:\Users\sean\LazyVM'; BackupDir = 'E:\Backups' } -WhatIf }
+
+        Should -Invoke -ModuleName $module Add-TrustedHostPath -Times 0
+    }
+
+    It 'allows a new place once confirmed' {
+        InModuleScope $module { Register-TrustedHostPath -Settings @{ VMName = 'Alpha'; Root = 'C:\Users\sean\LazyVM'; BackupDir = 'E:\Backups' } -Confirm:$false }
+
+        Should -Invoke -ModuleName $module Add-TrustedHostPath -Times 1 -Exactly -ParameterFilter { @($Path) -join '|' -eq 'E:\Backups' }
+    }
+
+    It 'does not ask again for a place already allowed' {
+        Mock -ModuleName $module Get-TrustedHostPath { @('E:\Backups') }
+
+        InModuleScope $module { Register-TrustedHostPath -Settings @{ VMName = 'Alpha'; Root = 'C:\Users\sean\LazyVM'; BackupDir = 'E:\Backups' } -Confirm:$false }
+
+        Should -Invoke -ModuleName $module Add-TrustedHostPath -Times 0
+    }
+
+    It 'refuses <Case>' -ForEach @(
+        @{ Case = 'a drive''s root'; Path = 'E:\' }
+        @{ Case = 'the Windows folder'; Path = (Join-Path -Path $env:SystemRoot -ChildPath 'Temp') }
+        @{ Case = 'Program Files'; Path = (Join-Path -Path $env:ProgramFiles -ChildPath 'Contoso') }
+        @{ Case = 'ProgramData'; Path = (Join-Path -Path $env:ProgramData -ChildPath 'Contoso') }
+        @{ Case = 'another user''s profile'; Path = (Join-Path -Path (Split-Path -Path $env:USERPROFILE -Parent) -ChildPath 'kim\Backups') }
+    ) {
+        $settings = @{ VMName = 'Alpha'; Root = 'D:\DevVM'; BackupDir = $Path }
+
+        { InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Register-TrustedHostPath -Settings $Settings -Confirm:$false } } |
+            Should -Throw -ExpectedMessage '*cannot be allowed*'
+        Should -Invoke -ModuleName $module Add-TrustedHostPath -Times 0
+    }
+}
+
+Describe 'Assert-NoReparsePoint fails closed (#284)' {
+    It 'refuses, running as SYSTEM, a write that is in neither the LazyVM folder nor an allowed place' {
+        Mock -ModuleName $module Test-RunningAsSystem { $true }
+
+        { InModuleScope $module { Assert-NoReparsePoint -Path 'C:\Windows\System32\x.dll' -Root 'C:\Users\sean\LazyVM' -Allowed @('E:\Backups') } } |
+            Should -Throw -ExpectedMessage '*not in the LazyVM folder*'
+    }
+
+    It 'refuses, running as SYSTEM, when no LazyVM folder is known at all' {
+        Mock -ModuleName $module Test-RunningAsSystem { $true }
+
+        { InModuleScope $module { $script:RunRoot = $null; Assert-NoReparsePoint -Path 'C:\Users\sean\LazyVM\Alpha\Config\VM.json' } } |
+            Should -Throw -ExpectedMessage '*not in the LazyVM folder*'
+    }
+
+    It 'walks from the allowed place a path outside the folder is in' {
+        $allowed = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path -Path $allowed -ChildPath 'Alpha') -Force | Out-Null
+        $script:alphaCopy = Join-Path -Path $allowed -ChildPath 'Alpha'
+        Mock -ModuleName $module Test-ReparsePoint { $Path -eq $script:alphaCopy }
+
+        { InModuleScope $module -Parameters @{ Allowed = $allowed } { param($Allowed) Assert-NoReparsePoint -Path (Join-Path -Path $Allowed -ChildPath 'Alpha/Alpha-User.vhdx') -Root 'C:\Users\sean\LazyVM' -Allowed @($Allowed) } } |
+            Should -Throw -ExpectedMessage '*Alpha is a reparse point*'
+    }
+
+    It 'lets the run''s own temporary folder be written' {
+        Mock -ModuleName $module Test-RunningAsSystem { $true }
+        Mock -ModuleName $module Test-ReparsePoint { $false }
+
+        { InModuleScope $module { Assert-NoReparsePoint -Path (Join-Path -Path ([IO.Path]::GetTempPath()) -ChildPath 'LazyVM-1/autounattend.xml') -Root 'C:\Users\sean\LazyVM' } } | Should -Not -Throw
+    }
+
+    It 'is known to the first build before its command run starts' {
+        Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType File -Path (Join-Path -Path $root -ChildPath 'DevBox/Config/VM.json') -Force | Out-Null
+        Mock -ModuleName $module Get-RegisteredRoot { $root }.GetNewClosure() -ParameterFilter { -not $Key }
+
+        $known = InModuleScope $module { Initialize-BuildTarget -Name 'DevBox' 6> $null; $script:RunRoot }
+
+        $known | Should -Be $root
+    }
+}
+
+Describe 'Deletes, moves and copies under the LazyVM folder (#284)' {
+    BeforeEach {
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path -Path $root -ChildPath 'Alpha') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/a.txt') -Value 'a'
+        Mock -ModuleName $module Test-ReparsePoint { $true }
+    }
+
+    It '<Helper> checks for reparse points first' -ForEach @(
+        @{ Helper = 'Remove-CheckedItem' }
+        @{ Helper = 'Move-CheckedItem' }
+        @{ Helper = 'Copy-CheckedItem' }
+    ) {
+        { InModuleScope $module -Parameters @{ Root = $root; Helper = $Helper } {
+                param($Root, $Helper)
+                $script:RunRoot = $Root
+                try {
+                    $file = Join-Path -Path $Root -ChildPath 'Alpha/a.txt'
+                    $other = Join-Path -Path $Root -ChildPath 'Alpha/b.txt'
+                    switch ($Helper) {
+                        'Remove-CheckedItem' { Remove-CheckedItem -Path $file }
+                        'Move-CheckedItem' { Move-CheckedItem -Path $file -Destination $other }
+                        'Copy-CheckedItem' { Copy-CheckedItem -Path $file -Destination $other }
+                    }
+                }
+                finally { $script:RunRoot = $null }
+            } } | Should -Throw -ExpectedMessage '*reparse point*'
+        Join-Path -Path $root -ChildPath 'Alpha/a.txt' | Should -Exist
+    }
+
+    It 'are what <File> uses on the host, not Remove-Item, Move-Item or Copy-Item' -ForEach @(
+        @{ File = 'Capture/Capture.ps1' }
+        @{ File = 'Maintenance/Rebuild.ps1' }
+        @{ File = 'Settings/ProfileHistory.ps1' }
+        @{ File = 'Settings/ToolingMigration.ps1' }
+        @{ File = 'Disks/UserDiskBackup.ps1' }
+        @{ File = 'Host/InstallMedia.ps1' }
+    ) {
+        # Script blocks run in the guest, through Invoke-GuestScript, are not the host's.
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path -Path $script:LazyVMModuleDir -ChildPath "Private/$File"), [ref]$null, [ref]$null)
+        $onHost = @($ast.FindAll({
+                    param($node)
+                    if ($node -isnot [System.Management.Automation.Language.CommandAst] -or $node.GetCommandName() -notin 'Remove-Item', 'Move-Item', 'Copy-Item') { return $false }
+                    for ($parent = $node.Parent; $parent; $parent = $parent.Parent) {
+                        if ($parent -is [System.Management.Automation.Language.CommandAst] -and $parent.GetCommandName() -eq 'Invoke-GuestScript') { return $false }
+                    }
+                    return $true
+                }, $true))
+
+        @($onHost | ForEach-Object { "line $($_.Extent.StartLineNumber): $($_.Extent.Text)" }) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Initialize-CommandRun checks the settings it ends up with (#284)' {
+    It 'checks the paths of the settings as read the last time' {
+        InModuleScope $module {
+            $text = (Get-Command -Name Initialize-CommandRun).Definition
+            ([regex]::Matches($text, 'Read-VMSetting\b')).Count | Should -Be 0
+            ([regex]::Matches($text, 'Read-TrustedVMSetting\b')).Count | Should -BeGreaterThan 1
+        }
+    }
+
+    It 'Read-TrustedVMSetting checks the paths in an unattended run' {
+        Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ Settings = @{ VMName = 'Alpha'; Root = 'C:\LazyVM' } } }
+        Mock -ModuleName $module Test-Unattended { $true }
+        Mock -ModuleName $module Assert-HostPathTrusted { throw 'outside' }
+
+        { InModuleScope $module -Parameters @{ Owner = $owner } { param($Owner) Read-TrustedVMSetting -Root 'C:\LazyVM' -VMName 'Alpha' -OwnerSid $Owner } } | Should -Throw -ExpectedMessage '*outside*'
     }
 }

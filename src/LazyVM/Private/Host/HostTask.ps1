@@ -8,11 +8,28 @@
 # folder (-Root) and its owner (-OwnerSid), and loads the module by its
 # folder in Program Files (Get-ModuleImportCommand, TrustedCode.ps1).
 
+function Get-HostTaskCommandName {
+    <# The LazyVM command a host task's name says it runs, and the VM it names; $null for a name LazyVM does not give its tasks. #>
+    param([Parameter(Mandatory)][string]$TaskName)
+
+    $commands = [ordered]@{
+        $script:MaintenanceTaskPrefix = 'Invoke-LazyVMMaintenance'
+        $script:ResumeTaskPrefix      = 'Build-LazyVM'
+    }
+    foreach ($prefix in $commands.Keys) {
+        if ($TaskName.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            return [pscustomobject]@{ Command = $commands[$prefix]; VMName = $TaskName.Substring($prefix.Length) }
+        }
+    }
+    return $null
+}
+
 function Get-HostTaskCommand {
     <#
       The LazyVM command a host task runs, worked out from its name, for the
       LazyVM folder $Root of the user $OwnerSid; $null for a name LazyVM
-      does not give its tasks.
+      does not give its tasks. Throws for a name whose VM part is not a VM
+      name: the command runs as SYSTEM.
     #>
     [OutputType([string])]
     param(
@@ -22,17 +39,10 @@ function Get-HostTaskCommand {
     )
 
     if ($OwnerSid -notmatch '^S-1-\d+(-\d+)+$') { throw "'$OwnerSid' is not a security identifier." }
-
-    $commands = [ordered]@{
-        $script:MaintenanceTaskPrefix = 'Invoke-LazyVMMaintenance'
-        $script:ResumeTaskPrefix      = 'Build-LazyVM'
-    }
-    foreach ($prefix in $commands.Keys) {
-        if ($TaskName.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-            return "$($commands[$prefix]) -Name '$($TaskName.Substring($prefix.Length))' -Root '$($Root.Replace("'", "''"))' -OwnerSid '$OwnerSid'"
-        }
-    }
-    return $null
+    $named = Get-HostTaskCommandName -TaskName $TaskName
+    if (-not $named) { return $null }
+    if (-not (Test-VMName -Name $named.VMName)) { throw "'$($named.VMName)', in the task '$TaskName', is not a VM name." }
+    return "$($named.Command) -Name '$($named.VMName.Replace("'", "''"))' -Root '$($Root.Replace("'", "''"))' -OwnerSid '$OwnerSid'"
 }
 
 function Register-LazyVMHostTask {

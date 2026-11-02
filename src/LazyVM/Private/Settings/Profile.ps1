@@ -443,6 +443,8 @@ function Initialize-BuildTarget {
         Set-RegisteredRoot -Path $root
         Write-Information "LazyVM keeps its VMs in $root. To use another folder, run Set-LazyVMRoot first." -InformationAction Continue
     }
+    # The resume task writes here as SYSTEM before its command run starts (PathSafety.ps1).
+    $script:RunRoot = $root
 
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $root)
 

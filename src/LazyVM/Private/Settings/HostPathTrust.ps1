@@ -54,14 +54,55 @@ function Add-TrustedHostPath {
     Set-ItemProperty -LiteralPath $key -Name 'Paths' -Value ([string[]]$paths) -Type MultiString
 }
 
+function Get-ForbiddenHostPathReason {
+    <#
+      Why $Path cannot be allowed for the scheduled tasks, which act on it as
+      SYSTEM; $null when it can. A drive's root, the system folders and other
+      users' profiles are never allowed.
+    #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    $full = ConvertTo-FullPath -Path $Path
+    if ($full -eq (ConvertTo-FullPath -Path ([IO.Path]::GetPathRoot($full)))) { return 'it is a whole drive' }
+    $systemFolders = @($env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData) | Where-Object { $_ }
+    foreach ($folder in $systemFolders) {
+        if (Test-PathWithin -Path $full -Folder $folder) { return "it is in $folder" }
+    }
+    $profiles = Split-Path -Path $env:USERPROFILE -Parent
+    if ((Test-PathWithin -Path $full -Folder $profiles) -and -not (Test-PathWithin -Path $full -Folder $env:USERPROFILE)) {
+        return "it is in $profiles but not in your own profile"
+    }
+    return $null
+}
+
 function Register-TrustedHostPath {
-    <# Allows the paths outside the LazyVM folder that $Settings name, for the user running LazyVM, elevated. #>
+    <#
+      Allows the paths outside the LazyVM folder that $Settings name, for the
+      user running LazyVM, elevated. Each new one is confirmed first: the
+      scheduled tasks will write and delete there as SYSTEM.
+    #>
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Settings)
 
-    $outside = @(Get-OutsideHostPath -Settings $Settings)
-    if ($outside.Count -eq 0) { return }
-    Add-TrustedHostPath -OwnerSid (Get-CurrentUserSid).Value -Path @($outside.Path)
-    Write-LogEntry "Allowed for the scheduled tasks, outside the LazyVM folder: $(@($outside | ForEach-Object { "$($_.Name) ($($_.Path))" }) -join ', ')" 'INFO'
+    $ownerSid = (Get-CurrentUserSid).Value
+    $allowed = @(Get-TrustedHostPath -OwnerSid $ownerSid)
+    $new = @(Get-OutsideHostPath -Settings $Settings | Where-Object {
+            $path = $_.Path
+            -not ($allowed | Where-Object { Test-SamePath -Path $path -Other $_ })
+        })
+    foreach ($item in $new) {
+        $reason = Get-ForbiddenHostPathReason -Path $item.Path
+        if ($reason) {
+            throw "$($item.Name) of '$($Settings.VMName)' is $($item.Path), which cannot be allowed for LazyVM's scheduled tasks because $reason. Choose a folder of your own, such as one on a data drive or in your profile, in its settings."
+        }
+    }
+    $confirmed = @($new | Where-Object {
+            $PSCmdlet.ShouldProcess($_.Path, "Allow LazyVM's scheduled tasks, which run as SYSTEM, to write and delete in this folder for $($_.Name) of '$($Settings.VMName)'")
+        })
+    if ($confirmed.Count -eq 0) { return }
+    Add-TrustedHostPath -OwnerSid $ownerSid -Path @($confirmed.Path)
+    Write-LogEntry "Allowed for the scheduled tasks, outside the LazyVM folder: $(@($confirmed | ForEach-Object { "$($_.Name) ($($_.Path))" }) -join ', ')" 'INFO'
 }
 
 function Assert-HostPathTrusted {

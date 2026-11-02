@@ -141,12 +141,18 @@ function Update-LegacyTask {
     )
 
     foreach ($task in @(Get-ScheduledTask -TaskName "$script:TaskPrefix*" -ErrorAction SilentlyContinue)) {
-        $command = Get-HostTaskCommand -TaskName $task.TaskName -Root $NewRoot -OwnerSid (Get-CurrentUserSid).Value
-        if (-not $command) {
+        $named = Get-HostTaskCommandName -TaskName $task.TaskName
+        if (-not $named) {
             Write-LogEntry "Task '$($task.TaskName)' is not one LazyVM makes, so it is left as it was" 'WARN'
             continue
         }
-        $vmName = $task.TaskName -replace "^($([regex]::Escape($script:MaintenanceTaskPrefix))|$([regex]::Escape($script:ResumeTaskPrefix)))", ''
+        # Its command will run as SYSTEM: a name that is not a VM's could carry code.
+        if (-not (Test-VMName -Name $named.VMName)) {
+            Write-LogEntry "Task '$($task.TaskName)' does not end in a VM name ('$($named.VMName)' is not a VM name), so it is left as it was" 'WARN'
+            continue
+        }
+        $vmName = $named.VMName
+        $command = Get-HostTaskCommand -TaskName $task.TaskName -Root $NewRoot -OwnerSid (Get-CurrentUserSid).Value
         $inThisInstall = foreach ($root in $OldRoot, $NewRoot) {
             Test-Path -LiteralPath (Join-Path -Path $root -ChildPath "$vmName/$script:ConfigFolderName/$script:ProfileFileName") -PathType Leaf
         }
