@@ -281,9 +281,10 @@ Each night the maintenance run, in this order:
 8. checks and backs up every user database to `D:\SQLBackup`;
 9. asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close);
 10. turns Sysmon on and installs it if it is not, with any newer configuration LazyVM ships ([Sysmon](#sysmon));
-11. applies the Visual Studio settings if the build could not ([Visual Studio settings](#visual-studio-settings));
-12. upgrades the winget packages ([winget upgrades](#winget-upgrades));
-13. installs Windows updates ([Windows updates](#windows-updates)).
+11. turns automatic sign-in back on, with no limit, if Windows turned it off or a sign-in count remains, as on a VM built before LazyVM removed the 99-sign-in limit. The password is stored as the LSA secret Windows' own automatic sign-in uses, never in the registry. A VM built with `-NoUnattend` is left as you set it;
+12. applies the Visual Studio settings if the build could not ([Visual Studio settings](#visual-studio-settings));
+13. upgrades the winget packages ([winget upgrades](#winget-upgrades));
+14. installs Windows updates ([Windows updates](#windows-updates)).
 
 A step that fails is logged and the rest still run. Then it reads the license and does this:
 
