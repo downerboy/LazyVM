@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.1.0](https://github.com/downerboy/LazyVM/compare/v6.0.0...v6.1.0) (2026-11-02)
+
+
+### Features
+
+* export BitLocker recovery keys and remind until exported ([#288](https://github.com/downerboy/LazyVM/issues/288)) ([aace2d4](https://github.com/downerboy/LazyVM/commit/aace2d4d3b6ec277ac32fd3c6438503f8c410cd7))
+
 ## [6.0.0](https://github.com/downerboy/LazyVM/compare/v5.2.4...v6.0.0) (2026-11-02)
 
 
