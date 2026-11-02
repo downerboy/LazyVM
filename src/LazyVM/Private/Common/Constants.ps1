@@ -139,6 +139,47 @@ $script:WingetExitMeanings = @{
 # break a working install of either. Wildcards as -like takes them.
 $script:WingetUpgradeNever = @('Microsoft.VisualStudio.*', 'Microsoft.SQLServer.*', 'Microsoft.SQLServerManagementStudio*')
 
+# What the Visual Studio Installer's exit codes mean, so a nightly update
+# that did not succeed explains itself (#293). From the installer's
+# documentation:
+# https://learn.microsoft.com/visualstudio/install/use-command-line-parameters-to-install-visual-studio#error-codes
+$script:VisualStudioInstallerExitMeanings = @{
+    740         = 'elevation required'
+    1001        = 'the Visual Studio Installer was already running'
+    1003        = 'the product is in use'
+    1602        = 'the update was canceled'
+    1618        = 'another installation was running'
+    5003        = 'the installer could not be downloaded'
+    5004        = 'the update was canceled'
+    5005        = 'the installer could not read its command line'
+    5007        = 'the computer does not meet the requirements'
+    8001        = 'the Arm machine check failed'
+    8002        = 'the background download precheck failed'
+    8003        = 'a component that is out of support was selected'
+    8004        = 'the installation folder could not be used'
+    8005        = 'the downloaded files could not be verified'
+    8006        = 'the product''s processes were running'
+    8010        = 'the operating system is not supported'
+    -1073720687 = 'the guest could not connect to the internet'
+    -1073741510 = 'the Visual Studio Installer was stopped'
+}
+
+# The installer's exit codes that only mean "not now": busy or in use. The
+# nightly update skips that night and tries again the next.
+$script:VisualStudioInstallerBusyExitCodes = @(1001, 1003, 1618, 8006)
+
+# The nightly updates' time budgets, in minutes (#293): no update starts once
+# its source's budget is spent, so none is cut off halfway. Each Gallery
+# module or dotnet tool also gets a guest call of its own, with its own limit.
+$script:InstallerProductUpdateBudgetMinutes = 45
+$script:SourceUpdateBudgetMinutes = 20
+$script:SourceUpdateItemTimeoutMinutes = 10
+
+# An installer product update that failed within this many minutes, and left
+# the product incomplete, is repaired the same night; one that took longer,
+# or timed out, is repaired by the next night's check instead (#293).
+$script:InstallerProductQuickFailureMinutes = 10
+
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.
 $script:TaskPrefix = 'LazyVM-'

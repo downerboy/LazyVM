@@ -33,7 +33,7 @@
         @{
             Function = 'Invoke-Maintenance'
             Area     = 'Maintenance'
-            Note     = 'steps 4-27 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
+            Note     = 'steps 4-30 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
             Includes = @('Test-BuildInProgress', 'Get-ResumePhase')
             Reads    = @(
                 @{ Label = 'build in progress'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json') }
@@ -52,7 +52,7 @@
             Function = 'Invoke-DailyMaintenance'
             Area     = 'Maintenance'
             Caller   = 'Invoke-Maintenance'
-            Note     = 'steps 6-26 are its calls; a step that fails is logged and the rest still run'
+            Note     = 'steps 6-29 are its calls; a step that fails is logged and the rest still run'
         }
         @{
             Function = 'Expand-GuestSystemDrive'
@@ -172,6 +172,29 @@
             Caller   = 'Invoke-DailyMaintenance'
             Note     = 'winget upgrades, except Visual Studio, SQL Server, pinned packages and running programs'
             Writes   = @(@{ Label = 'upgraded packages'; Kind = 'guest'; Store = 'Running guest'; Items = @('new versions; the tooling list is unchanged') })
+        }
+        @{
+            Function = 'Update-GuestInstallerProduct'
+            Area     = 'Maintenance'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'Visual Studio Installer update command, for each product (Visual Studio, SSMS) nobody is using; a restart it needs goes to Windows updates'
+            Writes   = @(@{ Label = 'updated products'; Kind = 'guest'; Store = 'Visual Studio Installer'; Items = @('new version; the tooling list is unchanged') })
+        }
+        @{
+            Function = 'Update-GuestGalleryModule'
+            Area     = 'Maintenance'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'installs the newer version of each PowerShell Gallery module, in Windows PowerShell and PowerShell 7, and removes the version it made old'
+            Reads    = @(@{ Label = 'modules'; Kind = 'web'; Store = 'PowerShell Gallery'; Items = @('newer module versions') })
+            Writes   = @(@{ Label = 'updated modules'; Kind = 'guest'; Store = 'Running guest'; Items = @('new versions beside the old', 'the version made old removed') })
+        }
+        @{
+            Function = 'Update-GuestDotnetTool'
+            Area     = 'Maintenance'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'dotnet tool update for each of the guest account''s global tools'
+            Reads    = @(@{ Label = 'tools'; Kind = 'web'; Store = 'NuGet'; Items = @('newer tool versions') })
+            Writes   = @(@{ Label = 'updated tools'; Kind = 'guest'; Store = 'Running guest'; Items = @('%USERPROFILE%\.dotnet\tools') })
         }
         @{
             Function = 'Update-GuestWindows'

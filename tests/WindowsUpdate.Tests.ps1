@@ -215,6 +215,46 @@ Describe 'Update-GuestWindows (#234)' {
 
         Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 1 -Exactly
     }
+
+    It 'restarts, under the same rule, when an earlier step needs a restart that Windows Update does not know of, and says why (#293)' {
+        Mock -ModuleName $module Install-GuestWindowsUpdate { $false }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM -RestartNeededBy 'Visual Studio Installer products' })
+
+        $result | Should -Be @($true)
+        Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 1 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -eq 'Restarting the guest to finish the Visual Studio Installer products updates' }
+    }
+
+    It 'leaves a restart an earlier step needs to the signed-in user, saying Windows does not ask for it (#293)' {
+        Mock -ModuleName $module Install-GuestWindowsUpdate { $false }
+        Mock -ModuleName $module Get-GuestSignedInUser { 'sean' }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM -RestartNeededBy 'Visual Studio Installer products' }
+
+        Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 0
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter {
+            $Level -eq 'WARN' -and $Message -like 'Visual Studio Installer products need a restart to finish updating - sean signed in to the guest, so restart the VM when you can; Windows does not ask for this restart'
+        }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { $Message -like 'Windows updates: restart pending*' }
+    }
+
+    It 'still makes the restart an earlier step needs when installing the updates fails, and logs the failure (#293)' {
+        Mock -ModuleName $module Install-GuestWindowsUpdate { throw 'Windows Update is broken' }
+        Mock -ModuleName $module Write-LogError { }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM -RestartNeededBy 'Visual Studio Installer products' })
+
+        $result | Should -Be @($true)
+        Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly -ParameterFilter { $Context -like 'Windows updates failed*' }
+        Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 1 -Exactly
+    }
+
+    It 'lets a failure to install the updates reach its caller when nothing else needs a restart' {
+        Mock -ModuleName $module Install-GuestWindowsUpdate { throw 'Windows Update is broken' }
+
+        { InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM } } | Should -Throw '*Windows Update is broken*'
+    }
 }
 
 Describe 'Invoke-GuestCheck (#276)' {
