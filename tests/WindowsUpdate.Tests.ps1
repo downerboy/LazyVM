@@ -234,7 +234,7 @@ Describe 'Update-GuestWindows (#234)' {
 
         Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 0
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter {
-            $Level -eq 'WARN' -and $Message -like 'Visual Studio Installer products need a restart to finish updating - sean signed in to the guest, so restart the VM yourself*Windows does not ask for this one'
+            $Level -eq 'WARN' -and $Message -like 'Visual Studio Installer products need a restart to finish updating - sean signed in to the guest, so restart the VM when you can; Windows does not ask for this restart'
         }
         Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { $Message -like 'Windows updates: restart pending*' }
     }

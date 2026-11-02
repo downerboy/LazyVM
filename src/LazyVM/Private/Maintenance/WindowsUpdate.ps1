@@ -153,7 +153,7 @@ function Update-GuestWindows {
             $who = $signedIn -join ', '
             if ($updatesNeedRestart) { Write-LogEntry "Windows updates: restart pending - $who signed in to the guest, so Windows asks when to restart" 'INFO' }
             if ($RestartNeededBy) {
-                Write-LogEntry "$RestartNeededBy need a restart to finish updating - $who signed in to the guest, so restart the VM yourself when you can; Windows does not ask for this one" 'WARN'
+                Write-LogEntry "$RestartNeededBy need a restart to finish updating - $who signed in to the guest, so restart the VM when you can; Windows does not ask for this restart" 'WARN'
             }
             return $false
         }
