@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.2.0](https://github.com/downerboy/LazyVM/compare/v6.1.0...v6.2.0) (2026-11-02)
+
+
+### Features
+
+* tune guest event logging and audit policy ([#294](https://github.com/downerboy/LazyVM/issues/294)) ([d3017d7](https://github.com/downerboy/LazyVM/commit/d3017d7da2595b5a024868e5fca01234359035d3))
+
 ## [6.1.0](https://github.com/downerboy/LazyVM/compare/v6.0.0...v6.1.0) (2026-11-02)
 
 

@@ -134,7 +134,7 @@ Describe 'Install-GuestSoftware' {
         Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('lazy', [securestring]::new()) }
         foreach ($step in 'Wait-GuestReady', 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk', 'Connect-Guest',
             'Expand-GuestSystemDrive', 'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
-            'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization', 'Set-GuestSysmon',
+            'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization', 'Set-GuestSysmon', 'Set-GuestEventLogging',
             'Wait-GuestNetwork', 'Install-SqlServerIfMissing', 'Initialize-VMTooling') {
             Mock -ModuleName $module $step { }
         }
@@ -148,6 +148,28 @@ Describe 'Install-GuestSoftware' {
         $null = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Install-GuestSoftware -VM $VM }
 
         Should -Invoke -ModuleName $module Set-GuestSysmon -Times 1 -Exactly
+    }
+
+    It 'sets the event logs, audit policy and PowerShell logging in the guest, after Sysmon (#291)' {
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
+        Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('lazy', [securestring]::new()) }
+        foreach ($step in 'Wait-GuestReady', 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk', 'Connect-Guest',
+            'Expand-GuestSystemDrive', 'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
+            'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization',
+            'Wait-GuestNetwork', 'Install-SqlServerIfMissing', 'Initialize-VMTooling') {
+            Mock -ModuleName $module $step { }
+        }
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Set-GuestSysmon { $script:order.Add('sysmon') }
+        Mock -ModuleName $module Set-GuestEventLogging { $script:order.Add('event logging') }
+        $tooling = InModuleScope $module { [ToolingRecord]::new() }
+        Mock -ModuleName $module Get-BuildTooling { $tooling }
+        Mock -ModuleName $module Write-ToolingReinstallReport { $true }
+        $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; GuestWaitMinutes = 1; GuestNetworkWaitMinutes = 1 }) }
+
+        $null = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Install-GuestSoftware -VM $VM }
+
+        $script:order -join ',' | Should -Be 'sysmon,event logging'
     }
 }
 
@@ -164,7 +186,7 @@ Describe 'Install-GuestSoftware Windows updates (#234)' {
         Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('lazy', [securestring]::new()) }
         foreach ($step in 'Wait-GuestReady', 'Remove-UnattendSeedDisk', 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk',
             'Connect-Guest', 'Expand-GuestSystemDrive', 'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
-            'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization', 'Set-GuestSysmon', 'Install-ToolingProduct',
+            'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization', 'Set-GuestSysmon', 'Set-GuestEventLogging', 'Install-ToolingProduct',
             'Install-SqlServerIfMissing', 'Install-WingetPackage', 'Install-OfficialInstaller', 'Initialize-VMTooling') {
             Mock -ModuleName $module $step { }
         }

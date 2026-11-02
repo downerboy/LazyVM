@@ -747,6 +747,11 @@
       "default": true,
       "description": "Turn on the Sysmon built into Windows 11 in the VM, with the configuration LazyVM ships (SwiftOnSecurity's, without the build noise of Visual Studio, MSBuild and SQL Server) and a 256 MB event log. Checked at every build and every night: turned on and installed if it is not, and given the configuration again when a newer LazyVM ships a different one. Set to false to leave Sysmon as it is."
     },
+    "GuestEventLogging": {
+      "type": "boolean",
+      "default": true,
+      "description": "Keep the event logs, the audit policy and PowerShell logging in the VM at the Microsoft security baseline for Windows 11: bigger Application, System, Security and PowerShell logs that overwrite their oldest events, the baseline's advanced audit policy, command lines in process creation events (4688) and PowerShell script block logging. Checked at every build and every night: only what is missing is added, so a bigger log or extra auditing you set is kept. Set to false to leave them as they are."
+    },
     "GuestSecurityScan": {
       "type": "boolean",
       "default": true,

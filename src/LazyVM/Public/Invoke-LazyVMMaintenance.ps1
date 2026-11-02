@@ -10,7 +10,7 @@
     change (see Save-LazyVMTooling) and the environment, firewall rules,
     scheduled tasks, SQL logins and application settings, checks and backs
     up the databases, asks the Store to update its apps, keeps Sysmon set
-    up, applies the Visual Studio settings if a build could not, upgrades
+    up and the event logs and audit policy at LazyVM's settings, applies the Visual Studio settings if a build could not, upgrades
     the winget packages and installs Windows updates. A step that fails is
     logged and the rest still run.
 

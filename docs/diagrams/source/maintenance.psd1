@@ -33,7 +33,7 @@
         @{
             Function = 'Invoke-Maintenance'
             Area     = 'Maintenance'
-            Note     = 'steps 4-24 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
+            Note     = 'steps 4-27 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
             Includes = @('Test-BuildInProgress', 'Get-ResumePhase')
             Reads    = @(
                 @{ Label = 'build in progress'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json') }
@@ -52,7 +52,7 @@
             Function = 'Invoke-DailyMaintenance'
             Area     = 'Maintenance'
             Caller   = 'Invoke-Maintenance'
-            Note     = 'steps 6-23 are its calls; a step that fails is logged and the rest still run'
+            Note     = 'steps 6-26 are its calls; a step that fails is logged and the rest still run'
         }
         @{
             Function = 'Expand-GuestSystemDrive'
@@ -138,6 +138,14 @@
             Note     = 'turns Sysmon on and installs it if it is not; applies the configuration again only when LazyVM ships a new one'
             Reads    = @(@{ Label = 'configuration'; Kind = 'file'; Store = 'Module Data\Sysmon\'; Items = @('sysmonconfig.xml') })
             Writes   = @(@{ Label = 'Sysmon'; Kind = 'guest'; Store = 'Running guest'; Items = @('Sysmon feature and service', 'HKLM:\SOFTWARE\LazyVM  config hash') })
+        }
+        @{
+            Function = 'Set-GuestEventLogging'
+            Area     = 'Installation'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'puts back what is missing of the event log sizes, audit policy, command-line auditing and script block logging (Microsoft security baseline)'
+            Reads    = @(@{ Label = 'logging state'; Kind = 'guest'; Store = 'Running guest'; Items = @('event log sizes and modes', 'auditpol /backup', 'policy registry values') })
+            Writes   = @(@{ Label = 'logging, only on a change'; Kind = 'guest'; Store = 'Running guest'; Items = @('event log sizes, overwrite oldest', 'audit subcategories', 'command-line auditing', 'script block logging') })
         }
         @{
             Function = 'Repair-GuestAutoLogon'
