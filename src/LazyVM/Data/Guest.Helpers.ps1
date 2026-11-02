@@ -1143,6 +1143,243 @@ function Get-GuestInstallerInstance {
     foreach ($instance in (($raw -join "`n") | ConvertFrom-Json)) { $instance }
 }
 
+function Get-GuestVisualStudioInstaller {
+    <# The Visual Studio Installer's setup.exe. Throws when the guest has no installer. #>
+    $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+    if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
+    return $installer
+}
+
+function Get-GuestProcessNameInFolder {
+    <# The names of the processes running from $Folder or a folder below it, each once. #>
+    param([Parameter(Mandatory)][string]$Folder)
+
+    $prefix = $Folder.TrimEnd('\') + '\'
+    return @(Get-CimInstance -ClassName Win32_Process |
+            Where-Object { "$($_.ExecutablePath)".StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } |
+            ForEach-Object { $_.Name } | Sort-Object -Unique)
+}
+
+# ── Nightly updates from other sources (#293) ────────────────────────────────
+#
+# The host lists what each source has (Update-GuestSource), each item as
+# @{ Name; Label; Version } (Label is what the log calls it), then updates
+# each item in a guest call of its own, which returns @{ Version; Notes }:
+# the item's version afterwards, or $null, and notes for the log.
+
+function Find-GuestDotnet {
+    <# dotnet.exe, or $null when .NET is not installed. #>
+    $command = Get-Command -Name dotnet -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($command) { return $command.Source }
+    return $null
+}
+
+function ConvertFrom-GuestDotnetToolList {
+    <#
+      The tools in what dotnet tool list printed, each as @{ Name; Version }:
+      the rows under its line of dashes, package id first, version second.
+    #>
+    [OutputType([pscustomobject])]
+    param([AllowEmptyCollection()][string[]]$Lines = @())
+
+    $inTable = $false
+    foreach ($line in $Lines) {
+        if ($line -match '^-{3,}\s*$') { $inTable = $true; continue }
+        $fields = @($line.Trim() -split '\s+')
+        if ($inTable -and $fields.Count -ge 2) { [pscustomobject]@{ Name = $fields[0]; Version = $fields[1] } }
+    }
+}
+
+function Get-GuestDotnetTool {
+    <#
+      The dotnet global tools of the account this runs as, each as
+      @{ Name; Label; Version }; nothing when .NET is not installed.
+    #>
+    [OutputType([pscustomobject])]
+    param()
+
+    $dotnet = Find-GuestDotnet
+    if (-not $dotnet) { return }
+    $lines = @(& $dotnet tool list --global 2>&1 | ForEach-Object { "$_" })
+    foreach ($tool in @(ConvertFrom-GuestDotnetToolList -Lines $lines)) {
+        [pscustomobject]@{ Name = $tool.Name; Label = $tool.Name; Version = $tool.Version }
+    }
+}
+
+function Invoke-GuestDotnetToolUpdate {
+    <#
+      Updates the dotnet global tool $Tool (Get-GuestDotnetTool) with dotnet
+      tool update, and returns @{ Version; Notes }: its version afterwards,
+      or $null when it is no longer listed. Throws with what dotnet said
+      when it could not update the tool.
+    #>
+    [OutputType([pscustomobject])]
+    param([Parameter(Mandatory)][object]$Tool)
+
+    $output = @(& (Find-GuestDotnet) tool update --global $Tool.Name 2>&1 | ForEach-Object { "$_" } | Where-Object { $_.Trim() })
+    if ($LASTEXITCODE -ne 0) { throw "dotnet tool update exit ${LASTEXITCODE}: $(if ($output) { $output[-1] })" }
+    $after = Get-GuestDotnetTool | Where-Object { $_.Name -eq $Tool.Name } | Select-Object -First 1
+    return [pscustomobject]@{ Version = $(if ($after) { $after.Version }); Notes = @() }
+}
+
+function Get-GuestPowerShellEdition {
+    <# The PowerShell editions in the guest, each as @{ Edition; Path }: Windows PowerShell, and PowerShell 7 when it is installed. #>
+    [OutputType([pscustomobject])]
+    param()
+
+    [pscustomobject]@{ Edition = 'Windows PowerShell'; Path = "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" }
+    $pwsh = Get-Command -Name pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($pwsh) { [pscustomobject]@{ Edition = 'PowerShell 7'; Path = $pwsh.Source } }
+}
+
+function Invoke-GuestPowerShellEdition {
+    <#
+      Runs $ScriptBlock in a process of the PowerShell at $Path, without its
+      profile, and returns its output; throws with its error when it fails.
+      Each edition has its own module folders and PowerShellGet, so a module
+      is listed and updated by the edition it was installed in.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock,
+        [object[]]$ArgumentList = @()
+    )
+
+    # Given a script block, PowerShell passes it and its arguments to the other process encoded, never as text to parse.
+    $output = @(& $Path -NoProfile -NonInteractive -Command $ScriptBlock -args $ArgumentList 2>&1)
+    $errors = @($output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+    if ($LASTEXITCODE -ne 0) { throw $(if ($errors) { "$($errors[-1])" } else { "$Path exited with $LASTEXITCODE" }) }
+    return @($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
+}
+
+function Get-GuestGalleryModule {
+    <#
+      The modules installed from the PowerShell Gallery in each PowerShell
+      edition, as @{ Items; Notes }: each item @{ Name; Label; Version; Path },
+      Path being the edition's PowerShell, and a note for each edition that
+      could not be asked and each module left alone. PowerShellGet and
+      PackageManagement are left alone: they would be updating themselves,
+      which can leave an edition without a working PowerShellGet.
+    #>
+    [OutputType([pscustomobject])]
+    param()
+
+    $leftAlone = @('PowerShellGet', 'PackageManagement')
+    $items = @()
+    $notes = @()
+    foreach ($edition in @(Get-GuestPowerShellEdition)) {
+        try {
+            $modules = @(Invoke-GuestPowerShellEdition -Path $edition.Path -ScriptBlock {
+                    Get-InstalledModule -ErrorAction SilentlyContinue | Where-Object { $_.Repository -eq 'PSGallery' } |
+                        ForEach-Object { [pscustomobject]@{ Name = $_.Name; Version = "$($_.Version)" } }
+                })
+        }
+        catch {
+            $notes += New-GuestNote -Level WARN -Text "could not list the modules of $($edition.Edition): $($_.Exception.Message)"
+            continue
+        }
+        foreach ($module in $modules) {
+            $label = "$($module.Name) ($($edition.Edition))"
+            if ($leftAlone -contains $module.Name) {
+                $notes += New-GuestNote -Level INFO -Text "left alone: $label - it would be updating itself; update it by hand when needed"
+                continue
+            }
+            $items += [pscustomobject]@{ Name = $module.Name; Label = $label; Version = $module.Version; Path = $edition.Path }
+        }
+    }
+    return [pscustomobject]@{ Items = $items; Notes = $notes }
+}
+
+# Old versions of Gallery modules that could not be removed yet, such as
+# ones in use, by module label: versions separated by ';' (#293).
+$script:GuestModuleRemovalKey = 'HKCU:\SOFTWARE\LazyVM\GalleryModuleRemovals'
+
+function Get-GuestModuleRemovalPending {
+    <# The versions of the module labelled $Label recorded as still to be removed. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Label)
+
+    $recorded = Get-ItemProperty -Path $script:GuestModuleRemovalKey -Name $Label -ErrorAction SilentlyContinue
+    if (-not $recorded) { return }
+    @("$($recorded.$Label)" -split ';' | Where-Object { $_ })
+}
+
+function Set-GuestModuleRemovalPending {
+    <# Records $Version as the versions of the module labelled $Label still to be removed; with none, forgets the module. #>
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [AllowEmptyCollection()][string[]]$Version = @()
+    )
+
+    if (@($Version).Count -eq 0) {
+        Remove-ItemProperty -Path $script:GuestModuleRemovalKey -Name $Label -ErrorAction SilentlyContinue
+        return
+    }
+    if (-not (Test-Path -Path $script:GuestModuleRemovalKey)) { $null = New-Item -Path $script:GuestModuleRemovalKey -Force }
+    $null = New-ItemProperty -Path $script:GuestModuleRemovalKey -Name $Label -Value ($Version -join ';') -PropertyType String -Force
+}
+
+function Invoke-GuestGalleryModuleUpdate {
+    <#
+      Updates the PowerShell Gallery module $Module (Get-GuestGalleryModule)
+      in its own edition, and returns @{ Version; Notes }: its newest version
+      afterwards, and a note for each old version removed or not removed.
+      Only when the Gallery has a newer version is it installed, beside the
+      ones there are and in the scope of the newest copy; nothing is
+      reinstalled. That night, the version it made old (the one before the
+      newest until then) is removed, so the two newest are kept; any other
+      version, such as one kept side by side on purpose, is left alone. A
+      version that could not be removed is recorded and tried again each
+      night (Get-GuestModuleRemovalPending) until it is removed or gone.
+    #>
+    [OutputType([pscustomobject])]
+    param([Parameter(Mandatory)][object]$Module)
+
+    $pending = @(Get-GuestModuleRemovalPending -Label $Module.Label)
+    $report = Invoke-GuestPowerShellEdition -Path $Module.Path -ArgumentList @($Module.Name, $pending) -ScriptBlock {
+        param($name, $pending)
+        $ErrorActionPreference = 'Stop'
+        # Windows PowerShell may offer only TLS 1.0, which the Gallery refuses (https://devblogs.microsoft.com/powershell/powershell-gallery-tls-support/).
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        # A prerelease label is left out of the comparison: [version] cannot read it, and Windows PowerShell has no semantic version.
+        $numeric = { param($version) [version]("$version" -replace '-.*$') }
+        $byVersion = { @(Get-InstalledModule -Name $name -AllVersions | Sort-Object { & $numeric $_.Version } -Descending) }
+
+        # A module installed both for all users and for the current user has a copy in each; the newest counts.
+        $versions = & $byVersion
+        $newest = $versions | Select-Object -First 1
+        $latest = Find-Module -Name $name -Repository PSGallery
+        $toRemove = @($pending)
+        if ((& $numeric $latest.Version) -gt (& $numeric $newest.Version)) {
+            $scope = if ("$($newest.InstalledLocation)".StartsWith("$env:ProgramFiles\", [StringComparison]::OrdinalIgnoreCase)) { 'AllUsers' } else { 'CurrentUser' }
+            # -Force lets the new version in beside the old one; it reinstalls nothing, as this version is not installed.
+            Install-Module -Name $name -RequiredVersion $latest.Version -Repository PSGallery -Scope $scope -Force
+            if ($versions.Count -ge 2) { $toRemove += "$($versions[1].Version)" }
+        }
+
+        $present = @(& $byVersion | ForEach-Object { "$($_.Version)" })
+        $removed = @()
+        $notRemoved = @()
+        foreach ($version in @($toRemove | Select-Object -Unique)) {
+            # A recorded version that is gone, removed by hand say, has nothing left to do.
+            if ($present -notcontains $version) { continue }
+            try {
+                Uninstall-Module -Name $name -RequiredVersion $version
+                $removed += $version
+            }
+            catch { $notRemoved += [pscustomobject]@{ Version = $version; Reason = $_.Exception.Message } }
+        }
+        [pscustomobject]@{ Version = "$((& $byVersion | Select-Object -First 1).Version)"; Removed = $removed; NotRemoved = $notRemoved }
+    } | Select-Object -Last 1
+
+    Set-GuestModuleRemovalPending -Label $Module.Label -Version @($report.NotRemoved | ForEach-Object { "$($_.Version)" })
+    $notes = @(foreach ($version in @($report.Removed)) {
+            New-GuestNote -Level INFO -Text "removed: $($Module.Label) $version - made old by tonight's update; the two newest versions are kept"
+        })
+    $notes += @(foreach ($old in @($report.NotRemoved)) { New-GuestNote -Level INFO -Text "not removed yet: $($Module.Label) $($old.Version) - $($old.Reason); tried again tomorrow" })
+    return [pscustomobject]@{ Version = $(if ($report) { $report.Version }); Notes = $notes }
+}
+
 # ── One-shot scheduled tasks ─────────────────────────────────────────────────
 #
 # Work that must outlive the PowerShell Direct session (long installers), or

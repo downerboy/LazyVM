@@ -259,11 +259,7 @@ function Repair-ToolingProduct {
     $label = $Product.DisplayName
     Write-LogEntry "$label is incomplete at $InstallPath, so it is being repaired (up to $($VM.Settings.VSInstallMinutes) minutes)..." 'WARN'
     try {
-        $installer = Invoke-GuestScript -VM $VM -Activity "$label repair" -TimeoutMinutes 5 -ScriptBlock {
-            $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
-            if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
-            return $installer
-        }
+        $installer = Invoke-GuestScript -VM $VM -Activity "$label repair" -TimeoutMinutes 5 -ScriptBlock { Get-GuestVisualStudioInstaller }
         $exitCode = Invoke-GuestInstaller -VM $VM -FilePath $installer -ArgumentList @('repair', '--installPath', "`"$InstallPath`"", '--quiet', '--norestart') `
             -Name "repair-$($Product.Edition())" -TimeoutMinutes $VM.Settings.VSInstallMinutes -Activity "the $label repair"
         if (Test-InstallExitCode -Product $label -ExitCode $exitCode) { return $true }
@@ -355,8 +351,7 @@ function Invoke-ProductModify {
             $ErrorActionPreference = 'Stop'
             $configPath = Join-Path $folder 'extensions.vsconfig'
             [IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
-            $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
-            if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
+            $installer = Get-GuestVisualStudioInstaller
             $arguments = @('modify', '--installPath', "`"$installPath`"", '--config', "`"$configPath`"", '--quiet', '--norestart')
             if ($allowUnsigned) { $arguments += '--allowUnsignedExtensions' }
             return [pscustomobject]@{ FilePath = $installer; Arguments = $arguments }
