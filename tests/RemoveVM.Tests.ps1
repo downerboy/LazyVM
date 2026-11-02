@@ -242,7 +242,7 @@ Describe 'Invoke-VMRemoval' {
         $iso = Join-Path -Path $shared -ChildPath 'ISO\Win11Ent_Eval.iso'
         Set-Content -LiteralPath $iso -Value 'x'
 
-        $settings = @{ VMName = 'Alpha'; LogFile = (Join-Path -Path $vmRoot -ChildPath 'Logs\Alpha.log') }
+        $settings = @{ VMName = 'Alpha'; Root = $root; LogFile = (Join-Path -Path $vmRoot -ChildPath 'Logs\Alpha.log') }
         $context = [pscustomobject]@{
             Machine     = $null
             Tasks       = @()
@@ -286,6 +286,21 @@ Describe 'Invoke-VMRemoval' {
         }
 
         Test-Path -LiteralPath $iso | Should -BeTrue
+    }
+
+    It 'keeps the VM''s -latest config template in Shared\Templates, and says where it is (#292)' {
+        $template = Join-Path -Path (Join-Path -Path $shared -ChildPath 'Templates') -ChildPath 'Alpha-latest.json'
+        New-Item -ItemType Directory -Path (Split-Path -Path $template -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $template -Value '{ "Name": "Alpha-latest", "Automatic": true, "Settings": {} }'
+
+        $said = InModuleScope $module -Parameters @{ Settings = $settings; Context = $context } {
+            param($Settings, $Context)
+            Start-Log -Path $Settings.LogFile -MaxSizeMB 10
+            Invoke-VMRemoval -VM ([VMContext]::new($Settings)) -Context $Context 6>&1
+        }
+
+        $template | Should -Exist
+        @($said | Where-Object { "$_".Contains('Alpha-latest') -and "$_".Contains('kept') -and "$_".Contains('will not replace it') -and "$_".Contains($template) }).Count | Should -Be 1
     }
 }
 
