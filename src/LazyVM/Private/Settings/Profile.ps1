@@ -65,6 +65,25 @@ function Get-VMProfilePath {
     return Join-Path -Path (Get-VMProfileDir -Root $Root -Name $Name) -ChildPath $script:ProfileFileName
 }
 
+function New-ProfileId {
+    <# A new VM's ProfileId: a GUID, so two VMs of the same name made one after the other are told apart (#292). #>
+    [OutputType([string])]
+    param()
+
+    return [guid]::NewGuid().ToString()
+}
+
+function Get-VMAsBuiltProfilePath {
+    <# A VM's VM.Template.json: its VM.json as it was first built, never changed. #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    return Join-Path -Path (Get-VMProfileDir -Root $Root -Name $Name) -ChildPath $script:ProfileTemplateFileName
+}
+
 function Get-VMProfileName {
     <# The VMs this host knows about: each folder in the LazyVM folder that holds a profile. #>
     param([Parameter(Mandatory)][string]$Root)
@@ -238,7 +257,7 @@ function Get-SharedTemplateSetting {
 function Get-PerVMSettingName {
     <#
       Settings that belong to one VM: file locations, the guest computer
-      name, the maintenance time, the recorded identity of its disks and
+      name, the maintenance time, its ProfileId, the recorded identity of its disks and
       what LazyVM recorded inside it. A VM copied with -From takes these
       from the shared template, which names everything after the VM and
       records nothing, rather than from the VM it copies; a config template
@@ -247,7 +266,7 @@ function Get-PerVMSettingName {
     [OutputType([string[]])]
     param()
 
-    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime') + @($script:DataDiskIdentitySettings) + @($script:RecordedGuestStateSettings)
+    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime', $script:ProfileIdSettingName) + @($script:DataDiskIdentitySettings) + @($script:RecordedGuestStateSettings)
 }
 
 function Get-ShareableSetting {
@@ -263,11 +282,18 @@ function Get-ShareableSetting {
         [Parameter(Mandatory)][string]$Name
     )
 
+    return Select-ShareableSetting -Settings (Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $Name))
+}
+
+function Select-ShareableSetting {
+    <# $Settings without the ones each VM has its own of (Get-PerVMSettingName). #>
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.IDictionary]$Settings)
+
     $perVM = Get-PerVMSettingName
-    $settings = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $Name)
     $shareable = @{}
-    foreach ($key in $settings.Keys) {
-        if ($perVM -notcontains $key) { $shareable[$key] = $settings[$key] }
+    foreach ($key in $Settings.Keys) {
+        if ($perVM -notcontains $key) { $shareable[$key] = $Settings[$key] }
     }
     return $shareable
 }
@@ -315,6 +341,7 @@ function New-VMProfile {
 
     $maintenanceTime = Get-NextMaintenanceTime -Root $Root -VMNames $existing
     if ($maintenanceTime) { $settings['MaintenanceTime'] = $maintenanceTime }
+    $settings[$script:ProfileIdSettingName] = New-ProfileId
 
     $path = Get-VMProfilePath -Root $Root -Name $Name
     $text = ConvertTo-SettingsJson -Settings $settings -ForProfile
@@ -347,7 +374,8 @@ function Update-VMProfile {
       The one way VM.json changes after it is created. Applies $Change (setting
       name -> new value), checks the result against the schema, writes it in
       a single step and keeps that version in History, named after $Stamp
-      (now, by default), removing versions no longer needed. A setting
+      (now, by default), removing versions no longer needed, then brings
+      the VM's <VM>-latest config template up to date. A setting
       LazyVM no longer uses is dropped from the file (#273). Logs each
       setting that changed or was dropped and returns their names; returns
       nothing, and writes nothing, when there is neither.
@@ -391,6 +419,9 @@ function Update-VMProfile {
     if (-not $Stamp) { $Stamp = Get-Stamp }
     $null = Save-ProfileVersion -Root $Root -Name $Name -Text $text -Stamp $Stamp
     Remove-OldProfileVersion -Root $Root -Name $Name -Needed (Get-ToolingCheckpointStamp -Name $Name)
+    # The VM's <VM>-latest config template follows every change as it is made (#292), and never fails it.
+    try { $null = Update-AutomaticTemplate -Root $Root -Name $Name }
+    catch { Write-LogEntry "The config template '$(Get-AutomaticTemplateName -Name $Name)' was not updated after this change to VM.json: $($_.Exception.Message)" 'WARN' }
 
     $what = if ($changed.Count -le 10) { $changed -join ', ' } else { "$($changed.Count) settings" }
     Write-LogEntry "Updated $path ($Reason): $what" 'INFO'
@@ -428,10 +459,12 @@ function Sync-VMProfile {
     foreach ($key in $template.Keys) {
         if (-not $current.ContainsKey($key)) { $missing[$key] = $template[$key] }
     }
+    # Its own, never one the shared template names (#292).
+    if (-not $current[$script:ProfileIdSettingName]) { $missing[$script:ProfileIdSettingName] = New-ProfileId }
     # Writes nothing unless a setting was missing or one LazyVM no longer uses is still there (#273).
     $null = Update-VMProfile -Root $root -Name $name -Change $missing -Reason 'brought up to date with the shared template'
 
-    $templatePath = Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath $script:ProfileTemplateFileName
+    $templatePath = Get-VMAsBuiltProfilePath -Root $root -Name $name
     if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) {
         Copy-Item -LiteralPath $path -Destination $templatePath
         Write-LogEntry "Kept a copy of the configuration this VM is built from: $templatePath" 'INFO'

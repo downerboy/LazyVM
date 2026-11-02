@@ -659,6 +659,10 @@ Deletes the VM and everything created for it, Dev Drive and User disk included. 
    - Also runs `Stop-Log`
    - Writes D8, files deleted: Files outside the VM folder (disks, state or backups that a setting put elsewhere; anything another VM uses is kept)
    - Writes D9, VM folder deleted: VM folder (<VM>\ and everything in it: Config, Disks, Checkpoints, State, Backups, Credentials, Logs, Virtual Machines; the log last)
+5. `Get-UserTemplatePath` (Settings, called by Invoke-VMRemoval): the VM's <VM>-latest config template is kept; the last line says where it is
+   - Also runs `Get-AutomaticTemplateName`
+   - Reads D10, kept template: Shared\Templates\ (<VM>-latest.json  (kept))
+   - Writes D11, where it is: Information (the template's path)
 
 <a id="status"></a>
 

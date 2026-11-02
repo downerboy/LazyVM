@@ -48,7 +48,7 @@
 
     process {
         Set-ForceConfirmation -Force:$Force -BoundParameters $PSBoundParameters
-        Invoke-CommandRun -Title 'Rebuild' -Name $Name -FailureMessage 'The rebuild stopped' -Cmdlet $PSCmdlet -RecordHardware -ScriptBlock {
+        Invoke-CommandRun -Title 'Rebuild' -Name $Name -FailureMessage 'The rebuild stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
             param($VM)
             $action = 'Rebuild from scratch. State is captured first and restored afterwards, and the old Windows disk is kept until the new VM is checked'
             if (-not $PSCmdlet.ShouldProcess($VM.Name, $action)) {

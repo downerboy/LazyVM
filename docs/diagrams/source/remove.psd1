@@ -54,5 +54,14 @@
                 @{ Label = 'VM folder deleted'; Kind = 'folder'; Store = 'VM folder'; Items = @('<VM>\ and everything in it: Config', 'Disks', 'Checkpoints', 'State', 'Backups', 'Credentials', 'Logs', 'Virtual Machines; the log last') }
             )
         }
+        @{
+            Function = 'Get-UserTemplatePath'
+            Area     = 'Settings'
+            Caller   = 'Invoke-VMRemoval'
+            Note     = 'the VM''s <VM>-latest config template is kept; the last line says where it is'
+            Includes = @('Get-AutomaticTemplateName')
+            Reads    = @(@{ Label = 'kept template'; Kind = 'file'; Store = 'Shared\Templates\'; Items = @('<VM>-latest.json  (kept)') })
+            Writes   = @(@{ Label = 'where it is'; Kind = 'output'; Store = 'Information'; Items = @('the template''s path') })
+        }
     )
 }

@@ -82,8 +82,9 @@ function Initialize-CommandRun {
     foreach ($warning in $configuration.Warnings) { Write-LogEntry $warning 'WARN' }
 
     # A VM from before #130 has its tooling list in files of its own: they
-    # go into VM.json before anything reads it.
-    $changed = Move-ToolingIntoProfile -Root $folder.Path -Name $vm.Name
+    # go into VM.json before anything reads it, except with -WhatIf, which
+    # changes nothing (#292).
+    $changed = (-not $WhatIfPreference) -and (Move-ToolingIntoProfile -Root $folder.Path -Name $vm.Name)
     # A rebuild must make the VM as it is now, not as it was first set up.
     if ($RecordHardware -and (Save-VMHardware -VM $vm)) { $changed = $true }
     if ($changed) {

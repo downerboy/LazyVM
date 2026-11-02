@@ -1205,6 +1205,12 @@
       "default": "02:00",
       "description": "When the VM's daily maintenance runs, 24-hour time on the host. New-LazyVM sets each new VM an hour after the latest existing one.",
       "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "ProfileId": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Recorded by LazyVM: this VM's own identifier, made when its profile is created and kept across rebuilds. Its <VM>-latest config template carries it, so a new VM of the same name never replaces the template kept from an earlier one. Leave it as it is; a VM copied with -From gets its own.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     }
   }
 }
