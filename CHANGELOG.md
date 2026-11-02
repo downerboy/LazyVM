@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.3.0](https://github.com/downerboy/LazyVM/compare/v6.2.0...v6.3.0) (2026-11-02)
+
+
+### Features
+
+* keep the original VM config and write an automatic template after changes ([#295](https://github.com/downerboy/LazyVM/issues/295)) ([15c7e19](https://github.com/downerboy/LazyVM/commit/15c7e1942d021dca2ff8da11ef7a0a4b1bd28f73))
+
 ## [6.2.0](https://github.com/downerboy/LazyVM/compare/v6.1.0...v6.2.0) (2026-11-02)
 
 
