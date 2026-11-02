@@ -28,12 +28,12 @@ UML use case diagrams for the LazyVM module, drawn from the code in `src/`, not 
 
 ![All LazyVM use cases by actor](use-cases/01-overview.svg)
 
-Actors: Host user, Administrator (a Host user), Task Scheduler running as SYSTEM.
+Actors: Host user, Administrator (a Host user), Task Scheduler running as the user who installed LazyVM.
 
 - Host user: Show LazyVM and its commands (`Show-LazyVM`, or just `LazyVM`), List VMs (`Get-LazyVM`), View settings (`Get-LazyVMSetting`), Create a VM profile (`New-LazyVM`), Save a VM as a config template (`Export-LazyVMTemplate`).
 - Administrator, also:
   - Look up: Check the license (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`), Check a VM end to end (`Test-LazyVM`).
-  - Set up: Choose the LazyVM folder (`Set-LazyVMRoot`), Store the guest account (`Set-LazyVMCredential`).
+  - Set up: Choose the LazyVM folder (`Set-LazyVMRoot`), Store the guest account (`Set-LazyVMCredential`), Move an install made for every user to your account (`Convert-LazyVMInstallation`).
   - Build and maintain: Build a VM (`Build-LazyVM`), Schedule daily maintenance (`Register-LazyVMMaintenance`), Run daily maintenance (`Invoke-LazyVMMaintenance`), Rebuild the VM (`Invoke-LazyVMRebuild`).
   - Tooling: View installed tooling (`Get-LazyVMTooling`), Record tooling changes (`Save-LazyVMTooling`), List tooling restore points (`Get-LazyVMRestorePoint`), Return to a tooling version (`Restore-LazyVMTooling`).
   - State: Capture state (`Save-LazyVMState`), Restore state (`Restore-LazyVMState`).
@@ -58,14 +58,14 @@ Build a VM includes:
 
 Build a VM is extended by:
 
-- **Choose the LazyVM folder automatically** when no folder is registered: LazyVM on the NTFS drive with the most free space.
+- **Choose the LazyVM folder automatically** when no folder is registered: `%USERPROFILE%\LazyVM`, open to the user and SYSTEM only.
 - **Create the VM profile** when there is none for `-Name`.
 
 ## 3. Run daily maintenance
 
 ![Run daily maintenance use cases](use-cases/03-maintenance.svg)
 
-Actors: Task Scheduler (daily at `MaintenanceTime`, as SYSTEM), Administrator. Systems: Hyper-V, Guest Windows.
+Actors: Task Scheduler (daily at `MaintenanceTime`, as the user who installed LazyVM), Administrator. Systems: Hyper-V, Guest Windows.
 
 Run daily maintenance includes, every day:
 

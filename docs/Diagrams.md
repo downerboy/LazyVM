@@ -97,17 +97,19 @@ Once, after updating from LazyVM 5. Moves C:\LazyVM, its tasks, passwords and re
    - Also runs `ConvertTo-NewRootPath`, `Get-FolderSize`, `Get-FreeSpace`
    - Reads D9, VM files: VMs in <old> (configuration, checkpoints, disks)
    - Writes D10, VM files: <new>\<VM>\ (Virtual Machines, Checkpoints, Disks)
-8. `Dismount-LegacyDvdMedia` (Migration, called by Invoke-InstallationMigration): ejects ISOs attached from the old folder
-   - Writes D11, DVD drives: VMs (ejected)
-9. `Move-LegacyFile` (Migration, called by Invoke-InstallationMigration): every other file, one at a time, to the same place
-   - Writes D12, settings, logs, state, ISOs: <new> (Shared\, <VM>\)
-10. `Mount-MovedDvdMedia` (Migration, called by Invoke-InstallationMigration): attaches the ISOs again from the new folder
-   - Writes D13, DVD drives: VMs (ISO from <new>)
-11. `Copy-LegacyRegistry` (Migration, called by Invoke-InstallationMigration): the folder and any interrupted build
+8. `Assert-NoVMFileLeft` (Migration, called by Invoke-InstallationMigration): stops before any other file moves if a VM still uses a disk in the old folder, a checkpoint's parent disk included
+   - Reads D11, disks in use: VMs and checkpoints (attached disks, parent disks)
+9. `Dismount-LegacyDvdMedia` (Migration, called by Invoke-InstallationMigration): ejects ISOs attached from the old folder
+   - Writes D12, DVD drives: VMs (ejected)
+10. `Move-LegacyFile` (Migration, called by Invoke-InstallationMigration): every other file, one at a time, to the same place
+   - Writes D13, settings, logs, state, ISOs: <new> (Shared\, <VM>\)
+11. `Mount-MovedDvdMedia` (Migration, called by Invoke-InstallationMigration): attaches the ISOs again from the new folder
+   - Writes D14, DVD drives: VMs (ISO from <new>)
+12. `Copy-LegacyRegistry` (Migration, called by Invoke-InstallationMigration): the folder and any interrupted build
    - Also runs `Get-LegacyResumePhase`, `Set-ResumePhase`, `Set-RegisteredRoot`
-   - Writes D14, your registry: HKCU:\SOFTWARE\LazyVM (Root = <new>, <VM>  ResumePhase)
-12. `Remove-LegacyInstallation` (Migration, called by Invoke-InstallationMigration): last: the old folder once empty, the Program Files copy, then the HKLM key
-   - Writes D15, old install removed: Machine-wide (<old>  (if empty), Program Files\PowerShell\Modules\LazyVM, HKLM:\SOFTWARE\LazyVM)
+   - Writes D15, your registry: HKCU:\SOFTWARE\LazyVM (Root = <new>, <VM>  ResumePhase)
+13. `Remove-LegacyInstallation` (Migration, called by Invoke-InstallationMigration): last: the old folder once empty, the Program Files copy, then the HKLM key
+   - Writes D16, old install removed: Machine-wide (<old>  (if empty), Program Files\PowerShell\Modules\LazyVM, HKLM:\SOFTWARE\LazyVM)
 
 <a id="show"></a>
 
