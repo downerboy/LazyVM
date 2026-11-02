@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.2.4](https://github.com/downerboy/LazyVM/compare/v5.2.3...v5.2.4) (2026-11-02)
+
+
+### Bug Fixes
+
+* wait and retry a winget install when another installation is in progress ([#281](https://github.com/downerboy/LazyVM/issues/281)) ([249b9e6](https://github.com/downerboy/LazyVM/commit/249b9e63c68ddbb2c5b5a3e7996023bae7c23ca5))
+
 ## [5.2.3](https://github.com/downerboy/LazyVM/compare/v5.2.2...v5.2.3) (2026-11-02)
 
 
