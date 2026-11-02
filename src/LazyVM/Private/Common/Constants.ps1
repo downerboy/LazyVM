@@ -16,6 +16,12 @@ $script:MachineRegistryKey = 'HKLM:\SOFTWARE\LazyVM'
 # move such an install (Convert-LazyVMInstallation).
 $script:LegacyRootRegistryKey = $script:MachineRegistryKey
 
+# The size of the guest's busiest event logs, Sysmon's (Sysmon.ps1) and
+# PowerShell's Operational log, which script block logging fills
+# (EventLogging.ps1): big enough that a day of a developer's work does not
+# roll over (Sean's decision on #236).
+$script:GuestBusyEventLogSize = 256MB
+
 # Inside the guest: the answer file's first-logon command sets Provisioned=1
 # here once Windows Setup and OOBE are done.
 $script:GuestMarkerKey = 'HKLM:\SOFTWARE\LazyVM'

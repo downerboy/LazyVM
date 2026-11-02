@@ -1415,3 +1415,106 @@ function Enable-GuestAutoLogon {
         if ($winlogon.PSObject.Properties[$name]) { Remove-ItemProperty -Path $script:GuestWinlogonKey -Name $name }
     }
 }
+
+# Event logs, audit policy and PowerShell logging (#291). The host decides
+# what to fix (EventLogging.ps1); these read the guest's settings and set
+# only what the host sends.
+
+function Invoke-GuestAuditPol {
+    <#
+      Runs auditpol.exe with $Argument and throws with its output when it
+      fails. Windows PowerShell turns a native program's error output into
+      errors, which 'Stop' would throw, so it is read as text here.
+    #>
+    param([Parameter(Mandatory)][string[]]$Argument)
+
+    $output = & { $ErrorActionPreference = 'Continue'; & auditpol.exe @Argument 2>&1 } | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "auditpol $($Argument -join ' ') failed (exit $LASTEXITCODE): $($output.Trim())" }
+}
+
+function ConvertFrom-AuditPolicyBackup {
+    <#
+      The setting of each audit subcategory in a file auditpol /backup
+      wrote, by subcategory GUID in capitals: 0 none, 1 success, 2 failure,
+      3 both. Its option rows, which have no GUID, are left out.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    $audit = @{}
+    foreach ($row in @(Import-Csv -LiteralPath $Path)) {
+        if ($row.'Subcategory GUID') { $audit[$row.'Subcategory GUID'.ToUpperInvariant()] = [int]$row.'Setting Value' }
+    }
+    return $audit
+}
+
+function Get-GuestLoggingState {
+    <#
+      The size and mode of each log in $LogName, the audit policy (by
+      subcategory GUID) and the value of each registry value in
+      $PolicyValue (Path, Name), $null when it is missing.
+    #>
+    param(
+        [Parameter(Mandatory)][string[]]$LogName,
+        [Parameter(Mandatory)][object[]]$PolicyValue
+    )
+
+    $logs = foreach ($name in $LogName) {
+        $log = New-Object -TypeName System.Diagnostics.Eventing.Reader.EventLogConfiguration -ArgumentList $name
+        [pscustomobject]@{ Name = $name; MaximumSizeInBytes = $log.MaximumSizeInBytes; LogMode = "$($log.LogMode)" }
+    }
+
+    $backup = Join-Path -Path $env:TEMP -ChildPath "LazyVM-auditpol-$([guid]::NewGuid().ToString('N')).csv"
+    try {
+        Invoke-GuestAuditPol -Argument @('/backup', "/file:$backup")
+        $audit = ConvertFrom-AuditPolicyBackup -Path $backup
+    }
+    finally {
+        Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+    }
+
+    $values = foreach ($value in $PolicyValue) {
+        $item = Get-ItemProperty -LiteralPath $value.Path -Name $value.Name -ErrorAction SilentlyContinue
+        [pscustomobject]@{ Path = $value.Path; Name = $value.Name; Value = $(if ($item) { $item.($value.Name) } else { $null }) }
+    }
+
+    return [pscustomobject]@{ Logs = @($logs); Audit = $audit; Values = @($values) }
+}
+
+function Set-GuestEventLogSize {
+    <# Gives the log $Name its size, overwriting its oldest events when full. #>
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][long]$MaximumSizeInBytes
+    )
+
+    $log = New-Object -TypeName System.Diagnostics.Eventing.Reader.EventLogConfiguration -ArgumentList $Name
+    $log.MaximumSizeInBytes = $MaximumSizeInBytes
+    $log.LogMode = [System.Diagnostics.Eventing.Reader.EventLogMode]::Circular
+    $log.SaveChanges()
+}
+
+function Enable-GuestAuditSubcategory {
+    <# Turns on success or failure auditing, or both, for the subcategory $SubcategoryGuid. Never turns any off. #>
+    param(
+        [Parameter(Mandatory)][string]$SubcategoryGuid,
+        [switch]$Success,
+        [switch]$Failure
+    )
+
+    $argument = @('/set', "/subcategory:$SubcategoryGuid")
+    if ($Success) { $argument += '/success:enable' }
+    if ($Failure) { $argument += '/failure:enable' }
+    Invoke-GuestAuditPol -Argument $argument
+}
+
+function Set-GuestPolicyValue {
+    <# Sets the DWORD registry value $Name under $Path, creating the key if it is missing. #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][int]$Value
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) { New-Item -Path $Path -Force | Out-Null }
+    New-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -PropertyType DWord -Force | Out-Null
+}

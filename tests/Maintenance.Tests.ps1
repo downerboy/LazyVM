@@ -36,6 +36,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
         Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
         Mock -ModuleName $module Set-GuestSysmon { 'stray' }
+        Mock -ModuleName $module Set-GuestEventLogging { 'stray' }
         Mock -ModuleName $module Update-GuestVisualStudioSetting { 'stray' }
         Mock -ModuleName $module Repair-GuestAutoLogon { 'stray' }
         Mock -ModuleName $module Update-GuestWingetPackage { 'stray' }
@@ -242,6 +243,19 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Set-GuestSysmon -Times 1 -Exactly
+    }
+
+    It 'keeps the event logs, audit policy and PowerShell logging set every day, after Sysmon, and carries on when that fails (#291)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Set-GuestSysmon { $script:order.Add('sysmon') }
+        Mock -ModuleName $module Set-GuestEventLogging { $script:order.Add('event logging'); throw 'the guest stopped answering' }
+        Mock -ModuleName $module Repair-GuestAutoLogon { $script:order.Add('auto logon') }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        $script:order -join ',' | Should -Be 'sysmon,event logging,auto logon'
     }
 
     It 'tries to apply the Visual Studio settings every day, and carries on when that fails (#266)' {
