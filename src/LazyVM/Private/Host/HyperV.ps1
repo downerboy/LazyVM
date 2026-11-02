@@ -215,9 +215,8 @@ function Register-ResumeTask {
     $action = New-LazyVMTaskAction -Command "Build-LazyVM -Name '$($VM.Name)'"
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $trigger.Delay = 'PT2M'   # let services settle before the build resumes
-    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     $taskSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 6) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-    Register-ScheduledTask -TaskName $settings.ResumeTaskName -Action $action -Trigger $trigger -Principal $principal -Settings $taskSettings -Force | Out-Null
+    Register-LazyVMHostTask -TaskName $settings.ResumeTaskName -Action $action -Trigger $trigger -Settings $taskSettings
 
     Write-LogEntry "Resume task '$($settings.ResumeTaskName)' registered (resumes at Phase $Phase after reboot)" 'OK'
 }

@@ -64,6 +64,7 @@ function Initialize-CommandRun {
     }
 
     Sync-GuestUserFromStore -VM $vm
+    if (-not (Test-Unattended)) { Write-TaskLogonWarning -VM $vm }
     return $vm
 }
 

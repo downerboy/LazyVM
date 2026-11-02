@@ -150,5 +150,8 @@ function Get-LazyVMDiagnostic {
     # 0x41303 (267011): the task has not run yet.
     $taskStatus = switch ([long]$info.LastTaskResult) { 0 { 'OK' } 267011 { 'INFO' } default { 'FAIL' } }
     $last = if ($taskStatus -eq 'INFO') { 'has not run yet' } else { "last ran $($info.LastRunTime), result 0x$('{0:X}' -f [long]$info.LastTaskResult)" }
+    if ([long]$info.LastTaskResult -eq $script:LogonFailureResult) {
+        $last = "could not start: Windows did not accept the password Task Scheduler has for you, probably because you changed it. Enter the new one with: Register-LazyVMMaintenance -Name $vmName"
+    }
     New-DiagnosticCheck -Name $vmName -Area Schedule -Check 'Maintenance task' -Status $taskStatus -Detail "$last; next run $($info.NextRunTime)"
 }

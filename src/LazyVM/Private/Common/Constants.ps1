@@ -119,6 +119,10 @@ $script:WingetExitMeanings = @{
 # break a working install of either. Wildcards as -like takes them.
 $script:WingetUpgradeNever = @('Microsoft.VisualStudio.*', 'Microsoft.SQLServer.*', 'Microsoft.SQLServerManagementStudio*')
 
+# A scheduled task's last result when Windows could not sign its account
+# in (0x8007052E), as after the user changed their password (HostTask.ps1).
+$script:LogonFailureResult = [long]2147943726
+
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.
 $script:TaskPrefix = 'LazyVM-'

@@ -40,13 +40,10 @@ function Register-RebuildSchedule {
         -ExecutionTimeLimit (New-TimeSpan -Hours 6) `
         -RestartCount 2 `
         -RestartInterval (New-TimeSpan -Minutes 30)
-    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-
-    Register-ScheduledTask -TaskName $settings.ScheduleTaskName -Trigger $trigger -Action $action `
-        -Settings $taskSettings -Principal $principal -Force | Out-Null
+    Register-LazyVMHostTask -TaskName $settings.ScheduleTaskName -Action $action -Trigger $trigger -Settings $taskSettings
 
     Write-LogEntry "Scheduled task '$($settings.ScheduleTaskName)' registered for VM '$($VM.Name)' - daily at $($settings.MaintenanceTime), first run $($nextRun.ToString('yyyy-MM-dd HH:mm'))" 'OK'
-    Write-LogEntry '  Runs daily as SYSTEM and does nothing until the evaluation is within' 'INFO'
+    Write-LogEntry "  Runs daily as $(Get-TaskUserName), signed in or not, and does nothing until the evaluation is within" 'INFO'
     Write-LogEntry "  $($settings.RebuildThresholdDays) days of expiry. It then captures state and rearms Windows;" 'INFO'
     Write-LogEntry '  only when rearms are exhausted does it capture, rebuild and restore.' 'INFO'
 }

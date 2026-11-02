@@ -175,3 +175,126 @@ Describe 'Get-RootAccessCheck (#284)' {
         $check.Detail | Should -BeLike '*inherits*'
     }
 }
+
+Describe 'Register-LazyVMHostTask (#284)' {
+    BeforeEach {
+        InModuleScope $module { $script:TaskCredential = $null }
+        Mock -ModuleName $module Test-Unattended { $false }
+        Mock -ModuleName $module Get-TaskUserName { 'MIKEPC\sean' }
+        Mock -ModuleName $module Get-Credential { [pscredential]::new('MIKEPC\sean', [Net.NetworkCredential]::new('', 'Windows-Pass-1').SecurePassword) }
+        Mock -ModuleName $module Register-ScheduledTask { }
+    }
+
+    AfterAll {
+        InModuleScope $module { $script:TaskCredential = $null }
+    }
+
+    It 'registers the task as the user, elevated, with the Windows password, replacing one of the same name' {
+        InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' }
+
+        Should -Invoke -ModuleName $module Register-ScheduledTask -Times 1 -Exactly -ParameterFilter {
+            $TaskName -eq 'LazyVM-Maintain-Alpha' -and $User -eq 'MIKEPC\sean' -and $Password -eq 'Windows-Pass-1' -and "$RunLevel" -eq 'Highest' -and $Force
+        }
+    }
+
+    It 'asks for the password once per PowerShell session' {
+        InModuleScope $module {
+            Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's'
+            Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Beta' -Action 'a' -Trigger 't' -Settings 's'
+        }
+
+        Should -Invoke -ModuleName $module Get-Credential -Times 1 -Exactly -ParameterFilter { $UserName -eq 'MIKEPC\sean' }
+        Should -Invoke -ModuleName $module Register-ScheduledTask -Times 2 -Exactly
+    }
+
+    It 'says clearly when Windows does not accept the password, and asks again next time' {
+        Mock -ModuleName $module Register-ScheduledTask {
+            throw [Management.Automation.ErrorRecord]::new([Exception]::new('The user name or password is incorrect.'), 'HRESULT 0x8007052e,Register-ScheduledTask', 'SecurityError', $null)
+        }
+
+        { InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' } } |
+            Should -Throw -ExpectedMessage '*did not accept the password for MIKEPC\sean*not your PIN*'
+        { InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' } } | Should -Throw
+
+        Should -Invoke -ModuleName $module Get-Credential -Times 2 -Exactly
+    }
+
+    It 'stops without asking when nobody is there to type the password' {
+        Mock -ModuleName $module Test-Unattended { $true }
+
+        { InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' } } |
+            Should -Throw -ExpectedMessage '*Windows password*Register-LazyVMMaintenance*'
+
+        Should -Invoke -ModuleName $module Get-Credential -Times 0
+        Should -Invoke -ModuleName $module Register-ScheduledTask -Times 0
+    }
+
+    It 'stops when no password is entered' {
+        Mock -ModuleName $module Get-Credential { $null }
+
+        { InModuleScope $module { Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' -Action 'a' -Trigger 't' -Settings 's' } } |
+            Should -Throw -ExpectedMessage '*No password*'
+    }
+}
+
+Describe 'The host tasks run as the user (#284)' {
+    BeforeAll {
+        $testVM = InModuleScope $module {
+            [VMContext]::new(@{ VMName = 'Alpha'; MaintenanceTime = '02:00'; RebuildThresholdDays = 10; ScheduleTaskName = 'LazyVM-Maintain-Alpha'
+                    ResumeTaskName = 'LazyVM-ResumeAfterReboot-Alpha'; ResumeRegKey = 'TestRegistry:\LazyVM\Alpha' })
+        }
+    }
+
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Assert-GuestCredential { }
+        Mock -ModuleName $module Get-TaskUserName { 'MIKEPC\sean' }
+        Mock -ModuleName $module New-LazyVMTaskAction { 'action' }
+        Mock -ModuleName $module New-ScheduledTaskTrigger { [pscustomobject]@{ Delay = $null } }
+        Mock -ModuleName $module New-ScheduledTaskSettingsSet { 'settings' }
+        Mock -ModuleName $module Register-LazyVMHostTask { }
+        Mock -ModuleName $module Register-ScheduledTask { throw 'must register through Register-LazyVMHostTask' }
+    }
+
+    It 'registers the daily maintenance as the user' {
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Register-RebuildSchedule -VM $VM }
+
+        Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-Maintain-Alpha' -and $Action -eq 'action' }
+    }
+
+    It 'registers the task that resumes a build after a restart as the user' {
+        # Under Pester's TestRegistry, so nothing is left in the real registry.
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Register-ResumeTask -VM $VM -Phase 3 }
+
+        Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-ResumeAfterReboot-Alpha' }
+    }
+}
+
+Describe 'A task Windows could not sign in for (#284)' {
+    It 'is recognised by its last result, 0x8007052E' {
+        Mock -ModuleName $module Get-ScheduledTaskInfo { [pscustomobject]@{ LastTaskResult = 2147943726 } }
+
+        InModuleScope $module { Test-TaskLogonFailure -TaskName 'LazyVM-Maintain-Alpha' } | Should -BeTrue
+    }
+
+    It 'is not <Case>' -ForEach @(
+        @{ Case = 'a task that ran'; Info = { [pscustomobject]@{ LastTaskResult = 0 } } }
+        @{ Case = 'a task that is not there'; Info = { } }
+        @{ Case = 'a check that cannot be made'; Info = { throw 'Task Scheduler is not available' } }
+    ) {
+        Mock -ModuleName $module Get-ScheduledTaskInfo $Info
+
+        InModuleScope $module { Test-TaskLogonFailure -TaskName 'LazyVM-Maintain-Alpha' } | Should -BeFalse
+    }
+
+    It 'is pointed out when a command starts, with the command that asks for the new password' {
+        Mock -ModuleName $module Test-TaskLogonFailure { $true }
+        Mock -ModuleName $module Write-LogEntry { }
+
+        $warning = InModuleScope $module {
+            Write-TaskLogonWarning -VM ([VMContext]::new(@{ VMName = 'Alpha'; ScheduleTaskName = 'LazyVM-Maintain-Alpha' })) 3>&1
+        }
+
+        "$warning" | Should -BeLike '*password*changed*Register-LazyVMMaintenance -Name Alpha*'
+    }
+}

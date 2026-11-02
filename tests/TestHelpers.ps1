@@ -39,5 +39,17 @@ $script:HyperVCommandStubs = [ordered]@{
     'Get-VMHardDiskDrive'      = { [CmdletBinding()] param([string[]]$VMName, $ControllerType, $ControllerNumber, $ControllerLocation) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Get-VMDvdDrive'           = { [CmdletBinding()] param([string[]]$VMName, $ControllerNumber, $ControllerLocation) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Add-VMHardDiskDrive'      = { [CmdletBinding()] param([string[]]$VMName, $ControllerType, $ControllerNumber, $ControllerLocation, [string]$Path) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Move-VMStorage'           = { [CmdletBinding()] param([string]$VMName, [string]$VirtualMachinePath, [string]$SnapshotFilePath, [string]$SmartPagingFilePath, [hashtable[]]$Vhds) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Set-VMDvdDrive'           = { [CmdletBinding()] param([string[]]$VMName, $ControllerNumber, $ControllerLocation, [string]$Path) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
 }
 Add-MissingCommandStub -Stub $script:HyperVCommandStubs
+
+# The Task Scheduler cmdlets the tests mock, for a runner without them (#284).
+$script:ScheduledTaskCommandStubs = [ordered]@{
+    'Register-ScheduledTask'      = { [CmdletBinding()] param([string]$TaskName, $Action, $Trigger, $Settings, [string]$User, [string]$Password, [string]$RunLevel, [switch]$Force) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Get-ScheduledTask'           = { [CmdletBinding()] param([string]$TaskName) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Get-ScheduledTaskInfo'       = { [CmdletBinding()] param([string]$TaskName) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'New-ScheduledTaskTrigger'    = { [CmdletBinding()] param([switch]$Daily, [int]$DaysInterval, [datetime]$At, [switch]$AtStartup) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'New-ScheduledTaskSettingsSet' = { [CmdletBinding()] param([switch]$WakeToRun, [switch]$StartWhenAvailable, [switch]$AllowStartIfOnBatteries, [switch]$DontStopIfGoingOnBatteries, [timespan]$ExecutionTimeLimit, [int]$RestartCount, [timespan]$RestartInterval) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+}
+Add-MissingCommandStub -Stub $script:ScheduledTaskCommandStubs
