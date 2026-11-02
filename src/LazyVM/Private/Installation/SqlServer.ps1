@@ -9,7 +9,7 @@ function Get-GuestSqlInstance {
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    return Invoke-GuestScript -VM $VM -Activity 'SQL Server detection' -TimeoutMinutes 5 -ScriptBlock {
+    return Invoke-GuestScript -VM $VM -Activity 'SQL Server detection' -TimeoutMinutes 5 -RetryOnDisconnect -ScriptBlock {
         $key = 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL'
         if (-not (Test-Path $key)) { return $null }
 
@@ -198,7 +198,7 @@ function Move-GuestSqlDataFile {
     $letter = $runtime.GuestDataDriveLetter
     Write-LogEntry "Moving SQL data files for instance '$($instance.Instance)' onto $($letter):..." 'INFO'
 
-    $files = @(Invoke-GuestScript -VM $VM -Activity 'SQL data file list' -TimeoutMinutes 5 -ArgumentList @($runtime.SqlServer) -ScriptBlock {
+    $files = @(Invoke-GuestScript -VM $VM -Activity 'SQL data file list' -TimeoutMinutes 5 -RetryOnDisconnect -ArgumentList @($runtime.SqlServer) -ScriptBlock {
             param($server)
             $connection = Open-GuestSqlConnection -Server $server
             # database_id 1-4 are master, tempdb, model and msdb: user
@@ -325,7 +325,7 @@ function Set-GuestSqlDefaultFolder {
     )
 
     $runtime = $VM.Runtime
-    return Invoke-GuestScript -VM $VM -Activity 'SQL default folders' -TimeoutMinutes 5 -ArgumentList @($Instance, $runtime.GuestSqlDataDir, $runtime.GuestSqlLogDir, $runtime.GuestSqlBackupDir) -ScriptBlock {
+    return Invoke-GuestScript -VM $VM -Activity 'SQL default folders' -TimeoutMinutes 5 -RetryOnDisconnect -ArgumentList @($Instance, $runtime.GuestSqlDataDir, $runtime.GuestSqlLogDir, $runtime.GuestSqlBackupDir) -ScriptBlock {
         param($instanceName, $dataDir, $logDir, $backupDir)
         try {
             # This instance's own key, not whichever one is listed first.

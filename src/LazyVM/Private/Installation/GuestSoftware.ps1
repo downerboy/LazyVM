@@ -90,7 +90,12 @@ function Install-GuestSoftware {
         Install-WingetPackage -VM $VM -Packages @($tooling.WingetInstalls())
         Install-OfficialInstaller -VM $VM -Tooling $tooling
         # Last, so the new VM starts patched; nobody is at work in it yet, so it may restart (#234).
-        try { Update-GuestWindows -VM $VM -StartedByLazyVM }
+        # After a restart the guest is left to settle first, as Windows may
+        # restart again and automatic sign-in comes a while later (#276).
+        try {
+            $restarted = Update-GuestWindows -VM $VM -StartedByLazyVM
+            if ($restarted) { Wait-GuestSettled -VM $VM }
+        }
         catch { Write-LogError 'Windows updates failed (non-fatal); maintenance tries again tonight' $_ }
     }
 
