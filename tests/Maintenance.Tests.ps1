@@ -36,6 +36,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
         Mock -ModuleName $module Set-GuestSysmon { 'stray' }
         Mock -ModuleName $module Update-GuestVisualStudioSetting { 'stray' }
+        Mock -ModuleName $module Repair-GuestAutoLogon { 'stray' }
         Mock -ModuleName $module Update-GuestWingetPackage { 'stray' }
         Mock -ModuleName $module Update-GuestWindows { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
@@ -178,6 +179,28 @@ Describe 'Invoke-Maintenance' {
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Update-GuestVisualStudioSetting -Times 1 -Exactly
         Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly -ParameterFilter { $Context -like '*Visual Studio settings*(non-fatal)*' }
+    }
+
+    It 'keeps automatic sign-in on every day, and carries on when that fails (#278)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Repair-GuestAutoLogon { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Repair-GuestAutoLogon -Times 1 -Exactly
+        Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly -ParameterFilter { $Context -like '*Automatic sign-in*(non-fatal)*' }
+    }
+
+    It 'checks automatic sign-in before Windows updates, whose restart then signs the account in (#278)' {
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Repair-GuestAutoLogon { $script:order.Add('autologon') }
+        Mock -ModuleName $module Update-GuestWindows { $script:order.Add('updates') }
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        $script:order -join ',' | Should -Be 'autologon,updates'
     }
 
     It 'captures the state when it changed and nothing else is due (#20)' {

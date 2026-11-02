@@ -201,7 +201,7 @@ function Invoke-DailyMaintenance {
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
       logins and Agent jobs, and application settings, checks and backs up
       the databases, asks the Store to update its apps, sets up Sysmon,
-      applies the Visual Studio settings when a build could not, upgrades
+      keeps automatic sign-in on, applies the Visual Studio settings when a build could not, upgrades
       the winget packages, installs Windows updates, then does
       nothing more until the evaluation is close to expiry, when it captures
       state and rearms. -StartedByLazyVM: the run
@@ -256,6 +256,12 @@ function Invoke-DailyMaintenance {
     # Sysmon turned on and installed if it is not, and given the configuration a newer LazyVM ships (#236).
     try { $null = Set-GuestSysmon -VM $VM }
     catch { Write-LogError 'Sysmon check failed (non-fatal)' $_ }
+
+    # Automatic sign-in renewed, with no limit, when Windows turned it off, a logon count remains or the password is in
+    # the registry in clear text (#278). The steps below that need the guest account signed in get it at the next
+    # start, Windows updates' restart included.
+    try { $null = Repair-GuestAutoLogon -VM $VM }
+    catch { Write-LogError 'Automatic sign-in check failed (non-fatal)' $_ }
 
     # The captured Visual Studio settings, retried until they are applied, while nobody has Visual Studio open (#266).
     # Before tonight's capture, so a capture tonight already has them.

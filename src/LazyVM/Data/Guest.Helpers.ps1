@@ -1058,3 +1058,135 @@ function Remove-GuestTask {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 }
+
+# Automatic sign-in (#278). Winlogon signs DefaultUserName in at every start
+# while AutoAdminLogon is 1 and there is no AutoLogonCount; with a count, it
+# turns automatic sign-in off when the count reaches 0. The password is the
+# LSA secret DefaultPassword, as Sysinternals Autologon stores it, never the
+# clear-text DefaultPassword registry value. See "MSGina.dll Features" and
+# "Protecting the Automatic Logon Password" on Microsoft Learn.
+$script:GuestWinlogonKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+
+function Get-GuestAutoLogonState {
+    <#
+      Winlogon's automatic sign-in settings, and whether the answer file set
+      it up: its first sign-in sets Provisioned at $MarkerKey, which a VM
+      built with -NoUnattend never has.
+    #>
+    param([Parameter(Mandatory)][string]$MarkerKey)
+
+    $winlogon = Get-ItemProperty -Path $script:GuestWinlogonKey
+    $marker = Get-ItemProperty -Path $MarkerKey -Name 'Provisioned' -ErrorAction SilentlyContinue
+    return [pscustomobject]@{
+        Unattended           = [bool]($marker -and $marker.Provisioned -eq 1)
+        AutoAdminLogon       = "$($winlogon.AutoAdminLogon)"
+        HasLogonCount        = $null -ne $winlogon.PSObject.Properties['AutoLogonCount']
+        HasPlainTextPassword = $null -ne $winlogon.PSObject.Properties['DefaultPassword']
+    }
+}
+
+function Save-GuestAutoLogonSecret {
+    <# Stores $Password as the LSA secret DefaultPassword, which Winlogon reads for automatic sign-in. Throws when LSA refuses. #>
+    param([Parameter(Mandatory)][securestring]$Password)
+
+    if (-not ('LazyVM.AutoLogonSecret' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Security;
+
+namespace LazyVM
+{
+    public static class AutoLogonSecret
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LsaUnicodeString
+        {
+            public ushort Length;
+            public ushort MaximumLength;
+            public IntPtr Buffer;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LsaObjectAttributes
+        {
+            public int Length;
+            public IntPtr RootDirectory;
+            public IntPtr ObjectName;
+            public uint Attributes;
+            public IntPtr SecurityDescriptor;
+            public IntPtr SecurityQualityOfService;
+        }
+
+        private const uint PolicyCreateSecret = 0x00000020;
+
+        [DllImport("advapi32.dll")]
+        private static extern uint LsaOpenPolicy(IntPtr systemName, ref LsaObjectAttributes objectAttributes, uint desiredAccess, out IntPtr policyHandle);
+
+        [DllImport("advapi32.dll")]
+        private static extern uint LsaStorePrivateData(IntPtr policyHandle, ref LsaUnicodeString keyName, ref LsaUnicodeString privateData);
+
+        [DllImport("advapi32.dll")]
+        private static extern uint LsaClose(IntPtr policyHandle);
+
+        [DllImport("advapi32.dll")]
+        private static extern int LsaNtStatusToWinError(uint status);
+
+        private static LsaUnicodeString ToLsaString(IntPtr buffer, int length)
+        {
+            LsaUnicodeString result = new LsaUnicodeString();
+            result.Buffer = buffer;
+            result.Length = (ushort)(length * 2);
+            result.MaximumLength = (ushort)((length + 1) * 2);
+            return result;
+        }
+
+        public static void Store(SecureString password)
+        {
+            LsaObjectAttributes attributes = new LsaObjectAttributes();
+            IntPtr policy;
+            uint status = LsaOpenPolicy(IntPtr.Zero, ref attributes, PolicyCreateSecret, out policy);
+            if (status != 0) { throw new System.ComponentModel.Win32Exception(LsaNtStatusToWinError(status), "LsaOpenPolicy failed"); }
+
+            string keyName = "DefaultPassword";
+            LsaUnicodeString name = ToLsaString(Marshal.StringToHGlobalUni(keyName), keyName.Length);
+            LsaUnicodeString secret = ToLsaString(Marshal.SecureStringToGlobalAllocUnicode(password), password.Length);
+            try
+            {
+                status = LsaStorePrivateData(policy, ref name, ref secret);
+                if (status != 0) { throw new System.ComponentModel.Win32Exception(LsaNtStatusToWinError(status), "LsaStorePrivateData failed"); }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(name.Buffer);
+                Marshal.ZeroFreeGlobalAllocUnicode(secret.Buffer);
+                LsaClose(policy);
+            }
+        }
+    }
+}
+'@
+    }
+    [LazyVM.AutoLogonSecret]::Store($Password)
+}
+
+function Enable-GuestAutoLogon {
+    <#
+      Turns automatic sign-in on for the account with no limit: the password
+      goes into the LSA secret first, so a refusal changes nothing, then
+      Winlogon is pointed at the account, as Sysinternals Autologon does,
+      and the logon count and any clear-text password are removed.
+    #>
+    param([Parameter(Mandatory)][pscredential]$Credential)
+
+    Save-GuestAutoLogonSecret -Password $Credential.Password
+
+    Set-ItemProperty -Path $script:GuestWinlogonKey -Name 'DefaultUserName' -Value $Credential.UserName
+    Set-ItemProperty -Path $script:GuestWinlogonKey -Name 'DefaultDomainName' -Value $env:COMPUTERNAME
+    Set-ItemProperty -Path $script:GuestWinlogonKey -Name 'AutoAdminLogon' -Value '1'
+
+    $winlogon = Get-ItemProperty -Path $script:GuestWinlogonKey
+    foreach ($name in 'AutoLogonCount', 'DefaultPassword') {
+        if ($winlogon.PSObject.Properties[$name]) { Remove-ItemProperty -Path $script:GuestWinlogonKey -Name $name }
+    }
+}

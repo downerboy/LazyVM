@@ -129,6 +129,17 @@
             Writes   = @(@{ Label = 'Sysmon'; Kind = 'guest'; Store = 'Running guest'; Items = @('Sysmon feature and service', 'HKLM:\SOFTWARE\LazyVM  config hash') })
         }
         @{
+            Function = 'Repair-GuestAutoLogon'
+            Area     = 'Maintenance'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'unattended VMs only: when Windows turned automatic sign-in off or a logon count remains, turns it back on with no limit'
+            Reads    = @(
+                @{ Label = 'sign-in state'; Kind = 'guest'; Store = 'Running guest'; Items = @('Winlogon AutoAdminLogon, AutoLogonCount', 'HKLM:\SOFTWARE\LazyVM  Provisioned') }
+                @{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') }
+            )
+            Writes   = @(@{ Label = 'automatic sign-in'; Kind = 'guest'; Store = 'Running guest'; Items = @('LSA secret DefaultPassword', 'Winlogon AutoAdminLogon = 1, no count') })
+        }
+        @{
             Function = 'Update-GuestVisualStudioSetting'
             Area     = 'Maintenance'
             Caller   = 'Invoke-DailyMaintenance'
