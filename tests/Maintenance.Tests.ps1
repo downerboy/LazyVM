@@ -33,7 +33,6 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Update-GuestScheduledTaskRecord { }
         Mock -ModuleName $module Update-GuestSqlRecord { }
         Mock -ModuleName $module Update-GuestAppSettingRecord { }
-        Mock -ModuleName $module Update-AutomaticTemplate { 'stray' }
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
         Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
         Mock -ModuleName $module Set-GuestSysmon { 'stray' }
@@ -110,19 +109,6 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         $script:order | Should -Be @('bitlocker', 'reminder')
-    }
-
-    It 'writes the automatic config template after recording the guest, and carries on when that fails (#292)' {
-        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
-        $script:order = @()
-        Mock -ModuleName $module Update-GuestAppSettingRecord { $script:order += 'record' }
-        Mock -ModuleName $module Update-AutomaticTemplate { $script:order += 'template'; throw 'the disk is full' }
-
-        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
-
-        "$($result[0])" | Should -Be 'None'
-        $script:order | Should -Be @('record', 'template')
-        Should -Invoke -ModuleName $module Write-LogError -ParameterFilter { $Context -like '*template*(non-fatal)*' }
     }
 
     It 'backs up the User disk every day, and carries on when that fails (#139)' {

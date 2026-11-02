@@ -365,7 +365,8 @@ function Update-VMProfile {
       The one way VM.json changes after it is created. Applies $Change (setting
       name -> new value), checks the result against the schema, writes it in
       a single step and keeps that version in History, named after $Stamp
-      (now, by default), removing versions no longer needed. A setting
+      (now, by default), removing versions no longer needed, then brings
+      the VM's <VM>-latest config template up to date. A setting
       LazyVM no longer uses is dropped from the file (#273). Logs each
       setting that changed or was dropped and returns their names; returns
       nothing, and writes nothing, when there is neither.
@@ -409,6 +410,9 @@ function Update-VMProfile {
     if (-not $Stamp) { $Stamp = Get-Stamp }
     $null = Save-ProfileVersion -Root $Root -Name $Name -Text $text -Stamp $Stamp
     Remove-OldProfileVersion -Root $Root -Name $Name -Needed (Get-ToolingCheckpointStamp -Name $Name)
+    # The VM's <VM>-latest config template follows every change as it is made (#292), and never fails it.
+    try { $null = Update-AutomaticTemplate -Root $Root -Name $Name }
+    catch { Write-LogEntry "The config template '$(Get-AutomaticTemplateName -Name $Name)' was not updated after this change to VM.json: $($_.Exception.Message)" 'WARN' }
 
     $what = if ($changed.Count -le 10) { $changed -join ', ' } else { "$($changed.Count) settings" }
     Write-LogEntry "Updated $path ($Reason): $what" 'INFO'

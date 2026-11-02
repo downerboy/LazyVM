@@ -4,9 +4,8 @@
 # Every version of VM.json LazyVM writes is kept in <Name>\Config\History as
 # VM-<yyyyMMdd-HHmmss>.json, named after when it was written. A recorded
 # tooling change is named after the checkpoint taken with it, so each
-# restore point has its tooling list. The first version, the VM.json the
-# VM was created with, is always kept (#292), with the newest
-# ProfileVersionsToKeep and any older one a tooling checkpoint still needs.
+# restore point has its tooling list. The newest ProfileVersionsToKeep
+# versions are kept, with any older one a tooling checkpoint still needs.
 
 function Get-ProfileHistoryDir {
     <# The folder holding a VM's kept versions of VM.json. #>
@@ -70,10 +69,9 @@ function Get-ProfileVersion {
 function Remove-OldProfileVersion {
     <#
       Removes the versions of VM.json older than the newest
-      ProfileVersionsToKeep, except the first one, which the VM was created
-      with, and those whose date-time is in $Needed: the ones the VM's
-      tooling checkpoints still need. Removes nothing when $Needed is $null,
-      because what the checkpoints need is unknown.
+      ProfileVersionsToKeep, except those whose date-time is in $Needed: the
+      ones the VM's tooling checkpoints still need. Removes nothing when
+      $Needed is $null, because what the checkpoints need is unknown.
     #>
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -86,8 +84,7 @@ function Remove-OldProfileVersion {
         return
     }
     $versions = @(Get-ProfileVersion -Root $Root -Name $Name)
-    $afterFirst = @($versions | Select-Object -Skip 1)
-    foreach ($version in @($afterFirst | Select-Object -SkipLast $script:ProfileVersionsToKeep)) {
+    foreach ($version in @($versions | Select-Object -SkipLast $script:ProfileVersionsToKeep)) {
         if ($Needed -contains $version.Stamp) { continue }
         Remove-CheckedItem -Path $version.Path
     }

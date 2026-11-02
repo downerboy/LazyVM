@@ -20,7 +20,7 @@
     },
     "Automatic": {
       "type": "boolean",
-      "description": "true in <VM>-latest, the template maintenance keeps for each VM: LazyVM rewrites it to match the VM, so your edits are replaced unless you remove Automatic. Its tooling list is what LazyVM recorded inside the VM. Leave it out of your own templates."
+      "description": "true in <VM>-latest, the template LazyVM keeps for each VM: LazyVM rewrites it to match the VM, so your edits are replaced unless you remove Automatic. Its tooling list is what LazyVM recorded inside the VM. Leave it out of your own templates."
     },
     "Settings": {
       "$ref": "LazyVM.Settings.schema.json",

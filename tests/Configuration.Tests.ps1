@@ -1064,7 +1064,15 @@ Describe 'Update-AutomaticTemplate (#292)' {
             param([string]$Root)
             InModuleScope $module -Parameters @{ Root = $Root } {
                 param($Root)
-                $null = Update-AutomaticTemplate -VM ([VMContext]::new(@{ VMName = 'Alpha'; Root = $Root }))
+                $null = Update-AutomaticTemplate -Root $Root -Name 'Alpha'
+            }
+        }
+        function Update-TestProfile {
+            <# Changes Alpha's VM.json the way LazyVM does. #>
+            param([string]$Root, [hashtable]$Change)
+            InModuleScope $module -Parameters @{ Root = $Root; Change = $Change } {
+                param($Root, $Change)
+                $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change $Change -Reason 'a test'
             }
         }
     }
@@ -1153,20 +1161,49 @@ Describe 'Update-AutomaticTemplate (#292)' {
         }
     }
 
-    It 'on the first night of a VM made before VM.json held its tooling list, compares it with the list folded in' {
+    It 'is refreshed as soon as LazyVM changes VM.json, whatever changed it' {
+        $root = New-TestBuiltRoot
+
+        Update-TestProfile -Root $root -Change @{ vCPU = 8 }
+        (Read-TestJson -Path (Get-TestTemplatePath -Root $root)).Settings.vCPU | Should -Be 8
+
+        Update-TestProfile -Root $root -Change @{ vCPU = 12 }
+        (Read-TestJson -Path (Get-TestTemplatePath -Root $root)).Settings.vCPU | Should -Be 12
+    }
+
+    It 'never fails the change to VM.json: a template that cannot be written is a warning' {
+        $root = New-TestBuiltRoot
+        Mock -ModuleName $module Update-AutomaticTemplate { throw 'the disk is full' }
+
+        { Update-TestProfile -Root $root -Change @{ vCPU = 8 } } | Should -Not -Throw
+
+        (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).vCPU | Should -Be 8
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like '*Alpha-latest*the disk is full*' }
+    }
+
+    It 'gets the tooling list of a VM made before VM.json held it, once that is folded in' {
         $root = New-TestBuiltRoot
         Set-TestProfile -Root $root -Json '{ "vCPU": 4 }'
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json') -Value '{ "vCPU": 4 }'
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value $toolingJson
 
-        Invoke-TestAutomaticTemplate -Root $root
+        InModuleScope $module -Parameters @{ Root = $root } { param($Root) $null = Move-ToolingIntoProfile -Root $Root -Name 'Alpha' }
 
         Get-TestWingetId -Settings (Read-TestJson -Path (Get-TestTemplatePath -Root $root)).Settings | Should -Be @('Git.Git')
     }
 
-    It 'writes the template when the configuration the VM was first built from cannot be read' {
+    It 'is not written for a VM that has not been built yet' {
         $root = New-TestBuiltRoot
         Remove-Item -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json')
+
+        Update-TestProfile -Root $root -Change @{ vCPU = 8 }
+
+        Get-TestTemplatePath -Root $root | Should -Not -Exist
+    }
+
+    It 'is written when the configuration the VM was first built from cannot be read' {
+        $root = New-TestBuiltRoot
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json') -Value 'not json'
 
         Invoke-TestAutomaticTemplate -Root $root
 
@@ -1309,23 +1346,6 @@ Describe 'Update-VMProfile' {
         @(Get-HistoryFile -Root $root | ForEach-Object { $_.Name } | Sort-Object) |
             Should -Be @('VM-20260101-000001.json', 'VM-20260101-000004.json', 'VM-20260101-000005.json', 'VM-20260102-000000.json')
         Join-Path -Path $historyDir -ChildPath 'Daily/Tooling-20260101.json' | Should -Exist
-    }
-
-    It 'always keeps the first version, the VM.json the VM was created with, on top of the newest 3 (#292)' {
-        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 5 }' }
-        $historyDir = Join-Path -Path $root -ChildPath 'Alpha/Config/History'
-        New-Item -ItemType Directory -Path $historyDir -Force | Out-Null
-        foreach ($n in 1..5) { Set-Content -LiteralPath (Join-Path -Path $historyDir -ChildPath "VM-20260101-00000$n.json") -Value "{ `"vCPU`": $n }" }
-
-        InModuleScope $module -Parameters @{ Root = $root } {
-            param($Root)
-            Mock Write-LogEntry {}
-            Mock Get-ToolingCheckpointStamp { , @() }
-            $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ vCPU = 6 } -Reason 'a test' -Stamp '20260102-000000'
-        }
-
-        @(Get-HistoryFile -Root $root | ForEach-Object { $_.Name } | Sort-Object) |
-            Should -Be @('VM-20260101-000001.json', 'VM-20260101-000004.json', 'VM-20260101-000005.json', 'VM-20260102-000000.json')
     }
 
     It 'removes nothing from History when it cannot tell which versions the checkpoints need' {

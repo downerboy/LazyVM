@@ -474,5 +474,11 @@ function Invoke-VMRemoval {
     }
 
     Write-Information "Log deleted: $($VM.Settings.LogFile)" -InformationAction Continue
+    # Templates are shared, so the VM's own stays, to build a matching VM from later (#292).
+    $templateName = Get-AutomaticTemplateName -Name $VM.Name
+    $template = Get-UserTemplatePath -Root $VM.Settings.Root -TemplateName $templateName
+    if (Test-Path -LiteralPath $template -PathType Leaf) {
+        Write-Information "The config template '$templateName' was kept, to build a matching VM with -ConfigTemplate $templateName; delete it by hand if you no longer want it: $template" -InformationAction Continue
+    }
     return [RemovalOutcome]::Removed
 }

@@ -42,7 +42,7 @@ $script:TemplateSchemaFileName = 'LazyVM.Template.schema.json'
 # is the Name field in its file; LazyVM.Template.schema.json has the same rule.
 $script:TemplatesFolderName = 'Templates'
 $script:TemplateNamePattern = '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$'
-# The automatic config template maintenance keeps for each VM is <VM>-latest (#292).
+# The automatic config template LazyVM keeps for each VM is <VM>-latest (#292).
 $script:AutomaticTemplateSuffix = 'latest'
 # The setting in VM.json that holds the VM's tooling list.
 $script:ToolingSettingName = 'Tooling'
