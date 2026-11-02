@@ -9,22 +9,32 @@
 # the passwords. A key not in that record, such as a new disk's or one
 # BitLocker gave a new key ID, is reminded of: at the end of a build, in the
 # maintenance log, by the next command run by hand on the VM, and by
-# Test-LazyVM.
+# Test-LazyVM. In this file, a recovery key is a disk's 48-digit BitLocker
+# recovery password.
+
+# How many unexported keys of each VM this run has reminded of, by VM name,
+# so a run reminds again only when there are more (Complete-CommandRun
+# clears it).
+$script:RunRecoveryKeyReminder = @{}
 
 function Get-NoRecoveryKeyMessage {
-    <# What to say when no recovery password is stored for $VMName yet. #>
+    <# What to say when no recovery password is stored for the VMs $VMName yet. #>
     [OutputType([string])]
-    param([Parameter(Mandatory)][string]$VMName)
+    param([Parameter(Mandatory)][string[]]$VMName)
 
-    return "No BitLocker recovery password is stored for '$VMName' yet. Build-LazyVM and the daily maintenance turn BitLocker on and store them."
+    return "No BitLocker recovery password is stored for '$($VMName -join "', '")' yet. Build-LazyVM and the daily maintenance turn BitLocker on and store them."
 }
 
 function Get-RecoveryKeyExportCommand {
-    <# The command that exports $VMName's recovery passwords, as the reminders show it. #>
+    <#
+      The command the reminders show: every VM's keys to one file, so
+      replacing last time's file with it (-Force) never drops another VM's
+      keys.
+    #>
     [OutputType([string])]
-    param([Parameter(Mandatory)][string]$VMName)
+    param()
 
-    return "Export-LazyVMRecoveryKey -Name $VMName -Path <a file on a USB drive>"
+    return 'Export-LazyVMRecoveryKey -Path <a file on a USB drive>'
 }
 
 function Get-RecoveryKeyStamp {
@@ -45,13 +55,14 @@ function Read-RecoveryKeyExportRecord {
 
     $path = $VM.Settings.RecoveryKeyExportFile
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
-    try { $record = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -DateKind String }
-    catch { return $null }
-    if (-not $record -or -not $record.PSObject.Properties['Keys']) { return $null }
-    return [pscustomobject]@{
-        Exported = if ($record.PSObject.Properties['Exported']) { [string]$record.Exported } else { '' }
-        Stamps   = @(@($record.Keys) | Where-Object { $_ } | ForEach-Object { Get-RecoveryKeyStamp -Key $_ })
+    try {
+        $record = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -DateKind String
+        return [pscustomobject]@{
+            Exported = if ($record.PSObject.Properties['Exported']) { [string]$record.Exported } else { '' }
+            Stamps   = @(@($record.Keys) | ForEach-Object { Get-RecoveryKeyStamp -Key $_ })
+        }
     }
+    catch { return $null }
 }
 
 function Save-RecoveryKeyExportRecord {
@@ -68,33 +79,57 @@ function Save-RecoveryKeyExportRecord {
     Write-TextFileAtomic -Path $VM.Settings.RecoveryKeyExportFile -Text (ConvertTo-Json -InputObject $record -Depth 3)
 }
 
+function Select-UnexportedRecoveryKey {
+    <# Of the stored $Keys, those the export $Record (from Read-RecoveryKeyExportRecord, or $null) did not hold. #>
+    [OutputType('LazyVM.RecoveryPassword')]
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Keys,
+        [AllowNull()][psobject]$Record
+    )
+
+    $exported = if ($Record) { $Record.Stamps } else { @() }
+    return @($Keys | Where-Object { $exported -notcontains (Get-RecoveryKeyStamp -Key $_) })
+}
+
 function Get-UnexportedRecoveryKey {
     <# The VM's stored recovery passwords that its last export did not hold. Throws when the store cannot be read. #>
     [OutputType('LazyVM.RecoveryPassword')]
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $record = Read-RecoveryKeyExportRecord -VM $VM
-    $exported = if ($record) { $record.Stamps } else { @() }
-    return @(Get-StoredRecoveryKey -VM $VM | Where-Object { $exported -notcontains (Get-RecoveryKeyStamp -Key $_) })
+    return Select-UnexportedRecoveryKey -Keys @(Get-StoredRecoveryKey -VM $VM) -Record (Read-RecoveryKeyExportRecord -VM $VM)
 }
 
 function Write-RecoveryKeyReminder {
     <#
-      Logs, in one line with the command to run, when a recovery password of
-      the VM's is not exported yet, and warns too when someone is there to
-      see it. Never throws: a reminder must not stop the command it runs in.
+      Reminds, in one line with the command to run, when a recovery password
+      of the VM's is not exported yet: shown once, and logged. Within a run,
+      only when there are more than it last reminded of. Never throws: a
+      reminder must not stop the command it runs in.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    try { $count = @(Get-UnexportedRecoveryKey -VM $VM).Count }
+    try {
+        $record = Read-RecoveryKeyExportRecord -VM $VM
+        $unexported = @(Select-UnexportedRecoveryKey -Keys @(Get-StoredRecoveryKey -VM $VM) -Record $record)
+    }
     catch {
         Write-LogError "Could not check whether the BitLocker recovery passwords of $($VM.Name) are exported (non-fatal)" $_
         return
     }
-    if ($count -eq 0) { return }
-    $message = "$count BitLocker recovery password(s) of $($VM.Name) not exported yet. Keep a copy offline with: $(Get-RecoveryKeyExportCommand -VMName $VM.Name)"
-    Write-LogEntry $message 'WARN'
-    if (-not (Test-Unattended)) { Write-Warning $message }
+    $count = $unexported.Count
+    $reminded = if ($script:RunRecoveryKeyReminder.ContainsKey($VM.Name)) { $script:RunRecoveryKeyReminder[$VM.Name] } else { 0 }
+    if ($count -le $reminded) { return }
+    $script:RunRecoveryKeyReminder[$VM.Name] = $count
+
+    # Exported before BitLocker's key ID was known: the passwords are in the file, their key IDs are not.
+    $exportedWithoutId = @(if ($record) { $unexported | Where-Object { $record.Stamps -contains ('{0}|' -f "$($_.DiskGuid)".ToUpperInvariant()) } })
+    $message = if ($exportedWithoutId.Count -eq $count) {
+        "The BitLocker key ID of $count exported recovery password(s) of $($VM.Name) is now known; export again so the file shows it: $(Get-RecoveryKeyExportCommand)"
+    }
+    else {
+        "$count BitLocker recovery password(s) of $($VM.Name) not exported yet. Keep a copy offline with: $(Get-RecoveryKeyExportCommand)"
+    }
+    Write-LogWarning $message
 }
 
 function Format-RecoveryKeyExport {
@@ -126,25 +161,4 @@ function Format-RecoveryKeyExport {
         }
     }
     return ($lines -join "`r`n") + "`r`n"
-}
-
-function Get-RecoveryKeyCheck {
-    <# Test-LazyVM's line on whether every stored recovery password of the VM's is exported. #>
-    param([Parameter(Mandatory)][VMContext]$VM)
-
-    $check = @{ Name = $VM.Name; Area = 'Host'; Check = 'Recovery keys' }
-    try {
-        $stored = @(Get-StoredRecoveryKey -VM $VM)
-        $unexported = @(Get-UnexportedRecoveryKey -VM $VM)
-    }
-    catch { return New-DiagnosticCheck @check -Status FAIL -Detail $_.Exception.Message }
-
-    if ($stored.Count -eq 0) {
-        return New-DiagnosticCheck @check -Status INFO -Detail 'none stored yet; the build and the daily maintenance store them'
-    }
-    if ($unexported.Count -gt 0) {
-        return New-DiagnosticCheck @check -Status WARN -Detail "$($unexported.Count) of $($stored.Count) not exported yet: $(Get-RecoveryKeyExportCommand -VMName $VM.Name)"
-    }
-    $record = Read-RecoveryKeyExportRecord -VM $VM
-    return New-DiagnosticCheck @check -Status OK -Detail "all $($stored.Count) exported, last on $($record.Exported)"
 }

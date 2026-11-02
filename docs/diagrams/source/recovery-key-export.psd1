@@ -2,7 +2,7 @@
     Id         = 'recovery-key-export'
     Title      = 'Export the recovery passwords'
     Command    = 'Export-LazyVMRecoveryKey'
-    Parameters = @('-Name <VM>  (optional)', '-Path <file>', '-Force  (optional)')
+    Parameters = @('-Name <VM, wildcards>  (optional, default *)', '-Path <file>', '-Force  (optional)')
     Summary    = 'Writes the BitLocker recovery passwords of the VM, or of every VM, to a file you keep offline, and records which keys it held so the reminders stop. Never writes over a file without -Force; warns about a file inside the LazyVM folder or in OneDrive.'
     Covers     = @('Export-LazyVMRecoveryKey')
     Omits      = @{
@@ -16,9 +16,9 @@
             Reads    = @(@{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root') })
         }
         @{
-            Function = 'Resolve-VMSelection'
+            Function = 'Select-VMProfileName'
             Area     = 'Settings'
-            Note     = 'the VM named, or with no -Name every VM (Get-VMProfileName)'
+            Note     = 'the VMs -Name matches, every VM by default; stops for a name without wildcards that no VM has'
             Includes = @('Get-VMProfileName')
             Reads    = @(@{ Label = 'VM profiles'; Kind = 'file'; Store = '<Root>\'; Items = @('*\Config\VM.json') })
         }
@@ -38,12 +38,18 @@
         @{
             Function = 'Test-PathWithin'
             Area     = 'Common'
-            Note     = 'before asking: stops for a missing folder or an existing file without -Force; warns for a file in the LazyVM folder or OneDrive'
+            Note     = 'before asking: stops for a missing folder or an existing file without -Force; warns when -Force with -Name drops other VMs'' keys, and for a file in the LazyVM folder or OneDrive'
             Includes = @('Test-CloudSyncedPath')
+        }
+        @{
+            Function = 'Use-RunRoot'
+            Area     = 'Common'
+            Note     = 'the writes below are checked for reparse points in the LazyVM folder'
         }
         @{
             Function = 'Write-TextFileAtomic'
             Area     = 'Common'
+            Caller   = 'Use-RunRoot'
             Note     = 'the file, plain text, one field per line'
             Includes = @('Format-RecoveryKeyExport')
             Writes   = @(@{ Label = 'recovery passwords'; Kind = 'file'; Store = '-Path'; Items = @('<file>, such as on a USB drive') })
@@ -51,6 +57,7 @@
         @{
             Function = 'Save-RecoveryKeyExportRecord'
             Area     = 'Disks'
+            Caller   = 'Use-RunRoot'
             Note     = 'which keys each VM''s export held, by disk GUID and key ID, never the passwords'
             Writes   = @(
                 @{ Label = 'export record'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('RecoveryKeyExport.json') }

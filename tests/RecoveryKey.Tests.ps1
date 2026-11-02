@@ -230,6 +230,24 @@ Describe 'Get-UnexportedRecoveryKey' {
 
         $unexported.Count | Should -Be 1
     }
+
+    It 'takes a record with an entry it cannot read as nothing exported' {
+        $root = New-TestRoot
+        Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword
+        $vm = New-TestVM -Root $root
+        New-Item -ItemType Directory -Path (Split-Path -Path $vm.Settings.RecoveryKeyExportFile -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $vm.Settings.RecoveryKeyExportFile -Value '{ "Keys": ["x"] }'
+
+        $unexported = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-UnexportedRecoveryKey -VM $VM })
+
+        $unexported.Count | Should -Be 1
+    }
+}
+
+Describe 'Get-NoRecoveryKeyMessage' {
+    It 'names every VM it is about' {
+        InModuleScope $module { Get-NoRecoveryKeyMessage -VMName 'Alpha', 'Beta' } | Should -BeLike "*'Alpha', 'Beta'*"
+    }
 }
 
 Describe 'Write-RecoveryKeyReminder' {
@@ -238,17 +256,20 @@ Describe 'Write-RecoveryKeyReminder' {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Write-LogError { }
         Mock -ModuleName $module Test-Unattended { $false }
+        InModuleScope $module { Complete-CommandRun -VM $null }
     }
 
-    It 'logs and warns, in one line with the command to run, when a key is not exported yet' {
+    It 'warns once on screen, and logs to the file only, in one line with the command for every VM' {
         $root = New-TestRoot
         Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword
 
-        InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } { param($VM) Write-RecoveryKeyReminder -VM $VM -WarningVariable warnings -WarningAction SilentlyContinue; $script:warned = $warnings }
+        $warned = @(InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } { param($VM) Write-RecoveryKeyReminder -VM $VM 3>&1 })
 
-        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like '*Export-LazyVMRecoveryKey -Name Alpha -Path *' -and $Message -notlike "*$osPassword*" }
-        $warned = InModuleScope $module { $script:warned }
-        "$warned" | Should -BeLike '*Export-LazyVMRecoveryKey -Name Alpha -Path *'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $FileOnly -and $Level -eq 'WARN' -and $Message -like '*Export-LazyVMRecoveryKey -Path *' -and $Message -notlike "*$osPassword*" }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { -not $FileOnly }
+        $warned.Count | Should -Be 1
+        "$warned" | Should -BeLike '*Export-LazyVMRecoveryKey -Path *'
+        "$warned" | Should -Not -BeLike '*-Name*'
         "$warned" | Should -Not -Match '\r|\n'
     }
 
@@ -257,10 +278,38 @@ Describe 'Write-RecoveryKeyReminder' {
         $root = New-TestRoot
         Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword
 
-        InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } { param($VM) Write-RecoveryKeyReminder -VM $VM -WarningVariable warnings -WarningAction SilentlyContinue; $script:warned = $warnings }
+        $warned = @(InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } { param($VM) Write-RecoveryKeyReminder -VM $VM 3>&1 })
 
-        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' }
-        @(InModuleScope $module { $script:warned }).Count | Should -Be 0
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and -not $FileOnly }
+        $warned.Count | Should -Be 0
+    }
+
+    It 'reminds again in the same run only when more keys are unexported, and again in the next run' {
+        $root = New-TestRoot
+        Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword
+        $vm = New-TestVM -Root $root
+
+        $first = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Write-RecoveryKeyReminder -VM $VM 3>&1; Write-RecoveryKeyReminder -VM $VM 3>&1 })
+        Add-TestKey -Root $root -Guid $sqlGuid -Disk 'SQL data disk' -Recovery $sqlPassword
+        $grown = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Write-RecoveryKeyReminder -VM $VM 3>&1 })
+        $nextRun = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Complete-CommandRun -VM $null; Write-RecoveryKeyReminder -VM $VM 3>&1 })
+
+        $first.Count | Should -Be 1
+        $grown.Count | Should -Be 1
+        "$grown" | Should -BeLike '2 *'
+        $nextRun.Count | Should -Be 1
+    }
+
+    It 'asks for a new export, now that BitLocker''s key ID is known, for a key exported without one' {
+        $root = New-TestRoot
+        Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword
+        $vm = New-TestVM -Root $root
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Save-RecoveryKeyExportRecord -VM $VM -Keys @(Get-StoredRecoveryKey -VM $VM) }
+        Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword -KeyId '{33333333-0000-0000-0000-000000000000}'
+
+        $warned = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Write-RecoveryKeyReminder -VM $VM 3>&1 })
+
+        "$warned" | Should -BeLike '*key ID*now known*export again*Export-LazyVMRecoveryKey -Path *'
     }
 
     It 'says nothing when every key is exported, or none is stored' {
@@ -280,30 +329,67 @@ Describe 'Write-RecoveryKeyReminder' {
     }
 }
 
+Describe 'Write-RunReminder' {
+    BeforeEach {
+        Use-MemorySecretStore
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Test-Unattended { $false }
+        Mock -ModuleName $module Test-MaintenanceTaskMissing { $true }
+        InModuleScope $module { Complete-CommandRun -VM $null }
+    }
+
+    It 'reminds of an unscheduled maintenance and of unexported keys, once on screen each' {
+        $root = New-TestRoot
+        Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword
+
+        $warned = @(InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } { param($VM) Write-RunReminder -VM $VM 3>&1 })
+
+        $warned.Count | Should -Be 2
+        "$($warned[0])" | Should -BeLike '*Register-LazyVMMaintenance*'
+        "$($warned[1])" | Should -BeLike '*Export-LazyVMRecoveryKey*'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { -not $FileOnly }
+    }
+
+    It 'leaves maintenance run by hand to remind of unexported keys once, not again after BitLocker' {
+        $root = New-TestRoot
+        Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword
+
+        # Invoke-LazyVMMaintenance: Initialize-CommandRun reminds, then Invoke-DailyMaintenance checks again after BitLocker.
+        $warned = @(InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } {
+                param($VM)
+                Write-RunReminder -VM $VM 3>&1
+                Write-RecoveryKeyReminder -VM $VM 3>&1
+            })
+
+        @($warned | Where-Object { "$_" -like '*Export-LazyVMRecoveryKey*' }).Count | Should -Be 1
+    }
+}
+
 Describe 'Get-RecoveryKeyCheck' {
     BeforeEach { Use-MemorySecretStore }
 
-    It 'warns, with the command to run, when a key is not exported yet' {
+    It 'warns, with the command for every VM, when a key is not exported yet' {
         $root = New-TestRoot
         Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword
 
         $check = InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } { param($VM) Get-RecoveryKeyCheck -VM $VM }
 
         $check.Status | Should -Be 'WARN'
-        $check.Detail | Should -BeLike '*1 of 1*Export-LazyVMRecoveryKey -Name Alpha -Path *'
+        $check.Detail | Should -BeLike '*1 of 1*Export-LazyVMRecoveryKey -Path *'
+        $check.Detail | Should -Not -BeLike '*-Name*'
     }
 
-    It 'is OK once every key is exported' {
+    It 'is OK once every key is exported, decrypting the store once' {
         $root = New-TestRoot
         Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword
+        $vm = New-TestVM -Root $root
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Save-RecoveryKeyExportRecord -VM $VM -Keys @(Get-StoredRecoveryKey -VM $VM) }
 
-        $check = InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } {
-            param($VM)
-            Save-RecoveryKeyExportRecord -VM $VM -Keys @(Get-StoredRecoveryKey -VM $VM)
-            Get-RecoveryKeyCheck -VM $VM
-        }
+        $check = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-RecoveryKeyCheck -VM $VM }
 
         $check.Status | Should -Be 'OK'
+        # One read above, to make the record, and one by the check.
+        Should -Invoke -ModuleName $module Get-StoredSecretTable -Times 2 -Exactly
     }
 
     It 'is INFO while no key is stored yet' {
@@ -321,6 +407,20 @@ Describe 'Get-RecoveryKeyCheck' {
     }
 }
 
+Describe 'Use-RunRoot' {
+    It 'checks writes against the LazyVM folder while the script block runs, and stops after, even when it throws' {
+        $during, $after = InModuleScope $module {
+            try { Use-RunRoot -Root 'C:\LazyVM' -ScriptBlock { $script:seenRoot = $script:RunRoot; throw 'boom' } }
+            catch { $null = $_ }
+            $script:seenRoot
+            "$script:RunRoot"
+        }
+
+        $during | Should -Be 'C:\LazyVM'
+        $after | Should -Be ''
+    }
+}
+
 Describe 'Export-LazyVMRecoveryKey' {
     BeforeEach {
         Use-MemorySecretStore
@@ -331,13 +431,12 @@ Describe 'Export-LazyVMRecoveryKey' {
         Mock -ModuleName $module Assert-Administrator { }
         Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $root; Source = 'a test' } }.GetNewClosure()
         Mock -ModuleName $module Get-VMProfileName { 'Alpha', 'Beta' }
-        Mock -ModuleName $module Resolve-VMSelection { $Requested }
         Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ VMName = $VMName; Settings = (New-TestSetting -Root $Root -Name $VMName) } }
         Mock -ModuleName $module Test-CloudSyncedPath { $false }
     }
 
     It 'writes the named VM''s keys to the file, records them as exported and returns the file' {
-        $file = Export-LazyVMRecoveryKey -Name Alpha -Path $target
+        $file = Export-LazyVMRecoveryKey -Name Alpha -Path $target -WarningAction SilentlyContinue
 
         $file.FullName | Should -Be $target
         $text = Get-Content -LiteralPath $target -Raw
@@ -355,6 +454,29 @@ Describe 'Export-LazyVMRecoveryKey' {
         $text | Should -BeLike "*$sqlPassword*"
     }
 
+    It 'takes wildcards in -Name' {
+        Export-LazyVMRecoveryKey -Name 'B*' -Path $target
+
+        $text = Get-Content -LiteralPath $target -Raw
+        $text | Should -BeLike "*$sqlPassword*"
+        $text | Should -Not -BeLike "*$osPassword*"
+    }
+
+    It 'stops, writing nothing, when a name without wildcards matches no VM' {
+        { Export-LazyVMRecoveryKey -Name Alpha, Gamma -Path $target } | Should -Throw -ExpectedMessage "*no VM named 'Gamma'*"
+        $target | Should -Not -Exist
+    }
+
+    It 'checks its writes in the LazyVM folder for reparse points' {
+        $seen = @{}
+        Mock -ModuleName $module Save-RecoveryKeyExportRecord { $seen.Root = & (Get-Module LazyVM) { $script:RunRoot } }.GetNewClosure()
+
+        $null = Export-LazyVMRecoveryKey -Name Alpha -Path $target
+
+        $seen.Root | Should -Be $root
+        InModuleScope $module { "$script:RunRoot" } | Should -Be ''
+    }
+
     It 'never writes over a file without -Force, even with -WhatIf' {
         Set-Content -LiteralPath $target -Value 'kept'
 
@@ -362,12 +484,26 @@ Describe 'Export-LazyVMRecoveryKey' {
         Get-Content -LiteralPath $target -Raw | Should -BeLike 'kept*'
     }
 
-    It 'writes over a file with -Force' {
-        Set-Content -LiteralPath $target -Value 'kept'
+    It 'replaces the file with -Force, warning when -Name leaves other VMs'' keys out of it' {
+        Set-Content -LiteralPath $target -Value 'OLD-CONTENT'
 
-        $null = Export-LazyVMRecoveryKey -Name Alpha -Path $target -Force
+        $null = Export-LazyVMRecoveryKey -Name Alpha -Path $target -Force -WarningVariable warnings -WarningAction SilentlyContinue
 
         Get-Content -LiteralPath $target -Raw | Should -BeLike "*$osPassword*"
+        Get-Content -LiteralPath $target -Raw | Should -Not -BeLike '*OLD-CONTENT*'
+        "$warnings" | Should -BeLike '*replaced*other VM*removed*'
+    }
+
+    It 'replaces the file with -Force without that warning when every VM is exported' {
+        Set-Content -LiteralPath $target -Value 'kept'
+
+        $null = Export-LazyVMRecoveryKey -Path $target -Force -WarningVariable warnings -WarningAction SilentlyContinue
+
+        "$warnings" | Should -Not -BeLike '*other VM*'
+    }
+
+    It 'says in its help that -Force replaces the file rather than adding to it' {
+        ((Get-Help -Name Export-LazyVMRecoveryKey -Parameter Force).Description | Out-String) | Should -BeLike '*replace*not merge*'
     }
 
     It 'writes and records nothing with -WhatIf' {

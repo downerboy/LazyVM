@@ -190,7 +190,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Get-LazyVMSetting` | Every setting as the VM uses it, where the value came from, and what it does. `-Setting Mem*` narrows it. |
 | `Set-LazyVMCredential` | Stores the administrator account LazyVM uses inside the VM. |
 | `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password, and `-ToClipboard` puts it on the clipboard for VMConnect's sign-in box. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
-| `Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt` | Writes every VM's BitLocker recovery passwords (or one VM's, with `-Name`) to a file you keep offline. Never writes over a file without `-Force`. See [Keeping the recovery passwords offline](#keeping-the-recovery-passwords-offline). |
+| `Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt` | Writes every VM's BitLocker recovery passwords (or those of the VMs `-Name` matches; wildcards work) to a file you keep offline. Never writes over a file without `-Force`, which replaces it. See [Keeping the recovery passwords offline](#keeping-the-recovery-passwords-offline). |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
 | `Test-LazyVM` | Checks what a build or maintenance run depends on: the LazyVM folder, the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only. `-ReportPath` also writes a text report. |
@@ -482,7 +482,7 @@ LazyVM's copy of the recovery passwords is only in its credential store. If that
 Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt
 ```
 
-This writes every VM's recovery passwords to that file; `-Name DevBox` writes only that VM's. The file is plain text, one field per line, so a screen reader reads it one field at a time:
+This writes every VM's recovery passwords to that file; `-Name DevBox` writes only that VM's, and `-Name Dev*` those of every VM whose name starts with `Dev`. A recovery key, in the command's name and its reminders, is a disk's 48-digit recovery password. The file is plain text, one field per line, so a screen reader reads it one field at a time:
 
 ```
 VM: DevBox
@@ -497,9 +497,9 @@ VM: DevBox
 When BitLocker asks for a recovery key, it shows the start of a key ID: type the recovery password listed under the same key ID. A key ID shows as "not known yet" until the next maintenance run has read it from the VM; the password is right either way.
 
 - Anyone with the file can unlock the disks. Keep it offline, not on the host or in the cloud. LazyVM warns, and still writes, when the file is inside the LazyVM folder or in OneDrive, since a copy there is lost with the folder or copied off the computer.
-- An existing file is never written over unless you add `-Force`. `-WhatIf` shows what would be written, without writing.
+- An existing file is never written over unless you add `-Force`, and `-Force` replaces it rather than adding to it. So with `-Name`, any other VM's keys in that file are gone, and LazyVM warns you; keep one file for every VM by leaving `-Name` out. `-WhatIf` shows what would be written, without writing.
 - LazyVM records in `Config\RecoveryKeyExport.json`, in the VM's folder, which keys the file held: their disk GUIDs and key IDs, never the passwords.
-- A key not in that record, such as a new disk's after a build or a rebuild, or one BitLocker gave a new key ID, is reminded of until you export again: at the end of `Build-LazyVM`, in the maintenance log, in one line at the start of the next command you run on the VM, and by `Test-LazyVM`. Each reminder gives the command to run. Export to the same file with `-Force`, or to a new one, and keep the newest.
+- A key not in that record, such as a new disk's after a build or a rebuild, or one BitLocker gave a new key ID, is reminded of until you export again: at the end of `Build-LazyVM`, in the maintenance log, in one line at the start of the next command you run on the VM, and by `Test-LazyVM`. Each reminder is one line, shown once per command (again only if more keys need exporting), and gives the command that exports every VM: `Export-LazyVMRecoveryKey -Path <a file on a USB drive>`. Export to the same file with `-Force`, or to a new one, and keep the newest. A key exported before its key ID was known is reminded of once more, so the file can show it.
 
 ### Sysmon
 

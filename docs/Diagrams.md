@@ -620,7 +620,8 @@ Saves a VM's settings and tooling list as a config template that new VMs can sta
    - Reads D2, VM profiles: <Root>\ (*\Config\VM.json)
 3. `Assert-TemplateNameAvailable` (Settings): stops unless the name is valid and no template, built-in or yours, has it
    - Reads D3, existing templates: Config templates (Data\Templates\*.json, Shared\Templates\*.json)
-4. `Export-VMTemplate` (Settings): the VM's settings and tooling list, without the ones each VM has its own of
+4. `Use-RunRoot` (Common): the write below is checked for reparse points in the LazyVM folder
+5. `Export-VMTemplate` (Settings, called by Use-RunRoot): the VM's settings and tooling list, without the ones each VM has its own of
    - Reads D4, VM configuration: <VM>\Config\ (VM.json)
    - Writes D5, config template: Shared\Templates\ (<Template>.json)
    - Writes D6, the new file: Pipeline (FileInfo)
@@ -744,7 +745,7 @@ Returns the account LazyVM uses inside the VM. -AsPlainText shows the password; 
 
 ## Export the recovery passwords
 
-`Export-LazyVMRecoveryKey` `-Name <VM>  (optional)` `-Path <file>` `-Force  (optional)`
+`Export-LazyVMRecoveryKey` `-Name <VM, wildcards>  (optional, default *)` `-Path <file>` `-Force  (optional)`
 
 Writes the BitLocker recovery passwords of the VM, or of every VM, to a file you keep offline, and records which keys it held so the reminders stop. Never writes over a file without -Force; warns about a file inside the LazyVM folder or in OneDrive.
 
@@ -752,7 +753,7 @@ Writes the BitLocker recovery passwords of the VM, or of every VM, to a file you
 
 1. `Resolve-LazyVMRoot` (Settings): the LazyVM folder
    - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root)
-2. `Resolve-VMSelection` (Settings): the VM named, or with no -Name every VM (Get-VMProfileName)
+2. `Select-VMProfileName` (Settings): the VMs -Name matches, every VM by default; stops for a name without wildcards that no VM has
    - Also runs `Get-VMProfileName`
    - Reads D2, VM profiles: <Root>\ (*\Config\VM.json)
 3. `Read-VMSetting` (Settings): each VM's settings, read only
@@ -760,12 +761,13 @@ Writes the BitLocker recovery passwords of the VM, or of every VM, to a file you
 4. `Get-StoredRecoveryKey` (Disks): every disk's recovery password, key ID and date; stops when none is stored
    - Also runs `Get-NoRecoveryKeyMessage`
    - Reads D4, recovery passwords: Credential store (<VM>\Credentials\bitlocker.cred)
-5. `Test-PathWithin` (Common): before asking: stops for a missing folder or an existing file without -Force; warns for a file in the LazyVM folder or OneDrive
+5. `Test-PathWithin` (Common): before asking: stops for a missing folder or an existing file without -Force; warns when -Force with -Name drops other VMs' keys, and for a file in the LazyVM folder or OneDrive
    - Also runs `Test-CloudSyncedPath`
-6. `Write-TextFileAtomic` (Common): the file, plain text, one field per line
+6. `Use-RunRoot` (Common): the writes below are checked for reparse points in the LazyVM folder
+7. `Write-TextFileAtomic` (Common, called by Use-RunRoot): the file, plain text, one field per line
    - Also runs `Format-RecoveryKeyExport`
    - Writes D5, recovery passwords: -Path (<file>, such as on a USB drive)
-7. `Save-RecoveryKeyExportRecord` (Disks): which keys each VM's export held, by disk GUID and key ID, never the passwords
+8. `Save-RecoveryKeyExportRecord` (Disks, called by Use-RunRoot): which keys each VM's export held, by disk GUID and key ID, never the passwords
    - Writes D6, export record: <VM>\Config\ (RecoveryKeyExport.json)
    - Writes D7, the file: Pipeline (FileInfo)
 

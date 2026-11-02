@@ -26,8 +26,14 @@
             Reads    = @(@{ Label = 'existing templates'; Kind = 'file'; Store = 'Config templates'; Items = @('Data\Templates\*.json', 'Shared\Templates\*.json') })
         }
         @{
+            Function = 'Use-RunRoot'
+            Area     = 'Common'
+            Note     = 'the write below is checked for reparse points in the LazyVM folder'
+        }
+        @{
             Function = 'Export-VMTemplate'
             Area     = 'Settings'
+            Caller   = 'Use-RunRoot'
             Note     = 'the VM''s settings and tooling list, without the ones each VM has its own of'
             Reads    = @(@{ Label = 'VM configuration'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json') })
             Writes   = @(

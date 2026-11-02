@@ -47,7 +47,10 @@ function Write-LogEntry {
         # removes the automatic positions from all the others.
         [Parameter(Position = 1)]
         [ValidateSet('INFO', 'WARN', 'ERROR', 'OK', 'PHASE')]
-        [string]$Level = 'INFO'
+        [string]$Level = 'INFO',
+
+        # Only to the log file: the line is shown on screen another way.
+        [switch]$FileOnly
     )
 
     $prefix, $color = switch ($Level) {
@@ -59,7 +62,7 @@ function Write-LogEntry {
     }
 
     $line = '{0}{1}{2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $prefix, $Message
-    Write-Host $line -ForegroundColor $color
+    if (-not $FileOnly) { Write-Host $line -ForegroundColor $color }
 
     if (-not $script:Log.Path) { return }
     # The logger must never throw: it runs inside catch blocks, and an
@@ -85,6 +88,22 @@ function Write-LogError {
     foreach ($frame in @("$($ErrorRecord.ScriptStackTrace)" -split "`r?`n" | Where-Object { $_.Trim() })) {
         Write-LogEntry "    at   : $($frame.Trim())" 'INFO'
     }
+}
+
+function Write-LogWarning {
+    <#
+      Logs a warning and shows it once: as a PowerShell warning when someone
+      is there to see it, written to the log file only; in a scheduled run,
+      as a log line.
+    #>
+    param([Parameter(Mandatory)][string]$Message)
+
+    if (Test-Unattended) {
+        Write-LogEntry $Message 'WARN'
+        return
+    }
+    Write-LogEntry $Message 'WARN' -FileOnly
+    Write-Warning $Message
 }
 
 function Write-LogList {

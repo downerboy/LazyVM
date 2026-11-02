@@ -92,21 +92,27 @@ function Initialize-CommandRun {
     }
 
     Sync-GuestUserFromStore -VM $vm
-    if (-not (Test-Unattended)) {
-        Write-MaintenanceTaskWarning -VM $vm
-        Write-RecoveryKeyReminder -VM $vm
-    }
+    if (-not (Test-Unattended)) { Write-RunReminder -VM $vm }
     return $vm
 }
 
+function Write-RunReminder {
+    <# What a command run by hand reminds you of first: maintenance that is not scheduled, and recovery passwords not exported yet. #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    Write-MaintenanceTaskWarning -VM $VM
+    Write-RecoveryKeyReminder -VM $VM
+}
+
 function Complete-CommandRun {
-    <# The end of every command that works on a VM, however it ended: closes the guest session and the log. #>
+    <# The end of every command that works on a VM, however it ended: closes the guest session and the log, and forgets the run's reminders. #>
     param([AllowNull()][VMContext]$VM)
 
     if ($VM) { Remove-GuestSession -VM $VM }
     Stop-Log
     $script:RunRoot = $null
     $script:RunAllowedPaths = @()
+    $script:RunRecoveryKeyReminder = @{}
 }
 
 function Invoke-CommandRun {

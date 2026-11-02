@@ -89,6 +89,27 @@ function Get-CloudSyncCheck {
     return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status WARN -Detail "$($synced -join ' and ') in OneDrive: files there can be online-only while the tasks run, and are copied to the cloud. Install the module with Install.ps1, and move the LazyVM folder outside OneDrive."
 }
 
+function Get-RecoveryKeyCheck {
+    <# Whether every stored BitLocker recovery password of the VM's is exported (#286). Reads the store and the export record once each. #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $check = @{ Name = $VM.Name; Area = 'Host'; Check = 'Recovery keys' }
+    try {
+        $stored = @(Get-StoredRecoveryKey -VM $VM)
+        $record = Read-RecoveryKeyExportRecord -VM $VM
+    }
+    catch { return New-DiagnosticCheck @check -Status FAIL -Detail $_.Exception.Message }
+
+    $unexported = @(Select-UnexportedRecoveryKey -Keys $stored -Record $record)
+    if ($stored.Count -eq 0) {
+        return New-DiagnosticCheck @check -Status INFO -Detail 'none stored yet; the build and the daily maintenance store them'
+    }
+    if ($unexported.Count -gt 0) {
+        return New-DiagnosticCheck @check -Status WARN -Detail "$($unexported.Count) of $($stored.Count) not exported yet: $(Get-RecoveryKeyExportCommand)"
+    }
+    return New-DiagnosticCheck @check -Status OK -Detail "all $($stored.Count) exported, last on $($record.Exported)"
+}
+
 function Get-LazyVMDiagnostic {
     <#
       The checks Test-LazyVM reports, in order. Reads only: a VM that is not

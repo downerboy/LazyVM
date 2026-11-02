@@ -86,7 +86,5 @@ function Write-MaintenanceTaskWarning {
     param([Parameter(Mandatory)][VMContext]$VM)
 
     if (-not (Test-MaintenanceTaskMissing -VM $VM)) { return }
-    $message = "The daily maintenance of $($VM.Name) is not scheduled, so nothing looks after it. Schedule it with: Register-LazyVMMaintenance -Name $($VM.Name)"
-    Write-LogEntry $message 'WARN'
-    Write-Warning $message
+    Write-LogWarning "The daily maintenance of $($VM.Name) is not scheduled, so nothing looks after it. Schedule it with: Register-LazyVMMaintenance -Name $($VM.Name)"
 }

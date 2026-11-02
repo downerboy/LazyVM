@@ -355,6 +355,16 @@ Describe 'Export-LazyVMTemplate (#250)' {
         (Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json).Name | Should -Be 'WebDev'
     }
 
+    It 'checks its write in the LazyVM folder for reparse points (#286)' {
+        $seen = @{}
+        Mock -ModuleName $module Export-VMTemplate { $seen.Root = & (Get-Module LazyVM) { $script:RunRoot }; Join-Path -Path $Root -ChildPath 'Alpha/Config/VM.json' }.GetNewClosure()
+
+        $null = Export-LazyVMTemplate -Name Alpha
+
+        $seen.Root | Should -Be $root
+        InModuleScope $module { "$script:RunRoot" } | Should -Be ''
+    }
+
     It 'writes nothing with -WhatIf' {
         Export-LazyVMTemplate -Name Alpha -WhatIf
 

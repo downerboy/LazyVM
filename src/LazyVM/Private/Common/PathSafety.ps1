@@ -16,6 +16,28 @@
 $script:RunRoot = $null
 $script:RunAllowedPaths = @()
 
+function Use-RunRoot {
+    <#
+      Runs $ScriptBlock with its writes checked against the LazyVM folder
+      $Root, for a command that writes there without a command run
+      (Initialize-CommandRun), and stops checking against it afterwards,
+      however it ended. Such a command writes only inside the folder, so no
+      place outside it is allowed.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock
+    )
+
+    $script:RunRoot = $Root
+    $script:RunAllowedPaths = @()
+    try { & $ScriptBlock }
+    finally {
+        $script:RunRoot = $null
+        $script:RunAllowedPaths = @()
+    }
+}
+
 function Test-RunningAsSystem {
     <# Whether LazyVM runs as SYSTEM, as its scheduled tasks do. #>
     [OutputType([bool])]

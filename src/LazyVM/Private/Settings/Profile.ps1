@@ -74,6 +74,27 @@ function Get-VMProfileName {
     return @($folders | ForEach-Object { $_.Name } | Sort-Object)
 }
 
+function Select-VMProfileName {
+    <#
+      Of the VM names $Names, those matching any of $Pattern, which may hold
+      wildcards, in order and once each. Throws for a name without wildcards
+      that no VM has, which is a mistake rather than an empty choice.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Names,
+        [Parameter(Mandatory)][string[]]$Pattern
+    )
+
+    foreach ($item in $Pattern) {
+        if (-not [WildcardPattern]::ContainsWildcardCharacters($item) -and $Names -notcontains $item) {
+            $known = if ($Names.Count -gt 0) { $Names -join ', ' } else { 'none yet' }
+            throw "There is no VM named '$item' (VMs on this host: $known)."
+        }
+    }
+    return @($Names | Where-Object { $name = $_; @($Pattern | Where-Object { $name -like $_ }).Count -gt 0 })
+}
+
 function Resolve-VMSelection {
     <#
       Which VM this run is for: the one named, or the only one there is.
