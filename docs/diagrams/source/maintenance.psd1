@@ -174,6 +174,29 @@
             Writes   = @(@{ Label = 'upgraded packages'; Kind = 'guest'; Store = 'Running guest'; Items = @('new versions; the tooling list is unchanged') })
         }
         @{
+            Function = 'Update-GuestInstallerProduct'
+            Area     = 'Maintenance'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'Visual Studio Installer update command, for each product (Visual Studio, SSMS) nobody is using; a restart it needs goes to Windows updates'
+            Writes   = @(@{ Label = 'updated products'; Kind = 'guest'; Store = 'Visual Studio Installer'; Items = @('new version; the tooling list is unchanged') })
+        }
+        @{
+            Function = 'Update-GuestGalleryModule'
+            Area     = 'Maintenance'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'installs the newer version of each PowerShell Gallery module, in Windows PowerShell and PowerShell 7, and removes the version it made old'
+            Reads    = @(@{ Label = 'modules'; Kind = 'web'; Store = 'PowerShell Gallery'; Items = @('newer module versions') })
+            Writes   = @(@{ Label = 'updated modules'; Kind = 'guest'; Store = 'Running guest'; Items = @('new versions beside the old', 'the version made old removed') })
+        }
+        @{
+            Function = 'Update-GuestDotnetTool'
+            Area     = 'Maintenance'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'dotnet tool update for each of the guest account''s global tools'
+            Reads    = @(@{ Label = 'tools'; Kind = 'web'; Store = 'NuGet'; Items = @('newer tool versions') })
+            Writes   = @(@{ Label = 'updated tools'; Kind = 'guest'; Store = 'Running guest'; Items = @('%USERPROFILE%\.dotnet\tools') })
+        }
+        @{
             Function = 'Update-GuestWindows'
             Area     = 'Maintenance'
             Caller   = 'Invoke-DailyMaintenance'
