@@ -419,6 +419,23 @@ Describe 'Use-RunRoot' {
         $during | Should -Be 'C:\LazyVM'
         $after | Should -Be ''
     }
+
+    It 'gives back the folder and allowed places of a call around it' {
+        $inner, $outer, $outerAllowed, $after = InModuleScope $module {
+            Use-RunRoot -Root 'C:\Outer' -ScriptBlock {
+                $script:RunAllowedPaths = @('E:\Allowed')
+                Use-RunRoot -Root 'C:\Inner' -ScriptBlock { $script:RunRoot }
+                $script:RunRoot
+                , @($script:RunAllowedPaths)
+            }
+            "$script:RunRoot"
+        }
+
+        $inner | Should -Be 'C:\Inner'
+        $outer | Should -Be 'C:\Outer'
+        $outerAllowed | Should -Be @('E:\Allowed')
+        $after | Should -Be ''
+    }
 }
 
 Describe 'Export-LazyVMRecoveryKey' {
