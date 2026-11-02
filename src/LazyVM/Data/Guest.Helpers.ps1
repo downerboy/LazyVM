@@ -470,6 +470,19 @@ function Get-GuestVolumeMountPoint {
     return @($part.AccessPaths | Where-Object { "$_" -like '\\?\Volume*' }) | Select-Object -First 1
 }
 
+function Find-GuestRecoveryProtector {
+    <# The key protector of $Volume (from Get-BitLockerVolume) with the recovery password $RecoveryPassword, or $null when it has none. #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'RecoveryPassword', Justification = 'The BitLocker cmdlets report a recovery password only as text.')]
+    param(
+        [Parameter(Mandatory)][psobject]$Volume,
+        [Parameter(Mandatory)][string]$RecoveryPassword
+    )
+
+    $protectors = @($Volume.KeyProtector | Where-Object { "$($_.KeyProtectorType)" -eq 'RecoveryPassword' -and $_.RecoveryPassword -eq $RecoveryPassword })
+    if ($protectors.Count -eq 0) { return $null }
+    return $protectors[0]
+}
+
 function Protect-GuestVolume {
     <#
       Turns BitLocker on for $MountPoint with $RecoveryPassword, or, when it
@@ -501,7 +514,7 @@ function Protect-GuestVolume {
     if (-not $System -and "$((Get-BitLockerVolume -MountPoint $env:SystemDrive).VolumeStatus)" -eq 'FullyDecrypted') {
         throw "C: is not encrypted, so $MountPoint could not unlock itself; left as it was"
     }
-    $hasPassword = @($volume.KeyProtector | Where-Object { "$($_.KeyProtectorType)" -eq 'RecoveryPassword' -and $_.RecoveryPassword -eq $RecoveryPassword }).Count -gt 0
+    $hasPassword = [bool](Find-GuestRecoveryProtector -Volume $volume -RecoveryPassword $RecoveryPassword)
 
     if ($status -eq 'FullyDecrypted') {
         $encryption = @{ EncryptionMethod = 'XtsAes256'; SkipHardwareTest = $true; UsedSpaceOnly = [bool]$UsedSpaceOnly }
@@ -547,6 +560,24 @@ function Protect-GuestVolume {
         $notes += New-GuestNote -Level OK -Text "turned BitLocker protection on for $MountPoint"
     }
     return $notes
+}
+
+function Get-GuestRecoveryKeyId {
+    <#
+      The key protector ID BitLocker gave $RecoveryPassword on $MountPoint,
+      which its recovery screen shows as the recovery key ID; empty when the
+      volume does not have that password.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'RecoveryPassword', Justification = 'The BitLocker cmdlets report a recovery password only as text.')]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$MountPoint,
+        [Parameter(Mandatory)][string]$RecoveryPassword
+    )
+
+    $protector = Find-GuestRecoveryProtector -Volume (Get-BitLockerVolume -MountPoint $MountPoint) -RecoveryPassword $RecoveryPassword
+    if ($protector) { return [string]$protector.KeyProtectorId }
+    return ''
 }
 
 function Unlock-GuestVolume {

@@ -8,6 +8,8 @@ function Test-LazyVM {
 
       - the LazyVM folder and where it was found
       - the Windows and SQL Server ISOs, and whether each is a real ISO image
+      - whether every BitLocker recovery password is exported
+        (Export-LazyVMRecoveryKey)
       - the VM's state and heartbeat
       - whether PowerShell Direct works with the stored account
       - the guest's boot time, Windows set-up state, LazyVM's provisioning

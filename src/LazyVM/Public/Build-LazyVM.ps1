@@ -143,6 +143,7 @@
             }
             Write-LogEntry "  Log : $($VM.Settings.LogFile)" 'INFO'
             Write-LogEntry '========================================================' 'INFO'
+            Write-RecoveryKeyReminder -VM $VM
         }
     }
 }

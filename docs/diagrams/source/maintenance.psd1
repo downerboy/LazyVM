@@ -76,6 +76,13 @@
             Writes   = @(@{ Label = 'encrypted disks, recovery passwords'; Kind = 'file'; Store = 'Guest and credential store'; Items = @('C:, D:, W:, U: with auto-unlock', '<VM>\Credentials\') })
         }
         @{
+            Function = 'Write-RecoveryKeyReminder'
+            Area     = 'Disks'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'logs any recovery password not exported yet, such as a new disk''s, with the command to export it'
+            Reads    = @(@{ Label = 'stored and exported keys'; Kind = 'file'; Store = '<VM>\'; Items = @('Credentials\bitlocker.cred', 'Config\RecoveryKeyExport.json') })
+        }
+        @{
             Function = 'Backup-UserDisk'
             Area     = 'Disks'
             Caller   = 'Invoke-DailyMaintenance'

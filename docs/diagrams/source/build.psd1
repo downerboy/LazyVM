@@ -178,5 +178,13 @@
             Note     = 'unless the host is restarting'
             Writes   = @(@{ Label = 'resume entries removed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('resume task deleted', 'Resume.json deleted') })
         }
+        @{
+            Function = 'Write-RecoveryKeyReminder'
+            Area     = 'Disks'
+            Caller   = 'Build-LazyVM'
+            Note     = 'when the build is over: reminds you to export any recovery password not exported yet, with the command'
+            Reads    = @(@{ Label = 'stored and exported keys'; Kind = 'file'; Store = '<VM>\'; Items = @('Credentials\bitlocker.cred', 'Config\RecoveryKeyExport.json') })
+            Writes   = @(@{ Label = 'reminder'; Kind = 'host'; Store = 'Console and log'; Items = @('one line, with the command') })
+        }
     )
 }

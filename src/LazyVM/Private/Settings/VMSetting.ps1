@@ -76,6 +76,7 @@ function Add-DerivedSetting {
     $Settings.AppSettingsCredFile = "$vmRoot\Credentials\appsettings.cred"
     $Settings.BitLockerCredFile = "$vmRoot\Credentials\bitlocker.cred"
     $Settings.ResumeFile = "$vmRoot\$script:ConfigFolderName\$script:ResumeFileName"
+    $Settings.RecoveryKeyExportFile = "$vmRoot\$script:ConfigFolderName\$script:RecoveryKeyExportFileName"
     $Settings.ResumeTaskName = "$script:ResumeTaskPrefix$vm"
     $Settings.ScheduleTaskName = Get-MaintenanceTaskName -VMName $vm
 }

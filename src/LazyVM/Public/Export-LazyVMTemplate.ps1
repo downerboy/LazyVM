@@ -55,6 +55,6 @@
         return
     }
 
-    $path = Export-VMTemplate -Root $root -Name $vmName -TemplateName $TemplateName
+    $path = Use-RunRoot -Root $root -ScriptBlock { Export-VMTemplate -Root $root -Name $vmName -TemplateName $TemplateName }
     Get-Item -LiteralPath $path
 }

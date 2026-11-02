@@ -190,9 +190,10 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Get-LazyVMSetting` | Every setting as the VM uses it, where the value came from, and what it does. `-Setting Mem*` narrows it. |
 | `Set-LazyVMCredential` | Stores the administrator account LazyVM uses inside the VM. |
 | `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password, and `-ToClipboard` puts it on the clipboard for VMConnect's sign-in box. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
+| `Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt` | Writes every VM's BitLocker recovery passwords (or those of the VMs `-Name` matches; wildcards work) to a file you keep offline. Never writes over a file without `-Force`, which replaces it. See [Keeping the recovery passwords offline](#keeping-the-recovery-passwords-offline). |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
-| `Test-LazyVM` | Checks what a build or maintenance run depends on: the LazyVM folder, the ISOs, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only. `-ReportPath` also writes a text report. |
+| `Test-LazyVM` | Checks what a build or maintenance run depends on: the LazyVM folder, the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only. `-ReportPath` also writes a text report. |
 | `Save-LazyVMTooling` | Records tooling changes now, as the daily run does, with a checkpoint first. |
 | `Get-LazyVMRestorePoint` | The recorded tooling versions that can be returned to. |
 | `Restore-LazyVMTooling -RestorePoint 20261008-201746` | Returns the VM to a recorded tooling version. All its disks go back, the Dev Drive included. |
@@ -452,11 +453,7 @@ The module itself is installed in `%ProgramFiles%\LazyVM\Modules\LazyVM`. Nothin
 
 Account and certificate passwords, the secrets recorded from the guest and the BitLocker recovery passwords are encrypted with Windows DPAPI for this computer, with LazyVM's own entropy, in each VM's `Credentials` folder. Both you, in an elevated PowerShell, and the scheduled tasks, running as SYSTEM, can decrypt them; copied to another computer they are useless.
 
-What keeps other accounts out is the LazyVM folder: it is open to you and SYSTEM only, so another standard user cannot open the files. A local administrator can, by taking ownership or running as SYSTEM, and could then decrypt them. Keep a copy of the BitLocker recovery passwords somewhere safe too, such as your password manager:
-
-```powershell
-Get-LazyVMCredential -Name DevBox -RecoveryPassword
-```
+What keeps other accounts out is the LazyVM folder: it is open to you and SYSTEM only, so another standard user cannot open the files. A local administrator can, by taking ownership or running as SYSTEM, and could then decrypt them. Keep a copy of the BitLocker recovery passwords offline too: see [Keeping the recovery passwords offline](#keeping-the-recovery-passwords-offline).
 
 ### BitLocker
 
@@ -476,6 +473,33 @@ Get-LazyVMCredential -Name DevBox -RecoveryPassword
 ```
 
 Windows keeps its recovery tools (Windows RE) on a partition of their own after `C:`, because it refuses them on a BitLocker-encrypted volume. Extending `C:` keeps it that way.
+
+### Keeping the recovery passwords offline
+
+LazyVM's copy of the recovery passwords is only in its credential store. If that is lost (your Windows profile is deleted, the host's disk fails, or the DPAPI keys are lost), the VMs' encrypted disks cannot be unlocked, and everything on them is gone. Keep a copy somewhere else, offline, such as on a USB drive kept somewhere safe:
+
+```powershell
+Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt
+```
+
+This writes every VM's recovery passwords to that file; `-Name DevBox` writes only that VM's, and `-Name Dev*` those of every VM whose name starts with `Dev`. A recovery key, in the command's name and its reminders, is a disk's 48-digit recovery password. The file is plain text, one field per line, so a screen reader reads it one field at a time:
+
+```
+VM: DevBox
+
+  Disk: OS disk
+  Disk GUID: {6F1C...}
+  Key ID: {3A7B2C1D-...}
+  Recorded: 2026-10-01
+  Recovery password: 123456-...
+```
+
+When BitLocker asks for a recovery key, it shows the start of a key ID: type the recovery password listed under the same key ID. A key ID shows as "not known yet" until the next maintenance run has read it from the VM; the password is right either way.
+
+- Anyone with the file can unlock the disks. Keep it offline, not on the host or in the cloud. LazyVM warns, and still writes, when the file is inside the LazyVM folder or in OneDrive, since a copy there is lost with the folder or copied off the computer.
+- An existing file is never written over unless you add `-Force`, and `-Force` replaces it rather than adding to it. So with `-Name`, any other VM's keys in that file are gone, and LazyVM warns you; keep one file for every VM by leaving `-Name` out. `-WhatIf` shows what would be written, without writing.
+- LazyVM records in `Config\RecoveryKeyExport.json`, in the VM's folder, which keys the file held: their disk GUIDs and key IDs, never the passwords.
+- A key not in that record, such as a new disk's after a build or a rebuild, or one BitLocker gave a new key ID, is reminded of until you export again: at the end of `Build-LazyVM`, in the maintenance log, in one line at the start of the next command you run on the VM, and by `Test-LazyVM`. Each reminder is one line, shown once per command (again only if more keys need exporting), and gives the command that exports every VM: `Export-LazyVMRecoveryKey -Path <a file on a USB drive>`. Export to the same file with `-Force`, or to a new one, and keep the newest. A key exported before its key ID was known is reminded of once more, so the file can show it.
 
 ### Sysmon
 
@@ -947,6 +971,7 @@ Get-Service MSSQLSERVER | Select-Object Name, Status
 - **Close Visual Studio before a capture**, so its settings backup is current.
 - **Read the `[!]` lines after a capture.** Anything reported as not migrated has to be recreated by hand after a rebuild.
 - **Check `Get-LazyVMLicense` occasionally**, so the rearm count is never a surprise.
+- **Export the recovery passwords when LazyVM reminds you**, to a USB drive kept offline: `Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt -Force`. Without them, a lost credential store means lost disks.
 - **Install tools inside the VM, the normal way.** The daily run records them, so they come back after a rebuild. `Save-LazyVMTooling` records them at once.
 - **Push before you revert.** A revert takes every disk back, the Dev Drive included.
 - **Take a checkpoint before risky work.** Tooling changes get one automatically; take your own before anything else risky.

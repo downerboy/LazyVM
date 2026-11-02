@@ -239,6 +239,8 @@ function Invoke-DailyMaintenance {
     # BitLocker on C: and every persistent disk; an older VM's disks are encrypted whole, in the background (#175).
     try { $null = Protect-GuestPersistentDisk -VM $VM }
     catch { Write-LogError 'BitLocker check failed (non-fatal)' $_ }
+    # A recovery password not exported yet, such as a new disk's, is logged; the next command run by hand reminds too (#286).
+    $null = Write-RecoveryKeyReminder -VM $VM
 
     # One copy of the User disk, still encrypted, made only when its files changed (#139).
     try { $null = Backup-UserDisk -VM $VM }
