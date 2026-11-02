@@ -644,7 +644,7 @@ Save-LazyVMTooling
 Phase 7 installs the whole list, in this order:
 1. Each Visual Studio Installer product from its channel's bootstrapper (`InstallerBootstrappers`), with its workloads and components. Then its Marketplace extensions are added, as a separate step, so an extension the installer refuses never stops the product itself from installing.
 2. SQL Server.
-3. Every winget package, and the winget match of every other program.
+3. Every winget package, and the winget match of every other program. A package refused because another installation is still in progress is tried again every 30 seconds, up to 10 times; one that hit a network error, once.
 4. The official installer of each program or extension that is still missing and has one.
 
 Anything already present is skipped.
