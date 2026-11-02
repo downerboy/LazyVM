@@ -11,12 +11,16 @@ LazyVM. The folder %ProgramFiles%\LazyVM is locked: administrators and
 SYSTEM can change it, you can read and run it, and nobody else can open
 it. LazyVM's scheduled tasks run this module as SYSTEM, so nobody but an
 administrator may be able to change it. An earlier copy of the same version
-is replaced; other versions are left alone.
+is replaced, and other versions there are removed.
 
-A copy an earlier LazyVM 6 put in %LOCALAPPDATA%\LazyVM\Modules or
-Documents\PowerShell\Modules is removed. LazyVM 5's copy, in
-%ProgramFiles%\PowerShell\Modules, is reported: Convert-LazyVMInstallation
-moves that install to you and removes it.
+Earlier copies that PowerShell would load instead are removed, and each
+removal is listed: LazyVM 5's, in %ProgramFiles%\PowerShell\Modules, and the
+ones an earlier LazyVM 6 put in %LOCALAPPDATA%\LazyVM\Modules or
+Documents\PowerShell\Modules. A copy that is, or holds, a junction or link is
+kept, with a warning: links are never followed. Then Install.ps1 checks that
+PowerShell loads the version it installed, and warns with the path of any
+copy that still comes first. If LazyVM 5's VMs have not been moved to you
+yet, it says to run Convert-LazyVMInstallation.
 
 Files downloaded from the internet are marked as such, and PowerShell will
 not load a marked module, so the copies are unblocked as they are installed.
@@ -119,6 +123,61 @@ public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wP
     $null = [LazyVMInstall.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$result)
 }
 
+function Test-LinkInFolder {
+    <#
+      Whether $Path, or anything in it, is a reparse point: a junction or a
+      symbolic link. Links found inside are not followed.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    $reparsePoint = [IO.FileAttributes]::ReparsePoint
+    if ((Get-Item -LiteralPath $Path -Force).Attributes.HasFlag($reparsePoint)) { return $true }
+    return @(Get-ChildItem -LiteralPath $Path -Recurse -Force | Where-Object { $_.Attributes.HasFlag($reparsePoint) }).Count -gt 0
+}
+
+function Remove-EarlierCopy {
+    <#
+      Deletes the earlier LazyVM copy $Path, if there is one, and says so.
+      A copy that is, or holds, a junction or link is kept, with a warning,
+      so nothing is deleted through a link.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    if (Test-LinkInFolder -Path $Path) {
+        Write-Warning "Kept the earlier copy in ${Path}: it is, or holds, a junction or link, which Install.ps1 does not follow. Look at it and delete it yourself, as administrator."
+        return
+    }
+    Remove-Item -LiteralPath $Path -Recurse -Force
+    Write-Information "Removed the earlier copy in $Path" -InformationAction Continue
+}
+
+function Get-OtherModuleVersion {
+    <# The version folders in the module folder $Path other than $Keep, the version being installed. #>
+    [OutputType([IO.DirectoryInfo])]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Keep
+    )
+
+    Get-ChildItem -LiteralPath $Path -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -as [version] -and $_.Name -ne $Keep }
+}
+
+function Write-ShadowingCopyWarning {
+    <#
+      Warns, with its path, when the first LazyVM on PSModulePath, the one
+      Import-Module LazyVM loads, is not the version installed in $Path.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    $first = Get-Module -Name LazyVM -ListAvailable | Select-Object -First 1
+    if ($first -and -not (Test-SameFolder -Path $first.ModuleBase -Other $Path)) {
+        Write-Warning "PowerShell loads LazyVM from $($first.ModuleBase), not from $Path, which Install.ps1 installed: it comes first on PSModulePath. Delete it as administrator, or take its folder off PSModulePath."
+    }
+}
+
 function Set-InstallFolderAccess {
     <#
       Locks $Path: full control for Administrators and SYSTEM, read and run
@@ -173,6 +232,9 @@ New-Item -ItemType Directory -Path $target -Force | Out-Null
 Copy-Item -Path (Join-Path -Path $versionDir.FullName -ChildPath '*') -Destination $target -Recurse -Force
 Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File
 Write-Information "Installed $moduleName $($versionDir.Name) in $target" -InformationAction Continue
+foreach ($other in Get-OtherModuleVersion -Path (Join-Path -Path $modulesDir -ChildPath $moduleName) -Keep $versionDir.Name) {
+    Remove-EarlierCopy -Path $other.FullName
+}
 
 # Earlier LazyVM 6 builds installed into the user's own folders, which the
 # user, or OneDrive, can change.
@@ -180,15 +242,15 @@ $userCopy = Join-Path -Path ([Environment]::GetFolderPath('LocalApplicationData'
 Update-UserModulePath -Change { param($List) Add-PathListEntry -List (Remove-PathListEntry -List $List -Entry $userCopy) -Entry $modulesDir }
 $env:PSModulePath = Add-PathListEntry -List (Remove-PathListEntry -List $env:PSModulePath -Entry $userCopy) -Entry $modulesDir
 $documentsCopy = Join-Path -Path ([Environment]::GetFolderPath('MyDocuments')) -ChildPath "PowerShell\Modules\$moduleName"
-foreach ($earlier in $userCopy, $documentsCopy) {
-    if (Test-Path -LiteralPath $earlier) {
-        Remove-Item -LiteralPath $earlier -Recurse -Force
-        Write-Information "Removed the earlier copy in $earlier" -InformationAction Continue
-    }
-}
-# LazyVM 5 was installed for every user, in PowerShell's own module folder.
+# LazyVM 5 was installed for every user, in PowerShell's own module folder,
+# which comes before this one on PSModulePath (#311).
 $machineWide = Join-Path -Path $env:ProgramFiles -ChildPath "PowerShell\Modules\$moduleName"
-if (Test-Path -LiteralPath $machineWide) {
-    Write-Warning "LazyVM 5 is installed for every user in $machineWide. Open a new PowerShell 7 window as administrator and run Convert-LazyVMInstallation: it moves your VMs, passwords and tasks to your account and then removes that copy."
+foreach ($earlier in $userCopy, $documentsCopy, $machineWide) {
+    Remove-EarlierCopy -Path $earlier
 }
+# LazyVM 5 recorded its folder here; Convert-LazyVMInstallation removes it once the install is moved.
+if (Get-ItemProperty -LiteralPath "HKLM:\SOFTWARE\$moduleName" -Name 'Root' -ErrorAction SilentlyContinue) {
+    Write-Warning "LazyVM 5's VMs are not moved to you yet. Open a new PowerShell 7 window as administrator and run Convert-LazyVMInstallation: it moves your VMs, passwords and tasks to your account."
+}
+Write-ShadowingCopyWarning -Path $target
 Write-Information 'Open a new PowerShell 7 window as administrator, then run: Build-LazyVM -Name DevBox' -InformationAction Continue

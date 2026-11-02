@@ -7,6 +7,8 @@ function Test-LazyVM {
     Reports, one check per line:
 
       - the LazyVM folder and where it was found
+      - whether Import-Module LazyVM loads this module, or an earlier copy
+        that comes before it on PSModulePath
       - the Windows and SQL Server ISOs, and whether each is a real ISO image
       - whether every BitLocker recovery password is exported
         (Export-LazyVMRecoveryKey)

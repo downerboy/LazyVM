@@ -87,6 +87,8 @@ Instead of typing those, you can double-click `Install-FromRepository.cmd` in th
 
 `Invoke-AnalyzerAndTest.ps1` assembles the module, checks it with PSScriptAnalyzer and runs the Pester tests; only if they all pass does `Install.ps1` install it, for you. The scheduled tasks, which run as SYSTEM, load it from that folder by its path, always the newest version installed, and only while nobody but administrators can change it, nor PowerShell itself. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Once installed, PowerShell loads it by itself the first time you use one of its commands.
 
+`Install.ps1` also removes earlier copies that PowerShell would load instead, and lists each one: LazyVM 5's, in `C:\Program Files\PowerShell\Modules\LazyVM`, other versions in `C:\Program Files\LazyVM\Modules\LazyVM`, and the ones an earlier LazyVM 6 put in your own folders. It keeps, with a warning, a copy that is or holds a junction or link, and never follows one. Then it warns if another copy still comes first on PSModulePath, with its path; `Test-LazyVM` checks the same.
+
 Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the module, and reports its commands as not recognized. To update, pull the repository and run the same commands again. The scheduled tasks pick up the new version on their next run.
 
 ### Who can use LazyVM
@@ -974,6 +976,7 @@ The log is the first place to look: `D:\DevVM\DevBox\Logs\DevBox.log`. Every lin
 | "...is not locked to its owner and SYSTEM, so LazyVM will not use it" | A scheduled task was handed a LazyVM folder whose access was changed. As the user it belongs to, run `Set-LazyVMRoot -Path <folder>` to lock it again. |
 | "...is in OneDrive" | LazyVM's folder must stay on this computer: choose one outside OneDrive. If `Test-LazyVM` says the module is in OneDrive, install it again with `Install.ps1`. |
 | "No stored guest credential" | Store one with `Set-LazyVMCredential`, for an account that is a local administrator inside the VM. |
+| `Import-Module LazyVM` loads an older version, or `Test-LazyVM` warns about module copies | An earlier copy comes before the installed one on PSModulePath. Run `Install.ps1` again, as administrator: it removes LazyVM's earlier copies and names any it kept. Delete any other copy it names yourself. |
 | Not sure what is wrong | Run `Test-LazyVM -Name DevBox`. It checks the folder, the ISOs, the VM, PowerShell Direct, the guest's set-up and the maintenance task, and says which one failed. |
 | The VM never becomes reachable | Open the VM's console. Windows Setup may be waiting on something, or the stored password may not match the account. Check by signing in at the console with the password `Get-LazyVMCredential -AsPlainText` shows. |
 | The password cannot be pasted into the VM's sign-in box | A basic VMConnect session has no clipboard. Copy the password on the host, then in VMConnect choose Clipboard > Type clipboard text: it types the text as keystrokes, so the VM's keyboard layout must match the host's. Or connect with an [enhanced session](#enhanced-session-mode), whose sign-in dialog accepts a paste. |

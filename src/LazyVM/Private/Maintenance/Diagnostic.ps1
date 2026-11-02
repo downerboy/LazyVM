@@ -89,6 +89,26 @@ function Get-CloudSyncCheck {
     return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status WARN -Detail "$($synced -join ' and ') in OneDrive: files there can be online-only while the tasks run, and are copied to the cloud. Install the module with Install.ps1, and move the LazyVM folder outside OneDrive."
 }
 
+function Get-ModuleShadowCheck {
+    <#
+      Whether Import-Module LazyVM loads this module, or another LazyVM copy
+      that comes before it on PSModulePath shadows it (#311). PowerShell lists
+      the copies in the order it looks for them.
+    #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    $running = Get-LazyVMModuleBase
+    $before = [Collections.Generic.List[string]]::new()
+    foreach ($copy in @(Get-Module -Name LazyVM -ListAvailable)) {
+        if (Test-SamePath -Path $copy.ModuleBase -Other $running) { break }
+        $before.Add($copy.ModuleBase)
+    }
+    if ($before.Count -eq 0) {
+        return New-DiagnosticCheck -Name $Name -Area Host -Check 'Module copies' -Status OK -Detail "Import-Module LazyVM loads this one ($running)"
+    }
+    return New-DiagnosticCheck -Name $Name -Area Host -Check 'Module copies' -Status WARN -Detail "$($before -join ' and ') come before $running on PSModulePath, so Import-Module LazyVM loads them instead. Run Install.ps1 again, as administrator: it removes LazyVM's earlier copies and names any it cannot."
+}
+
 function Get-RecoveryKeyCheck {
     <# Whether every stored BitLocker recovery password of the VM's is exported (#286). Reads the store and the export record once each. #>
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -137,6 +157,7 @@ function Get-LazyVMDiagnostic {
     Get-RootAccessCheck -Name $vmName -Root $root.Path
     Get-CloudSyncCheck -Name $vmName -Root $root.Path
     Get-TrustedCodeCheck -Name $vmName
+    Get-ModuleShadowCheck -Name $vmName
     Get-IsoCheck -Name $vmName -Check 'Windows ISO' -Path $settings.ISOPath
     Get-IsoCheck -Name $vmName -Check 'SQL Server ISO' -Path $settings.SQLIsoPath -Downloadable
     Get-RecoveryKeyCheck -VM ([VMContext]::new($settings))
