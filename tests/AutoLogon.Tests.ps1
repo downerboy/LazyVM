@@ -33,22 +33,27 @@ BeforeAll {
     }
 }
 
-Describe 'Test-AutoLogonRenewalNeeded' {
-    It 'is false when automatic sign-in is on with no limit and no password in the registry' {
+Describe 'Get-AutoLogonFix' {
+    It 'finds nothing to fix when automatic sign-in is on with no limit and no password in the registry' {
         $state = New-TestAutoLogonState
 
-        InModuleScope $module -Parameters @{ State = $state } { param($State) Test-AutoLogonRenewalNeeded -State $State } | Should -BeFalse
+        $fixes = @(InModuleScope $module -Parameters @{ State = $state } { param($State) Get-AutoLogonFix -State $State })
+
+        $fixes.Count | Should -Be 0
     }
 
-    It 'is true when <Case>' -ForEach @(
-        @{ Case = 'Windows turned automatic sign-in off'; State = @{ AutoAdminLogon = '0' } }
-        @{ Case = 'automatic sign-in was never set'; State = @{ AutoAdminLogon = '' } }
-        @{ Case = 'a logon count remains'; State = @{ HasLogonCount = $true } }
-        @{ Case = 'the password is in the registry in clear text'; State = @{ HasPlainTextPassword = $true } }
+    It 'says what it fixes when <Case>' -ForEach @(
+        @{ Case = 'Windows turned automatic sign-in off'; State = @{ AutoAdminLogon = '0' }; Expected = @('turned it back on') }
+        @{ Case = 'automatic sign-in was never set'; State = @{ AutoAdminLogon = '' }; Expected = @('turned it back on') }
+        @{ Case = 'a logon count remains'; State = @{ HasLogonCount = $true }; Expected = @('removed a leftover logon count') }
+        @{ Case = 'the password is in the registry in clear text'; State = @{ HasPlainTextPassword = $true }; Expected = @('moved a clear-text password into the LSA secret') }
+        @{ Case = 'a count and a clear-text password remain'; State = @{ HasLogonCount = $true; HasPlainTextPassword = $true }; Expected = @('removed a leftover logon count', 'moved a clear-text password into the LSA secret') }
     ) {
         $testState = New-TestAutoLogonState @State
 
-        InModuleScope $module -Parameters @{ State = $testState } { param($State) Test-AutoLogonRenewalNeeded -State $State } | Should -BeTrue
+        $fixes = @(InModuleScope $module -Parameters @{ State = $testState } { param($State) Get-AutoLogonFix -State $State })
+
+        $fixes | Should -Be $Expected
     }
 }
 
@@ -62,10 +67,12 @@ Describe 'Repair-GuestAutoLogon' {
         Mock -ModuleName $module Invoke-GuestScript { 'stray' } -ParameterFilter { "$ScriptBlock" -match 'Enable-GuestAutoLogon' }
     }
 
-    It 'leaves a VM built without the answer file (-NoUnattend) alone' {
+    It 'leaves a VM built without the answer file (-NoUnattend) alone, without a line in the log every night' {
         Mock -ModuleName $module Invoke-GuestScript { New-TestAutoLogonState -Unattended $false -AutoAdminLogon '0' } -ParameterFilter { "$ScriptBlock" -match 'Get-GuestAutoLogonState' }
 
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Repair-GuestAutoLogon -VM $VM }
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly
 
         Should -Invoke -ModuleName $module Assert-GuestCredential -Times 0 -Exactly
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 0 -Exactly -ParameterFilter { "$ScriptBlock" -match 'Enable-GuestAutoLogon' }
@@ -80,15 +87,24 @@ Describe 'Repair-GuestAutoLogon' {
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 0 -Exactly -ParameterFilter { "$ScriptBlock" -match 'Enable-GuestAutoLogon' }
     }
 
-    It 'turns automatic sign-in back on with the stored guest credential when it expired' {
+    It 'turns automatic sign-in back on with the stored guest credential, never the password as text, when it expired' {
         Mock -ModuleName $module Invoke-GuestScript { New-TestAutoLogonState -AutoAdminLogon '0' } -ParameterFilter { "$ScriptBlock" -match 'Get-GuestAutoLogonState' }
 
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Repair-GuestAutoLogon -VM $VM }
 
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
-            "$ScriptBlock" -match 'Enable-GuestAutoLogon' -and $ArgumentList[0] -eq 'devadmin' -and $ArgumentList[1] -eq 'S3cret&<pass'
+            "$ScriptBlock" -match 'Enable-GuestAutoLogon' -and $ArgumentList.Count -eq 1 -and $ArgumentList[0] -is [pscredential] -and
+            $ArgumentList[0].UserName -eq 'devadmin' -and $ArgumentList[0].GetNetworkCredential().Password -eq 'S3cret&<pass'
         }
-        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'OK' -and $Message -match 'devadmin' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'OK' -and $Message -match 'devadmin' -and $Message -match 'turned it back on' }
+    }
+
+    It 'says what it removed, not that it turned sign-in back on, when sign-in was still on' {
+        Mock -ModuleName $module Invoke-GuestScript { New-TestAutoLogonState -HasLogonCount $true } -ParameterFilter { "$ScriptBlock" -match 'Get-GuestAutoLogonState' }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Repair-GuestAutoLogon -VM $VM }
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'OK' -and $Message -match 'removed a leftover logon count' -and $Message -notmatch 'back on' }
     }
 
     It 'reads the marker the answer file''s first sign-in sets' {
@@ -148,24 +164,27 @@ Describe 'Enable-GuestAutoLogon (guest helper)' {
         Mock Set-ItemProperty { }
         Mock Remove-ItemProperty { }
         Mock Get-ItemProperty { [pscustomobject]@{ AutoAdminLogon = '0'; AutoLogonCount = 0; DefaultPassword = 'old' } } -ParameterFilter { $Path -eq $winlogonKey }
+        $password = [securestring]::new()
+        foreach ($character in 'S3cret'.ToCharArray()) { $password.AppendChar($character) }
+        $guestCredential = [pscredential]::new('devadmin', $password)
     }
 
     It 'stores the password as the LSA secret, never in the registry' {
-        Enable-GuestAutoLogon -UserName 'devadmin' -Password 'S3cret'
+        Enable-GuestAutoLogon -Credential $guestCredential
 
-        Should -Invoke Save-GuestAutoLogonSecret -Times 1 -Exactly -ParameterFilter { $Password -eq 'S3cret' }
+        Should -Invoke Save-GuestAutoLogonSecret -Times 1 -Exactly -ParameterFilter { $Password -is [securestring] -and [pscredential]::new('x', $Password).GetNetworkCredential().Password -eq 'S3cret' }
         Should -Invoke Set-ItemProperty -Times 0 -Exactly -ParameterFilter { $Name -eq 'DefaultPassword' }
     }
 
     It 'turns automatic sign-in on for the account' {
-        Enable-GuestAutoLogon -UserName 'devadmin' -Password 'S3cret'
+        Enable-GuestAutoLogon -Credential $guestCredential
 
         Should -Invoke Set-ItemProperty -Times 1 -Exactly -ParameterFilter { $Path -eq $winlogonKey -and $Name -eq 'AutoAdminLogon' -and $Value -eq '1' }
         Should -Invoke Set-ItemProperty -Times 1 -Exactly -ParameterFilter { $Path -eq $winlogonKey -and $Name -eq 'DefaultUserName' -and $Value -eq 'devadmin' }
     }
 
     It 'removes the logon count, so it never runs out, and any clear-text password' {
-        Enable-GuestAutoLogon -UserName 'devadmin' -Password 'S3cret'
+        Enable-GuestAutoLogon -Credential $guestCredential
 
         Should -Invoke Remove-ItemProperty -Times 1 -Exactly -ParameterFilter { $Path -eq $winlogonKey -and $Name -eq 'AutoLogonCount' }
         Should -Invoke Remove-ItemProperty -Times 1 -Exactly -ParameterFilter { $Path -eq $winlogonKey -and $Name -eq 'DefaultPassword' }
@@ -174,7 +193,7 @@ Describe 'Enable-GuestAutoLogon (guest helper)' {
     It 'removes nothing that is not there' {
         Mock Get-ItemProperty { [pscustomobject]@{ AutoAdminLogon = '0' } } -ParameterFilter { $Path -eq $winlogonKey }
 
-        Enable-GuestAutoLogon -UserName 'devadmin' -Password 'S3cret'
+        Enable-GuestAutoLogon -Credential $guestCredential
 
         Should -Invoke Remove-ItemProperty -Times 0 -Exactly
     }
@@ -182,7 +201,7 @@ Describe 'Enable-GuestAutoLogon (guest helper)' {
     It 'stores the secret before turning automatic sign-in on, so a failed store changes nothing' {
         Mock Save-GuestAutoLogonSecret { throw 'LsaStorePrivateData failed: 5' }
 
-        { Enable-GuestAutoLogon -UserName 'devadmin' -Password 'S3cret' } | Should -Throw '*LsaStorePrivateData*'
+        { Enable-GuestAutoLogon -Credential $guestCredential } | Should -Throw '*LsaStorePrivateData*'
 
         Should -Invoke Set-ItemProperty -Times 0 -Exactly
     }

@@ -155,7 +155,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Export-LazyVMTemplate -Name Clean -TemplateName Office` | Saves a VM's configuration, tooling list included, as a config template in `Shared\Templates`, for new VMs to start from. See [Making your own config template](#making-your-own-config-template). |
 | `Build-LazyVM -Name Clean -ConfigTemplate PlainWindows` | Creates a new VM's profile from a config template, then builds it. Ignored, with a warning, for a VM that already has a profile. |
 | `Build-LazyVM -FromPhase 7` | Starts at a phase, skipping earlier ones, after fixing what stopped a build. |
-| `Build-LazyVM -NoUnattend` | No answer file: Windows Setup has to be completed by hand in VMConnect. |
+| `Build-LazyVM -NoUnattend` | No answer file: Windows Setup has to be completed by hand in VMConnect. This is also the only way to have a VM without automatic sign-in: on every other VM it stays on for the VM's life, and maintenance turns it back on if it is turned off. |
 | `Get-LazyVM` | Lists the VMs, their state in Hyper-V, and their maintenance time and task. |
 | `Get-LazyVMSetting` | Every setting as the VM uses it, where the value came from, and what it does. `-Setting Mem*` narrows it. |
 | `Set-LazyVMCredential` | Stores the administrator account LazyVM uses inside the VM. |
@@ -281,7 +281,7 @@ Each night the maintenance run, in this order:
 8. checks and backs up every user database to `D:\SQLBackup`;
 9. asks the Microsoft Store to update its apps (a VM that is mostly off would otherwise lag behind; open apps update when they close);
 10. turns Sysmon on and installs it if it is not, with any newer configuration LazyVM ships ([Sysmon](#sysmon));
-11. turns automatic sign-in back on, with no limit, if Windows turned it off or a sign-in count remains, as on a VM built before LazyVM removed the 99-sign-in limit. The password is stored as the LSA secret Windows' own automatic sign-in uses, never in the registry. A VM built with `-NoUnattend` is left as you set it;
+11. keeps automatic sign-in on: if it is off, even if you turned it off yourself, or a sign-in count or a clear-text password remains, as on a VM built before LazyVM removed the 99-sign-in limit, it turns it back on with no limit. Automatic sign-in stays on for the VM's life; the only way to have a VM without it is to build it with `-NoUnattend`, and such a VM is left as you set it. The password is stored as the LSA secret Windows' own automatic sign-in uses, never in the registry;
 12. applies the Visual Studio settings if the build could not ([Visual Studio settings](#visual-studio-settings));
 13. upgrades the winget packages ([winget upgrades](#winget-upgrades));
 14. installs Windows updates ([Windows updates](#windows-updates)).

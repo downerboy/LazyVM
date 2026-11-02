@@ -6,32 +6,36 @@
 # automatic sign-in does whenever the VM starts. A new build's answer file
 # removes the logon count at the first sign-in; a VM built before that
 # stops signing in by itself after 99 starts, so maintenance turns it back
-# on. The work in the guest is in Data\Guest.Helpers.ps1.
+# on. Only a VM built with -NoUnattend goes without it. The work in the
+# guest is in Data\Guest.Helpers.ps1.
 
-function Test-AutoLogonRenewalNeeded {
+function Get-AutoLogonFix {
     <#
-      True when automatic sign-in has to be set again: Windows turned it
+      What renewing automatic sign-in fixes, as phrases for the log: it is
       off, a logon count would turn it off, or the password sits in the
-      registry in clear text. The rule, kept apart so it can be tested on
-      its own.
+      registry in clear text. Nothing when it needs no renewal. The rule,
+      kept apart so it can be tested on its own.
     #>
-    [OutputType([bool])]
+    [OutputType([string[]])]
     param([Parameter(Mandatory)][pscustomobject]$State)
 
-    return $State.AutoAdminLogon -ne '1' -or $State.HasLogonCount -or $State.HasPlainTextPassword
+    $fixes = [System.Collections.Generic.List[string]]::new()
+    if ($State.AutoAdminLogon -ne '1') { $fixes.Add('turned it back on') }
+    if ($State.HasLogonCount) { $fixes.Add('removed a leftover logon count') }
+    if ($State.HasPlainTextPassword) { $fixes.Add('moved a clear-text password into the LSA secret') }
+    return $fixes.ToArray()
 }
 
 function Repair-GuestAutoLogon {
     <#
-      Turns automatic sign-in back on, with no limit, for the stored guest
-      account when it needs it, the password stored as the LSA secret. A VM
-      built with -NoUnattend, whose user chose to sign in by hand, is left
-      alone. Runs in the PowerShell Direct session as the guest
-      administrator, which may write the LSA secret; a guest task would
-      write its arguments, the password among them, to the guest's disk.
+      Renews automatic sign-in, with no limit, for the stored guest account
+      when it needs it, the password stored as the LSA secret. A VM built
+      with -NoUnattend, whose user chose to sign in by hand, is left alone.
+      Runs in the PowerShell Direct session as the guest administrator,
+      which may write the LSA secret, with the credential as remoting
+      carries it: the password encrypted with the session key. A guest task
+      would write its arguments to the guest's disk.
     #>
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'The guest password has to cross into the guest as text, as the certificate passwords do, for LsaStorePrivateData.')]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingUsernameAndPasswordParams', '', Justification = 'The guest script block takes the account and its password as text; see the line above.')]
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $state = Invoke-GuestScript -VM $VM -Activity 'automatic sign-in check' -TimeoutMinutes 5 -ArgumentList @($script:GuestMarkerKey) -ScriptBlock {
@@ -40,16 +44,17 @@ function Repair-GuestAutoLogon {
         Get-GuestAutoLogonState -MarkerKey $markerKey
     }
     if (-not $state.Unattended) {
-        Write-LogEntry 'Automatic sign-in: the VM was built without the answer file (-NoUnattend), so it is left as it is' 'INFO'
+        Write-Verbose 'Automatic sign-in: the VM was built without the answer file (-NoUnattend), so it is left as it is'
         return
     }
-    if (-not (Test-AutoLogonRenewalNeeded -State $state)) { return }
+    $fixes = @(Get-AutoLogonFix -State $state)
+    if ($fixes.Count -eq 0) { return }
 
     $credential = Assert-GuestCredential -VM $VM
-    $null = Invoke-GuestScript -VM $VM -Activity 'automatic sign-in' -TimeoutMinutes 5 -ArgumentList @($credential.UserName, (ConvertTo-PlainText -Secure $credential.Password)) -ScriptBlock {
-        param($userName, $password)
+    $null = Invoke-GuestScript -VM $VM -Activity 'automatic sign-in' -TimeoutMinutes 5 -ArgumentList @($credential) -ScriptBlock {
+        param([pscredential]$credential)
         $ErrorActionPreference = 'Stop'
-        Enable-GuestAutoLogon -UserName $userName -Password $password
+        Enable-GuestAutoLogon -Credential $credential
     }
-    Write-LogEntry "Automatic sign-in: turned back on for '$($credential.UserName)', with no limit" 'OK'
+    Write-LogEntry "Automatic sign-in for '$($credential.UserName)', now with no limit: $($fixes -join '; ')" 'OK'
 }
