@@ -1,7 +1,7 @@
 @echo off
 rem Install-FromRepository.cmd - double-click to analyze, test and install LazyVM
-rem from this repository. The same as running, in PowerShell 7 as administrator
-rem in this folder:
+rem from this repository, for the current Windows user. The same as running, in
+rem PowerShell 7 as administrator in this folder:
 rem
 rem     ./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out
 rem
@@ -9,11 +9,12 @@ rem Nothing is installed unless the analyzer and every test pass.
 setlocal
 
 rem Not elevated: start this file again as administrator (UAC prompt) and stop.
+rem LazyVM goes in %ProgramFiles%\LazyVM, which only administrators can change (#284).
 rem The path goes through an environment variable, so no quoting can break it.
 fltmc >nul 2>&1
 if errorlevel 1 (
     set "LAZYVM_SELF=%~f0"
-    powershell.exe -NoLogo -NoProfile -Command "try { Start-Process -FilePath $env:LAZYVM_SELF -Verb RunAs -ErrorAction Stop } catch { Write-Host 'Administrator rights are needed to install LazyVM for all users.'; Read-Host 'Press Enter to close' }"
+    powershell.exe -NoLogo -NoProfile -Command "try { Start-Process -FilePath $env:LAZYVM_SELF -Verb RunAs -ErrorAction Stop } catch { Write-Host 'Administrator rights are needed to install LazyVM in Program Files.'; Read-Host 'Press Enter to close' }"
     exit /b
 )
 

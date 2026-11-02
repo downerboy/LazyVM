@@ -42,6 +42,21 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
         Mock -ModuleName $module Save-GuestState { 'stray' }
         Mock -ModuleName $module Test-GuestStateChanged { $false }
+        Mock -ModuleName $module Get-ResumePhase { 0 }
+    }
+
+    It 'skips the night, starting no build, while <Case> (#284)' -ForEach @(
+        @{ Case = 'a build waits to carry on after a host restart'; Phase = 3; Exists = $true }
+        @{ Case = 'the VM is not there yet'; Phase = 0; Exists = $false }
+    ) {
+        Mock -ModuleName $module Get-ResumePhase { $Phase }.GetNewClosure()
+        if (-not $Exists) { Mock -ModuleName $module Get-VM { } }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Open-GuestSession -Times 0
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*build still in progress*skipping tonight*' -and $Level -eq 'INFO' }
     }
 
     It 'returns only None when nothing is due' {
@@ -335,14 +350,15 @@ Describe 'Start-GuestStoreAppUpdate (#233)' {
 Describe 'Get-MaintenancePreview (#18)' {
     BeforeEach {
         Mock -ModuleName $module Open-GuestSession { $false }
+        Mock -ModuleName $module Get-ResumePhase { 0 }
     }
 
-    It 'says the VM would be built when it does not exist' {
+    It 'says the night would be skipped while the VM is not built yet (#284)' {
         Mock -ModuleName $module Get-VM { }
 
         $text = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Get-MaintenancePreview -VM $VM }
 
-        $text | Should -BeLike 'Build*'
+        $text | Should -BeLike '*build still in progress*'
     }
 
     It 'starts nothing when the VM is off, and says the evaluation was not read' {

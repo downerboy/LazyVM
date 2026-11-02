@@ -1,9 +1,20 @@
 ﻿# Constants.ps1 - Names LazyVM uses in more than one place, defined once.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
-# Where the root folder is recorded for every later run, including the
-# scheduled tasks, which run as SYSTEM. Each VM's resume point is a subkey.
-$script:RootRegistryKey = 'HKLM:\SOFTWARE\LazyVM'
+# Where the root folder is recorded for the user's later runs (#284). The
+# scheduled tasks run as SYSTEM, which cannot read it: their command names
+# the root folder itself (Get-HostTaskCommand).
+$script:RootRegistryKey = 'HKCU:\SOFTWARE\LazyVM'
+
+# LazyVM's key for the computer, which only an administrator can change.
+# Each user's allowed paths outside their LazyVM folder are under it, by
+# security identifier (HostPathTrust.ps1).
+$script:MachineRegistryKey = 'HKLM:\SOFTWARE\LazyVM'
+
+# Where a machine-wide install, before #284, recorded its root folder (the
+# Root value), with the VMs' resume points as subkeys. Read only to find and
+# move such an install (Convert-LazyVMInstallation).
+$script:LegacyRootRegistryKey = $script:MachineRegistryKey
 
 # Inside the guest: the answer file's first-logon command sets Provisioned=1
 # here once Windows Setup and OOBE are done.
@@ -116,11 +127,35 @@ $script:WingetUpgradeNever = @('Microsoft.VisualStudio.*', 'Microsoft.SQLServer.
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.
 $script:TaskPrefix = 'LazyVM-'
+# The host's tasks for one VM, each followed by the VM's name: its daily
+# maintenance, and the build that carries on after a host restart.
+$script:MaintenanceTaskPrefix = "${script:TaskPrefix}Maintain-"
+$script:ResumeTaskPrefix = "${script:TaskPrefix}ResumeAfterReboot-"
+
+# In <Root>\<Name>\Config while a build waits to carry on after a host
+# restart: the phase it carries on from (HyperV.ps1). In the VM's own
+# folder, which the resume task, running as SYSTEM, can read.
+$script:ResumeFileName = 'Resume.json'
+
+# In <Root>\Shared during Convert-LazyVMInstallation: the ISOs it ejected to
+# move them, until it attaches them again (Migration.ps1).
+$script:EjectedMediaFileName = 'Migration.EjectedMedia.json'
 
 # Settings LazyVM once had and no longer uses, deleted from the schema. A
 # settings file that still names one is read without it rather than
 # refused, and VM.json is written back without it (#273).
-$script:RetiredSettingNames = @('GuestProjectPaths', 'ProjectExcludeDirs', 'MaxProjectCaptureGB', 'GuestRestoreRoot')
+# CredStoreDir held the machine key file credentials were encrypted with
+# before #284. SQLIsoUrl and ISODownloadPage became fixed addresses below
+# (#284): a setting in the user's folder must not choose what the
+# scheduled task, running as SYSTEM, downloads or opens.
+$script:RetiredSettingNames = @('GuestProjectPaths', 'ProjectExcludeDirs', 'MaxProjectCaptureGB', 'GuestRestoreRoot', 'CredStoreDir', 'SQLIsoUrl', 'ISODownloadPage')
+
+# Microsoft's addresses for the install media (InstallMedia.ps1). The
+# Windows evaluation sits behind a registration form, so its page is opened
+# for the user; the SQL Server 2025 Enterprise Developer ISO, from which
+# LazyVM installs the Standard Developer edition, is downloaded.
+$script:WindowsIsoDownloadPage = 'https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise'
+$script:SqlIsoUrl = 'https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso'
 
 # Checkpoint names: '<prefix> <yyyyMMdd-HHmmss>[ <note>]'.
 $script:ToolingCheckpointPrefix = 'Tooling'

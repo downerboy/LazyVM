@@ -7,7 +7,6 @@
 #  Remove-LazyVM deletes the VM and everything created to support it:
 #
 #    scheduled tasks   its maintenance task and any resume-after-reboot task
-#    registry          its resume key
 #    Hyper-V           the VM itself, with its checkpoints
 #    VM folder         <Root>\<Name>, with everything in it: disks and their
 #                      checkpoint disks, configuration, profile, state,
@@ -22,8 +21,8 @@
 #  What every VM uses is never touched: the root folder, Shared (the ISO,
 #  installers, settings and the credential key) and the module itself. Anything another
 #  VM also uses is kept too: a path another VM's settings name, a folder
-#  holding one, a disk attached to another VM, a task name or registry key
-#  another VM shares. The confirmation lists exactly what will go and what is
+#  holding one, a disk attached to another VM, or a task name another VM
+#  shares. The confirmation lists exactly what will go and what is
 #  kept, and why.
 #
 #  The planning is kept apart from the deleting (Get-VMRemovalPlan takes
@@ -31,17 +30,41 @@
 #  Hyper-V or a single real file.
 # ─────────────────────────────────────────────────────────────────────────────
 
+function ConvertTo-FullPath {
+    <# $Path with '.' and '..' worked out and no trailing separator, so paths compare as the file system sees them. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    return [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+}
+
+function Test-SamePath {
+    <# True when $Path and $Other name the same file or folder. Ignores case, '.' and '..', and trailing separators. #>
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Other
+    )
+
+    return (ConvertTo-FullPath -Path $Path).Equals((ConvertTo-FullPath -Path $Other), [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Test-PathWithin {
-    <# True when $Path is $Folder itself or lies anywhere inside it. Ignores case and trailing backslashes. #>
+    <#
+      True when $Path is $Folder itself or lies anywhere inside it, as the
+      file system resolves both: '..' cannot climb out. Ignores case and
+      trailing separators.
+    #>
+    [OutputType([bool])]
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Folder
     )
 
-    $path = $Path.TrimEnd('\')
-    $folder = $Folder.TrimEnd('\')
-    if ($path.Equals($folder, [StringComparison]::OrdinalIgnoreCase)) { return $true }
-    return $path.StartsWith("$folder\", [StringComparison]::OrdinalIgnoreCase)
+    $full = ConvertTo-FullPath -Path $Path
+    $folderFull = ConvertTo-FullPath -Path $Folder
+    if ($full.Equals($folderFull, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    return ($full.StartsWith("$folderFull\", [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith("$folderFull/", [StringComparison]::OrdinalIgnoreCase))
 }
 
 function Get-ParentFolder {
@@ -67,7 +90,6 @@ function Get-VMOwnedPath {
         $Settings.VSSettingsBackup
         $Settings.GuestCredFile
         $Settings.CertCredFile
-        $Settings.CredKeyFile
         $Settings.LogFile
     )
     $folders = @(
@@ -130,7 +152,6 @@ function Get-VMRemovalPlan {
         $Settings.ISOSearchRoot
         $Settings.ISOPath
         (Get-ParentFolder -Path $Settings.SQLIsoPath)
-        $Settings.CredStoreDir
     ) | Where-Object { $_ }
 
     # Every path another VM's settings name, with the VM it belongs to.
@@ -206,20 +227,8 @@ function Get-VMRemovalPlan {
         $tasks += $taskName
     }
 
-    $registryKey = $null
-    if ($Settings.ResumeRegKey) {
-        $sharedWith = @($OtherSettings | Where-Object { $_.ResumeRegKey -and (Test-PathWithin -Path $_.ResumeRegKey -Folder $Settings.ResumeRegKey) })
-        if ($sharedWith.Count -gt 0) {
-            $kept.Add([pscustomobject]@{ Path = $Settings.ResumeRegKey; Reason = "VM '$($sharedWith[0].VMName)' uses $($sharedWith[0].ResumeRegKey)" })
-        }
-        else {
-            $registryKey = $Settings.ResumeRegKey
-        }
-    }
-
     return [pscustomobject]@{
         Tasks       = $tasks
-        RegistryKey = $registryKey
         VMRoot      = $vmRoot
         Files       = $files
         Folders     = $folders
@@ -255,6 +264,7 @@ function Remove-PathWithRetry {
     <# Deletes a file or folder, retrying briefly while Hyper-V lets go of a disk it has just released. #>
     param([Parameter(Mandatory)][string]$Path)
 
+    Assert-NoReparsePoint -Path $Path
     for ($attempt = 1; $attempt -le 6; $attempt++) {
         try {
             Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
@@ -328,12 +338,11 @@ function Get-VMRemovalContext {
 
     # Only what is actually there is listed and deleted.
     $tasks = @($plan.Tasks | Where-Object { Get-ScheduledTask -TaskName $_ -ErrorAction SilentlyContinue })
-    $registryKey = if ($plan.RegistryKey -and (Test-Path -LiteralPath $plan.RegistryKey)) { $plan.RegistryKey } else { $null }
     $files = @($plan.Files | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     $folders = @($plan.Folders | Where-Object { Test-Path -LiteralPath $_ -PathType Container })
     $vmRoot = if (Test-Path -LiteralPath $plan.VMRoot -PathType Container) { $plan.VMRoot } else { $null }
 
-    if (-not $machine -and $tasks.Count -eq 0 -and -not $registryKey -and -not $vmRoot -and $files.Count + $folders.Count -eq 0) {
+    if (-not $machine -and $tasks.Count -eq 0 -and -not $vmRoot -and $files.Count + $folders.Count -eq 0) {
         Write-LogEntry "Nothing of '$($VM.Name)' was found to remove." 'INFO'
         return $null
     }
@@ -343,7 +352,6 @@ function Get-VMRemovalContext {
         Write-LogEntry "  Hyper-V VM   $($VM.Name) ($($machine.State), $checkpointCount checkpoint(s))" 'INFO'
     }
     foreach ($task in $tasks) { Write-LogEntry "  Task         $task" 'INFO' }
-    if ($registryKey) { Write-LogEntry "  Registry     $registryKey" 'INFO' }
     $total = 0
     foreach ($path in @($vmRoot | Where-Object { $_ }) + $files + $folders) {
         $size = Get-PathSize -Path $path
@@ -374,7 +382,6 @@ function Get-VMRemovalContext {
     return [pscustomobject]@{
         Machine     = $machine
         Tasks       = $tasks
-        RegistryKey = $registryKey
         VMRoot      = $vmRoot
         Files       = $files
         Folders     = $folders
@@ -402,14 +409,6 @@ function Invoke-VMRemoval {
             Write-LogEntry "Task removed: $task" 'OK'
         }
         catch { $failures.Add("task $task - $($_.Exception.Message)") }
-    }
-
-    if ($Context.RegistryKey) {
-        try {
-            Remove-Item -LiteralPath $Context.RegistryKey -Recurse -Force -ErrorAction Stop
-            Write-LogEntry "Registry key removed: $($Context.RegistryKey)" 'OK'
-        }
-        catch { $failures.Add("$($Context.RegistryKey) - $($_.Exception.Message)") }
     }
 
     if ($Context.Machine) {

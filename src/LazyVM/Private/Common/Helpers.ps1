@@ -36,6 +36,7 @@ function Write-TextFileAtomic {
         [Parameter(Mandatory)][AllowEmptyString()][string]$Text
     )
 
+    Assert-NoReparsePoint -Path $Path
     $folder = Split-Path -Path $Path -Parent
     if ($folder -and -not (Test-Path -LiteralPath $folder)) {
         New-Item -ItemType Directory -Path $folder -Force | Out-Null
@@ -54,6 +55,7 @@ function New-Folder {
     <# Creates a folder, and any parents, if it is not there yet. #>
     param([Parameter(Mandatory)][string]$Path)
 
+    Assert-NoReparsePoint -Path $Path
     if (-not (Test-Path -LiteralPath $Path)) {
         New-Item -ItemType Directory -Path $Path -Force | Out-Null
     }

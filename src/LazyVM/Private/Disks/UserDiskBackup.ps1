@@ -102,11 +102,12 @@ function Copy-UserDiskVhd {
         if (-not $frozen) { throw "The checkpoint '$name' did not make the User disk read-only." }
 
         New-Folder -Path (Split-Path -Path $Destination -Parent)
+        Assert-NoReparsePoint -Path $partial
         Convert-VHD -Path $frozen -DestinationPath $partial -VHDType Dynamic -ErrorAction Stop
-        Move-Item -LiteralPath $partial -Destination $Destination -Force
+        Move-CheckedItem -Path $partial -Destination $Destination
     }
     catch {
-        Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue
+        Remove-CheckedItem -Path $partial -Quiet
         throw
     }
     finally {
@@ -151,6 +152,6 @@ function Backup-UserDisk {
 
     Write-LogEntry "Copying the User disk to $destination..." 'INFO'
     Copy-UserDiskVhd -VM $VM -Destination $destination
-    Set-Content -LiteralPath $recordPath -Value $fingerprint -Encoding utf8
+    Write-TextFileAtomic -Path $recordPath -Text $fingerprint
     Write-LogEntry "User disk copied, still encrypted, to $destination; to restore it, swap it for $userDisk while the VM is off" 'OK'
 }

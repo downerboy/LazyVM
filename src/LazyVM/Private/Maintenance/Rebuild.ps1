@@ -140,7 +140,7 @@ function Invoke-RetireCurrentVM {
     Remove-VM -Name $VM.Name -Force
     Write-LogEntry "VM definition '$($VM.Name)' removed (disks kept)" 'OK'
 
-    Move-Item -LiteralPath $osPath -Destination $retiredPath -Force
+    Move-CheckedItem -Path $osPath -Destination $retiredPath
     Write-LogEntry "OS disk retired to $([IO.Path]::GetFileName($retiredPath)) ($(Format-Size (Get-Item $retiredPath).Length))" 'OK'
 
     # The VM's own configuration folder would otherwise collide with the new build.
@@ -148,7 +148,7 @@ function Invoke-RetireCurrentVM {
     if (Test-Path -LiteralPath $settings.VMConfigDir) {
         try {
             $retiredConfig = "$($settings.VMConfigDir).retired-$stamp"
-            Move-Item -LiteralPath $settings.VMConfigDir -Destination $retiredConfig -Force
+            Move-CheckedItem -Path $settings.VMConfigDir -Destination $retiredConfig
             Write-LogEntry 'VM configuration folder moved aside' 'OK'
         }
         catch {
@@ -158,7 +158,7 @@ function Invoke-RetireCurrentVM {
     }
 
     # The answer-file disc is built afresh every time.
-    Remove-Item -LiteralPath $settings.SeedDiskPath -Force -ErrorAction SilentlyContinue
+    Remove-CheckedItem -Path $settings.SeedDiskPath -Quiet
 
     Write-LogEntry "SQL data disk left untouched: $($settings.SQLDiskPath)" 'INFO'
     if ($settings.UseDevDrive -and (Test-Path -LiteralPath $settings.DevDrivePath)) {
@@ -189,10 +189,10 @@ function Remove-RetiredVM {
     $freed = 0
     if (Test-Path -LiteralPath $Retired.RetiredOsPath) {
         $freed = (Get-Item -LiteralPath $Retired.RetiredOsPath).Length
-        Remove-Item -LiteralPath $Retired.RetiredOsPath -Force
+        Remove-CheckedItem -Path $Retired.RetiredOsPath
     }
     if ($Retired.RetiredConfig -and (Test-Path -LiteralPath $Retired.RetiredConfig)) {
-        Remove-Item -LiteralPath $Retired.RetiredConfig -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-CheckedItem -Path $Retired.RetiredConfig -Recurse -Quiet
     }
     Write-LogEntry "Retired VM deleted - $(Format-Size $freed) reclaimed" 'OK'
 }

@@ -4,7 +4,7 @@
     Command    = '.\LazyVM\Install.ps1'
     Parameters = @()
     External   = $true
-    Summary    = 'Copies the module from a downloaded release to where PowerShell 7 and the SYSTEM maintenance task find it, replacing an earlier copy of the same version, and unblocks it.'
+    Summary    = 'As administrator. Copies the module from a downloaded release to %ProgramFiles%\LazyVM, which it locks so only administrators can change it and only you can read it, adds it to your PSModulePath, replacing an earlier copy of the same version, and unblocks it. Removes copies earlier LazyVM 6 builds put in your own folders.'
     Covers     = @()
     Omits      = @{}
     Steps      = @(
@@ -17,7 +17,8 @@
                 @{ Label = 'module from the zip'; Kind = 'folder'; Store = 'LazyVM\LazyVM\'; Items = @('<version>\') }
             )
             Writes   = @(
-                @{ Label = 'module installed for all users'; Kind = 'folder'; Store = '$env:ProgramFiles\PowerShell\'; Items = @('Modules\LazyVM\', '<version>\') }
+                @{ Label = 'module, admin-only to change, readable by you'; Kind = 'folder'; Store = '%ProgramFiles%\LazyVM\'; Items = @('Modules\LazyVM\', '<version>\') }
+                @{ Label = 'module folder on your PSModulePath'; Kind = 'registry'; Store = 'HKCU:\Environment'; Items = @('PSModulePath') }
             )
         }
         @{

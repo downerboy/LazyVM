@@ -19,7 +19,9 @@
     capture when the certificates or Visual Studio settings changed. Then the VM's state is captured and
     Windows rearmed, which gives another 90 days for the price of a restart.
     Only when no rearms are left is the VM rebuilt (see
-    Invoke-LazyVMRebuild). A VM that does not exist yet is built.
+    Invoke-LazyVMRebuild). A VM whose build is still in progress - one
+    waiting to carry on after a host restart, or not there yet - is left
+    alone that night, so maintenance never starts a second build.
 
     Register-LazyVMMaintenance schedules this to run daily, unattended. If a
     settings file has a problem when it runs, the copy from the last time
@@ -29,9 +31,21 @@
     .PARAMETER Name
     The VM. May be left out while there is only one.
 
-    With -WhatIf, says what a run would do without doing any of it: build
-    the VM, rearm, rebuild, or only the daily checks. It reads the VM's
+    With -WhatIf, says what a run would do without doing any of it: nothing
+    while the build is still in progress, rearm, rebuild, or only the daily
+    checks. It reads the VM's
     evaluation while the VM is running, and starts nothing.
+
+    .PARAMETER Root
+    The LazyVM folder, instead of the one recorded for you. LazyVM's
+    scheduled tasks pass it, since they run as SYSTEM, which cannot read
+    your registry. It must be a LazyVM folder locked to its owner and
+    SYSTEM (see Set-LazyVMRoot).
+
+    .PARAMETER OwnerSid
+    The security identifier of the user the LazyVM folder belongs to, with
+    -Root. LazyVM's scheduled tasks pass it; the folder must be locked to
+    that user and SYSTEM. The account running the command if left out.
 
     .EXAMPLE
     Invoke-LazyVMMaintenance -Name DevBox
@@ -42,18 +56,23 @@
     Says whether tonight's run would rearm or rebuild DevBox, changing nothing.
 
     .OUTPUTS
-    System.String: what was done - None, Rearmed, Rebuilt or Built.
+    System.String: what was done - None, Rearmed or Rebuilt.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
     param(
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [string]$Name
+        [string]$Name,
+
+        [string]$Root,
+
+        [ValidatePattern('^S-1-\d+(-\d+)+$')]
+        [string]$OwnerSid
     )
 
     process {
         # -WhatIf reads, but records nothing: not even a hardware change in VM.json.
-        Invoke-CommandRun -Title 'Maintenance' -Name $Name -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
+        Invoke-CommandRun -Title 'Maintenance' -Name $Name -Root $Root -OwnerSid $OwnerSid -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
             param($VM)
             if ($WhatIfPreference) {
                 $null = $PSCmdlet.ShouldProcess($VM.Name, (Get-MaintenancePreview -VM $VM))
@@ -78,13 +97,6 @@
                         throw "The rebuild of '$($VM.Name)' did not complete cleanly. The log says what happened and how to go back: $($VM.Settings.LogFile)"
                     }
                     return 'Rebuilt'
-                }
-                ([MaintenanceStep]::Build) {
-                    Write-LogEntry 'Maintenance found no VM - building one' 'INFO'
-                    if ((Invoke-Rebuild -VM $VM) -ne $true) {
-                        throw "Building '$($VM.Name)' did not complete cleanly. The log says what happened: $($VM.Settings.LogFile)"
-                    }
-                    return 'Built'
                 }
                 default {
                     throw "Maintenance of '$($VM.Name)' could not run. The log says why: $($VM.Settings.LogFile)"

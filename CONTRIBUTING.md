@@ -14,7 +14,7 @@ LazyVM uses [GitHub Flow](https://docs.github.com/en/get-started/using-github/gi
    ./Invoke-AnalyzerAndTest.ps1
    ```
 
-   To check and also install what you built, double-click `Install-FromRepository.cmd`, or run `./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out` as administrator.
+   To check and also install what you built, double-click `Install-FromRepository.cmd`, or run `./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out`. Run either as administrator: LazyVM goes in `%ProgramFiles%\LazyVM\Modules`, which only administrators can change, readable by you only.
 
    If the change adds, removes or reorders what a command calls, update that command's diagram source in `docs/diagrams/source` and run `./Update-Diagram.ps1`; the tests fail until the diagrams match the code. Update the [guide](docs/Guide.md), the [use cases](docs/UseCases.md) and the command's own help in the same pull request.
 

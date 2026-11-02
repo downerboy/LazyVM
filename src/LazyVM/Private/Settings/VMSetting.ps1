@@ -15,7 +15,6 @@ $script:HostPathSettings = @(
     'CheckpointDir'
     'VSSettingsBackup'
     'LogFile'
-    'CredStoreDir'
     'StateDir'
 )
 
@@ -28,10 +27,16 @@ function Resolve-HostPathSetting {
 
     $problems = [System.Collections.Generic.List[string]]::new()
 
-    foreach ($name in $script:HostPathSettings) {
-        $value = [string]$Settings[$name]
-
-        if (Test-FullHostPath $value) {
+    foreach ($name in @($script:HostPathSettings) + 'BackupDir') {
+        # A relative path may start with '.\', as it always could.
+        $value = [string]$Settings[$name] -replace '^\.[\\/]', ''
+        # Any other '.' or '..' part could lead out of the LazyVM folder (#284).
+        $parts = $value -split '[\\/]'
+        if ($parts -contains '..' -or $parts -contains '.') {
+            $problems.Add("'$name' must not contain '.' or '..' parts: '$value'.")
+            continue
+        }
+        if ($name -eq 'BackupDir' -or (Test-FullHostPath $value)) {
             continue
         }
         if (-not $value -or $value -match '^[A-Za-z]:' -or $value.StartsWith('\')) {
@@ -39,8 +44,7 @@ function Resolve-HostPathSetting {
             continue
         }
 
-        $relative = $value -replace '^\.\\', ''
-        $Settings[$name] = "$Root\$relative"
+        $Settings[$name] = "$Root\$value"
     }
 
     if ($problems.Count -gt 0) {
@@ -66,14 +70,13 @@ function Add-DerivedSetting {
     # New-VM -Path <Root> makes <Root>\<Name>\Virtual Machines for the
     # VM's configuration, inside the VM's own folder.
     $Settings.VMConfigDir = "$vmRoot\Virtual Machines"
-    $Settings.CredKeyFile = "$($Settings.CredStoreDir)\.lazyvm.key"
     $Settings.GuestCredFile = "$vmRoot\Credentials\guest.cred"
     $Settings.CertCredFile = "$vmRoot\Credentials\certs.cred"
     $Settings.EnvironmentCredFile = "$vmRoot\Credentials\environment.cred"
     $Settings.AppSettingsCredFile = "$vmRoot\Credentials\appsettings.cred"
     $Settings.BitLockerCredFile = "$vmRoot\Credentials\bitlocker.cred"
-    $Settings.ResumeRegKey = "$script:RootRegistryKey\$vm"
-    $Settings.ResumeTaskName = "${script:TaskPrefix}ResumeAfterReboot-$vm"
+    $Settings.ResumeFile = "$vmRoot\$script:ConfigFolderName\$script:ResumeFileName"
+    $Settings.ResumeTaskName = "$script:ResumeTaskPrefix$vm"
     $Settings.ScheduleTaskName = Get-MaintenanceTaskName -VMName $vm
 }
 
@@ -81,7 +84,7 @@ function Get-MaintenanceTaskName {
     <# The name of a VM's daily maintenance task. #>
     param([Parameter(Mandatory)][string]$VMName)
 
-    return "${script:TaskPrefix}Maintain-$VMName"
+    return "$script:MaintenanceTaskPrefix$VMName"
 }
 
 function Expand-VMToken {

@@ -3,8 +3,8 @@
     Title      = 'Daily maintenance'
     Command    = 'Invoke-LazyVMMaintenance'
     Parameters = @('-Name <VM>', '-WhatIf  (optional)')
-    Summary    = 'Each night: records hardware changes made in Hyper-V, looks after the disks, records what changed in the guest, backs up the databases, keeps the guest up to date, and acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry. With -WhatIf, Get-MaintenancePreview says what a run would do and nothing else runs. Returns None, Rearmed, Rebuilt or Built.'
-    CalledBy   = @{ Name = 'LazyVM-Maintain-<VM>'; Kind = 'task'; Notes = @('daily at MaintenanceTime', 'as SYSTEM') }
+    Summary    = 'Each night: records hardware changes made in Hyper-V, looks after the disks, records what changed in the guest, backs up the databases, keeps the guest up to date, and acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry. With -WhatIf, Get-MaintenancePreview says what a run would do and nothing else runs. A VM whose build is still in progress (a resume point is set, or the VM is not there yet) is skipped that night. Returns None, Rearmed or Rebuilt.'
+    CalledBy   = @{ Name = 'LazyVM-Maintain-<VM>'; Kind = 'task'; Notes = @('daily at MaintenanceTime', 'as SYSTEM, with -Root') }
     Covers     = @('Invoke-LazyVMMaintenance', 'Invoke-Maintenance', 'Invoke-DailyMaintenance')
     Omits      = @{
         'Get-MaintenancePreview' = 'runs only with -WhatIf, in place of everything else; the summary says so'
@@ -15,7 +15,7 @@
             Area     = 'Common'
             Note     = 'builds the VM context, opens the log and records any hardware change made in Hyper-V'
             Reads    = @(
-                @{ Label = 'settings, VM profile, guest user name'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKLM:\SOFTWARE\LazyVM  Root', 'Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json', '<VM>\Credentials\guest.cred') }
+                @{ Label = 'settings, VM profile, guest user name'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKCU:\SOFTWARE\LazyVM  Root', 'Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json', '<VM>\Credentials\guest.cred') }
                 @{ Label = 'hardware'; Kind = 'Hyper-V'; Store = 'VM <VM>'; Items = @('processors, memory, disk sizes, switch') }
             )
             Writes   = @(
@@ -33,15 +33,19 @@
         @{
             Function = 'Invoke-Maintenance'
             Area     = 'Maintenance'
-            Note     = 'steps 4-23 are its calls; no VM: returns Build and Invoke-Rebuild builds one instead'
-            Reads    = @(@{ Label = 'does the VM exist'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('Get-VM <VM>') })
+            Note     = 'steps 4-23 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
+            Includes = @('Test-BuildInProgress', 'Get-ResumePhase')
+            Reads    = @(
+                @{ Label = 'build in progress'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json') }
+                @{ Label = 'does the VM exist'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('Get-VM <VM>') }
+            )
         }
         @{
             Function = 'Open-GuestSession'
             Area     = 'Guest'
             Caller   = 'Invoke-Maintenance'
             Note     = 'starts the VM if it is off and waits for it, then opens the session'
-            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('Shared\Credentials\.lazyvm.key', '<VM>\Credentials\guest.cred') })
+            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') })
             Writes   = @(@{ Label = 'PowerShell Direct session'; Kind = 'Hyper-V'; Store = 'VM <VM>'; Items = @('running, reachable') })
         }
         @{

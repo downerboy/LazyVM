@@ -36,7 +36,7 @@ function Complete-ToolingFold {
         Write-LogEntry "$From was kept: $Into holds a different tooling list. Compare the two, keep the list you want in $Into, then delete $From." 'WARN'
         return $false
     }
-    Remove-Item -LiteralPath $From -Force
+    Remove-CheckedItem -Path $From
     Write-LogEntry "Folded $From into $Into, and deleted it" 'OK'
     return $true
 }

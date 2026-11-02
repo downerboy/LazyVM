@@ -420,23 +420,31 @@ function Sync-VMProfile {
 function Initialize-BuildTarget {
     <#
       Everything Build-LazyVM needs before it can start, set up on first use
-      so a single command is enough: the LazyVM folder, recorded once, and
+      so a single command is enough: the LazyVM folder, recorded once (or
+      -Root, which must be one already), and
       the VM's profile, from -ConfigTemplate when one is given. Says what it
       set up. A VM that already has a profile keeps it: its VM.json, not a
       config template, decides how it is built.
     #>
     param(
         [string]$Name,
-        [string]$ConfigTemplate
+        [string]$ConfigTemplate,
+        [string]$Root,
+        [string]$OwnerSid
     )
 
-    $root = Get-RegisteredRoot
+    Assert-NoLegacyInstallation
+    # A folder handed in, as the resume task does, is used as it is.
+    $root = if ($Root) { (Resolve-LazyVMRoot -Root $Root -OwnerSid $OwnerSid).Path } else { Get-RegisteredRoot }
     if (-not $root) {
         $root = Get-DefaultRoot
-        New-Folder -Path $root
+        Assert-RootFolderUsable -Path $root
+        Initialize-RootFolder -Path $root
         Set-RegisteredRoot -Path $root
         Write-Information "LazyVM keeps its VMs in $root. To use another folder, run Set-LazyVMRoot first." -InformationAction Continue
     }
+    # The resume task writes here as SYSTEM before its command run starts (PathSafety.ps1).
+    $script:RunRoot = $root
 
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $root)
 

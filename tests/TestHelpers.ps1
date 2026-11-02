@@ -39,5 +39,10 @@ $script:HyperVCommandStubs = [ordered]@{
     'Get-VMHardDiskDrive'      = { [CmdletBinding()] param([string[]]$VMName, $ControllerType, $ControllerNumber, $ControllerLocation) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Get-VMDvdDrive'           = { [CmdletBinding()] param([string[]]$VMName, $ControllerNumber, $ControllerLocation) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
     'Add-VMHardDiskDrive'      = { [CmdletBinding()] param([string[]]$VMName, $ControllerType, $ControllerNumber, $ControllerLocation, [string]$Path) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Move-VMStorage'           = { [CmdletBinding()] param([string]$VMName, [string]$VirtualMachinePath, [string]$SnapshotFilePath, [string]$SmartPagingFilePath, [hashtable[]]$Vhds) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Get-VHD'                  = { [CmdletBinding()] param([string[]]$Path) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Get-VMSnapshot'           = { [CmdletBinding()] param([string[]]$VMName) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
+    'Set-VMDvdDrive'           = { [CmdletBinding()] param([string[]]$VMName, $ControllerNumber, $ControllerLocation, [string]$Path) throw "$($MyInvocation.MyCommand.Name) is a test stub; mock it ($($PSBoundParameters.Keys -join ', '))." }
 }
 Add-MissingCommandStub -Stub $script:HyperVCommandStubs
+

@@ -33,7 +33,7 @@ Actors: Host user, Administrator (a Host user), Task Scheduler running as SYSTEM
 - Host user: Show LazyVM and its commands (`Show-LazyVM`, or just `LazyVM`), List VMs (`Get-LazyVM`), View settings (`Get-LazyVMSetting`), Create a VM profile (`New-LazyVM`), Save a VM as a config template (`Export-LazyVMTemplate`).
 - Administrator, also:
   - Look up: Check the license (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`), Check a VM end to end (`Test-LazyVM`).
-  - Set up: Choose the LazyVM folder (`Set-LazyVMRoot`), Store the guest account (`Set-LazyVMCredential`).
+  - Set up: Choose the LazyVM folder (`Set-LazyVMRoot`), Store the guest account (`Set-LazyVMCredential`), Move an install made for every user to your account (`Convert-LazyVMInstallation`).
   - Build and maintain: Build a VM (`Build-LazyVM`), Schedule daily maintenance (`Register-LazyVMMaintenance`), Run daily maintenance (`Invoke-LazyVMMaintenance`), Rebuild the VM (`Invoke-LazyVMRebuild`).
   - Tooling: View installed tooling (`Get-LazyVMTooling`), Record tooling changes (`Save-LazyVMTooling`), List tooling restore points (`Get-LazyVMRestorePoint`), Return to a tooling version (`Restore-LazyVMTooling`).
   - State: Capture state (`Save-LazyVMState`), Restore state (`Restore-LazyVMState`).
@@ -58,7 +58,7 @@ Build a VM includes:
 
 Build a VM is extended by:
 
-- **Choose the LazyVM folder automatically** when no folder is registered: LazyVM on the NTFS drive with the most free space.
+- **Choose the LazyVM folder automatically** when no folder is registered: `%USERPROFILE%\LazyVM`, open to the user and SYSTEM only.
 - **Create the VM profile** when there is none for `-Name`.
 
 ## 3. Run daily maintenance
@@ -85,7 +85,8 @@ It is extended by:
 - **Capture state** when the evaluation is within `RebuildThresholdDays` (10) of expiry, or the certificates or Visual Studio settings changed since the last capture.
 - **Rearm the evaluation** when rearms are left.
 - **Rebuild the VM** when no rearms are left or the rearm failed.
-- **Build a VM** when the VM does not exist.
+
+It does nothing that night while the VM's build is still in progress: a build waits to carry on after a host restart, or the VM is not there yet.
 
 Schedule daily maintenance (`Register-LazyVMMaintenance`) registers the task with Task Scheduler. Build a VM does this too.
 
@@ -150,7 +151,7 @@ Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Window
 - View the guest account (`Get-LazyVMCredential`).
 - Check the license (`Get-LazyVMLicense`) reads the license inside the guest. Extended by **Start the VM** when the VM is off.
 - Check a VM end to end (`Test-LazyVM`) checks the folder, the ISOs, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only: a VM that is off is not started.
-- Remove a VM (`Remove-LazyVM`) includes **List what will be deleted and kept**, then deletes the VM, its tasks, its registry key, its disks (Dev Drive and User disk included), checkpoints, state, profile and log. Anything another VM also uses is kept. It asks first unless `-Force`; `-WhatIf` only lists.
+- Remove a VM (`Remove-LazyVM`) includes **List what will be deleted and kept**, then deletes the VM, its tasks, its disks (Dev Drive and User disk included), checkpoints, state, profile and log. Anything another VM also uses is kept. It asks first unless `-Force`; `-WhatIf` only lists.
 
 ## 9. Install the module
 

@@ -6,15 +6,16 @@
     .DESCRIPTION
     Build-LazyVM -Name DevBox is all it takes. On first use it also:
 
-      - chooses the LazyVM folder, if none has been: <drive>:\LazyVM on the
-        local drive with the most free space (Set-LazyVMRoot chooses another)
+      - chooses the LazyVM folder, if none has been: %USERPROFILE%\LazyVM,
+        open to you and SYSTEM only (Set-LazyVMRoot chooses another)
       - creates the VM's profile, if it has none (New-LazyVM is optional),
         from -ConfigTemplate when given
       - finds the Windows ISO, including in your Downloads folder, and moves
         it into the LazyVM folder; with no ISO anywhere it opens the download
         page and stops, so you download it and run the same command again
       - creates the administrator account inside the VM
-      - schedules the daily maintenance, once every phase has run
+      - schedules the daily maintenance before the first phase, so it is in
+        place even if the host restarts
 
     The build runs these phases, skipping whatever is already done, so it is
     safe to run again after a failure:
@@ -54,6 +55,17 @@
     Start at this phase, skipping the earlier ones. Mostly for picking up
     after fixing a problem in a later phase.
 
+    .PARAMETER Root
+    The LazyVM folder, instead of the one recorded for you. LazyVM's
+    scheduled tasks pass it, since they run as SYSTEM, which cannot read
+    your registry. It must be a LazyVM folder locked to its owner and
+    SYSTEM (see Set-LazyVMRoot).
+
+    .PARAMETER OwnerSid
+    The security identifier of the user the LazyVM folder belongs to, with
+    -Root. LazyVM's scheduled tasks pass it; the folder must be locked to
+    that user and SYSTEM. The account running the command if left out.
+
     .PARAMETER NoUnattend
     Do not give the VM an answer file: Windows Setup has to be completed by
     hand in VMConnect, and Phase 7 waits for that.
@@ -84,7 +96,12 @@
         [ValidateScript({ Test-BuildPhaseNumber -Number $_ }, ErrorMessage = "There is no build phase {0}. Get-Help Build-LazyVM lists the phases.")]
         [int]$FromPhase = 0,
 
-        [switch]$NoUnattend
+        [switch]$NoUnattend,
+
+        [string]$Root,
+
+        [ValidatePattern('^S-1-\d+(-\d+)+$')]
+        [string]$OwnerSid
     )
 
     process {
@@ -93,24 +110,26 @@
         $setup = if ($NoUnattend) { ', with Windows Setup completed by hand' } else { '' }
         $vmProfile = if ($ConfigTemplate) { "profile (from the config template '$ConfigTemplate')" } else { 'profile' }
         if (-not $PSCmdlet.ShouldProcess($target, "Build from phase $FromPhase$setup, first setting up the LazyVM folder, $vmProfile and Windows ISO if they are missing")) { return }
-        Initialize-BuildTarget -Name $Name -ConfigTemplate $ConfigTemplate
-        Invoke-CommandRun -Title 'Build' -Name $Name -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+        Initialize-BuildTarget -Name $Name -ConfigTemplate $ConfigTemplate -Root $Root -OwnerSid $OwnerSid
+        Invoke-CommandRun -Title 'Build' -Name $Name -Root $Root -OwnerSid $OwnerSid -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
             Sync-VMProfile -VM $VM
-            $outcome = Invoke-VMBuild -VM $VM -FromPhase $FromPhase -NoUnattend:$NoUnattend
-            if ($outcome -eq [BuildOutcome]::RestartPending) {
-                Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
-                return
-            }
-
-            # The daily maintenance, so nothing has to be remembered. A problem
-            # here is reported but does not undo a good build.
+            # Run by its owner: the places outside the LazyVM folder its
+            # settings name are allowed for the scheduled tasks.
+            if (-not (Test-Unattended)) { Register-TrustedHostPath -Settings $VM.Settings }
+            # The daily maintenance first, so it is in place even if the host
+            # restarts part-way. A problem here is reported but does not stop the build.
             try {
                 Register-RebuildSchedule -VM $VM
             }
             catch {
                 Write-LogEntry "The daily maintenance could not be scheduled: $($_.Exception.Message)" 'WARN'
                 Write-LogEntry "  Schedule it with: Register-LazyVMMaintenance -Name $($VM.Name)" 'INFO'
+            }
+            $outcome = Invoke-VMBuild -VM $VM -FromPhase $FromPhase -NoUnattend:$NoUnattend
+            if ($outcome -eq [BuildOutcome]::RestartPending) {
+                Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
+                return
             }
 
             Write-LogEntry '' 'INFO'

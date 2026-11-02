@@ -79,7 +79,7 @@ function Get-LazyVMCredential {
         $configuration = Read-VMSetting -Root (Resolve-LazyVMRoot).Path -VMName $Name
 
         if ($RecoveryPassword) {
-            $table = Get-StoredSecretTable -KeyPath $configuration.Settings.CredKeyFile -Path $configuration.Settings.BitLockerCredFile
+            $table = Get-StoredSecretTable -Path $configuration.Settings.BitLockerCredFile
             if ($table.Count -eq 0) {
                 throw "No BitLocker recovery password is stored for '$($configuration.VMName)' yet. Build-LazyVM and the daily maintenance turn BitLocker on and store them."
             }
@@ -95,7 +95,7 @@ function Get-LazyVMCredential {
             } | Sort-Object -Property Disk, Recorded
         }
 
-        $credential = Get-StoredCredential -KeyPath $configuration.Settings.CredKeyFile -Path $configuration.Settings.GuestCredFile
+        $credential = Get-StoredCredential -Path $configuration.Settings.GuestCredFile
 
         if (-not $credential) {
             throw "No credential is stored for '$($configuration.VMName)' yet. Build-LazyVM creates one, or store one with: Set-LazyVMCredential -Name $($configuration.VMName)"

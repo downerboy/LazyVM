@@ -28,7 +28,7 @@ function Get-GuestCredential {
     <# The VM's stored guest credential, or $null when none is stored. Throws when it cannot be read. #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    return Get-StoredCredential -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.GuestCredFile
+    return Get-StoredCredential -Path $VM.Settings.GuestCredFile
 }
 
 function Assert-GuestCredential {
@@ -67,7 +67,7 @@ function Initialize-GuestCredential {
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $result = Get-OrNewStoredCredential -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.GuestCredFile -UserName $VM.Runtime.GuestAdminUser
+    $result = Get-OrNewStoredCredential -Path $VM.Settings.GuestCredFile -UserName $VM.Runtime.GuestAdminUser
     if ($result.Generated) {
         Write-LogEntry "Generated a guest administrator credential for '$($VM.Runtime.GuestAdminUser)'" 'OK'
         Write-LogEntry "  See it with: Get-LazyVMCredential -Name $($VM.Name) -AsPlainText" 'INFO'
@@ -90,7 +90,7 @@ function Set-StoredGuestCredential {
     $generated = (-not $Credential.Password -or $Credential.Password.Length -eq 0)
     $password = if ($generated) { New-RandomPassword } else { $Credential.Password }
 
-    Save-StoredCredential -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.GuestCredFile -UserName $userName -Password $password
+    Save-StoredCredential -Path $VM.Settings.GuestCredFile -UserName $userName -Password $password
     $VM.Runtime.GuestAdminUser = $userName
     Write-LogEntry "Guest credential stored for '$userName' at $($VM.Settings.GuestCredFile)" 'OK'
     if ($generated) {

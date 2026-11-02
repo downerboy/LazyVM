@@ -398,7 +398,7 @@
       "default": "{VM}\\Disks",
       "description": "Where the VM's Windows disk and answer-file disc are kept. Hyper-V keeps checkpoint disks (.avhdx) beside the disks they belong to. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "OSDiskSizeGB": {
       "type": "integer",
@@ -469,7 +469,7 @@
       "default": "Shared\\ISO\\Win11Ent_Eval.iso",
       "description": "The Windows 11 Enterprise evaluation ISO. If it is not found here, the ISO folder is searched for one. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "ISOMinSizeGB": {
       "type": "integer",
@@ -482,33 +482,21 @@
       "default": "Shared\\ISO",
       "description": "The folder searched for a Windows ISO when ISOPath does not exist. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
-    },
-    "ISODownloadPage": {
-      "type": "string",
-      "default": "https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise",
-      "description": "Where to download the Windows 11 Enterprise evaluation. Opened for you when no ISO is found.",
-      "format": "uri"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "SQLIsoPath": {
       "type": "string",
       "default": "Shared\\Installers\\SQLServer2025-x64-ENU-EntDev.iso",
-      "description": "The SQL Server installation ISO. Downloaded from SQLIsoUrl when missing. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
+      "description": "The SQL Server installation ISO. Downloaded from Microsoft when missing. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
-    },
-    "SQLIsoUrl": {
-      "type": "string",
-      "default": "https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso",
-      "description": "Where the SQL Server ISO is downloaded from: the SQL Server 2025 Enterprise Developer ISO, from which LazyVM installs the Standard Developer edition, free for development and test, so code cannot come to depend on Enterprise-only features.",
-      "format": "uri"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "SQLDiskPath": {
       "type": "string",
       "default": "{VM}\\Disks\\{VM}-SQL.vhdx",
       "description": "The SQL data disk. It is never deleted by a rebuild, so databases survive one. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "SQLDiskSizeGB": {
       "type": "integer",
@@ -557,7 +545,7 @@
       "default": "{VM}\\Disks\\{VM}-DevDrive.vhdx",
       "description": "The Dev Drive disk on the host. Keep it here, not inside the VM: a rebuild replaces the VM's own disks. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "DevDriveSizeGB": {
       "type": "integer",
@@ -607,7 +595,7 @@
       "default": "{VM}\\Disks\\{VM}-User.vhdx",
       "description": "The User disk: Documents, Desktop, Downloads, .ssh and source\\repos live on it, so a rebuild never touches them. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "UserDiskSizeGB": {
       "type": "integer",
@@ -640,27 +628,27 @@
       "default": "{VM}\\Checkpoints",
       "description": "Where Hyper-V checkpoints of the VM are kept. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "VSSettingsBackup": {
       "type": "string",
       "default": "{VM}\\Backups\\VisualStudio.vssettings",
       "description": "Where the Visual Studio settings export is kept between rebuilds. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "BackupDir": {
       "type": ["string", "null"],
       "default": null,
       "description": "Where the copy of the User disk goes, such as a folder on an external disk: a full path (like 'F:\\LazyVMBackup'). Empty keeps it in the VM's Backups folder. When the folder is not there, the copy is skipped with a warning.",
-      "pattern": "^([A-Za-z]:[\\\\/]|\\\\\\\\[^\\\\/]+[\\\\/]).+"
+      "pattern": "^(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))([A-Za-z]:[\\\\/]|\\\\\\\\[^\\\\/]+[\\\\/]).+"
     },
     "LogFile": {
       "type": "string",
       "default": "{VM}\\Logs\\{VM}.log",
       "description": "The VM's log file. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "LogMaxSizeMB": {
       "type": "integer",
@@ -669,19 +657,12 @@
       "minimum": 1,
       "maximum": 1024
     },
-    "CredStoreDir": {
-      "type": "string",
-      "default": "Shared\\Credentials",
-      "description": "Where the key that encrypts every VM's stored passwords is kept. The encrypted passwords themselves are in each VM's Credentials folder. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
-      "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
-    },
     "StateDir": {
       "type": "string",
       "default": "{VM}\\State",
       "description": "Where the guest's captured state (databases, settings, files) is kept for a rebuild. A path inside the LazyVM folder (like 'Shared\\ISO') or a full path on another drive (like 'E:\\VMs'). {VM} is replaced by the VM's name.",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
+      "pattern": "^(?:\\.[\\\\/])?(?!(.*[\\\\/])?\\.\\.?([\\\\/]|$))(?![A-Za-z]:(?![\\\\/])|[\\\\/](?![\\\\/])).+"
     },
     "GuestAdminUser": {
       "type": "string",

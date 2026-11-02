@@ -71,7 +71,6 @@ BeforeAll {
         return @{
             VMName            = 'Alpha'
             Root              = $Root
-            CredKeyFile       = "$Root\Shared\Credentials\.lazyvm.key"
             BitLockerCredFile = "$Root\Alpha\Credentials\bitlocker.cred"
             SQLDiskPath       = "$Root\Alpha\Disks\Alpha-SQL.vhdx"
             DevDrivePath      = "$Root\Alpha\Disks\Alpha-DevDrive.vhdx"
@@ -83,9 +82,8 @@ BeforeAll {
 
     function Use-MemorySecretStore {
         <#
-          The credential store, in memory: the real one needs a key file only
-          SYSTEM and Administrators can read. What a test stores lands in
-          $script:Secrets, keyed by file.
+          The credential store, in memory, so no test writes an encrypted
+          file. What a test stores lands in $script:Secrets, keyed by file.
         #>
         $script:Secrets = @{}
         Mock -ModuleName $module Get-StoredSecretTable { if ($script:Secrets.ContainsKey($Path)) { $script:Secrets[$Path].Clone() } else { @{} } }

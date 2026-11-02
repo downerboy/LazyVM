@@ -32,6 +32,63 @@ function Get-IsoCheck {
     return New-DiagnosticCheck -Name $Name -Area Host -Check $Check -Status $status -Detail "$Path $why"
 }
 
+function ConvertTo-AccountName {
+    <# The account name for a security identifier, or the identifier itself when it has no name. #>
+    param([Parameter(Mandatory)][string]$Sid)
+
+    try { return [System.Security.Principal.SecurityIdentifier]::new($Sid).Translate([System.Security.Principal.NTAccount]).Value }
+    catch { return $Sid }
+}
+
+function Get-RootAccessCheck {
+    <# Whether the LazyVM folder is open to the current user and SYSTEM only, as Initialize-RootFolder leaves it (#284). #>
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Root
+    )
+
+    try { $access = Get-RootAccess -Root $Root }
+    catch { return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status FAIL -Detail $_.Exception.Message }
+    $allowed = @((Get-CurrentUserSid).Value, 'S-1-5-18')
+    $others = @($access.Sids | Where-Object { $allowed -notcontains $_ } | ForEach-Object { ConvertTo-AccountName -Sid $_ })
+    $problems = @()
+    if (-not $access.Protected) { $problems += 'it inherits access from the folder above' }
+    if ($others.Count -gt 0) { $problems += "it is also open to $($others -join ', ')" }
+    if ($problems.Count -eq 0) {
+        return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status OK -Detail 'only you and SYSTEM'
+    }
+    return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status WARN -Detail "$($problems -join '; '). Lock it again with: Set-LazyVMRoot -Path $Root"
+}
+
+function Get-TrustedCodeCheck {
+    <# Whether only administrators, SYSTEM and TrustedInstaller can change the code the scheduled tasks run (#284). #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    try { Assert-TrustedCode }
+    catch {
+        return New-DiagnosticCheck -Name $Name -Area Host -Check 'Code the tasks run' -Status FAIL -Detail "$($_.Exception.Message) Install LazyVM with Install.ps1, as administrator."
+    }
+    return New-DiagnosticCheck -Name $Name -Area Host -Check 'Code the tasks run' -Status OK -Detail "only administrators can change it ($(Get-ModuleImportPath))"
+}
+
+function Get-CloudSyncCheck {
+    <#
+      Whether the LazyVM folder or the module LazyVM runs from is in
+      OneDrive (#284), where files can be online-only while the tasks run
+      and are copied to the cloud.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Root
+    )
+
+    $synced = @(@($Root, (Get-LazyVMModuleBase)) | Where-Object { Test-CloudSyncedPath -Path $_ })
+    if ($synced.Count -eq 0) {
+        return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status OK -Detail 'the LazyVM folder and the module are outside OneDrive'
+    }
+    return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status WARN -Detail "$($synced -join ' and ') in OneDrive: files there can be online-only while the tasks run, and are copied to the cloud. Install the module with Install.ps1, and move the LazyVM folder outside OneDrive."
+}
+
 function Get-LazyVMDiagnostic {
     <#
       The checks Test-LazyVM reports, in order. Reads only: a VM that is not
@@ -56,6 +113,9 @@ function Get-LazyVMDiagnostic {
     $vmName = $configuration.VMName
     $settings = $configuration.Settings
     New-DiagnosticCheck -Name $vmName -Area Host -Check 'LazyVM folder' -Status OK -Detail "$($root.Path) (from $($root.Source))"
+    Get-RootAccessCheck -Name $vmName -Root $root.Path
+    Get-CloudSyncCheck -Name $vmName -Root $root.Path
+    Get-TrustedCodeCheck -Name $vmName
     Get-IsoCheck -Name $vmName -Check 'Windows ISO' -Path $settings.ISOPath
     Get-IsoCheck -Name $vmName -Check 'SQL Server ISO' -Path $settings.SQLIsoPath -Downloadable
 
@@ -70,7 +130,7 @@ function Get-LazyVMDiagnostic {
 
     if ($machine -and "$($machine.State)" -eq 'Running') {
         try {
-            $credential = Get-StoredCredential -KeyPath $settings.CredKeyFile -Path $settings.GuestCredFile
+            $credential = Get-StoredCredential -Path $settings.GuestCredFile
             if (-not $credential) { throw "No credential is stored for '$vmName'. Store one with: Set-LazyVMCredential -Name $vmName" }
             $guest = Invoke-Command -VMName $vmName -Credential $credential -ErrorAction Stop -ArgumentList $script:GuestMarkerKey -ScriptBlock {
                 param($markerKey)

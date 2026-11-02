@@ -15,7 +15,7 @@
             Note     = 'every check in order; one that cannot be made is a FAIL and the rest still run'
             Includes = @('Resolve-LazyVMRoot', 'Read-VMSetting', 'Get-IsoCheck', 'Get-StoredCredential', 'New-DiagnosticCheck')
             Reads    = @(
-                @{ Label = 'folder and settings'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKLM:\SOFTWARE\LazyVM  Root', '<VM>\Config\VM.json') }
+                @{ Label = 'folder and settings'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKCU:\SOFTWARE\LazyVM  Root', '<VM>\Config\VM.json') }
                 @{ Label = 'media'; Kind = 'file'; Store = 'Shared\'; Items = @('ISO\Win11Ent_Eval.iso', 'Installers\SQLServer2025 ISO') }
                 @{ Label = 'VM and task'; Kind = 'Hyper-V'; Store = 'Hyper-V and Task Scheduler'; Items = @('VM <VM>', 'LazyVM-Maintain-<VM>') }
                 @{ Label = 'guest set-up, if running'; Kind = 'guest'; Store = 'Running guest'; Items = @('PowerShell Direct, disks', 'automatic sign-in on or off') }

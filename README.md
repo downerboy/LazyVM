@@ -33,12 +33,13 @@ Still needed: a code-signing certificate, and a good deal more.
 
 - Windows 10 or 11 Pro, Enterprise or Education on the host (Hyper-V is not available on Home).
 - [PowerShell 7.6 or later](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows), run as administrator: `winget install Microsoft.PowerShell`.
+- A Windows account that is an administrator on the host. A Windows Hello account with no password is fine: LazyVM's scheduled tasks run as SYSTEM.
 - A Windows 11 Enterprise Evaluation ISO, downloaded by hand from the [Microsoft Evaluation Center](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise). LazyVM opens that page for you if it can't find one.
 - Memory and disk for each VM. By default a VM starts with 8 GB of memory and can grow to 16 GB. Its disks are 120 GB for Windows, 100 GB for SQL data, 250 GB for the Dev Drive and 20 GB for the User disk, all dynamically expanding.
 
 ## Install
 
-Open **PowerShell 7** (`pwsh`, not Windows PowerShell) as administrator.
+LazyVM is installed for you: the module goes in `%ProgramFiles%\LazyVM\Modules`, which only administrators can change and only you can read, added to your `PSModulePath`. Its data folder is open to you and SYSTEM only, so other standard users cannot use LazyVM or read what it stores. Open **PowerShell 7** (`pwsh`, not Windows PowerShell) as administrator, signed in as the user who will use LazyVM.
 
 **From a release** (no Git needed): download `LazyVM-<version>.zip` from the [latest release](https://github.com/downerboy/LazyVM/releases), then, in the folder you saved it to:
 
@@ -56,9 +57,11 @@ cd S:\Source\LazyVM
 ./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out
 ```
 
-Or double-click `Install-FromRepository.cmd` in the repository folder: it asks for administrator rights and runs the same two commands.
+Or double-click `Install-FromRepository.cmd` in the repository folder: it runs the same two commands.
 
-This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, installs it for all users, which the scheduled maintenance needs because it runs as SYSTEM. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Open a new PowerShell 7 window afterwards.
+This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, installs it for you. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Open a new PowerShell 7 window as administrator afterwards.
+
+**Updating from LazyVM 5?** It was installed for every user. Once LazyVM 6 is installed, run `Convert-LazyVMInstallation` once, as administrator: it moves your VMs, passwords and scheduled tasks to your account, keeping the VMs running. See the [guide](docs/Guide.md#updating-from-lazyvm-5-installed-for-every-user).
 
 ## Quick start
 
@@ -68,7 +71,7 @@ Build-LazyVM -Name DevBox
 
 That is all. The first time, it:
 
-- chooses a folder for LazyVM (`LazyVM` on the local drive with the most free space) and says where; run `Set-LazyVMRoot` first to choose your own;
+- chooses a folder for LazyVM (`%USERPROFILE%\LazyVM`, open to you and SYSTEM only) and says where; run `Set-LazyVMRoot` first to choose your own;
 - creates the VM's profile;
 - finds the Windows ISO. Leave it in your Downloads folder and LazyVM moves it into place. If there is none it opens the download page and stops; run the command again once it has downloaded;
 - turns Hyper-V on if needed, restarting the host and carrying on by itself;
@@ -87,6 +90,7 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `LazyVM` (`Show-LazyVM`)                                    | The version, the LazyVM folder and its VMs, where the module is installed, and the command list.      |
 | `Set-LazyVMRoot`                                            | Chooses your own folder for LazyVM instead of the automatic one.                                       |
+| `Convert-LazyVMInstallation`                                | Once, after updating from LazyVM 5: moves an install made for every user to your account.             |
 | `New-LazyVM`                                                | Creates a VM's profile without building it. `-From` starts from another VM's settings and tools; `-ConfigTemplate` from a config template. |
 | `Build-LazyVM`                                              | Builds the VM, setting up whatever is missing first, and schedules its maintenance. Safe to run again. `-ConfigTemplate` picks a new VM's config template. |
 | `Export-LazyVMTemplate`                                     | Saves a VM's configuration as a config template that new VMs can start from.                          |

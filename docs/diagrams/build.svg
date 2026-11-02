@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 3289" width="1030" height="3289" role="img" aria-labelledby="t-build">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 3452" width="1030" height="3452" role="img" aria-labelledby="t-build">
 <title id="t-build">Build a VM: calls in order, with data flowing in from the left and out to the right</title>
 <style>
 svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
@@ -24,11 +24,11 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
 <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
 </defs>
-<rect class="bg" x="0" y="0" width="1030" height="3289"/>
+<rect class="bg" x="0" y="0" width="1030" height="3452"/>
 <text class="cap" x="20" y="16">INPUTS</text>
 <text class="cap" x="335" y="16">CALLS IN ORDER</text>
 <text class="cap" x="740" y="16">OUTPUTS</text>
-<path class="cl" d="M335,76 L305,76 L305,3178"/>
+<path class="cl" d="M335,76 L305,76 L305,3358"/>
 <path class="cl" d="M305,200 L335,200" marker-end="url(#ac)"/>
 <path class="df" d="M275,222 L335,222" marker-end="url(#ad)"/>
 <path class="df" d="M275,318 L335,318" marker-end="url(#ad)"/>
@@ -42,47 +42,48 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <path class="df" d="M275,672 L335,672" marker-end="url(#ad)"/>
 <path class="df" d="M640,672 L740,672" marker-end="url(#ad)"/>
 <path class="cl" d="M305,762 L335,762" marker-end="url(#ac)"/>
-<path class="cl" d="M305,874 L335,874" marker-end="url(#ac)"/>
-<path class="df" d="M275,896 L335,896" marker-end="url(#ad)"/>
-<path class="cl" d="M305,986 L335,986" marker-end="url(#ac)"/>
-<path class="cl" d="M305,1132 L335,1132" marker-end="url(#ac)"/>
-<path class="df" d="M275,1154 L335,1154" marker-end="url(#ad)"/>
-<path class="df" d="M640,1154 L740,1154" marker-end="url(#ad)"/>
+<path class="df" d="M640,784 L740,784" marker-end="url(#ad)"/>
+<path class="cl" d="M305,908 L335,908" marker-end="url(#ac)"/>
+<path class="df" d="M640,938.5 L740,938.5" marker-end="url(#ad)"/>
+<path class="cl" d="M305,1054 L335,1054" marker-end="url(#ac)"/>
+<path class="cl" d="M305,1166 L335,1166" marker-end="url(#ac)"/>
+<path class="df" d="M275,1188 L335,1188" marker-end="url(#ad)"/>
 <path class="cl" d="M305,1278 L335,1278" marker-end="url(#ac)"/>
-<path class="df" d="M275,1300 L335,1300" marker-end="url(#ad)"/>
 <path class="cl" d="M305,1424 L335,1424" marker-end="url(#ac)"/>
+<path class="df" d="M275,1446 L335,1446" marker-end="url(#ad)"/>
 <path class="df" d="M640,1446 L740,1446" marker-end="url(#ad)"/>
-<path class="df" d="M640,1542 L740,1542" marker-end="url(#ad)"/>
-<path class="cl" d="M305,1632 L335,1632" marker-end="url(#ac)"/>
-<path class="df" d="M640,1671 L740,1671" marker-end="url(#ad)"/>
-<path class="cl" d="M305,1778 L335,1778" marker-end="url(#ac)"/>
-<path class="df" d="M275,1800 L335,1800" marker-end="url(#ad)"/>
-<path class="df" d="M640,1800 L740,1800" marker-end="url(#ad)"/>
-<path class="cl" d="M305,1907 L335,1907" marker-end="url(#ac)"/>
-<path class="df" d="M640,1937.5 L740,1937.5" marker-end="url(#ad)"/>
+<path class="cl" d="M305,1570 L335,1570" marker-end="url(#ac)"/>
+<path class="df" d="M275,1592 L335,1592" marker-end="url(#ad)"/>
+<path class="cl" d="M305,1716 L335,1716" marker-end="url(#ac)"/>
+<path class="df" d="M640,1738 L740,1738" marker-end="url(#ad)"/>
+<path class="df" d="M640,1834 L740,1834" marker-end="url(#ad)"/>
+<path class="cl" d="M305,1924 L335,1924" marker-end="url(#ac)"/>
+<path class="df" d="M640,1963 L740,1963" marker-end="url(#ad)"/>
 <path class="cl" d="M305,2070 L335,2070" marker-end="url(#ac)"/>
 <path class="df" d="M275,2092 L335,2092" marker-end="url(#ad)"/>
 <path class="df" d="M640,2092 L740,2092" marker-end="url(#ad)"/>
-<path class="cl" d="M305,2216 L335,2216" marker-end="url(#ac)"/>
-<path class="df" d="M640,2238 L740,2238" marker-end="url(#ad)"/>
-<path class="cl" d="M305,2345 L335,2345" marker-end="url(#ac)"/>
-<path class="df" d="M275,2367 L335,2367" marker-end="url(#ad)"/>
-<path class="df" d="M640,2367 L740,2367" marker-end="url(#ad)"/>
-<path class="df" d="M640,2463 L740,2463" marker-end="url(#ad)"/>
-<path class="cl" d="M305,2553 L335,2553" marker-end="url(#ac)"/>
-<path class="df" d="M275,2575 L335,2575" marker-end="url(#ad)"/>
-<path class="df" d="M275,2671 L335,2671" marker-end="url(#ad)"/>
-<path class="df" d="M275,2767 L335,2767" marker-end="url(#ad)"/>
-<path class="df" d="M640,2609 L740,2609" marker-end="url(#ad)"/>
-<path class="df" d="M640,2739 L740,2739" marker-end="url(#ad)"/>
-<path class="cl" d="M305,2886 L335,2886" marker-end="url(#ac)"/>
-<path class="df" d="M275,2908 L335,2908" marker-end="url(#ad)"/>
-<path class="df" d="M640,2916.5 L740,2916.5" marker-end="url(#ad)"/>
-<path class="cl" d="M305,3066 L335,3066" marker-end="url(#ac)"/>
-<path class="df" d="M640,3088 L740,3088" marker-end="url(#ad)"/>
+<path class="cl" d="M305,2199 L335,2199" marker-end="url(#ac)"/>
+<path class="df" d="M640,2229.5 L740,2229.5" marker-end="url(#ad)"/>
+<path class="cl" d="M305,2362 L335,2362" marker-end="url(#ac)"/>
+<path class="df" d="M275,2384 L335,2384" marker-end="url(#ad)"/>
+<path class="df" d="M640,2384 L740,2384" marker-end="url(#ad)"/>
+<path class="cl" d="M305,2508 L335,2508" marker-end="url(#ac)"/>
+<path class="df" d="M640,2530 L740,2530" marker-end="url(#ad)"/>
+<path class="cl" d="M305,2637 L335,2637" marker-end="url(#ac)"/>
+<path class="df" d="M275,2659 L335,2659" marker-end="url(#ad)"/>
+<path class="df" d="M640,2659 L740,2659" marker-end="url(#ad)"/>
+<path class="df" d="M640,2755 L740,2755" marker-end="url(#ad)"/>
+<path class="cl" d="M305,2845 L335,2845" marker-end="url(#ac)"/>
+<path class="df" d="M275,2867 L335,2867" marker-end="url(#ad)"/>
+<path class="df" d="M275,2963 L335,2963" marker-end="url(#ad)"/>
+<path class="df" d="M275,3059 L335,3059" marker-end="url(#ad)"/>
+<path class="df" d="M640,2901 L740,2901" marker-end="url(#ad)"/>
+<path class="df" d="M640,3031 L740,3031" marker-end="url(#ad)"/>
 <path class="cl" d="M305,3178 L335,3178" marker-end="url(#ac)"/>
 <path class="df" d="M275,3200 L335,3200" marker-end="url(#ad)"/>
 <path class="df" d="M640,3208.5 L740,3208.5" marker-end="url(#ad)"/>
+<path class="cl" d="M305,3358 L335,3358" marker-end="url(#ac)"/>
+<path class="df" d="M640,3380 L740,3380" marker-end="url(#ad)"/>
 <g class="bd"><circle cx="293" cy="222" r="10"/><text x="293" y="225.5" text-anchor="middle">D1</text></g>
 <g class="bd"><circle cx="293" cy="318" r="10"/><text x="293" y="321.5" text-anchor="middle">D2</text></g>
 <g class="bd"><circle cx="293" cy="414" r="10"/><text x="293" y="417.5" text-anchor="middle">D3</text></g>
@@ -92,32 +93,32 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <g class="bd"><circle cx="690" cy="526" r="10"/><text x="690" y="529.5" text-anchor="middle">D7</text></g>
 <g class="bd"><circle cx="293" cy="672" r="10"/><text x="293" y="675.5" text-anchor="middle">D8</text></g>
 <g class="bd"><circle cx="690" cy="672" r="10"/><text x="690" y="675.5" text-anchor="middle">D9</text></g>
-<g class="bd"><circle cx="293" cy="896" r="10"/><text x="293" y="899.5" text-anchor="middle">D10</text></g>
-<g class="bd"><circle cx="293" cy="1154" r="10"/><text x="293" y="1157.5" text-anchor="middle">D11</text></g>
-<g class="bd"><circle cx="690" cy="1154" r="10"/><text x="690" y="1157.5" text-anchor="middle">D12</text></g>
-<g class="bd"><circle cx="293" cy="1300" r="10"/><text x="293" y="1303.5" text-anchor="middle">D13</text></g>
+<g class="bd"><circle cx="690" cy="784" r="10"/><text x="690" y="787.5" text-anchor="middle">D10</text></g>
+<g class="bd"><circle cx="690" cy="938.5" r="10"/><text x="690" y="942" text-anchor="middle">D11</text></g>
+<g class="bd"><circle cx="293" cy="1188" r="10"/><text x="293" y="1191.5" text-anchor="middle">D12</text></g>
+<g class="bd"><circle cx="293" cy="1446" r="10"/><text x="293" y="1449.5" text-anchor="middle">D13</text></g>
 <g class="bd"><circle cx="690" cy="1446" r="10"/><text x="690" y="1449.5" text-anchor="middle">D14</text></g>
-<g class="bd"><circle cx="690" cy="1542" r="10"/><text x="690" y="1545.5" text-anchor="middle">D15</text></g>
-<g class="bd"><circle cx="690" cy="1671" r="10"/><text x="690" y="1674.5" text-anchor="middle">D16</text></g>
-<g class="bd"><circle cx="293" cy="1800" r="10"/><text x="293" y="1803.5" text-anchor="middle">D17</text></g>
-<g class="bd"><circle cx="690" cy="1800" r="10"/><text x="690" y="1803.5" text-anchor="middle">D18</text></g>
-<g class="bd"><circle cx="690" cy="1937.5" r="10"/><text x="690" y="1941" text-anchor="middle">D19</text></g>
-<g class="bd"><circle cx="293" cy="2092" r="10"/><text x="293" y="2095.5" text-anchor="middle">D20</text></g>
-<g class="bd"><circle cx="690" cy="2092" r="10"/><text x="690" y="2095.5" text-anchor="middle">D21</text></g>
-<g class="bd"><circle cx="690" cy="2238" r="10"/><text x="690" y="2241.5" text-anchor="middle">D22</text></g>
-<g class="bd"><circle cx="293" cy="2367" r="10"/><text x="293" y="2370.5" text-anchor="middle">D23</text></g>
-<g class="bd"><circle cx="690" cy="2367" r="10"/><text x="690" y="2370.5" text-anchor="middle">D24</text></g>
-<g class="bd"><circle cx="690" cy="2463" r="10"/><text x="690" y="2466.5" text-anchor="middle">D25</text></g>
-<g class="bd"><circle cx="293" cy="2575" r="10"/><text x="293" y="2578.5" text-anchor="middle">D26</text></g>
-<g class="bd"><circle cx="293" cy="2671" r="10"/><text x="293" y="2674.5" text-anchor="middle">D27</text></g>
-<g class="bd"><circle cx="293" cy="2767" r="10"/><text x="293" y="2770.5" text-anchor="middle">D28</text></g>
-<g class="bd"><circle cx="690" cy="2609" r="10"/><text x="690" y="2612.5" text-anchor="middle">D29</text></g>
-<g class="bd"><circle cx="690" cy="2739" r="10"/><text x="690" y="2742.5" text-anchor="middle">D30</text></g>
-<g class="bd"><circle cx="293" cy="2908" r="10"/><text x="293" y="2911.5" text-anchor="middle">D31</text></g>
-<g class="bd"><circle cx="690" cy="2916.5" r="10"/><text x="690" y="2920" text-anchor="middle">D32</text></g>
-<g class="bd"><circle cx="690" cy="3088" r="10"/><text x="690" y="3091.5" text-anchor="middle">D33</text></g>
-<g class="bd"><circle cx="293" cy="3200" r="10"/><text x="293" y="3203.5" text-anchor="middle">D34</text></g>
-<g class="bd"><circle cx="690" cy="3208.5" r="10"/><text x="690" y="3212" text-anchor="middle">D35</text></g>
+<g class="bd"><circle cx="293" cy="1592" r="10"/><text x="293" y="1595.5" text-anchor="middle">D15</text></g>
+<g class="bd"><circle cx="690" cy="1738" r="10"/><text x="690" y="1741.5" text-anchor="middle">D16</text></g>
+<g class="bd"><circle cx="690" cy="1834" r="10"/><text x="690" y="1837.5" text-anchor="middle">D17</text></g>
+<g class="bd"><circle cx="690" cy="1963" r="10"/><text x="690" y="1966.5" text-anchor="middle">D18</text></g>
+<g class="bd"><circle cx="293" cy="2092" r="10"/><text x="293" y="2095.5" text-anchor="middle">D19</text></g>
+<g class="bd"><circle cx="690" cy="2092" r="10"/><text x="690" y="2095.5" text-anchor="middle">D20</text></g>
+<g class="bd"><circle cx="690" cy="2229.5" r="10"/><text x="690" y="2233" text-anchor="middle">D21</text></g>
+<g class="bd"><circle cx="293" cy="2384" r="10"/><text x="293" y="2387.5" text-anchor="middle">D22</text></g>
+<g class="bd"><circle cx="690" cy="2384" r="10"/><text x="690" y="2387.5" text-anchor="middle">D23</text></g>
+<g class="bd"><circle cx="690" cy="2530" r="10"/><text x="690" y="2533.5" text-anchor="middle">D24</text></g>
+<g class="bd"><circle cx="293" cy="2659" r="10"/><text x="293" y="2662.5" text-anchor="middle">D25</text></g>
+<g class="bd"><circle cx="690" cy="2659" r="10"/><text x="690" y="2662.5" text-anchor="middle">D26</text></g>
+<g class="bd"><circle cx="690" cy="2755" r="10"/><text x="690" y="2758.5" text-anchor="middle">D27</text></g>
+<g class="bd"><circle cx="293" cy="2867" r="10"/><text x="293" y="2870.5" text-anchor="middle">D28</text></g>
+<g class="bd"><circle cx="293" cy="2963" r="10"/><text x="293" y="2966.5" text-anchor="middle">D29</text></g>
+<g class="bd"><circle cx="293" cy="3059" r="10"/><text x="293" y="3062.5" text-anchor="middle">D30</text></g>
+<g class="bd"><circle cx="690" cy="2901" r="10"/><text x="690" y="2904.5" text-anchor="middle">D31</text></g>
+<g class="bd"><circle cx="690" cy="3031" r="10"/><text x="690" y="3034.5" text-anchor="middle">D32</text></g>
+<g class="bd"><circle cx="293" cy="3200" r="10"/><text x="293" y="3203.5" text-anchor="middle">D33</text></g>
+<g class="bd"><circle cx="690" cy="3208.5" r="10"/><text x="690" y="3212" text-anchor="middle">D34</text></g>
+<g class="bd"><circle cx="690" cy="3380" r="10"/><text x="690" y="3383.5" text-anchor="middle">D35</text></g>
 <g class="bx-cmd"><rect x="335" y="34" width="305" height="118" rx="3"/>
 <text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
 <text class="nm" x="487.5" y="64" text-anchor="middle">Build-LazyVM</text>
@@ -132,21 +133,23 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="500.5" y="210" text-anchor="middle">Initialize-BuildTarget()</text>
 <line class="div" x1="335" y1="217" x2="640" y2="217"/>
 <g class="sn"><circle cx="351" cy="201" r="10"/><text x="351" y="205" text-anchor="middle">1</text></g>
-<text class="at" x="345" y="232">first run: picks the root and creates</text>
-<text class="at" x="345" y="249">the profile, from -ConfigTemplate when</text>
-<text class="at" x="345" y="266">given</text>
+<text class="at" x="345" y="232">stops while a machine-wide install is</text>
+<text class="at" x="345" y="249">still there; first run: creates</text>
+<text class="at" x="345" y="266">%USERPROFILE%\LazyVM, open to you and</text>
+<text class="at" x="345" y="283">SYSTEM only, and the profile, from</text>
+<text class="at" x="345" y="300">-ConfigTemplate when given</text>
 </g>
 <g class="bx-store"><rect x="20" y="180" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="194" text-anchor="middle">«registry»</text>
-<text class="nm" x="147.5" y="210" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<text class="nm" x="147.5" y="210" text-anchor="middle">HKCU:\SOFTWARE\LazyVM</text>
 <line class="div" x1="20" y1="217" x2="275" y2="217"/>
 <text class="at" x="30" y="232">Root, if already set</text>
 </g>
 <g class="bx-store"><rect x="20" y="276" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="290" text-anchor="middle">«host»</text>
-<text class="nm" x="147.5" y="306" text-anchor="middle">Fixed drives</text>
+<text class="st" x="147.5" y="290" text-anchor="middle">«registry»</text>
+<text class="nm" x="147.5" y="306" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
 <line class="div" x1="20" y1="313" x2="275" y2="313"/>
-<text class="at" x="30" y="328">NTFS, free space</text>
+<text class="at" x="30" y="328">Root, if still there</text>
 </g>
 <g class="bx-store"><rect x="20" y="372" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="386" text-anchor="middle">«file»</text>
@@ -157,9 +160,9 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="740" y="180" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="194" text-anchor="middle">«registry»</text>
-<text class="nm" x="875" y="210" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<text class="nm" x="875" y="210" text-anchor="middle">HKCU:\SOFTWARE\LazyVM</text>
 <line class="div" x1="740" y1="217" x2="1010" y2="217"/>
-<text class="at" x="750" y="232">Root = X:\LazyVM</text>
+<text class="at" x="750" y="232">Root = %USERPROFILE%\LazyVM</text>
 </g>
 <g class="bx-store"><rect x="740" y="276" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="290" text-anchor="middle">«file»</text>
@@ -179,7 +182,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="147.5" y="498" text-anchor="middle">«settings»</text>
 <text class="nm" x="147.5" y="514" text-anchor="middle">VM context sources</text>
 <line class="div" x1="20" y1="521" x2="275" y2="521"/>
-<text class="at" x="30" y="536">HKLM:\SOFTWARE\LazyVM Root</text>
+<text class="at" x="30" y="536">HKCU:\SOFTWARE\LazyVM Root</text>
 <text class="at" x="30" y="553">Shared\Config\LazyVM.Settings.json</text>
 <text class="at" x="30" y="570">&lt;VM&gt;\Config\VM.json</text>
 <text class="at" x="30" y="587">&lt;VM&gt;\Credentials\guest.cred</text>
@@ -211,347 +214,357 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="750" y="682">VM.json</text>
 <text class="at" x="750" y="699">VM.Template.json (first time only)</text>
 </g>
-<g class="bx-mod"><rect x="335" y="742" width="305" height="84" rx="3"/>
-<text class="st" x="500.5" y="756" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="772" text-anchor="middle">Invoke-VMBuild()</text>
+<g class="bx-mod"><rect x="335" y="742" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="756" text-anchor="middle">«Settings»</text>
+<text class="nm" x="500.5" y="772" text-anchor="middle">Register-TrustedHostPath()</text>
 <line class="div" x1="335" y1="779" x2="640" y2="779"/>
 <g class="sn"><circle cx="351" cy="763" r="10"/><text x="351" y="767" text-anchor="middle">4</text></g>
-<text class="at" x="345" y="794">runs the phases from -FromPhase or the</text>
-<text class="at" x="345" y="811">resume point, whichever is later</text>
+<text class="at" x="345" y="794">run by you, not a task</text>
+<text class="at" x="345" y="811">(Test-Unattended): allows the places</text>
+<text class="at" x="345" y="828">outside the LazyVM folder the settings</text>
+<text class="at" x="345" y="845">name, such as BackupDir</text>
 </g>
-<g class="bx-mod"><rect x="335" y="854" width="305" height="84" rx="3"/>
-<text class="st" x="500.5" y="868" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="884" text-anchor="middle">Get-ResumePhase()</text>
-<line class="div" x1="335" y1="891" x2="640" y2="891"/>
-<g class="sn"><circle cx="351" cy="875" r="10"/><text x="351" y="879" text-anchor="middle">5</text></g>
-<text class="at" x="345" y="906">called by Invoke-VMBuild</text>
-<text class="at" x="345" y="923">picks up after a host restart</text>
+<g class="bx-store"><rect x="740" y="742" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="756" text-anchor="middle">«registry»</text>
+<text class="nm" x="875" y="772" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<line class="div" x1="740" y1="779" x2="1010" y2="779"/>
+<text class="at" x="750" y="794">&lt;your SID&gt;\HostPaths</text>
 </g>
-<g class="bx-store"><rect x="20" y="854" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="868" text-anchor="middle">«registry»</text>
-<text class="nm" x="147.5" y="884" text-anchor="middle">HKLM:\SOFTWARE\LazyVM\&lt;VM&gt;</text>
-<line class="div" x1="20" y1="891" x2="275" y2="891"/>
-<text class="at" x="30" y="906">ResumePhase</text>
+<g class="bx-mod"><rect x="335" y="888" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="902" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="500.5" y="918" text-anchor="middle">Register-RebuildSchedule()</text>
+<line class="div" x1="335" y1="925" x2="640" y2="925"/>
+<g class="sn"><circle cx="351" cy="909" r="10"/><text x="351" y="913" text-anchor="middle">5</text></g>
+<text class="at" x="345" y="940">before the phases, so the schedule is in</text>
+<text class="at" x="345" y="957">place even if the host restarts; a</text>
+<text class="at" x="345" y="974">failure here is logged and the build</text>
+<text class="at" x="345" y="991">goes on</text>
 </g>
-<g class="bx-mod"><rect x="335" y="966" width="305" height="118" rx="3"/>
-<text class="st" x="500.5" y="980" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="996" text-anchor="middle">Invoke-BuildPhase()</text>
-<line class="div" x1="335" y1="1003" x2="640" y2="1003"/>
-<g class="sn"><circle cx="351" cy="987" r="10"/><text x="351" y="991" text-anchor="middle">6</text></g>
-<text class="at" x="345" y="1018">called by Invoke-VMBuild</text>
-<text class="at" x="345" y="1035">runs each phase of Get-BuildPhase in</text>
-<text class="at" x="345" y="1052">order (steps 7-18); when a phase throws,</text>
-<text class="at" x="345" y="1069">deletes the answer-file disc first</text>
+<g class="bx-store"><rect x="740" y="888" width="270" height="101" rx="3"/>
+<text class="st" x="875" y="902" text-anchor="middle">«task»</text>
+<text class="nm" x="875" y="918" text-anchor="middle">Task Scheduler</text>
+<line class="div" x1="740" y1="925" x2="1010" y2="925"/>
+<text class="at" x="750" y="940">LazyVM-Maintain-&lt;VM&gt;</text>
+<text class="at" x="750" y="957">daily at MaintenanceTime</text>
+<text class="at" x="750" y="974">as SYSTEM, with -Root, -OwnerSid</text>
 </g>
-<g class="bx-mod"><rect x="335" y="1112" width="305" height="118" rx="3"/>
-<text class="st" x="500.5" y="1126" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="1142" text-anchor="middle">Initialize-InstallationIso()</text>
-<line class="div" x1="335" y1="1149" x2="640" y2="1149"/>
-<g class="sn"><circle cx="351" cy="1133" r="10"/><text x="351" y="1137" text-anchor="middle">7</text></g>
-<text class="at" x="345" y="1164">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="1181">the Windows ISO, before anything</text>
-<text class="at" x="345" y="1198">changes; opens the download page and</text>
-<text class="at" x="345" y="1215">stops if there is none</text>
+<g class="bx-mod"><rect x="335" y="1034" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="1048" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="1064" text-anchor="middle">Invoke-VMBuild()</text>
+<line class="div" x1="335" y1="1071" x2="640" y2="1071"/>
+<g class="sn"><circle cx="351" cy="1055" r="10"/><text x="351" y="1059" text-anchor="middle">6</text></g>
+<text class="at" x="345" y="1086">runs the phases from -FromPhase or the</text>
+<text class="at" x="345" y="1103">resume point, whichever is later</text>
 </g>
-<g class="bx-store"><rect x="20" y="1112" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="1126" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="1142" text-anchor="middle">Shared\ISO\  or  Downloads\</text>
-<line class="div" x1="20" y1="1149" x2="275" y2="1149"/>
-<text class="at" x="30" y="1164">Windows 11 Enterprise</text>
-<text class="at" x="30" y="1181">Evaluation ISO</text>
+<g class="bx-mod"><rect x="335" y="1146" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="1160" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="1176" text-anchor="middle">Get-ResumePhase()</text>
+<line class="div" x1="335" y1="1183" x2="640" y2="1183"/>
+<g class="sn"><circle cx="351" cy="1167" r="10"/><text x="351" y="1171" text-anchor="middle">7</text></g>
+<text class="at" x="345" y="1198">called by Invoke-VMBuild</text>
+<text class="at" x="345" y="1215">picks up after a host restart</text>
 </g>
-<g class="bx-store"><rect x="740" y="1112" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="1126" text-anchor="middle">«file»</text>
-<text class="nm" x="875" y="1142" text-anchor="middle">Shared\ISO\</text>
-<line class="div" x1="740" y1="1149" x2="1010" y2="1149"/>
-<text class="at" x="750" y="1164">Win11Ent_Eval.iso</text>
-<text class="at" x="750" y="1181">(moved from Downloads)</text>
+<g class="bx-store"><rect x="20" y="1146" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="1160" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="1176" text-anchor="middle">&lt;VM&gt;\Config\</text>
+<line class="div" x1="20" y1="1183" x2="275" y2="1183"/>
+<text class="at" x="30" y="1198">Resume.json</text>
 </g>
 <g class="bx-mod"><rect x="335" y="1258" width="305" height="118" rx="3"/>
 <text class="st" x="500.5" y="1272" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="1288" text-anchor="middle">Repair-HyperVService()</text>
+<text class="nm" x="500.5" y="1288" text-anchor="middle">Invoke-BuildPhase()</text>
 <line class="div" x1="335" y1="1295" x2="640" y2="1295"/>
 <g class="sn"><circle cx="351" cy="1279" r="10"/><text x="351" y="1283" text-anchor="middle">8</text></g>
-<text class="at" x="345" y="1310">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="1327">and Test-HostReadiness()</text>
-<text class="at" x="345" y="1344">phases 0 and 1: the Hyper-V services,</text>
-<text class="at" x="345" y="1361">then CPU, SLAT, memory and free space</text>
+<text class="at" x="345" y="1310">called by Invoke-VMBuild</text>
+<text class="at" x="345" y="1327">runs each phase of Get-BuildPhase in</text>
+<text class="at" x="345" y="1344">order (steps 7-18); when a phase throws,</text>
+<text class="at" x="345" y="1361">deletes the answer-file disc first</text>
 </g>
-<g class="bx-store"><rect x="20" y="1258" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="1272" text-anchor="middle">«host»</text>
-<text class="nm" x="147.5" y="1288" text-anchor="middle">This PC</text>
-<line class="div" x1="20" y1="1295" x2="275" y2="1295"/>
-<text class="at" x="30" y="1310">vmms, vmcompute, CPU, SLAT</text>
-<text class="at" x="30" y="1327">RAM, free space</text>
-</g>
-<g class="bx-mod"><rect x="335" y="1404" width="305" height="180" rx="3"/>
+<g class="bx-mod"><rect x="335" y="1404" width="305" height="118" rx="3"/>
 <text class="st" x="500.5" y="1418" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="1434" text-anchor="middle">Enable-HyperVFeature()</text>
+<text class="nm" x="500.5" y="1434" text-anchor="middle">Initialize-InstallationIso()</text>
 <line class="div" x1="335" y1="1441" x2="640" y2="1441"/>
 <g class="sn"><circle cx="351" cy="1425" r="10"/><text x="351" y="1429" text-anchor="middle">9</text></g>
 <text class="at" x="345" y="1456">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="1473">phase 2; returns RestartPending when the</text>
-<text class="at" x="345" y="1490">host must restart</text>
+<text class="at" x="345" y="1473">the Windows ISO, before anything</text>
+<text class="at" x="345" y="1490">changes; opens the download page and</text>
+<text class="at" x="345" y="1507">stops if there is none</text>
+</g>
+<g class="bx-store"><rect x="20" y="1404" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="1418" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="1434" text-anchor="middle">Shared\ISO\  or  Downloads\</text>
+<line class="div" x1="20" y1="1441" x2="275" y2="1441"/>
+<text class="at" x="30" y="1456">Windows 11 Enterprise</text>
+<text class="at" x="30" y="1473">Evaluation ISO</text>
 </g>
 <g class="bx-store"><rect x="740" y="1404" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="1418" text-anchor="middle">«task»</text>
-<text class="nm" x="875" y="1434" text-anchor="middle">Task Scheduler</text>
+<text class="st" x="875" y="1418" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="1434" text-anchor="middle">Shared\ISO\</text>
 <line class="div" x1="740" y1="1441" x2="1010" y2="1441"/>
-<text class="at" x="750" y="1456">LazyVM-ResumeAfterReboot-&lt;VM&gt;</text>
+<text class="at" x="750" y="1456">Win11Ent_Eval.iso</text>
+<text class="at" x="750" y="1473">(moved from Downloads)</text>
 </g>
-<g class="bx-store"><rect x="740" y="1500" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="1514" text-anchor="middle">«registry»</text>
-<text class="nm" x="875" y="1530" text-anchor="middle">HKLM:\SOFTWARE\LazyVM\&lt;VM&gt;</text>
-<line class="div" x1="740" y1="1537" x2="1010" y2="1537"/>
-<text class="at" x="750" y="1552">ResumePhase = 3</text>
+<g class="bx-mod"><rect x="335" y="1550" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="1564" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="1580" text-anchor="middle">Repair-HyperVService()</text>
+<line class="div" x1="335" y1="1587" x2="640" y2="1587"/>
+<g class="sn"><circle cx="351" cy="1571" r="10"/><text x="351" y="1575" text-anchor="middle">10</text></g>
+<text class="at" x="345" y="1602">called by Invoke-BuildPhase</text>
+<text class="at" x="345" y="1619">and Test-HostReadiness()</text>
+<text class="at" x="345" y="1636">phases 0 and 1: the Hyper-V services,</text>
+<text class="at" x="345" y="1653">then CPU, SLAT, memory and free space</text>
 </g>
-<g class="bx-mod"><rect x="335" y="1612" width="305" height="118" rx="3"/>
-<text class="st" x="500.5" y="1626" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="1642" text-anchor="middle">Initialize-HostFolder()</text>
-<line class="div" x1="335" y1="1649" x2="640" y2="1649"/>
-<g class="sn"><circle cx="351" cy="1633" r="10"/><text x="351" y="1637" text-anchor="middle">10</text></g>
-<text class="at" x="345" y="1664">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="1681">phase 3</text>
+<g class="bx-store"><rect x="20" y="1550" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="1564" text-anchor="middle">«host»</text>
+<text class="nm" x="147.5" y="1580" text-anchor="middle">This PC</text>
+<line class="div" x1="20" y1="1587" x2="275" y2="1587"/>
+<text class="at" x="30" y="1602">vmms, vmcompute, CPU, SLAT</text>
+<text class="at" x="30" y="1619">RAM, free space</text>
 </g>
-<g class="bx-store"><rect x="740" y="1612" width="270" height="118" rx="3"/>
-<text class="st" x="875" y="1626" text-anchor="middle">«folder»</text>
-<text class="nm" x="875" y="1642" text-anchor="middle">&lt;Root&gt;\</text>
-<line class="div" x1="740" y1="1649" x2="1010" y2="1649"/>
-<text class="at" x="750" y="1664">Shared\ ISO, Installers,</text>
-<text class="at" x="750" y="1681">Credentials</text>
-<text class="at" x="750" y="1698">&lt;VM&gt;\ Disks, Credentials, Backups,</text>
-<text class="at" x="750" y="1715">Logs, Checkpoints</text>
+<g class="bx-mod"><rect x="335" y="1696" width="305" height="180" rx="3"/>
+<text class="st" x="500.5" y="1710" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="1726" text-anchor="middle">Enable-HyperVFeature()</text>
+<line class="div" x1="335" y1="1733" x2="640" y2="1733"/>
+<g class="sn"><circle cx="351" cy="1717" r="10"/><text x="351" y="1721" text-anchor="middle">11</text></g>
+<text class="at" x="345" y="1748">called by Invoke-BuildPhase</text>
+<text class="at" x="345" y="1765">phase 2; returns RestartPending when the</text>
+<text class="at" x="345" y="1782">host must restart</text>
 </g>
-<g class="bx-mod"><rect x="335" y="1758" width="305" height="101" rx="3"/>
-<text class="st" x="500.5" y="1772" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="1788" text-anchor="middle">Initialize-SqlServerIso()</text>
-<line class="div" x1="335" y1="1795" x2="640" y2="1795"/>
-<g class="sn"><circle cx="351" cy="1779" r="10"/><text x="351" y="1783" text-anchor="middle">11</text></g>
-<text class="at" x="345" y="1810">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="1827">phase 4: downloads the SQL Server ISO if</text>
-<text class="at" x="345" y="1844">it is missing</text>
+<g class="bx-store"><rect x="740" y="1696" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="1710" text-anchor="middle">«task»</text>
+<text class="nm" x="875" y="1726" text-anchor="middle">Task Scheduler</text>
+<line class="div" x1="740" y1="1733" x2="1010" y2="1733"/>
+<text class="at" x="750" y="1748">LazyVM-ResumeAfterReboot-&lt;VM&gt;</text>
+<text class="at" x="750" y="1765">as SYSTEM, with -Root</text>
 </g>
-<g class="bx-store"><rect x="20" y="1758" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="1772" text-anchor="middle">«web»</text>
-<text class="nm" x="147.5" y="1788" text-anchor="middle">download.microsoft.com</text>
-<line class="div" x1="20" y1="1795" x2="275" y2="1795"/>
-<text class="at" x="30" y="1810">SQL Server 2025 ISO, only if</text>
-<text class="at" x="30" y="1827">missing</text>
+<g class="bx-store"><rect x="740" y="1792" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="1806" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="1822" text-anchor="middle">&lt;VM&gt;\Config\</text>
+<line class="div" x1="740" y1="1829" x2="1010" y2="1829"/>
+<text class="at" x="750" y="1844">Resume.json (Phase 3)</text>
 </g>
-<g class="bx-store"><rect x="740" y="1758" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="1772" text-anchor="middle">«file»</text>
-<text class="nm" x="875" y="1788" text-anchor="middle">Shared\Installers\</text>
-<line class="div" x1="740" y1="1795" x2="1010" y2="1795"/>
-<text class="at" x="750" y="1810">SQLServer2025-x64-ENU-EntDev.iso</text>
+<g class="bx-mod"><rect x="335" y="1904" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="1918" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="1934" text-anchor="middle">Initialize-HostFolder()</text>
+<line class="div" x1="335" y1="1941" x2="640" y2="1941"/>
+<g class="sn"><circle cx="351" cy="1925" r="10"/><text x="351" y="1929" text-anchor="middle">12</text></g>
+<text class="at" x="345" y="1956">called by Invoke-BuildPhase</text>
+<text class="at" x="345" y="1973">phase 3</text>
 </g>
-<g class="bx-mod"><rect x="335" y="1887" width="305" height="135" rx="3"/>
-<text class="st" x="500.5" y="1901" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="1917" text-anchor="middle">Initialize-SqlDataVhd()</text>
-<line class="div" x1="335" y1="1924" x2="640" y2="1924"/>
-<g class="sn"><circle cx="351" cy="1908" r="10"/><text x="351" y="1912" text-anchor="middle">12</text></g>
-<text class="at" x="345" y="1939">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="1956">and Initialize-DevDriveVhd()</text>
-<text class="at" x="345" y="1973">and Initialize-UserDataVhd()</text>
-<text class="at" x="345" y="1990">phase 5: existing disks are never</text>
-<text class="at" x="345" y="2007">overwritten</text>
+<g class="bx-store"><rect x="740" y="1904" width="270" height="118" rx="3"/>
+<text class="st" x="875" y="1918" text-anchor="middle">«folder»</text>
+<text class="nm" x="875" y="1934" text-anchor="middle">&lt;Root&gt;\</text>
+<line class="div" x1="740" y1="1941" x2="1010" y2="1941"/>
+<text class="at" x="750" y="1956">Shared\ ISO, Installers,</text>
+<text class="at" x="750" y="1973">Credentials</text>
+<text class="at" x="750" y="1990">&lt;VM&gt;\ Disks, Credentials, Backups,</text>
+<text class="at" x="750" y="2007">Logs, Checkpoints</text>
 </g>
-<g class="bx-store"><rect x="740" y="1887" width="270" height="101" rx="3"/>
-<text class="st" x="875" y="1901" text-anchor="middle">«file»</text>
-<text class="nm" x="875" y="1917" text-anchor="middle">&lt;VM&gt;\Disks\</text>
-<line class="div" x1="740" y1="1924" x2="1010" y2="1924"/>
-<text class="at" x="750" y="1939">&lt;VM&gt;-SQL.vhdx (100 GB)</text>
-<text class="at" x="750" y="1956">&lt;VM&gt;-DevDrive.vhdx (250 GB)</text>
-<text class="at" x="750" y="1973">&lt;VM&gt;-User.vhdx (20 GB)</text>
-</g>
-<g class="bx-mod"><rect x="335" y="2050" width="305" height="118" rx="3"/>
-<text class="st" x="500.5" y="2064" text-anchor="middle">«Credentials»</text>
-<text class="nm" x="500.5" y="2080" text-anchor="middle">Initialize-GuestCredential()</text>
+<g class="bx-mod"><rect x="335" y="2050" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="2064" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="2080" text-anchor="middle">Initialize-SqlServerIso()</text>
 <line class="div" x1="335" y1="2087" x2="640" y2="2087"/>
 <g class="sn"><circle cx="351" cy="2071" r="10"/><text x="351" y="2075" text-anchor="middle">13</text></g>
 <text class="at" x="345" y="2102">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="2119">phase 6, for a VM that does not exist</text>
-<text class="at" x="345" y="2136">yet, without -NoUnattend: generates the</text>
-<text class="at" x="345" y="2153">account if there is none</text>
+<text class="at" x="345" y="2119">phase 4: downloads the SQL Server ISO if</text>
+<text class="at" x="345" y="2136">it is missing</text>
 </g>
 <g class="bx-store"><rect x="20" y="2050" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="2064" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="2080" text-anchor="middle">Credential store</text>
+<text class="st" x="147.5" y="2064" text-anchor="middle">«web»</text>
+<text class="nm" x="147.5" y="2080" text-anchor="middle">download.microsoft.com</text>
 <line class="div" x1="20" y1="2087" x2="275" y2="2087"/>
-<text class="at" x="30" y="2102">Shared\Credentials\.lazyvm.key</text>
-<text class="at" x="30" y="2119">&lt;VM&gt;\Credentials\guest.cred</text>
+<text class="at" x="30" y="2102">SQL Server 2025 ISO, only if</text>
+<text class="at" x="30" y="2119">missing</text>
 </g>
 <g class="bx-store"><rect x="740" y="2050" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="2064" text-anchor="middle">«file»</text>
-<text class="nm" x="875" y="2080" text-anchor="middle">Credential store</text>
+<text class="nm" x="875" y="2080" text-anchor="middle">Shared\Installers\</text>
 <line class="div" x1="740" y1="2087" x2="1010" y2="2087"/>
-<text class="at" x="750" y="2102">Shared\Credentials\.lazyvm.key</text>
-<text class="at" x="750" y="2119">&lt;VM&gt;\Credentials\guest.cred</text>
+<text class="at" x="750" y="2102">SQLServer2025-x64-ENU-EntDev.iso</text>
 </g>
-<g class="bx-mod"><rect x="335" y="2196" width="305" height="101" rx="3"/>
-<text class="st" x="500.5" y="2210" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="2226" text-anchor="middle">New-UnattendSeedDisk()</text>
-<line class="div" x1="335" y1="2233" x2="640" y2="2233"/>
-<g class="sn"><circle cx="351" cy="2217" r="10"/><text x="351" y="2221" text-anchor="middle">14</text></g>
-<text class="at" x="345" y="2248">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="2265">phase 6: the answer file for Setup, in</text>
-<text class="at" x="345" y="2282">the same cases</text>
+<g class="bx-mod"><rect x="335" y="2179" width="305" height="135" rx="3"/>
+<text class="st" x="500.5" y="2193" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="2209" text-anchor="middle">Initialize-SqlDataVhd()</text>
+<line class="div" x1="335" y1="2216" x2="640" y2="2216"/>
+<g class="sn"><circle cx="351" cy="2200" r="10"/><text x="351" y="2204" text-anchor="middle">14</text></g>
+<text class="at" x="345" y="2231">called by Invoke-BuildPhase</text>
+<text class="at" x="345" y="2248">and Initialize-DevDriveVhd()</text>
+<text class="at" x="345" y="2265">and Initialize-UserDataVhd()</text>
+<text class="at" x="345" y="2282">phase 5: existing disks are never</text>
+<text class="at" x="345" y="2299">overwritten</text>
 </g>
-<g class="bx-store"><rect x="740" y="2196" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="2210" text-anchor="middle">«file»</text>
-<text class="nm" x="875" y="2226" text-anchor="middle">&lt;VM&gt;\Disks\</text>
-<line class="div" x1="740" y1="2233" x2="1010" y2="2233"/>
-<text class="at" x="750" y="2248">&lt;VM&gt;-Seed.iso</text>
+<g class="bx-store"><rect x="740" y="2179" width="270" height="101" rx="3"/>
+<text class="st" x="875" y="2193" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="2209" text-anchor="middle">&lt;VM&gt;\Disks\</text>
+<line class="div" x1="740" y1="2216" x2="1010" y2="2216"/>
+<text class="at" x="750" y="2231">&lt;VM&gt;-SQL.vhdx (100 GB)</text>
+<text class="at" x="750" y="2248">&lt;VM&gt;-DevDrive.vhdx (250 GB)</text>
+<text class="at" x="750" y="2265">&lt;VM&gt;-User.vhdx (20 GB)</text>
 </g>
-<g class="bx-mod"><rect x="335" y="2325" width="305" height="180" rx="3"/>
-<text class="st" x="500.5" y="2339" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="2355" text-anchor="middle">New-GuestVM()</text>
-<line class="div" x1="335" y1="2362" x2="640" y2="2362"/>
-<g class="sn"><circle cx="351" cy="2346" r="10"/><text x="351" y="2350" text-anchor="middle">15</text></g>
-<text class="at" x="345" y="2377">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="2394">phase 6: Gen 2, Secure Boot, TPM,</text>
-<text class="at" x="345" y="2411">dynamic memory</text>
+<g class="bx-mod"><rect x="335" y="2342" width="305" height="118" rx="3"/>
+<text class="st" x="500.5" y="2356" text-anchor="middle">«Credentials»</text>
+<text class="nm" x="500.5" y="2372" text-anchor="middle">Initialize-GuestCredential()</text>
+<line class="div" x1="335" y1="2379" x2="640" y2="2379"/>
+<g class="sn"><circle cx="351" cy="2363" r="10"/><text x="351" y="2367" text-anchor="middle">15</text></g>
+<text class="at" x="345" y="2394">called by Invoke-BuildPhase</text>
+<text class="at" x="345" y="2411">phase 6, for a VM that does not exist</text>
+<text class="at" x="345" y="2428">yet, without -NoUnattend: generates the</text>
+<text class="at" x="345" y="2445">account if there is none</text>
 </g>
-<g class="bx-store"><rect x="20" y="2325" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="2339" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="2355" text-anchor="middle">Shared\ISO\  &lt;VM&gt;\Disks\</text>
-<line class="div" x1="20" y1="2362" x2="275" y2="2362"/>
-<text class="at" x="30" y="2377">Win11Ent_Eval.iso</text>
-<text class="at" x="30" y="2394">&lt;VM&gt;-Seed.iso</text>
+<g class="bx-store"><rect x="20" y="2342" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="2356" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="2372" text-anchor="middle">Credential store</text>
+<line class="div" x1="20" y1="2379" x2="275" y2="2379"/>
+<text class="at" x="30" y="2394">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
-<g class="bx-store"><rect x="740" y="2325" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="2339" text-anchor="middle">«file»</text>
-<text class="nm" x="875" y="2355" text-anchor="middle">&lt;VM&gt;\</text>
-<line class="div" x1="740" y1="2362" x2="1010" y2="2362"/>
-<text class="at" x="750" y="2377">Disks\&lt;VM&gt;-OS.vhdx</text>
-<text class="at" x="750" y="2394">Virtual Machines\ (configuration)</text>
+<g class="bx-store"><rect x="740" y="2342" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="2356" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="2372" text-anchor="middle">Credential store</text>
+<line class="div" x1="740" y1="2379" x2="1010" y2="2379"/>
+<text class="at" x="750" y="2394">&lt;VM&gt;\Credentials\guest.cred</text>
 </g>
-<g class="bx-store"><rect x="740" y="2421" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="2435" text-anchor="middle">«Hyper-V»</text>
-<text class="nm" x="875" y="2451" text-anchor="middle">VM &lt;VM&gt;</text>
-<line class="div" x1="740" y1="2458" x2="1010" y2="2458"/>
-<text class="at" x="750" y="2473">created, not started yet</text>
+<g class="bx-mod"><rect x="335" y="2488" width="305" height="101" rx="3"/>
+<text class="st" x="500.5" y="2502" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="2518" text-anchor="middle">New-UnattendSeedDisk()</text>
+<line class="div" x1="335" y1="2525" x2="640" y2="2525"/>
+<g class="sn"><circle cx="351" cy="2509" r="10"/><text x="351" y="2513" text-anchor="middle">16</text></g>
+<text class="at" x="345" y="2540">called by Invoke-BuildPhase</text>
+<text class="at" x="345" y="2557">phase 6: the answer file for Setup, in</text>
+<text class="at" x="345" y="2574">the same cases</text>
 </g>
-<g class="bx-mod"><rect x="335" y="2533" width="305" height="305" rx="3"/>
-<text class="st" x="500.5" y="2547" text-anchor="middle">«Installation»</text>
-<text class="nm" x="500.5" y="2563" text-anchor="middle">Install-GuestSoftware()</text>
-<line class="div" x1="335" y1="2570" x2="640" y2="2570"/>
-<g class="sn"><circle cx="351" cy="2554" r="10"/><text x="351" y="2558" text-anchor="middle">16</text></g>
-<text class="at" x="345" y="2585">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="2602">phase 7: starts the VM, waits for Setup</text>
-<text class="at" x="345" y="2619">and deletes the answer-file disc;</text>
-<text class="at" x="345" y="2636">attaches and prepares D:, W: and U: and</text>
-<text class="at" x="345" y="2653">puts the personal folders on U:; extends</text>
-<text class="at" x="345" y="2670">C:; BitLocker; Enhanced Session; removes</text>
-<text class="at" x="345" y="2687">built-in apps and applies the appearance</text>
-<text class="at" x="345" y="2704">and Developer Mode; Sysmon; then the</text>
-<text class="at" x="345" y="2721">tooling list: Visual Studio Installer</text>
-<text class="at" x="345" y="2738">products, SQL Server, winget packages,</text>
-<text class="at" x="345" y="2755">official installers; Windows updates,</text>
-<text class="at" x="345" y="2772">and after their restart waits for the</text>
-<text class="at" x="345" y="2789">guest to settle (no further restart,</text>
-<text class="at" x="345" y="2806">automatic sign-in done); records the</text>
-<text class="at" x="345" y="2823">tooling list</text>
+<g class="bx-store"><rect x="740" y="2488" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="2502" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="2518" text-anchor="middle">&lt;VM&gt;\Disks\</text>
+<line class="div" x1="740" y1="2525" x2="1010" y2="2525"/>
+<text class="at" x="750" y="2540">&lt;VM&gt;-Seed.iso</text>
 </g>
-<g class="bx-store"><rect x="20" y="2533" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="2547" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="2563" text-anchor="middle">&lt;VM&gt;\Config\</text>
-<line class="div" x1="20" y1="2570" x2="275" y2="2570"/>
-<text class="at" x="30" y="2585">VM.json, its Tooling,</text>
-<text class="at" x="30" y="2602">or the shared template&apos;s</text>
+<g class="bx-mod"><rect x="335" y="2617" width="305" height="180" rx="3"/>
+<text class="st" x="500.5" y="2631" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="2647" text-anchor="middle">New-GuestVM()</text>
+<line class="div" x1="335" y1="2654" x2="640" y2="2654"/>
+<g class="sn"><circle cx="351" cy="2638" r="10"/><text x="351" y="2642" text-anchor="middle">17</text></g>
+<text class="at" x="345" y="2669">called by Invoke-BuildPhase</text>
+<text class="at" x="345" y="2686">phase 6: Gen 2, Secure Boot, TPM,</text>
+<text class="at" x="345" y="2703">dynamic memory</text>
 </g>
-<g class="bx-store"><rect x="20" y="2629" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="2643" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="2659" text-anchor="middle">Shared\Installers\</text>
-<line class="div" x1="20" y1="2666" x2="275" y2="2666"/>
-<text class="at" x="30" y="2681">SQLServer2025 ISO</text>
+<g class="bx-store"><rect x="20" y="2617" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="2631" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="2647" text-anchor="middle">Shared\ISO\  &lt;VM&gt;\Disks\</text>
+<line class="div" x1="20" y1="2654" x2="275" y2="2654"/>
+<text class="at" x="30" y="2669">Win11Ent_Eval.iso</text>
+<text class="at" x="30" y="2686">&lt;VM&gt;-Seed.iso</text>
 </g>
-<g class="bx-store"><rect x="20" y="2725" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="2739" text-anchor="middle">«web»</text>
-<text class="nm" x="147.5" y="2755" text-anchor="middle">Internet</text>
-<line class="div" x1="20" y1="2762" x2="275" y2="2762"/>
-<text class="at" x="30" y="2777">VS bootstrappers, Marketplace,</text>
-<text class="at" x="30" y="2794">winget, Windows Update</text>
+<g class="bx-store"><rect x="740" y="2617" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="2631" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="2647" text-anchor="middle">&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="2654" x2="1010" y2="2654"/>
+<text class="at" x="750" y="2669">Disks\&lt;VM&gt;-OS.vhdx</text>
+<text class="at" x="750" y="2686">Virtual Machines\ (configuration)</text>
 </g>
-<g class="bx-store"><rect x="740" y="2533" width="270" height="152" rx="3"/>
-<text class="st" x="875" y="2547" text-anchor="middle">«guest»</text>
-<text class="nm" x="875" y="2563" text-anchor="middle">Guest</text>
-<line class="div" x1="740" y1="2570" x2="1010" y2="2570"/>
-<text class="at" x="750" y="2585">D: data disk, W: Dev Drive,</text>
-<text class="at" x="750" y="2602">U: User disk</text>
-<text class="at" x="750" y="2619">BitLocker, Sysmon, appearance</text>
-<text class="at" x="750" y="2636">VS + SSMS, extensions</text>
-<text class="at" x="750" y="2653">SQL Server 2025, winget apps</text>
-<text class="at" x="750" y="2670">Windows updates</text>
+<g class="bx-store"><rect x="740" y="2713" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="2727" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="875" y="2743" text-anchor="middle">VM &lt;VM&gt;</text>
+<line class="div" x1="740" y1="2750" x2="1010" y2="2750"/>
+<text class="at" x="750" y="2765">created, not started yet</text>
 </g>
-<g class="bx-store"><rect x="740" y="2697" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="2711" text-anchor="middle">«file»</text>
-<text class="nm" x="875" y="2727" text-anchor="middle">&lt;VM&gt;\</text>
-<line class="div" x1="740" y1="2734" x2="1010" y2="2734"/>
-<text class="at" x="750" y="2749">Config\VM.json</text>
-<text class="at" x="750" y="2766">State\reinstall-by-hand.txt</text>
+<g class="bx-mod"><rect x="335" y="2825" width="305" height="305" rx="3"/>
+<text class="st" x="500.5" y="2839" text-anchor="middle">«Installation»</text>
+<text class="nm" x="500.5" y="2855" text-anchor="middle">Install-GuestSoftware()</text>
+<line class="div" x1="335" y1="2862" x2="640" y2="2862"/>
+<g class="sn"><circle cx="351" cy="2846" r="10"/><text x="351" y="2850" text-anchor="middle">18</text></g>
+<text class="at" x="345" y="2877">called by Invoke-BuildPhase</text>
+<text class="at" x="345" y="2894">phase 7: starts the VM, waits for Setup</text>
+<text class="at" x="345" y="2911">and deletes the answer-file disc;</text>
+<text class="at" x="345" y="2928">attaches and prepares D:, W: and U: and</text>
+<text class="at" x="345" y="2945">puts the personal folders on U:; extends</text>
+<text class="at" x="345" y="2962">C:; BitLocker; Enhanced Session; removes</text>
+<text class="at" x="345" y="2979">built-in apps and applies the appearance</text>
+<text class="at" x="345" y="2996">and Developer Mode; Sysmon; then the</text>
+<text class="at" x="345" y="3013">tooling list: Visual Studio Installer</text>
+<text class="at" x="345" y="3030">products, SQL Server, winget packages,</text>
+<text class="at" x="345" y="3047">official installers; Windows updates,</text>
+<text class="at" x="345" y="3064">and after their restart waits for the</text>
+<text class="at" x="345" y="3081">guest to settle (no further restart,</text>
+<text class="at" x="345" y="3098">automatic sign-in done); records the</text>
+<text class="at" x="345" y="3115">tooling list</text>
 </g>
-<g class="bx-mod"><rect x="335" y="2866" width="305" height="152" rx="3"/>
-<text class="st" x="500.5" y="2880" text-anchor="middle">«Installation»</text>
-<text class="nm" x="500.5" y="2896" text-anchor="middle">Complete-GuestConfiguration()</text>
-<line class="div" x1="335" y1="2903" x2="640" y2="2903"/>
-<g class="sn"><circle cx="351" cy="2887" r="10"/><text x="351" y="2891" text-anchor="middle">17</text></g>
-<text class="at" x="345" y="2918">called by Invoke-BuildPhase</text>
-<text class="at" x="345" y="2935">phase 8: 8a the SQL data disk, 8b moves</text>
-<text class="at" x="345" y="2952">SQL data files onto it, 8c answers</text>
-<text class="at" x="345" y="2969">Visual Studio&apos;s first launch and imports</text>
-<text class="at" x="345" y="2986">its settings; a step that fails does not</text>
-<text class="at" x="345" y="3003">stop the others</text>
+<g class="bx-store"><rect x="20" y="2825" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="2839" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="2855" text-anchor="middle">&lt;VM&gt;\Config\</text>
+<line class="div" x1="20" y1="2862" x2="275" y2="2862"/>
+<text class="at" x="30" y="2877">VM.json, its Tooling,</text>
+<text class="at" x="30" y="2894">or the shared template&apos;s</text>
 </g>
-<g class="bx-store"><rect x="20" y="2866" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="2880" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="2896" text-anchor="middle">&lt;VM&gt;\Backups\</text>
-<line class="div" x1="20" y1="2903" x2="275" y2="2903"/>
-<text class="at" x="30" y="2918">VisualStudio.vssettings</text>
+<g class="bx-store"><rect x="20" y="2921" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="2935" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="2951" text-anchor="middle">Shared\Installers\</text>
+<line class="div" x1="20" y1="2958" x2="275" y2="2958"/>
+<text class="at" x="30" y="2973">SQLServer2025 ISO</text>
 </g>
-<g class="bx-store"><rect x="740" y="2866" width="270" height="101" rx="3"/>
-<text class="st" x="875" y="2880" text-anchor="middle">«guest»</text>
-<text class="nm" x="875" y="2896" text-anchor="middle">Guest</text>
-<line class="div" x1="740" y1="2903" x2="1010" y2="2903"/>
-<text class="at" x="750" y="2918">user databases on D:\SQLData</text>
-<text class="at" x="750" y="2935">VS settings imported, or pending</text>
-<text class="at" x="750" y="2952">for nightly maintenance</text>
+<g class="bx-store"><rect x="20" y="3017" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="3031" text-anchor="middle">«web»</text>
+<text class="nm" x="147.5" y="3047" text-anchor="middle">Internet</text>
+<line class="div" x1="20" y1="3054" x2="275" y2="3054"/>
+<text class="at" x="30" y="3069">VS bootstrappers, Marketplace,</text>
+<text class="at" x="30" y="3086">winget, Windows Update</text>
 </g>
-<g class="bx-mod"><rect x="335" y="3046" width="305" height="84" rx="3"/>
-<text class="st" x="500.5" y="3060" text-anchor="middle">«Host»</text>
-<text class="nm" x="500.5" y="3076" text-anchor="middle">Unregister-ResumeTask()</text>
-<line class="div" x1="335" y1="3083" x2="640" y2="3083"/>
-<g class="sn"><circle cx="351" cy="3067" r="10"/><text x="351" y="3071" text-anchor="middle">18</text></g>
-<text class="at" x="345" y="3098">called by Invoke-VMBuild</text>
-<text class="at" x="345" y="3115">unless the host is restarting</text>
+<g class="bx-store"><rect x="740" y="2825" width="270" height="152" rx="3"/>
+<text class="st" x="875" y="2839" text-anchor="middle">«guest»</text>
+<text class="nm" x="875" y="2855" text-anchor="middle">Guest</text>
+<line class="div" x1="740" y1="2862" x2="1010" y2="2862"/>
+<text class="at" x="750" y="2877">D: data disk, W: Dev Drive,</text>
+<text class="at" x="750" y="2894">U: User disk</text>
+<text class="at" x="750" y="2911">BitLocker, Sysmon, appearance</text>
+<text class="at" x="750" y="2928">VS + SSMS, extensions</text>
+<text class="at" x="750" y="2945">SQL Server 2025, winget apps</text>
+<text class="at" x="750" y="2962">Windows updates</text>
 </g>
-<g class="bx-store"><rect x="740" y="3046" width="270" height="84" rx="3"/>
-<text class="st" x="875" y="3060" text-anchor="middle">«task»</text>
-<text class="nm" x="875" y="3076" text-anchor="middle">Task Scheduler</text>
-<line class="div" x1="740" y1="3083" x2="1010" y2="3083"/>
-<text class="at" x="750" y="3098">resume task deleted</text>
-<text class="at" x="750" y="3115">ResumePhase cleared</text>
+<g class="bx-store"><rect x="740" y="2989" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="3003" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="3019" text-anchor="middle">&lt;VM&gt;\</text>
+<line class="div" x1="740" y1="3026" x2="1010" y2="3026"/>
+<text class="at" x="750" y="3041">Config\VM.json</text>
+<text class="at" x="750" y="3058">State\reinstall-by-hand.txt</text>
 </g>
-<g class="bx-mod"><rect x="335" y="3158" width="305" height="101" rx="3"/>
-<text class="st" x="500.5" y="3172" text-anchor="middle">«Maintenance»</text>
-<text class="nm" x="500.5" y="3188" text-anchor="middle">Register-RebuildSchedule()</text>
+<g class="bx-mod"><rect x="335" y="3158" width="305" height="152" rx="3"/>
+<text class="st" x="500.5" y="3172" text-anchor="middle">«Installation»</text>
+<text class="nm" x="500.5" y="3188" text-anchor="middle">Complete-GuestConfiguration()</text>
 <line class="div" x1="335" y1="3195" x2="640" y2="3195"/>
 <g class="sn"><circle cx="351" cy="3179" r="10"/><text x="351" y="3183" text-anchor="middle">19</text></g>
-<text class="at" x="345" y="3210">a failure here is logged; the build</text>
-<text class="at" x="345" y="3227">still stands</text>
+<text class="at" x="345" y="3210">called by Invoke-BuildPhase</text>
+<text class="at" x="345" y="3227">phase 8: 8a the SQL data disk, 8b moves</text>
+<text class="at" x="345" y="3244">SQL data files onto it, 8c answers</text>
+<text class="at" x="345" y="3261">Visual Studio&apos;s first launch and imports</text>
+<text class="at" x="345" y="3278">its settings; a step that fails does not</text>
+<text class="at" x="345" y="3295">stop the others</text>
 </g>
 <g class="bx-store"><rect x="20" y="3158" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="3172" text-anchor="middle">«file»</text>
-<text class="nm" x="147.5" y="3188" text-anchor="middle">Credential store</text>
+<text class="nm" x="147.5" y="3188" text-anchor="middle">&lt;VM&gt;\Backups\</text>
 <line class="div" x1="20" y1="3195" x2="275" y2="3195"/>
-<text class="at" x="30" y="3210">Shared\Credentials\.lazyvm.key</text>
-<text class="at" x="30" y="3227">&lt;VM&gt;\Credentials\guest.cred</text>
+<text class="at" x="30" y="3210">VisualStudio.vssettings</text>
 </g>
 <g class="bx-store"><rect x="740" y="3158" width="270" height="101" rx="3"/>
-<text class="st" x="875" y="3172" text-anchor="middle">«task»</text>
-<text class="nm" x="875" y="3188" text-anchor="middle">Task Scheduler</text>
+<text class="st" x="875" y="3172" text-anchor="middle">«guest»</text>
+<text class="nm" x="875" y="3188" text-anchor="middle">Guest</text>
 <line class="div" x1="740" y1="3195" x2="1010" y2="3195"/>
-<text class="at" x="750" y="3210">LazyVM-Maintain-&lt;VM&gt;</text>
-<text class="at" x="750" y="3227">daily at MaintenanceTime</text>
-<text class="at" x="750" y="3244">runs as SYSTEM</text>
+<text class="at" x="750" y="3210">user databases on D:\SQLData</text>
+<text class="at" x="750" y="3227">VS settings imported, or pending</text>
+<text class="at" x="750" y="3244">for nightly maintenance</text>
+</g>
+<g class="bx-mod"><rect x="335" y="3338" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="3352" text-anchor="middle">«Host»</text>
+<text class="nm" x="500.5" y="3368" text-anchor="middle">Unregister-ResumeTask()</text>
+<line class="div" x1="335" y1="3375" x2="640" y2="3375"/>
+<g class="sn"><circle cx="351" cy="3359" r="10"/><text x="351" y="3363" text-anchor="middle">20</text></g>
+<text class="at" x="345" y="3390">called by Invoke-VMBuild</text>
+<text class="at" x="345" y="3407">unless the host is restarting</text>
+</g>
+<g class="bx-store"><rect x="740" y="3338" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="3352" text-anchor="middle">«task»</text>
+<text class="nm" x="875" y="3368" text-anchor="middle">Task Scheduler</text>
+<line class="div" x1="740" y1="3375" x2="1010" y2="3375"/>
+<text class="at" x="750" y="3390">resume task deleted</text>
+<text class="at" x="750" y="3407">Resume.json deleted</text>
 </g>
 </svg>

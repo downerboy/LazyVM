@@ -91,7 +91,6 @@ Describe 'Invoke-LazyVMMaintenance' {
         @{ Step = 'None'; Expected = 'None'; Rebuilds = 0 }
         @{ Step = 'Rearmed'; Expected = 'Rearmed'; Rebuilds = 0 }
         @{ Step = 'Rebuild'; Expected = 'Rebuilt'; Rebuilds = 1 }
-        @{ Step = 'Build'; Expected = 'Built'; Rebuilds = 1 }
     ) {
         Mock -ModuleName $module Invoke-Maintenance { $Step }.GetNewClosure()
 
@@ -130,6 +129,9 @@ Describe 'Build-LazyVM' {
     BeforeEach {
         Mock -ModuleName $module Initialize-BuildTarget { }
         Mock -ModuleName $module Register-RebuildSchedule { }
+        Mock -ModuleName $module Register-TrustedHostPath { }
+        # Run by its owner, not a scheduled task.
+        Mock -ModuleName $module Test-Unattended { $false }
         Mock -ModuleName $module Assert-Administrator { }
         # GetNewClosure keeps only this block's own variables.
         $vm = $testVM
@@ -171,7 +173,7 @@ Describe 'Build-LazyVM' {
         Should -Invoke -ModuleName $module Invoke-VMBuild -ParameterFilter { $FromPhase -eq 7 -and $NoUnattend }
     }
 
-    It 'schedules the daily maintenance after a successful build' {
+    It 'schedules the daily maintenance for a successful build' {
         Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
 
         Build-LazyVM -Name Alpha
@@ -187,12 +189,12 @@ Describe 'Build-LazyVM' {
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*could not be scheduled*' }
     }
 
-    It 'does not schedule maintenance while the host restarts' {
+    It 'has the maintenance scheduled already when the host restarts part-way, since the build that carries on is unattended (#284)' {
         Mock -ModuleName $module Invoke-VMBuild { 'RestartPending' }
 
         Build-LazyVM -Name Alpha
 
-        Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 0
+        Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 1 -Exactly
     }
 
     It 'sets up nothing and builds nothing with -WhatIf (#18)' {
@@ -364,28 +366,17 @@ Describe 'Export-LazyVMTemplate (#250)' {
     }
 }
 
-Describe 'Get-ModuleImportCommand' {
-    It 'imports by name when the module is installed where PowerShell looks for modules' {
-        InModuleScope $module {
-            $base = $ExecutionContext.SessionState.Module.ModuleBase
-            $saved = $env:PSModulePath
-            try {
-                $env:PSModulePath = (Split-Path -Path $base -Parent) + [IO.Path]::PathSeparator + $saved
-                Get-ModuleImportCommand | Should -Be "Import-Module -Name 'LazyVM'"
-            }
-            finally { $env:PSModulePath = $saved }
-        }
+Describe 'Get-ModuleImportCommand (#284)' {
+    It 'imports an installed module by its folder above the version, so the task loads the newest version installed' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Users\sean\AppData\Local\LazyVM\Modules\LazyVM\6.0.0' }
+
+        InModuleScope $module { Get-ModuleImportCommand } | Should -Be "Import-Module -Name 'C:\Users\sean\AppData\Local\LazyVM\Modules\LazyVM'"
     }
 
-    It 'imports by path otherwise' {
-        InModuleScope $module {
-            $saved = $env:PSModulePath
-            try {
-                $env:PSModulePath = ''
-                Get-ModuleImportCommand | Should -BeLike "Import-Module -Name '*LazyVM.psd1'"
-            }
-            finally { $env:PSModulePath = $saved }
-        }
+    It 'imports a module that is not in a version folder by its manifest' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'S:\Source\LazyVM\src\LazyVM' }
+
+        InModuleScope $module { Get-ModuleImportCommand } | Should -Be "Import-Module -Name 'S:\Source\LazyVM\src\LazyVM\LazyVM.psd1'"
     }
 }
 
@@ -393,7 +384,11 @@ Describe 'Initialize-BuildTarget' {
     BeforeEach {
         $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
         Mock -ModuleName $module Set-RegisteredRoot { }
+        # No machine-wide install from before #284.
+        Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
         Mock -ModuleName $module Get-DefaultRoot { $root }.GetNewClosure()
+        # The folder's access is tested in PerUser.Tests.ps1; here it only has to be there.
+        Mock -ModuleName $module Initialize-RootFolder { New-Item -ItemType Directory -Path $Path -Force | Out-Null }
     }
 
     It 'chooses and records the LazyVM folder on first use, and creates the profile' {
@@ -440,25 +435,6 @@ Describe 'Initialize-BuildTarget' {
         Mock -ModuleName $module Get-RegisteredRoot { $root }.GetNewClosure()
 
         { InModuleScope $module { Initialize-BuildTarget } } | Should -Throw -ExpectedMessage '*Build-LazyVM -Name DevBox*'
-    }
-}
-
-Describe 'Select-RootVolume' {
-    It 'picks the NTFS volume with the most free space, leaving out virtual disks' {
-        $volumes = @(
-            [pscustomobject]@{ DriveLetter = 'C'; FileSystem = 'NTFS'; SizeRemaining = 200GB; IsVirtual = $false }
-            [pscustomobject]@{ DriveLetter = 'D'; FileSystem = 'NTFS'; SizeRemaining = 900GB; IsVirtual = $false }
-            [pscustomobject]@{ DriveLetter = 'S'; FileSystem = 'ReFS'; SizeRemaining = 950GB; IsVirtual = $true }
-            [pscustomobject]@{ DriveLetter = 'V'; FileSystem = 'NTFS'; SizeRemaining = 999GB; IsVirtual = $true }
-        )
-
-        (InModuleScope $module -Parameters @{ Volumes = $volumes } { param($Volumes) Select-RootVolume -Volumes $Volumes }).DriveLetter | Should -Be 'D'
-    }
-
-    It 'returns nothing when no volume will do' {
-        $volumes = @([pscustomobject]@{ DriveLetter = 'S'; FileSystem = 'ReFS'; SizeRemaining = 1TB; IsVirtual = $true })
-
-        InModuleScope $module -Parameters @{ Volumes = $volumes } { param($Volumes) Select-RootVolume -Volumes $Volumes } | Should -BeNullOrEmpty
     }
 }
 

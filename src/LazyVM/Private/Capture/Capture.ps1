@@ -94,7 +94,7 @@ function Remove-OldCapture {
     $old = @($captures | Select-Object -Skip $script:CapturesToKeep) + $copies
     foreach ($item in $old) {
         try {
-            Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop
+            Remove-CheckedItem -Path $item.FullName -Recurse
             Write-LogEntry "  removed the old capture $($item.Name)" 'INFO'
         }
         catch { Write-LogEntry "  could not remove the old capture $($item.FullName): $($_.Exception.Message)" 'WARN' }
@@ -267,7 +267,7 @@ function Save-GuestVisualStudioState {
         }
         else {
             try {
-                Copy-Item -LiteralPath $captured.Files['Settings'] -Destination $VM.Settings.VSSettingsBackup -Force -ErrorAction Stop
+                Copy-CheckedItem -Path $captured.Files['Settings'] -Destination $VM.Settings.VSSettingsBackup
                 $refreshed = Get-VisualStudioSettingToApply -VM $VM
                 Write-VisualStudioSettingMarker -VM $VM -InstanceId $vs.InstanceId -AppliedHash $refreshed.BackupHash
             }
@@ -474,7 +474,7 @@ function Save-GuestCertificate {
         [Parameter(Mandatory)][string]$Staging
     )
 
-    $password = (Get-OrNewStoredCredential -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.CertCredFile -UserName 'certs').Credential.Password
+    $password = (Get-OrNewStoredCredential -Path $VM.Settings.CertCredFile -UserName 'certs').Credential.Password
     return Invoke-GuestScript -VM $VM -Activity 'certificate capture' -TimeoutMinutes 10 -ArgumentList @($Staging, (ConvertTo-PlainText -Secure $password)) -ScriptBlock {
         param($staging, $certPassword)
         $securePassword = ConvertTo-SecureString -String $certPassword -AsPlainText -Force

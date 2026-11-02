@@ -3,7 +3,7 @@
     Title      = 'Build a VM'
     Command    = 'Build-LazyVM'
     Parameters = @('-Name <VM>', '-ConfigTemplate <Template>  (optional)', '-FromPhase 0-8  (optional)', '-NoUnattend  (optional)')
-    Summary    = 'Invoke-VMBuild runs phases 0 to 8, skipping work already done; Build-LazyVM then schedules maintenance. Running it again finishes an interrupted build.'
+    Summary    = 'Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skipping work already done. Running it again finishes an interrupted build.'
     Covers     = @('Build-LazyVM', 'Invoke-VMBuild', 'Invoke-BuildPhase', 'Get-BuildPhase', 'Install-GuestSoftware', 'Complete-GuestConfiguration')
     Omits      = @{
         'Test-BuildPhaseNumber' = 'validates -FromPhase before the command runs'
@@ -12,14 +12,15 @@
         @{
             Function = 'Initialize-BuildTarget'
             Area     = 'Settings'
-            Note     = 'first run: picks the root and creates the profile, from -ConfigTemplate when given'
+            Note     = 'stops while a machine-wide install is still there; first run: creates %USERPROFILE%\LazyVM, open to you and SYSTEM only, and the profile, from -ConfigTemplate when given'
+            Includes = @('Assert-NoLegacyInstallation', 'Get-DefaultRoot', 'Assert-RootFolderUsable', 'Initialize-RootFolder')
             Reads    = @(
-                @{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root, if already set') }
-                @{ Label = 'drive with most free space'; Kind = 'host'; Store = 'Fixed drives'; Items = @('NTFS, free space') }
+                @{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root, if already set') }
+                @{ Label = 'machine-wide install'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root, if still there') }
                 @{ Label = 'config template, with -ConfigTemplate'; Kind = 'file'; Store = 'Config templates'; Items = @('Data\Templates\*.json', 'Shared\Templates\*.json') }
             )
             Writes   = @(
-                @{ Label = 'LazyVM folder, first run'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('Root = X:\LazyVM') }
+                @{ Label = 'LazyVM folder, first run'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root = %USERPROFILE%\LazyVM') }
                 @{ Label = 'settings file and profile, if new'; Kind = 'file'; Store = 'Settings files'; Items = @('Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json') }
             )
         }
@@ -27,7 +28,7 @@
             Function = 'Initialize-CommandRun'
             Area     = 'Common'
             Note     = 'builds the VM context and opens the log'
-            Reads    = @(@{ Label = 'settings, VM profile, guest user name'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKLM:\SOFTWARE\LazyVM  Root', 'Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json', '<VM>\Credentials\guest.cred') })
+            Reads    = @(@{ Label = 'settings, VM profile, guest user name'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKCU:\SOFTWARE\LazyVM  Root', 'Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json', '<VM>\Credentials\guest.cred') })
             Writes   = @(@{ Label = 'run log'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('<VM>.log  (appended)') })
         }
         @{
@@ -36,6 +37,20 @@
             Note     = 'fills in any setting VM.json lacks from the shared template'
             Reads    = @(@{ Label = 'shared template'; Kind = 'file'; Store = 'Shared\Config\'; Items = @('LazyVM.Settings.json') })
             Writes   = @(@{ Label = 'complete profile'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json', 'VM.Template.json  (first time only)') })
+        }
+        @{
+            Function = 'Register-TrustedHostPath'
+            Area     = 'Settings'
+            Note     = 'run by you, not a task (Test-Unattended): allows the places outside the LazyVM folder the settings name, such as BackupDir'
+            Includes = @('Test-Unattended', 'Get-OutsideHostPath', 'Add-TrustedHostPath')
+            Writes   = @(@{ Label = 'places outside the LazyVM folder, allowed for the tasks'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM'; Items = @('<your SID>\HostPaths') })
+        }
+        @{
+            Function = 'Register-RebuildSchedule'
+            Area     = 'Maintenance'
+            Note     = 'before the phases, so the schedule is in place even if the host restarts; a failure here is logged and the build goes on'
+            Includes = @('Get-HostTaskCommand', 'Register-LazyVMHostTask')
+            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'as SYSTEM, with -Root, -OwnerSid') })
         }
         @{
             Function = 'Invoke-VMBuild'
@@ -47,7 +62,7 @@
             Area     = 'Host'
             Caller   = 'Invoke-VMBuild'
             Note     = 'picks up after a host restart'
-            Reads    = @(@{ Label = 'phase to resume at'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase') })
+            Reads    = @(@{ Label = 'phase to resume at'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json') })
         }
         @{
             Function = 'Invoke-BuildPhase'
@@ -78,8 +93,8 @@
             Caller   = 'Invoke-BuildPhase'
             Note     = 'phase 2; returns RestartPending when the host must restart'
             Writes   = @(
-                @{ Label = 'resume task, only if a restart is needed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-ResumeAfterReboot-<VM>') }
-                @{ Label = 'where to resume'; Kind = 'registry'; Store = 'HKLM:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase = 3') }
+                @{ Label = 'resume task, only if a restart is needed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-ResumeAfterReboot-<VM>', 'as SYSTEM, with -Root') }
+                @{ Label = 'where to resume'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json  (Phase 3)') }
             )
         }
         @{
@@ -110,8 +125,8 @@
             Area     = 'Credentials'
             Caller   = 'Invoke-BuildPhase'
             Note     = 'phase 6, for a VM that does not exist yet, without -NoUnattend: generates the account if there is none'
-            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('Shared\Credentials\.lazyvm.key', '<VM>\Credentials\guest.cred') })
-            Writes   = @(@{ Label = 'credential, if new'; Kind = 'file'; Store = 'Credential store'; Items = @('Shared\Credentials\.lazyvm.key', '<VM>\Credentials\guest.cred') })
+            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') })
+            Writes   = @(@{ Label = 'credential, if new'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') })
         }
         @{
             Function = 'New-UnattendSeedDisk'
@@ -161,14 +176,7 @@
             Area     = 'Host'
             Caller   = 'Invoke-VMBuild'
             Note     = 'unless the host is restarting'
-            Writes   = @(@{ Label = 'resume entries removed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('resume task deleted', 'ResumePhase cleared') })
-        }
-        @{
-            Function = 'Register-RebuildSchedule'
-            Area     = 'Maintenance'
-            Note     = 'a failure here is logged; the build still stands'
-            Reads    = @(@{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('Shared\Credentials\.lazyvm.key', '<VM>\Credentials\guest.cred') })
-            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'runs as SYSTEM') })
+            Writes   = @(@{ Label = 'resume entries removed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('resume task deleted', 'Resume.json deleted') })
         }
     )
 }

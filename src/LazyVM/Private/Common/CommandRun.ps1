@@ -2,7 +2,7 @@
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 function Assert-Administrator {
-    <# Hyper-V, the registry under HKLM and scheduled tasks all need an elevated session. #>
+    <# Hyper-V and scheduled tasks that run elevated both need an elevated session. #>
     $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'LazyVM needs an elevated PowerShell: right-click PowerShell 7 and choose Run as administrator.'
@@ -18,6 +18,25 @@ function Test-Unattended {
     return -not [Environment]::UserInteractive
 }
 
+function Read-TrustedVMSetting {
+    <#
+      Read-VMSetting for a command run: in an unattended run, which acts as
+      SYSTEM, also stops when the settings name a place outside the LazyVM
+      folder that their owner $OwnerSid has not allowed. Reading and
+      checking together, no settings are used unchecked.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [string]$VMName,
+        [Parameter(Mandatory)][string]$OwnerSid
+    )
+
+    $unattended = Test-Unattended
+    $configuration = Read-VMSetting -Root $Root -VMName $VMName -Unattended:$unattended
+    if ($unattended) { Assert-HostPathTrusted -Settings $configuration.Settings -OwnerSid $OwnerSid }
+    return $configuration
+}
+
 function Initialize-CommandRun {
     <#
       The start of every command that works on a VM: reads its settings,
@@ -30,12 +49,21 @@ function Initialize-CommandRun {
     param(
         [Parameter(Mandatory)][string]$Title,
         [string]$Name,
+        [string]$Root,
+        [string]$OwnerSid,
         [switch]$RecordHardware
     )
 
-    $root = Resolve-LazyVMRoot
-    Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $root.Path)
-    $configuration = Read-VMSetting -Root $root.Path -VMName $Name -Unattended:(Test-Unattended)
+    $folder = Resolve-LazyVMRoot -Root $Root -OwnerSid $OwnerSid
+    $owner = if ($OwnerSid) { $OwnerSid } else { (Get-CurrentUserSid).Value }
+    # Every write there, and in the places outside it its owner allowed, is
+    # checked for reparse points (PathSafety.ps1).
+    $script:RunRoot = $folder.Path
+    $script:RunAllowedPaths = @(Get-TrustedHostPath -OwnerSid $owner)
+    Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $folder.Path)
+    # A scheduled task, as SYSTEM, acts only on paths the owner allowed,
+    # the log among them.
+    $configuration = Read-TrustedVMSetting -Root $folder.Path -VMName $Name -OwnerSid $owner
     $vm = [VMContext]::new($configuration.Settings)
 
     Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
@@ -47,7 +75,7 @@ function Initialize-CommandRun {
     Write-LogEntry "  User    : $env:USERDOMAIN\$env:USERNAME" 'INFO'
     Write-LogEntry "  Module  : $($MyInvocation.MyCommand.Module.Version) on PowerShell $($PSVersionTable.PSVersion)" 'INFO'
     Write-LogEntry "  VM      : $($vm.Name) ($($configuration.ProfilePath))" 'INFO'
-    Write-LogEntry "  Root    : $($root.Path) (from $($root.Source))" 'INFO'
+    Write-LogEntry "  Root    : $($folder.Path) (from $($folder.Source))" 'INFO'
     $missing = @($configuration.MissingKeys)
     Write-LogEntry "  Profile : $(if ($missing.Count -gt 0) { "$($missing.Count) setting(s) not yet in VM.json, taken from the shared template" } else { 'complete' })" 'INFO'
     Write-LogEntry $rule 'INFO'
@@ -55,15 +83,16 @@ function Initialize-CommandRun {
 
     # A VM from before #130 has its tooling list in files of its own: they
     # go into VM.json before anything reads it.
-    $changed = Move-ToolingIntoProfile -Root $root.Path -Name $vm.Name
+    $changed = Move-ToolingIntoProfile -Root $folder.Path -Name $vm.Name
     # A rebuild must make the VM as it is now, not as it was first set up.
     if ($RecordHardware -and (Save-VMHardware -VM $vm)) { $changed = $true }
     if ($changed) {
-        $configuration = Read-VMSetting -Root $root.Path -VMName $vm.Name -Unattended:(Test-Unattended)
+        $configuration = Read-TrustedVMSetting -Root $folder.Path -VMName $vm.Name -OwnerSid $owner
         $vm = [VMContext]::new($configuration.Settings)
     }
 
     Sync-GuestUserFromStore -VM $vm
+    if (-not (Test-Unattended)) { Write-MaintenanceTaskWarning -VM $vm }
     return $vm
 }
 
@@ -73,6 +102,8 @@ function Complete-CommandRun {
 
     if ($VM) { Remove-GuestSession -VM $VM }
     Stop-Log
+    $script:RunRoot = $null
+    $script:RunAllowedPaths = @()
 }
 
 function Invoke-CommandRun {
@@ -92,13 +123,15 @@ function Invoke-CommandRun {
         [string]$FailureMessage,
         [System.Management.Automation.PSCmdlet]$Cmdlet,
         [scriptblock]$ScriptBlock,
+        [string]$Root,
+        [string]$OwnerSid,
         [switch]$RecordHardware
     )
 
     Assert-Administrator
     $context = $null
     try {
-        $context = Initialize-CommandRun -Title $Title -Name $Name -RecordHardware:$RecordHardware
+        $context = Initialize-CommandRun -Title $Title -Name $Name -Root $Root -OwnerSid $OwnerSid -RecordHardware:$RecordHardware
         & $ScriptBlock $context
     }
     catch {
@@ -125,21 +158,20 @@ function Set-ForceConfirmation {
     }
 }
 
+function Get-LazyVMModuleBase {
+    <# The folder this LazyVM module was loaded from. #>
+    [OutputType([string])]
+    param()
+
+    return $MyInvocation.MyCommand.Module.ModuleBase
+}
+
 function Get-ModuleImportCommand {
-    <#
-      How a scheduled task loads this module. By name when it is installed
-      where PowerShell looks for modules, so an updated version is picked up
-      automatically; otherwise by the path it was loaded from.
-    #>
-    $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
-    foreach ($searchPath in @($env:PSModulePath -split [IO.Path]::PathSeparator | Where-Object { $_ })) {
-        $folder = $searchPath.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-        if ($moduleBase.StartsWith($folder, [StringComparison]::OrdinalIgnoreCase)) {
-            return "Import-Module -Name 'LazyVM'"
-        }
-    }
-    $manifest = Join-Path -Path $moduleBase -ChildPath 'LazyVM.psd1'
-    return "Import-Module -Name '$($manifest.Replace("'", "''"))'"
+    <# How a scheduled task loads this module: by the path Get-ModuleImportPath gives. #>
+    [OutputType([string])]
+    param()
+
+    return "Import-Module -Name '$((Get-ModuleImportPath).Replace("'", "''"))'"
 }
 
 function New-LazyVMTaskAction {

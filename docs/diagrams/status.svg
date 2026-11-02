@@ -61,7 +61,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 </g>
 <g class="bx-store"><rect x="20" y="146" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="160" text-anchor="middle">«registry»</text>
-<text class="nm" x="147.5" y="176" text-anchor="middle">HKLM:\SOFTWARE\LazyVM</text>
+<text class="nm" x="147.5" y="176" text-anchor="middle">HKCU:\SOFTWARE\LazyVM</text>
 <line class="div" x1="20" y1="183" x2="275" y2="183"/>
 <text class="at" x="30" y="198">Root</text>
 </g>

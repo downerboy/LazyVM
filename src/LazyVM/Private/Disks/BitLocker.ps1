@@ -51,7 +51,7 @@ function Read-RecoveryPasswordTable {
     [OutputType([hashtable])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    return Get-StoredSecretTable -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.BitLockerCredFile
+    return Get-StoredSecretTable -Path $VM.Settings.BitLockerCredFile
 }
 
 function Get-OrNewRecoveryPassword {
@@ -72,7 +72,7 @@ function Get-OrNewRecoveryPassword {
 
     $password = New-BitLockerRecoveryPassword
     $table[$key] = @{ Disk = $Disk; RecoveryPassword = $password; Recorded = (Get-Date).ToString('o') }
-    Save-StoredSecretTable -KeyPath $VM.Settings.CredKeyFile -Path $VM.Settings.BitLockerCredFile -UserName 'bitlocker' -Secrets $table
+    Save-StoredSecretTable -Path $VM.Settings.BitLockerCredFile -UserName 'bitlocker' -Secrets $table
     return $password
 }
 

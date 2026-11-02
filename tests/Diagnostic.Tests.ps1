@@ -25,10 +25,13 @@ Describe 'Get-LazyVMDiagnostic' {
         Mock -ModuleName $module Read-VMSetting {
             $settings = @{
                 ISOPath = 'C:\LazyVM\Shared\ISO\Win11.iso'; SQLIsoPath = 'C:\LazyVM\Shared\ISO\SQL.iso'
-                CredKeyFile = 'key'; GuestCredFile = 'guest.cred'; ScheduleTaskName = 'LazyVM Alpha'
+                GuestCredFile = 'guest.cred'; ScheduleTaskName = 'LazyVM Alpha'
             }
             [pscustomobject]@{ VMName = 'Alpha'; Settings = $settings }
         }
+        Mock -ModuleName $module Get-TrustedCodeCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Code the tasks run'; Status = 'OK'; Detail = '' } }
+        Mock -ModuleName $module Get-CloudSyncCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'OneDrive'; Status = 'OK'; Detail = '' } }
+        Mock -ModuleName $module Get-RootAccessCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'LazyVM folder access'; Status = 'OK'; Detail = '' } }
         Mock -ModuleName $module Test-IsoFile { $true }
         Mock -ModuleName $module Get-Item { [pscustomobject]@{ Length = 6GB } }
         Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; Heartbeat = 'OkApplicationsHealthy' } }
@@ -46,6 +49,7 @@ Describe 'Get-LazyVMDiagnostic' {
 
         @($checks.Values | Where-Object { $_.Status -in 'WARN', 'FAIL' }).Count | Should -Be 0
         $checks['LazyVM folder'].Detail | Should -BeLike 'C:\LazyVM*registry*'
+        $checks['LazyVM folder access'].Status | Should -Be 'OK'
         $checks['PowerShell Direct'].Status | Should -Be 'OK'
         $checks['Maintenance task'].Status | Should -Be 'OK'
     }

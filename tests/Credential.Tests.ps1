@@ -17,7 +17,7 @@ Describe 'Get-LazyVMCredential -ToClipboard' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }
         Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = 'C:\LazyVM' } }
-        Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ VMName = 'Alpha'; Settings = @{ CredKeyFile = 'key'; GuestCredFile = 'guest.cred' } } }
+        Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ VMName = 'Alpha'; Settings = @{ GuestCredFile = 'guest.cred' } } }
         Mock -ModuleName $module Get-StoredCredential { [pscredential]::new('devadmin', [Net.NetworkCredential]::new('', 'Correct-Horse-9').SecurePassword) }
         Mock -ModuleName $module Set-ClipboardSecret { }
     }

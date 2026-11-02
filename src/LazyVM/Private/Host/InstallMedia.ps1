@@ -18,7 +18,6 @@ function Initialize-HostFolder {
         $settings.VMRoot
         $settings.DiskDir
         (Split-Path $settings.SQLDiskPath -Parent)
-        $settings.CredStoreDir
         (Split-Path $settings.GuestCredFile -Parent)
         (Split-Path $settings.VSSettingsBackup -Parent)
         (Split-Path $settings.LogFile -Parent)
@@ -99,7 +98,7 @@ function Initialize-InstallationIso {
     if ($found -and $found.Where -eq 'Downloads') {
         New-Folder -Path (Split-Path -Path $settings.ISOPath -Parent)
         Write-LogEntry "Moving the Windows ISO from $($found.File.DirectoryName) to $($settings.ISOPath), where the scheduled rebuilds can find it..." 'INFO'
-        Move-Item -LiteralPath $found.File.FullName -Destination $settings.ISOPath
+        Move-CheckedItem -Path $found.File.FullName -Destination $settings.ISOPath
         $found = [pscustomobject]@{ File = Get-Item -LiteralPath $settings.ISOPath; Where = 'Configured' }
     }
     if ($found) {
@@ -111,14 +110,14 @@ function Initialize-InstallationIso {
     $downloads = Get-DownloadsFolder
     Write-LogEntry 'No Windows 11 Enterprise evaluation ISO was found.' 'ERROR'
     Write-LogEntry '  It cannot be downloaded automatically: the download is behind a registration form.' 'INFO'
-    Write-LogEntry "  Download it from $($settings.ISODownloadPage)" 'INFO'
+    Write-LogEntry "  Download it from $script:WindowsIsoDownloadPage" 'INFO'
     Write-LogEntry '  into your Downloads folder, then run the same Build-LazyVM command again.' 'INFO'
 
     # Someone is at the keyboard, so take them straight to the form. A
     # scheduled run has nobody to read the page and skips this.
     if (-not (Test-Unattended)) {
         try {
-            Start-Process -FilePath $settings.ISODownloadPage
+            Start-Process -FilePath $script:WindowsIsoDownloadPage
             Write-LogEntry '  The download page has been opened in your browser.' 'INFO'
         }
         catch {
@@ -160,19 +159,20 @@ function Initialize-SqlServerIso {
 
     $temp = "$($settings.SQLIsoPath).tmp"
     try {
-        Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        Remove-CheckedItem -Path $temp -Quiet
         # The progress bar slows a multi-gigabyte download to a crawl.
         $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $settings.SQLIsoUrl -OutFile $temp -UseBasicParsing
+        Assert-NoReparsePoint -Path $temp
+        Invoke-WebRequest -Uri $script:SqlIsoUrl -OutFile $temp -UseBasicParsing
         if (-not (Test-IsoFile -Path $temp)) {
             throw "the downloaded file is not an ISO image (got $(Format-Size (Get-Item -LiteralPath $temp).Length) - the address probably returned a web page)"
         }
-        Move-Item -LiteralPath $temp -Destination $settings.SQLIsoPath -Force
+        Move-CheckedItem -Path $temp -Destination $settings.SQLIsoPath
         Write-LogEntry "SQL Server ISO - downloaded ($(Format-Size (Get-Item -LiteralPath $settings.SQLIsoPath).Length))" 'OK'
     }
     catch {
-        Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        Remove-CheckedItem -Path $temp -Quiet
         Write-LogError 'SQL Server ISO - download failed' $_
-        throw "Cannot continue without the SQL Server ISO. Download it from $($settings.SQLIsoUrl) and save it to $($settings.SQLIsoPath)."
+        throw "Cannot continue without the SQL Server ISO. Download it from $script:SqlIsoUrl and save it to $($settings.SQLIsoPath)."
     }
 }

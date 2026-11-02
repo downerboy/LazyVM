@@ -97,6 +97,20 @@ function Get-MaintenanceDecision {
     return [MaintenanceDecision]::Rebuild
 }
 
+function Test-BuildInProgress {
+    <#
+      Whether the VM's build has not finished: a build waits to carry on
+      after a host restart, or the VM is not there yet. The daily
+      maintenance then leaves it alone (#284), so it never starts a build
+      beside the one in progress.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    if ((Get-ResumePhase -VM $VM) -gt 0) { return $true }
+    return -not (Get-VM -Name $VM.Name -ErrorAction SilentlyContinue)
+}
+
 function Get-MaintenancePreview {
     <#
       Invoke-LazyVMMaintenance -WhatIf (#18): what a run would do, as one
@@ -106,8 +120,8 @@ function Get-MaintenancePreview {
     [OutputType([string])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
+    if (Test-BuildInProgress -VM $VM) { return 'Nothing: the build still in progress is left to finish' }
     $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
-    if (-not $machine) { return "Build the VM: it does not exist yet" }
     $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups, winget upgrades, Windows updates)'
     if ("$($machine.State)" -ne 'Running') {
         return "Start the VM, which is $($machine.State), then $($daily.Substring(0, 1).ToLower())$($daily.Substring(1)) and act on its evaluation, which was not read while the VM is not running"
@@ -161,7 +175,8 @@ function Invoke-Maintenance {
       is off, runs the day's work (Invoke-DailyMaintenance) and, however that
       ends, shuts a VM it started down again, even when a step threw, such as
       a restart for updates that left the guest unreachable. A VM about to be
-      rebuilt is left to the rebuild.
+      rebuilt is left to the rebuild, and one whose build is still in
+      progress is left alone.
       Returns what the caller does next.
     #>
     [OutputType([MaintenanceStep])]
@@ -169,9 +184,9 @@ function Invoke-Maintenance {
 
     Write-LogEntry 'Maintenance Run' 'PHASE'
 
-    if (-not (Get-VM -Name $VM.Name -ErrorAction SilentlyContinue)) {
-        Write-LogEntry "VM '$($VM.Name)' does not exist - running a normal build instead" 'WARN'
-        return [MaintenanceStep]::Build
+    if (Test-BuildInProgress -VM $VM) {
+        Write-LogEntry "VM '$($VM.Name)': build still in progress - skipping tonight" 'INFO'
+        return [MaintenanceStep]::None
     }
     try { $wasOff = Open-GuestSession -VM $VM -Purpose 'check its license' }
     catch {
