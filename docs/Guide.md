@@ -30,7 +30,7 @@ The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyV
 
 - **Build.** Create the VM and install Windows unattended. Then install everything in the VM's tooling list (Visual Studio, SSMS, SQL Server, winget packages) with no input from you.
 - **Configure.** Attach and prepare the SQL data disk, the Dev Drive and the User disk, encrypt them and `C:` with BitLocker, and relocate databases onto the data disk.
-- **Maintain.** Every night, record what changed in the VM (tools you added or removed, taking a checkpoint first so you can go back, and your environment, firewall rules, scheduled tasks, SQL logins and application settings), back up the databases, and keep Windows, winget packages, Visual Studio, PowerShell Gallery modules, dotnet global tools, Store apps and Sysmon up to date. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
+- **Maintain.** Every night, record what changed in the VM (tools you added or removed, taking a checkpoint first so you can go back, and your environment, firewall rules, scheduled tasks, SQL logins and application settings), back up the databases, and keep Windows, winget packages, Visual Studio, SSMS, PowerShell Gallery modules, dotnet global tools, Store apps and Sysmon up to date. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
 
 ### What survives a rebuild
 
@@ -315,7 +315,7 @@ Each night the maintenance run, in this order:
 11. keeps automatic sign-in on: if it is off, even if you turned it off yourself, or a sign-in count or a clear-text password remains, as on a VM built before LazyVM removed the 99-sign-in limit, it turns it back on with no limit. Automatic sign-in stays on for the VM's life; the only way to have a VM without it is to build it with `-NoUnattend`, and such a VM is left as you set it. The password is stored as the LSA secret Windows' own automatic sign-in uses, never in the registry;
 12. applies the Visual Studio settings if the build could not ([Visual Studio settings](#visual-studio-settings));
 13. upgrades the winget packages ([winget upgrades](#winget-upgrades));
-14. updates Visual Studio, the PowerShell Gallery modules and the dotnet global tools ([Other updates](#other-updates));
+14. updates Visual Studio and SSMS, the PowerShell Gallery modules and the dotnet global tools ([Other updates](#other-updates));
 15. installs Windows updates ([Windows updates](#windows-updates)).
 
 A step that fails is logged and the rest still run. Then it reads the license and does this:
@@ -334,7 +334,7 @@ The 10-day threshold is `RebuildThresholdDays` ([section 8](#8-settings)).
 
 Each night's maintenance upgrades everything winget can upgrade in the VM from its own source, as `winget upgrade --all` would, including packages you installed yourself, with three exceptions, each named in the log:
 
-- **Visual Studio and SQL Server** (and SSMS) are never upgraded by winget: their own installers service them, and a winget upgrade can break a working install. Visual Studio's installer updates it the same night ([Other updates](#other-updates)).
+- **Visual Studio and SQL Server** (and SSMS) are never upgraded by winget: their own installers service them, and a winget upgrade can break a working install. Visual Studio's installer updates Visual Studio and SSMS the same night ([Other updates](#other-updates)).
 - **Packages you pin** are left alone. To keep a package at its version, pin it inside the VM: `winget pin add --id <id>`. `winget pin remove --id <id>` lets it upgrade again.
 - **Programs that are running** are skipped that night, so nothing you have open is closed under you. A program whose install folder Windows does not record, or records only as a shared folder such as `Program Files`, cannot be checked this way; it is upgraded anyway, and the log says it was upgraded without a running check.
 
@@ -344,13 +344,20 @@ The upgrades run as the guest account, so packages installed for that account al
 
 ### Other updates
 
-After the winget upgrades, each night's maintenance updates three more sources, each only when the VM has something from it, and each in a step of its own, so one that fails does not stop the others. The log names each update and its result (updated from one version to another, up to date, or failed and why):
+After the winget upgrades, each night's maintenance updates three more sources, each only when the VM has something from it, and each in a step of its own, so one that fails does not stop the others. Each item is updated on its own and logged as soon as it is done: updated from one version to another, up to date, skipped and why, or failed and why.
 
-- **Visual Studio**: each Visual Studio in the VM is updated by the Visual Studio Installer's own update command (`setup.exe update --quiet --norestart`). One that has any program running from its folder, such as Visual Studio itself or MSBuild, is skipped that night and tried again the next, so an open IDE is never closed. An update that needs a restart finishes at the next one, such as the one Windows updates may make. SSMS, which the same installer manages, is left alone.
-- **PowerShell Gallery modules**: every module installed from the PowerShell Gallery (`Install-Module` or `Install-PSResource`), in Windows PowerShell and in PowerShell 7, is updated with `Update-Module` in the edition it was installed in. The new version is installed beside the old one, so a session using the module keeps working.
+- **Visual Studio Installer products** (Visual Studio, and SSMS 21 and later): each is updated by the Visual Studio Installer's own update command (`setup.exe update --quiet --norestart`, never `--force`).
+  - One that has any program running from its folder, such as Visual Studio, MSBuild or SSMS, is skipped that night and tried again the next, so nothing you have open is closed. So is one the installer reports as busy or in use.
+  - One that is incomplete, such as after an update that was cut off, is repaired instead, and updated from the next night. If the repair fails, the log says to open the Visual Studio Installer in the VM and choose Resume or Repair.
+  - An update that needs a restart is finished by the restart Windows updates make, under the same rule: only when nobody can be disturbed, and otherwise left pending ([Windows updates](#windows-updates)).
+- **PowerShell Gallery modules**: every module installed from the PowerShell Gallery (`Install-Module` or `Install-PSResource`), in Windows PowerShell and in PowerShell 7, in the edition it was installed in.
+  - Only when the Gallery has a newer version is it installed, beside the old one and for the same users (all users, or just the guest account). Nothing is reinstalled.
+  - The two newest versions of each module are kept, and older ones are removed. One that cannot be removed, such as one in use, is removed on a later night.
+  - PowerShellGet and PackageManagement are left alone, as updating them from themselves can break them; the log says so. Update them by hand if you need to.
+  - An edition whose modules cannot be listed is named in the log, with why.
 - **dotnet global tools**: each of the guest account's global tools (`dotnet tool install --global`) is updated with `dotnet tool update --global`. Local tools, which a repository's tool manifest pins, are left alone.
 
-Visual Studio updates that have not started after 45 minutes, and module and tool updates that have not started after 20, wait for the next night, so none is cut off halfway. Like the winget upgrades, these updates change versions, not what is installed, so they do not change the VM's tooling list.
+Visual Studio Installer product updates that have not started after 45 minutes, and module and tool updates that have not started after 20, wait for the next night. Each module and tool also has a time limit of its own, so one that hangs costs only itself. Like the winget upgrades, these updates change versions, not what is installed, so they do not change the VM's tooling list.
 
 ### Windows updates
 

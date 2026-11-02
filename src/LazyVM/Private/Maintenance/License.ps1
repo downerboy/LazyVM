@@ -122,7 +122,7 @@ function Get-MaintenancePreview {
 
     if (Test-BuildInProgress -VM $VM) { return 'Nothing: the build still in progress is left to finish' }
     $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
-    $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups, winget, Visual Studio, PowerShell Gallery and dotnet tool updates, Windows updates)'
+    $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups, winget, Visual Studio Installer product, PowerShell Gallery and dotnet tool updates, Windows updates)'
     if ("$($machine.State)" -ne 'Running') {
         return "Start the VM, which is $($machine.State), then $($daily.Substring(0, 1).ToLower())$($daily.Substring(1)) and act on its evaluation, which was not read while the VM is not running"
     }
@@ -217,8 +217,8 @@ function Invoke-DailyMaintenance {
       logins and Agent jobs, and application settings, checks and backs up
       the databases, asks the Store to update its apps, sets up Sysmon,
       keeps automatic sign-in on, applies the Visual Studio settings when a build could not, upgrades
-      the winget packages, updates Visual Studio, the PowerShell Gallery
-      modules and the dotnet global tools, installs Windows updates, then does
+      the winget packages, updates the Visual Studio Installer products, the
+      PowerShell Gallery modules and the dotnet global tools, installs Windows updates, then does
       nothing more until the evaluation is close to expiry, when it captures
       state and rearms. -StartedByLazyVM: the run
       started the VM, so nobody is at work in it.
@@ -291,9 +291,11 @@ function Invoke-DailyMaintenance {
     try { $null = Update-GuestWingetPackage -VM $VM }
     catch { Write-LogError 'winget upgrades failed (non-fatal)' $_ }
 
-    # Visual Studio, by its own installer, which winget leaves alone, while nobody is using it (#293).
-    try { $null = Update-GuestVisualStudio -VM $VM }
-    catch { Write-LogError 'Visual Studio updates failed (non-fatal)' $_ }
+    # Visual Studio and SSMS, by their own installer, which winget leaves them to, while nobody is using them (#293). A
+    # restart one needs is made with Windows updates', under the same rule.
+    $restartNeeded = $false
+    try { $restartNeeded = Update-GuestInstallerProduct -VM $VM }
+    catch { Write-LogError 'Visual Studio Installer product updates failed (non-fatal)' $_ }
 
     # The modules installed from the PowerShell Gallery, and the dotnet global tools, when the guest has any (#293).
     try { $null = Update-GuestGalleryModule -VM $VM }
@@ -303,7 +305,7 @@ function Invoke-DailyMaintenance {
 
     # Windows updates, after tonight's records and backups so a bad update still has them, and before the
     # license check. The guest is restarted for them only when nobody can be disturbed by it (#234).
-    try { $null = Update-GuestWindows -VM $VM -StartedByLazyVM:$StartedByLazyVM }
+    try { $null = Update-GuestWindows -VM $VM -StartedByLazyVM:$StartedByLazyVM -RestartNeeded:$restartNeeded }
     catch { Write-LogError 'Windows updates failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM

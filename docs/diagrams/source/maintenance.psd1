@@ -166,19 +166,19 @@
             Writes   = @(@{ Label = 'upgraded packages'; Kind = 'guest'; Store = 'Running guest'; Items = @('new versions; the tooling list is unchanged') })
         }
         @{
-            Function = 'Update-GuestVisualStudio'
+            Function = 'Update-GuestInstallerProduct'
             Area     = 'Maintenance'
             Caller   = 'Invoke-DailyMaintenance'
-            Note     = 'Visual Studio Installer update command, for each Visual Studio nobody is using'
-            Writes   = @(@{ Label = 'updated Visual Studio'; Kind = 'guest'; Store = 'Visual Studio'; Items = @('new version; the tooling list is unchanged') })
+            Note     = 'Visual Studio Installer update command, for each product (Visual Studio, SSMS) nobody is using; a restart it needs goes to Windows updates'
+            Writes   = @(@{ Label = 'updated products'; Kind = 'guest'; Store = 'Visual Studio Installer'; Items = @('new version; the tooling list is unchanged') })
         }
         @{
             Function = 'Update-GuestGalleryModule'
             Area     = 'Maintenance'
             Caller   = 'Invoke-DailyMaintenance'
-            Note     = 'Update-Module for each PowerShell Gallery module, in Windows PowerShell and PowerShell 7'
+            Note     = 'installs the newer version of each PowerShell Gallery module, in Windows PowerShell and PowerShell 7; keeps the two newest'
             Reads    = @(@{ Label = 'modules'; Kind = 'web'; Store = 'PowerShell Gallery'; Items = @('newer module versions') })
-            Writes   = @(@{ Label = 'updated modules'; Kind = 'guest'; Store = 'Running guest'; Items = @('new versions beside the old') })
+            Writes   = @(@{ Label = 'updated modules'; Kind = 'guest'; Store = 'Running guest'; Items = @('new versions beside the old', 'older versions removed') })
         }
         @{
             Function = 'Update-GuestDotnetTool'

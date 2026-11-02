@@ -346,11 +346,11 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM, with -Ro
    - Writes D33, settings applied: Visual Studio (imported settings, pending flag cleared)
 18. `Update-GuestWingetPackage` (Maintenance, called by Invoke-DailyMaintenance): winget upgrades, except Visual Studio, SQL Server, pinned packages and running programs
    - Writes D34, upgraded packages: Running guest (new versions; the tooling list is unchanged)
-19. `Update-GuestVisualStudio` (Maintenance, called by Invoke-DailyMaintenance): Visual Studio Installer update command, for each Visual Studio nobody is using
-   - Writes D35, updated Visual Studio: Visual Studio (new version; the tooling list is unchanged)
-20. `Update-GuestGalleryModule` (Maintenance, called by Invoke-DailyMaintenance): Update-Module for each PowerShell Gallery module, in Windows PowerShell and PowerShell 7
+19. `Update-GuestInstallerProduct` (Maintenance, called by Invoke-DailyMaintenance): Visual Studio Installer update command, for each product (Visual Studio, SSMS) nobody is using; a restart it needs goes to Windows updates
+   - Writes D35, updated products: Visual Studio Installer (new version; the tooling list is unchanged)
+20. `Update-GuestGalleryModule` (Maintenance, called by Invoke-DailyMaintenance): installs the newer version of each PowerShell Gallery module, in Windows PowerShell and PowerShell 7; keeps the two newest
    - Reads D36, modules: PowerShell Gallery (newer module versions)
-   - Writes D37, updated modules: Running guest (new versions beside the old)
+   - Writes D37, updated modules: Running guest (new versions beside the old, older versions removed)
 21. `Update-GuestDotnetTool` (Maintenance, called by Invoke-DailyMaintenance): dotnet tool update for each of the guest account's global tools
    - Reads D38, tools: NuGet (newer tool versions)
    - Writes D39, updated tools: Running guest (%USERPROFILE%\.dotnet\tools)

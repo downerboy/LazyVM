@@ -39,7 +39,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Update-GuestVisualStudioSetting { 'stray' }
         Mock -ModuleName $module Repair-GuestAutoLogon { 'stray' }
         Mock -ModuleName $module Update-GuestWingetPackage { 'stray' }
-        Mock -ModuleName $module Update-GuestVisualStudio { 'stray' }
+        Mock -ModuleName $module Update-GuestInstallerProduct { $false }
         Mock -ModuleName $module Update-GuestGalleryModule { 'stray' }
         Mock -ModuleName $module Update-GuestDotnetTool { 'stray' }
         Mock -ModuleName $module Update-GuestWindows { 'stray' }
@@ -192,7 +192,7 @@ Describe 'Invoke-Maintenance' {
     }
 
     It 'updates <Source> every day, and carries on when that fails (#293)' -ForEach @(
-        @{ Source = 'Visual Studio'; Step = 'Update-GuestVisualStudio' }
+        @{ Source = 'the Visual Studio Installer products'; Step = 'Update-GuestInstallerProduct' }
         @{ Source = 'the PowerShell Gallery modules'; Step = 'Update-GuestGalleryModule' }
         @{ Source = 'the dotnet global tools'; Step = 'Update-GuestDotnetTool' }
     ) {
@@ -206,10 +206,24 @@ Describe 'Invoke-Maintenance' {
         Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly
     }
 
+    It 'passes on the restart a Visual Studio Installer product update needs to Windows updates, which restart only when nobody can be disturbed (#293)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Update-GuestInstallerProduct { $true }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { $RestartNeeded }
+
+        Mock -ModuleName $module Update-GuestInstallerProduct { throw 'the guest stopped answering' }
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
+
+        Should -Invoke -ModuleName $module Update-GuestWindows -Times 1 -Exactly -ParameterFilter { -not $RestartNeeded }
+    }
+
     It 'updates the other sources next to the winget upgrades, before Windows updates, whose restart then finishes them too (#293)' {
         $script:order = [System.Collections.Generic.List[string]]::new()
         Mock -ModuleName $module Update-GuestWingetPackage { $script:order.Add('winget') }
-        Mock -ModuleName $module Update-GuestVisualStudio { $script:order.Add('vs') }
+        Mock -ModuleName $module Update-GuestInstallerProduct { $script:order.Add('vs') }
         Mock -ModuleName $module Update-GuestGalleryModule { $script:order.Add('gallery') }
         Mock -ModuleName $module Update-GuestDotnetTool { $script:order.Add('dotnet') }
         Mock -ModuleName $module Update-GuestWindows { $script:order.Add('updates') }

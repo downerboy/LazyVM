@@ -215,6 +215,25 @@ Describe 'Update-GuestWindows (#234)' {
 
         Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 1 -Exactly
     }
+
+    It 'restarts, under the same rule, when an earlier step needs a restart that Windows Update does not know of, such as a Visual Studio update (#293)' {
+        Mock -ModuleName $module Install-GuestWindowsUpdate { $false }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM -RestartNeeded })
+
+        $result | Should -Be @($true)
+        Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 1 -Exactly
+    }
+
+    It 'leaves the restart an earlier step needs pending, and says so, when someone is signed in (#293)' {
+        Mock -ModuleName $module Install-GuestWindowsUpdate { $false }
+        Mock -ModuleName $module Get-GuestSignedInUser { 'sean' }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestWindows -VM $VM -RestartNeeded }
+
+        Should -Invoke -ModuleName $module Restart-GuestGracefully -Times 0
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -match 'pending' -and $Message -match 'sean' }
+    }
 }
 
 Describe 'Invoke-GuestCheck (#276)' {
