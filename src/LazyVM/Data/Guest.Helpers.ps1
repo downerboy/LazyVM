@@ -1300,14 +1300,14 @@ function Set-GuestEventLogSize {
 }
 
 function Enable-GuestAuditSubcategory {
-    <# Turns on success or failure auditing, or both, for the subcategory $Guid. Never turns any off. #>
+    <# Turns on success or failure auditing, or both, for the subcategory $SubcategoryGuid. Never turns any off. #>
     param(
-        [Parameter(Mandatory)][string]$Guid,
+        [Parameter(Mandatory)][string]$SubcategoryGuid,
         [switch]$Success,
         [switch]$Failure
     )
 
-    $argument = @('/set', "/subcategory:$Guid")
+    $argument = @('/set', "/subcategory:$SubcategoryGuid")
     if ($Success) { $argument += '/success:enable' }
     if ($Failure) { $argument += '/failure:enable' }
     Invoke-GuestAuditPol -Argument $argument

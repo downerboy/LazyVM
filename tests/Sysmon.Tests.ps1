@@ -68,6 +68,17 @@ Describe 'Set-GuestSysmon' {
         Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter { $Notes[0].Text -eq 'Sysmon installed' }
     }
 
+    It 'sizes its event log from the constant PowerShell''s Operational log uses too (#291)' {
+        Mock -ModuleName $module Invoke-GuestScript { }
+        InModuleScope $module { $script:GuestBusyEventLogSize = 512MB }
+        try {
+            InModuleScope $module { Set-GuestSysmon -VM ([VMContext]::new(@{ VMName = 'Alpha'; GuestSysmon = $true })) }
+        }
+        finally { InModuleScope $module { $script:GuestBusyEventLogSize = 256MB } }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { $ArgumentList[2] -eq 512MB }
+    }
+
     It 'logs a guest failure as non-fatal and carries on' {
         Mock -ModuleName $module Invoke-GuestScript { throw 'Sysmon failed in guest: access denied' }
 

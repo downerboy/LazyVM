@@ -12,18 +12,17 @@
 # someone turned on is never turned off. The work in the guest is in
 # Data\Guest.Helpers.ps1.
 
-# The smallest size of each log. The Sysmon log is Set-GuestSysmon's (256 MB, #236).
+# The smallest size of each log. The Sysmon log is Set-GuestSysmon's (#236).
 $script:GuestEventLogMinimumSize = [ordered]@{
     # The baseline's "Specify the maximum log file size (KB)": 32768, 196608 and 32768.
     'Application'                              = 32MB
     'Security'                                 = 192MB
     'System'                                   = 32MB
     # The baseline sets no size for the PowerShell logs. The engine log gets
-    # the size of Application and System; script block logging writes to the
-    # Operational log, sized as Sysmon's so a day of a developer's work does
-    # not roll over.
+    # the size of Application and System; script block logging fills the
+    # Operational log, so it is sized as Sysmon's.
     'Windows PowerShell'                       = 32MB
-    'Microsoft-Windows-PowerShell/Operational' = 256MB
+    'Microsoft-Windows-PowerShell/Operational' = $script:GuestBusyEventLogSize
 }
 
 # The baseline's advanced audit policy (its audit.csv), by subcategory GUID,
@@ -188,7 +187,7 @@ function Set-GuestEventLogging {
             param($logFixes, $auditFixes, $valueFixes)
             $ErrorActionPreference = 'Stop'
             foreach ($fix in @($logFixes)) { Set-GuestEventLogSize -Name $fix.Name -MaximumSizeInBytes $fix.MaximumSizeInBytes }
-            foreach ($fix in @($auditFixes)) { Enable-GuestAuditSubcategory -Guid $fix.Guid -Success:$fix.Success -Failure:$fix.Failure }
+            foreach ($fix in @($auditFixes)) { Enable-GuestAuditSubcategory -SubcategoryGuid $fix.Guid -Success:$fix.Success -Failure:$fix.Failure }
             foreach ($fix in @($valueFixes)) { Set-GuestPolicyValue -Path $fix.Path -Name $fix.Name -Value $fix.Value }
         }
         foreach ($fix in $fixes) { Write-LogEntry "Event logging: $($fix.Text)" 'OK' }

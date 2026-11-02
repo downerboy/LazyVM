@@ -67,6 +67,13 @@ Describe 'Get-EventLogSizeFix' {
         $fix[0].MaximumSizeInBytes | Should -Be ($Size * 1MB)
     }
 
+    It 'sizes PowerShell''s Operational log as Sysmon''s, from the one constant both use' {
+        $sizes = InModuleScope $module { @{ Shared = $script:GuestBusyEventLogSize; PowerShell = $script:GuestEventLogMinimumSize['Microsoft-Windows-PowerShell/Operational'] } }
+
+        $sizes.Shared | Should -Be 256MB
+        $sizes.PowerShell | Should -Be $sizes.Shared
+    }
+
     It 'keeps a log someone made bigger at its size' {
         $fixes = @(InModuleScope $module -Parameters @{ Logs = (New-TestLogState -Size 2GB -LogMode 'Retain') } { param($Logs) Get-EventLogSizeFix -Log $Logs })
 
