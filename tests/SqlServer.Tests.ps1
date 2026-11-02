@@ -93,7 +93,7 @@ Describe 'Install-SqlServer' {
         Mock -ModuleName $module Set-VMDvdDrive { }
         Mock -ModuleName $module Invoke-GuestScript { 'E:\setup.exe' }
         Mock -ModuleName $module Copy-ToGuest { }
-        Mock -ModuleName $module New-GuestTaskFolder { "C:\Program Files\LazyVM\Tasks\$TaskName" }
+        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         Mock -ModuleName $module Invoke-GuestInstaller { 0 }
     }
 
@@ -103,12 +103,11 @@ Describe 'Install-SqlServer' {
         Join-Path $stateDir 'sql\ConfigurationFile.ini' | Should -Exist
     }
 
-    It 'runs setup with the configuration file copied into its task''s own folder, which only administrators can change (#302)' {
+    It 'runs setup with the configuration file copied into the staging folder, which only administrators can change (#302)' {
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Install-SqlServer -VM $VM }
 
         # ? for the path separators, which are / where the tests run on Linux.
-        $config = 'C:?Program Files?LazyVM?Tasks?LazyVM-install-sqlserver?ConfigurationFile.ini'
-        Should -Invoke -ModuleName $module New-GuestTaskFolder -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-install-sqlserver' -and -not $AsGuestUser }
+        $config = 'C:?Program Files?LazyVM?Staging?ConfigurationFile.ini'
         Should -Invoke -ModuleName $module Copy-ToGuest -Times 1 -ParameterFilter { $GuestPath -like $config }
         Should -Invoke -ModuleName $module Invoke-GuestInstaller -Times 1 -ParameterFilter { $Name -eq 'install-sqlserver' -and $ArgumentList -like "/CONFIGURATIONFILE=`"$config`"" }
     }

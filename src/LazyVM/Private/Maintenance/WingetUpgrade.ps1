@@ -32,35 +32,60 @@ function Get-GuestWingetUpgrade {
         [Parameter(Mandatory)][string]$Winget
     )
 
-    return Invoke-GuestScript -VM $VM -Activity 'listing winget upgrades' -TimeoutMinutes 10 -ArgumentList @($Winget, (Protect-GuestSetupFolder -VM $VM)) -ScriptBlock {
-        param($winget, $setupDir)
+    $listed = Invoke-GuestScript -VM $VM -Activity 'listing winget upgrades' -TimeoutMinutes 10 -ArgumentList @($Winget) -ScriptBlock {
+        param($winget)
 
         # winget writes UTF-8; read as anything else, its ellipsis and column alignment are lost.
         [Console]::OutputEncoding = [Text.Encoding]::UTF8
         $lines = @(& $winget upgrade --source winget --accept-source-agreements --disable-interactivity 2>&1 | ForEach-Object { "$_" })
-        $rows = @(ConvertFrom-GuestWingetTable -Lines $lines | Where-Object { $_.Source -eq 'winget' -and (Test-GuestWingetId -Id $_.Id -AllowCutShort) })
-
-        # winget export lists whole ids, to complete any the table cut short.
-        $knownIds = @()
-        if (@($rows | Where-Object { $_.Id.EndsWith([string][char]0x2026) }).Count -gt 0) {
-            $exportFile = Join-Path $setupDir 'upgrade-winget.json'
-            Remove-Item -LiteralPath $exportFile -Force -ErrorAction SilentlyContinue
-            & $winget export --output $exportFile --source winget --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
-            if (Test-Path -LiteralPath $exportFile) {
-                $export = Get-Content -LiteralPath $exportFile -Raw | ConvertFrom-Json
-                $knownIds = @(foreach ($source in @($export.Sources)) { foreach ($package in @($source.Packages)) { "$($package.PackageIdentifier)" } })
-                Remove-Item -LiteralPath $exportFile -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        foreach ($row in $rows) {
-            [pscustomobject]@{
-                Id      = Resolve-GuestWingetId -Id $row.Id -KnownId $knownIds
-                Name    = $row.Name
-                Folders = @(Get-GuestProgramFolder -Name $row.Name)
-            }
+        foreach ($row in @(ConvertFrom-GuestWingetTable -Lines $lines | Where-Object { $_.Source -eq 'winget' -and (Test-GuestWingetId -Id $_.Id -AllowCutShort) })) {
+            [pscustomobject]@{ Id = $row.Id; Name = $row.Name; Folders = @(Get-GuestProgramFolder -Name $row.Name) }
         }
     }
+    $rows = @($listed)
+
+    $cutShort = @($rows | Where-Object { "$($_.Id)".EndsWith([string][char]0x2026) } | ForEach-Object { "$($_.Id)" })
+    $whole = @{}
+    if ($cutShort.Count -gt 0) {
+        try { $whole = Get-GuestWingetWholeId -VM $VM -Winget $Winget -Id $cutShort }
+        catch { Write-LogEntry "  The winget ids cut short could not be completed, so those packages are left out (non-fatal): $($_.Exception.Message)" 'WARN' }
+    }
+    foreach ($row in $rows) {
+        $id = if ($cutShort -contains "$($row.Id)") { "$($whole["$($row.Id)"])" } else { "$($row.Id)" }
+        [pscustomobject]@{ Id = $id; Name = $row.Name; Folders = @($row.Folders) }
+    }
+}
+
+function Get-GuestWingetWholeId {
+    <#
+      The whole ids for ids winget cut short in its table, as a hashtable
+      from each cut id to its whole one, or '' when it cannot be completed:
+      from winget export, which lists whole ids, written in the staging
+      folder (Get-GuestStagingFolder).
+    #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$Winget,
+        [Parameter(Mandatory)][string[]]$Id
+    )
+
+    $pairs = Invoke-GuestScript -VM $VM -Activity 'completing winget ids' -TimeoutMinutes 10 -ArgumentList @($Winget, (Get-GuestStagingFolder -VM $VM), $Id) -ScriptBlock {
+        param($winget, $staging, $ids)
+        $knownIds = @()
+        $exportFile = Join-Path $staging 'upgrade-winget.json'
+        Remove-Item -LiteralPath $exportFile -Force -ErrorAction SilentlyContinue
+        & $winget export --output $exportFile --source winget --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
+        if (Test-Path -LiteralPath $exportFile) {
+            $export = Get-Content -LiteralPath $exportFile -Raw | ConvertFrom-Json
+            $knownIds = @(foreach ($source in @($export.Sources)) { foreach ($package in @($source.Packages)) { "$($package.PackageIdentifier)" } })
+            Remove-Item -LiteralPath $exportFile -Force -ErrorAction SilentlyContinue
+        }
+        foreach ($cut in $ids) { [pscustomobject]@{ Cut = $cut; Whole = Resolve-GuestWingetId -Id $cut -KnownId $knownIds } }
+    }
+    $whole = @{}
+    foreach ($pair in @($pairs)) { $whole["$($pair.Cut)"] = "$($pair.Whole)" }
+    return $whole
 }
 
 function Update-GuestWingetPackage {

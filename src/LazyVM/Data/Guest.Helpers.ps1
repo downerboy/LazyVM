@@ -967,17 +967,35 @@ function Get-GuestInstallerProblem {
 # A folder only administrators and SYSTEM can change, for files that SYSTEM
 # or an administrator runs or trusts: owned by Administrators, nothing
 # inherited from the folder above, and full control for SYSTEM and
-# Administrators, for the folder, its subfolders and its files. A task that
-# runs as a user under their limited token also gives that user Modify, as
-# that token cannot use the Administrators entry.
+# Administrators, for the folder, its subfolders and its files. For a task
+# that runs as a user under their limited token, which cannot use the
+# Administrators entry, the task's folder also lets that user read it, and
+# its Output folder lets them change it.
+#
+# They are kept only under %ProgramFiles%\LazyVM, whose folders only
+# administrators, SYSTEM and TrustedInstaller may change (#302): in a folder
+# other users can make folders and links in, such as C:\, a check could be
+# raced. A folder that is not right is moved aside, never deleted: a
+# recursive delete of a tree someone else could change can be led anywhere.
 
 $script:GuestAdministratorsSid = 'S-1-5-32-544'
 
+# The accounts that may own or change the folders above the private ones:
+# Administrators, SYSTEM and TrustedInstaller, as TrustedCode.ps1 has them.
+$script:GuestTrustedWriters = @('S-1-5-32-544', 'S-1-5-18', 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
+
+# Rights that change a folder or what is in it, as in TrustedCode.ps1.
+$script:GuestWriteRights = [long]0x500D0156
+
 function Get-GuestPrivateFolderAccess {
     <# The access a private folder gives: each security identifier with its rights. #>
-    param([string]$ModifySid)
+    param(
+        [string]$ReadSid,
+        [string]$ModifySid
+    )
 
     $access = [ordered]@{ 'S-1-5-18' = 'FullControl'; $script:GuestAdministratorsSid = 'FullControl' }
+    if ($ReadSid) { $access[$ReadSid] = 'ReadAndExecute' }
     if ($ModifySid) { $access[$ModifySid] = 'Modify' }
     return $access
 }
@@ -985,12 +1003,14 @@ function Get-GuestPrivateFolderAccess {
 function New-GuestPrivateFolder {
     <#
       A new, empty private folder, for a download that is checked and then
-      run, or a task's files. Created with its owner and ACL in one step, so
-      no one else can put anything in it first. With $ModifySid, that account
-      may change it too. Fails if anything is already at $Path.
+      run, or a task's files. Created with its owner and ACL in one step, and
+      checked afterwards, as Windows hands back a folder or link already
+      there without applying the ACL. With $ReadSid, that account may read
+      it; with $ModifySid, change it. Fails if anything is already at $Path.
     #>
     param(
         [Parameter(Mandatory)][string]$Path,
+        [string]$ReadSid,
         [string]$ModifySid
     )
 
@@ -998,11 +1018,13 @@ function New-GuestPrivateFolder {
     $acl = New-Object System.Security.AccessControl.DirectorySecurity
     $acl.SetOwner((New-Object System.Security.Principal.SecurityIdentifier($script:GuestAdministratorsSid)))
     $acl.SetAccessRuleProtection($true, $false)
-    foreach ($entry in (Get-GuestPrivateFolderAccess -ModifySid $ModifySid).GetEnumerator()) {
+    foreach ($entry in (Get-GuestPrivateFolderAccess -ReadSid $ReadSid -ModifySid $ModifySid).GetEnumerator()) {
         $identity = New-Object System.Security.Principal.SecurityIdentifier($entry.Key)
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($identity, $entry.Value, 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
     }
     $null = [IO.Directory]::CreateDirectory($Path, $acl)
+    $problem = Get-GuestPrivateFolderProblem -Path $Path -ReadSid $ReadSid -ModifySid $ModifySid
+    if ($problem) { throw "$Path was not made private: $problem" }
 }
 
 function Get-GuestFolderAclProblem {
@@ -1015,6 +1037,7 @@ function Get-GuestFolderAclProblem {
     [OutputType([string])]
     param(
         [Parameter(Mandatory)]$Acl,
+        [string]$ReadSid,
         [string]$ModifySid
     )
 
@@ -1022,7 +1045,7 @@ function Get-GuestFolderAclProblem {
     if ($owner -ne $script:GuestAdministratorsSid) { return "it is owned by $owner, not Administrators" }
     if (-not $Acl.AreAccessRulesProtected) { return 'it inherits access from the folder above' }
 
-    $expected = Get-GuestPrivateFolderAccess -ModifySid $ModifySid
+    $expected = Get-GuestPrivateFolderAccess -ReadSid $ReadSid -ModifySid $ModifySid
     $synchronize = [System.Security.AccessControl.FileSystemRights]::Synchronize
     $everywhere = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
     $found = @{}
@@ -1047,75 +1070,103 @@ function Get-GuestPrivateFolderProblem {
     [OutputType([string])]
     param(
         [Parameter(Mandatory)][string]$Path,
+        [string]$ReadSid,
         [string]$ModifySid
     )
 
     $item = Get-Item -LiteralPath $Path -Force
     if (-not $item.PSIsContainer) { return 'it is not a folder' }
     if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return 'it is a junction or link' }
-    return Get-GuestFolderAclProblem -Acl (Get-Acl -LiteralPath $Path) -ModifySid $ModifySid
+    return Get-GuestFolderAclProblem -Acl (Get-Acl -LiteralPath $Path) -ReadSid $ReadSid -ModifySid $ModifySid
 }
 
 function Initialize-GuestPrivateFolder {
     <#
-      Makes $Path a private folder (New-GuestPrivateFolder). A folder already
-      there is kept, with what it holds, only when its owner and ACL are
-      exactly right; anything else there is deleted first. Returns why what
-      was there was deleted, or '' when nothing was.
+      Makes $Path a private folder (New-GuestPrivateFolder), in a folder only
+      administrators can change (Initialize-GuestAdminFolder). A folder
+      already there is kept, with what it holds, only when its owner and ACL
+      are exactly right; anything else there is moved aside beside it,
+      never deleted. Returns @{ Path; Replaced; Reason; MovedTo }.
     #>
-    [OutputType([string])]
+    [OutputType([pscustomobject])]
     param(
         [Parameter(Mandatory)][string]$Path,
+        [string]$ReadSid,
         [string]$ModifySid
     )
 
-    $problem = ''
+    $result = [pscustomobject]@{ Path = $Path; Replaced = $false; Reason = ''; MovedTo = '' }
     if (Test-Path -LiteralPath $Path) {
-        $problem = Get-GuestPrivateFolderProblem -Path $Path -ModifySid $ModifySid
-        if (-not $problem) { return '' }
-        Remove-GuestFolderEntry -Path $Path
+        $result.Reason = Get-GuestPrivateFolderProblem -Path $Path -ReadSid $ReadSid -ModifySid $ModifySid
+        if (-not $result.Reason) { return $result }
+        $result.Replaced = $true
+        $result.MovedTo = '{0}.replaced-{1}' -f $Path, [guid]::NewGuid().ToString('N')
+        # A move renames the folder, file or link itself; nothing in it is touched.
+        if ((Get-Item -LiteralPath $Path -Force).PSIsContainer) { [IO.Directory]::Move($Path, $result.MovedTo) }
+        else { [IO.File]::Move($Path, $result.MovedTo) }
     }
-    New-GuestPrivateFolder -Path $Path -ModifySid $ModifySid
-    return $problem
+    New-GuestPrivateFolder -Path $Path -ReadSid $ReadSid -ModifySid $ModifySid
+    return $result
 }
 
-function Initialize-GuestSetupFolder {
+function Get-GuestAdminFolderProblem {
     <#
-      Makes $Path, the setup folder (GuestSetupDir) where LazyVM stages what
-      it copies in and out over PowerShell Direct, a private folder
-      (Initialize-GuestPrivateFolder), so no other guest user can change or
-      read what is staged there (#302). Returns why the folder that was there
-      was replaced, or '' when it was right or new. A folder that is not
-      right is deleted with everything in it, so only a folder of its own,
-      directly in a drive's root and not one Windows uses, is accepted.
+      Why the folder at $Path, above LazyVM's private folders, is not one
+      only administrators, SYSTEM and TrustedInstaller own and can change,
+      or '' when it is. A rule for what is inside only does not count.
     #>
     [OutputType([string])]
     param([Parameter(Mandatory)][string]$Path)
 
-    $folder = $Path.TrimEnd('\')
-    $windowsFolders = @($env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData, ("$env:PUBLIC" -replace '\\[^\\]*$', '')) |
-        Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') }
-    if ($folder -notmatch '^[A-Za-z]:\\[^\\/]+$' -or $folder -match '^[A-Za-z]:\\\.+$' -or $windowsFolders -contains $folder) {
-        throw "GuestSetupDir must be a folder of its own directly in a drive's root, such as C:\LazyVMSetup, not $Path"
+    $item = Get-Item -LiteralPath $Path -Force
+    if (-not $item.PSIsContainer) { return 'it is not a folder' }
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return 'it is a junction or link' }
+    $acl = Get-Acl -LiteralPath $Path
+    $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+    if ($script:GuestTrustedWriters -notcontains $owner) { return "it is owned by $owner, who can change its permissions" }
+    foreach ($rule in @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))) {
+        $sid = $rule.IdentityReference.Value
+        $insideOnly = [bool]($rule.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly)
+        if ("$($rule.AccessControlType)" -ne 'Allow' -or $insideOnly -or $script:GuestTrustedWriters -contains $sid) { continue }
+        if ([long]$rule.FileSystemRights -band $script:GuestWriteRights) { return "$sid can change it ($($rule.FileSystemRights))" }
     }
-    return Initialize-GuestPrivateFolder -Path $folder
+    return ''
 }
 
-function Remove-GuestFolderEntry {
+function Initialize-GuestAdminFolder {
     <#
-      Deletes the file, folder or link at $Path; a folder with everything in
-      it. A junction or link, there or inside, is removed itself, never what
-      it points to (.NET's recursive delete does not follow them).
+      Makes sure the folder at $Path, above LazyVM's private folders, is one
+      only administrators can change (Get-GuestAdminFolderProblem). A missing
+      one is made, inheriting Program Files' access. One that is not right
+      is never changed or deleted: this stops, saying why.
     #>
     param([Parameter(Mandatory)][string]$Path)
 
-    $item = Get-Item -LiteralPath $Path -Force
-    if (-not $item.PSIsContainer) {
-        [IO.File]::Delete($Path)
-        return
-    }
-    $isLink = [bool]($item.Attributes -band [IO.FileAttributes]::ReparsePoint)
-    [IO.Directory]::Delete($Path, -not $isLink)
+    if (-not (Test-Path -LiteralPath $Path)) { $null = New-Item -ItemType Directory -Path $Path }
+    $problem = Get-GuestAdminFolderProblem -Path $Path
+    if ($problem) { throw "$Path is not safe for LazyVM's files: $problem. LazyVM does not change it; an administrator must fix or remove it." }
+}
+
+function Get-GuestLazyVMFolder {
+    <# %ProgramFiles%\LazyVM in the guest, which holds LazyVM's task and staging folders. #>
+    [OutputType([string])]
+    param()
+
+    return [IO.Path]::Combine($env:ProgramFiles, 'LazyVM')
+}
+
+function Initialize-GuestStagingFolder {
+    <#
+      Makes %ProgramFiles%\LazyVM\Staging, where LazyVM stages what it copies
+      in and out of the guest, a private folder, and returns
+      Initialize-GuestPrivateFolder's result for it.
+    #>
+    [OutputType([pscustomobject])]
+    param()
+
+    $lazyVM = Get-GuestLazyVMFolder
+    Initialize-GuestAdminFolder -Path $lazyVM
+    return Initialize-GuestPrivateFolder -Path ([IO.Path]::Combine($lazyVM, 'Staging'))
 }
 
 function Get-GuestAccountSid {
@@ -1387,28 +1438,33 @@ function Invoke-GuestGalleryModuleUpdate {
 # as a scheduled task. The task runs a fixed wrapper script. The work itself
 # and its arguments are written beside it as files, never pasted into script
 # text, so no path or value can change what the script does. The wrapper
-# writes <task>.done: the work's result, OK, or FAILED: <reason>.
+# writes Output\<task>.done: the work's result, OK, or FAILED: <reason>.
 #
-# Each task keeps these files, its transcript and any file it is given in a
-# private folder of its own, %ProgramFiles%\LazyVM\Tasks\<task> (#302), so no
-# other guest user can change what it runs, forge its result or read its
-# transcript. Not under %ProgramData%, where any user can make the folder
-# first; no one but an administrator can make one under %ProgramFiles%.
+# Each task keeps these files, and any file it is given, in a private folder
+# of its own, %ProgramFiles%\LazyVM\Tasks\<task> (#302), and its result and
+# transcript in the Output folder inside it. A task under a user's limited
+# token can read its folder and change only Output, so what it is given
+# stays as LazyVM wrote it; its result is only that user's word.
 
 $script:GuestTaskWrapper = @'
 $ErrorActionPreference = 'Stop'
-$base = $PSCommandPath -replace '\.ps1$', ''
+# For the work: its own folder, with what it was given, and where it may write.
+$TaskFolder = Split-Path -Path $PSCommandPath -Parent
+$TaskOutput = Join-Path $TaskFolder 'Output'
+$name = [IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
+$base = Join-Path $TaskFolder $name
+$done = Join-Path $TaskOutput "$name.done"
 $transcribing = $false
-try { Start-Transcript -Path "$base.log" -Force | Out-Null; $transcribing = $true } catch { $transcribing = $false }
+try { Start-Transcript -Path (Join-Path $TaskOutput "$name.log") -Force | Out-Null; $transcribing = $true } catch { $transcribing = $false }
 try {
     $arguments = @()
     foreach ($item in (Get-Content -LiteralPath "$base.args.json" -Raw | ConvertFrom-Json)) { $arguments += , $item }
     $work = [scriptblock]::Create((Get-Content -LiteralPath "$base.work.ps1" -Raw))
     $result = & $work @arguments
     if ($null -eq $result) { $result = 'OK' }
-    "$(@($result)[-1])" | Set-Content -LiteralPath "$base.done" -Encoding UTF8
+    "$(@($result)[-1])" | Set-Content -LiteralPath $done -Encoding UTF8
 }
-catch { "FAILED: $($_.Exception.Message)" | Set-Content -LiteralPath "$base.done" -Encoding UTF8 }
+catch { "FAILED: $($_.Exception.Message)" | Set-Content -LiteralPath $done -Encoding UTF8 }
 finally { if ($transcribing) { Stop-Transcript | Out-Null } }
 '@
 
@@ -1417,47 +1473,40 @@ function Get-GuestTaskFolder {
     [OutputType([string])]
     param([Parameter(Mandatory)][string]$TaskName)
 
-    return [IO.Path]::Combine($env:ProgramFiles, 'LazyVM', 'Tasks', $TaskName)
+    return [IO.Path]::Combine((Get-GuestLazyVMFolder), 'Tasks', $TaskName)
+}
+
+function Get-GuestTaskOutputFolder {
+    <# Where task $TaskName writes its result and transcript: Output in its folder, as the wrapper has it. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$TaskName)
+
+    return Join-Path (Get-GuestTaskFolder -TaskName $TaskName) 'Output'
 }
 
 function Initialize-GuestTaskFolder {
     <#
-      Makes task $TaskName's private folder ready (Initialize-GuestPrivateFolder)
-      and returns its path. With $UserName, for a task that runs as that user
-      under their limited token, the user may change it too.
+      Makes task $TaskName's private folder and its Output folder ready, once
+      the folders above are checked, and returns the task's folder. The one
+      place that decides who has access: for a task that runs as $UserName
+      under their limited token (not -Elevated), that user may read the
+      folder and change Output; a full token or SYSTEM needs no entry of its own.
     #>
     [OutputType([string])]
     param(
         [Parameter(Mandatory)][string]$TaskName,
-        [string]$UserName
+        [string]$UserName,
+        [switch]$Elevated
     )
 
+    $lazyVM = Get-GuestLazyVMFolder
+    Initialize-GuestAdminFolder -Path $lazyVM
+    Initialize-GuestAdminFolder -Path ([IO.Path]::Combine($lazyVM, 'Tasks'))
+    $userSid = if ($UserName -and -not $Elevated) { Get-GuestAccountSid -UserName $UserName } else { '' }
     $folder = Get-GuestTaskFolder -TaskName $TaskName
-    # Inherits Program Files' access: only administrators can change it.
-    New-GuestFolder -Path (Split-Path -Path $folder -Parent)
-    $modifySid = if ($UserName) { Get-GuestAccountSid -UserName $UserName } else { '' }
-    $null = Initialize-GuestPrivateFolder -Path $folder -ModifySid $modifySid
+    $null = Initialize-GuestPrivateFolder -Path $folder -ReadSid $userSid
+    $null = Initialize-GuestPrivateFolder -Path (Get-GuestTaskOutputFolder -TaskName $TaskName) -ModifySid $userSid
     return $folder
-}
-
-function Remove-GuestLegacyTaskFile {
-    <#
-      Deletes the files an earlier LazyVM left of task $TaskName in $SetupDir,
-      where tasks kept them before they had folders of their own (#302).
-      Never fails: a file it cannot delete is left, and a $SetupDir that is a
-      junction or link is not touched.
-    #>
-    param(
-        [Parameter(Mandatory)][string]$SetupDir,
-        [Parameter(Mandatory)][string]$TaskName
-    )
-
-    $folder = Get-Item -LiteralPath $SetupDir -Force -ErrorAction SilentlyContinue
-    if (-not $folder -or ($folder.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return }
-    $base = Join-Path $SetupDir $TaskName
-    foreach ($suffix in '.ps1', '.work.ps1', '.args.json', '.done', '.log') {
-        Remove-Item -LiteralPath "$base$suffix" -Force -ErrorAction SilentlyContinue
-    }
 }
 
 function Start-GuestTask {
@@ -1477,11 +1526,9 @@ function Start-GuestTask {
         [Parameter(Mandatory)][int]$TimeoutSeconds
     )
 
-    # A full token has the Administrators entry; only a limited one needs its own.
-    $limitedUser = if ($UserName -and -not $Elevated) { $UserName } else { '' }
-    $folder = Initialize-GuestTaskFolder -TaskName $TaskName -UserName $limitedUser
+    $folder = Initialize-GuestTaskFolder -TaskName $TaskName -UserName $UserName -Elevated:$Elevated
     $base = Join-Path $folder $TaskName
-    Remove-Item -LiteralPath "$base.done" -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path (Get-GuestTaskOutputFolder -TaskName $TaskName) "$TaskName.done") -Force -ErrorAction SilentlyContinue
     Set-Content -LiteralPath "$base.ps1" -Value $script:GuestTaskWrapper -Encoding UTF8
     Set-Content -LiteralPath "$base.work.ps1" -Value $Work -Encoding UTF8
     Set-Content -LiteralPath "$base.args.json" -Value (ConvertTo-Json -InputObject @($ArgumentList) -Depth 5) -Encoding UTF8
@@ -1501,10 +1548,14 @@ function Start-GuestTask {
 }
 
 function Get-GuestTaskStatus {
-    <# Done: what the wrapper wrote, or $null while it runs; the task's state; the boot time. #>
+    <#
+      Done: what the wrapper wrote, or $null while it runs; the task's state;
+      the boot time. A task under a user's limited token can write its own
+      result, so its Done is only that user's word.
+    #>
     param([Parameter(Mandatory)][string]$TaskName)
 
-    $done = Join-Path (Get-GuestTaskFolder -TaskName $TaskName) "$TaskName.done"
+    $done = Join-Path (Get-GuestTaskOutputFolder -TaskName $TaskName) "$TaskName.done"
     $result = $null
     if (Test-Path -LiteralPath $done) { $result = (Get-Content -LiteralPath $done -Raw).Trim() }
     return [pscustomobject]@{

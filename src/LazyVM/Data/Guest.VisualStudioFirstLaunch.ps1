@@ -3,7 +3,8 @@
 # Runs in the GUEST, under Windows PowerShell 5.1, in the signed-in user's
 # desktop session: no PowerShell 7 syntax. The build copies it to
 # C:\Program Files\LazyVM\Tasks\LazyVM-VSFirstLaunch\VisualStudioFirstLaunch.ps1,
-# the folder of its task, which only that user and administrators can change.
+# the folder of its task, which that user can read but only administrators
+# can change; what it writes goes in the task's Output folder.
 #
 # The build (Complete-GuestVisualStudioFirstLaunch) runs it with -DevenvPath,
 # -Control, -TimeoutMinutes and -ProcessIdPath: it starts Visual Studio with

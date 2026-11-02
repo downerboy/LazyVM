@@ -195,9 +195,9 @@ function Save-GuestVisualStudioState {
     }
 
     $info = Invoke-GuestScript -VM $VM -Activity 'Visual Studio capture' -TimeoutMinutes 20 -ArgumentList @(
-        (Protect-GuestSetupFolder -VM $VM), $vs.InstanceId, "$($vs.ProductLine)"
+        (Get-GuestStagingFolder -VM $VM), $vs.InstanceId, "$($vs.ProductLine)"
     ) -ScriptBlock {
-        param($setupDir, $instanceId, $productLine)
+        param($stagingFolder, $instanceId, $productLine)
         $ErrorActionPreference = 'Stop'
         $out = [ordered]@{ Settings = $null; SettingsMarker = $null; NuGetConfig = $null; GitConfig = $null; UserItems = $null; Notes = @() }
 
@@ -212,7 +212,7 @@ function Save-GuestVisualStudioState {
 
         $userItems = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "Visual Studio $productLine"
         if (Test-Path $userItems) {
-            $staging = Join-Path $setupDir 'vs-useritems'
+            $staging = Join-Path $stagingFolder 'vs-useritems'
             Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
             New-GuestFolder -Path $staging
             foreach ($name in 'Code Snippets', 'Templates', 'Settings') {
@@ -220,7 +220,7 @@ function Save-GuestVisualStudioState {
                 if (Test-Path $source) { Copy-Item -Path $source -Destination $staging -Recurse -Force -ErrorAction SilentlyContinue }
             }
             if (@(Get-ChildItem $staging -Recurse -File -ErrorAction SilentlyContinue).Count -gt 0) {
-                $out.UserItems = Join-Path $setupDir 'vs-useritems.zip'
+                $out.UserItems = Join-Path $stagingFolder 'vs-useritems.zip'
                 New-GuestZip -Source $staging -Destination $out.UserItems
             }
             Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
@@ -421,8 +421,8 @@ function Save-GuestWindowsState {
         [Parameter(Mandatory)][string]$CaptureDir
     )
 
-    $setupDir = Protect-GuestSetupFolder -VM $VM
-    $staging = Join-Path $setupDir 'winstate'
+    $stagingFolder = Get-GuestStagingFolder -VM $VM
+    $staging = Join-Path $stagingFolder 'winstate'
     $null = Invoke-GuestScript -VM $VM -Activity 'Windows capture staging' -TimeoutMinutes 5 -ArgumentList @($staging) -ScriptBlock {
         param($staging)
         Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
@@ -442,10 +442,10 @@ function Save-GuestWindowsState {
     $summary = [pscustomobject]@{
         Certificates = @($certificates.Certificates)
     }
-    $zip = Invoke-GuestScript -VM $VM -Activity 'Windows capture archive' -TimeoutMinutes 15 -ArgumentList @($staging, ($summary | ConvertTo-Json -Depth 8), $setupDir) -ScriptBlock {
-        param($staging, $summaryJson, $setupDir)
+    $zip = Invoke-GuestScript -VM $VM -Activity 'Windows capture archive' -TimeoutMinutes 15 -ArgumentList @($staging, ($summary | ConvertTo-Json -Depth 8), $stagingFolder) -ScriptBlock {
+        param($staging, $summaryJson, $stagingFolder)
         Set-Content -Path (Join-Path $staging 'environment.json') -Value $summaryJson -Encoding UTF8
-        $zip = Join-Path $setupDir 'winstate.zip'
+        $zip = Join-Path $stagingFolder 'winstate.zip'
         New-GuestZip -Source $staging -Destination $zip
         return $zip
     }

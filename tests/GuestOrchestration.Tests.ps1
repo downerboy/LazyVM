@@ -262,7 +262,7 @@ Describe 'Invoke-GuestTask' {
         }
 
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
-            $sent = @($ArgumentList[3])
+            $sent = @($ArgumentList[2])
             $Activity -like 'starting *' -and
             $sent.Count -eq 2 -and
             $sent[0] -eq 'C:\winget.exe' -and -not $sent[0].PSObject.Properties['PSComputerName'] -and
@@ -283,19 +283,7 @@ Describe 'Guest task files (#302)' {
         }
     }
 
-    It 'deletes what an earlier LazyVM left of the task in the setup folder when it starts it' {
-        InModuleScope $module -Parameters @{ Settings = $settings } {
-            param($Settings)
-            Invoke-GuestTask -VM ([VMContext]::new($Settings)) -TaskName 'LazyVM-test' -Work { 'OK' } -TimeoutMinutes 5 -Activity 'test'
-        }
-
-        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
-            $Activity -like 'starting *' -and $ArgumentList[0] -eq 'LazyVM-test' -and $ArgumentList[1] -eq 'C:\LazyVMSetup' -and
-            "$ScriptBlock" -match 'Remove-GuestLegacyTaskFile -SetupDir \$legacySetupDir' -and "$ScriptBlock" -notmatch 'Start-GuestTask[^\r\n]*SetupDir'
-        }
-    }
-
-    It 'reads the result from the task''s own folder, not the setup folder' {
+    It 'leaves where the task''s result is to the guest, which reads it from the task''s own folder' {
         InModuleScope $module -Parameters @{ Settings = $settings } {
             param($Settings)
             Invoke-GuestTask -VM ([VMContext]::new($Settings)) -TaskName 'LazyVM-test' -Work { 'OK' } -TimeoutMinutes 5 -Activity 'test'
@@ -306,7 +294,7 @@ Describe 'Guest task files (#302)' {
         }
     }
 
-    It 'runs an installer as the task Get-GuestInstallerTaskName names, and gives it nothing from the setup folder' {
+    It 'runs an installer as a task of its own, named after it' {
         Mock -ModuleName $module Invoke-GuestTask { '0' }
 
         $null = InModuleScope $module -Parameters @{ Settings = $settings } {

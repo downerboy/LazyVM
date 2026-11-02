@@ -127,11 +127,9 @@ function Install-SqlServer {
     Write-LogEntry "Installing $script:SqlEditionName (up to $($VM.Settings.SQLInstallMinutes) minutes)..." 'INFO'
 
     try {
-        # In the setup task's own folder, which no other guest user can
-        # change, as setup runs as SYSTEM (#302).
-        $installerName = 'install-sqlserver'
-        $guestFolder = New-GuestTaskFolder -VM $VM -TaskName (Get-GuestInstallerTaskName -Name $installerName)
-        $guestConfigPath = Join-Path $guestFolder 'ConfigurationFile.ini'
+        # In the staging folder, which no other guest user can change, as
+        # setup runs as SYSTEM (#302).
+        $guestConfigPath = Join-Path (Get-GuestStagingFolder -VM $VM) 'ConfigurationFile.ini'
         Copy-ToGuest -VM $VM -HostPath $hostConfigPath -GuestPath $guestConfigPath
         $setupExe = Invoke-GuestScript -VM $VM -Activity 'SQL Server media check' -TimeoutMinutes 5 -ScriptBlock {
             $ErrorActionPreference = 'Stop'
@@ -155,7 +153,7 @@ function Install-SqlServer {
             "/CONFIGURATIONFILE=`"$guestConfigPath`""
         )
         $exitCode = Invoke-GuestInstaller -VM $VM -FilePath $setupExe -ArgumentList $setupArguments `
-            -Name $installerName -TimeoutMinutes $VM.Settings.SQLInstallMinutes -Activity 'the SQL Server install'
+            -Name 'install-sqlserver' -TimeoutMinutes $VM.Settings.SQLInstallMinutes -Activity 'the SQL Server install'
     }
     finally {
         Set-VMDvdDrive -VMName $VM.Name -ControllerNumber $dvd.ControllerNumber -ControllerLocation $dvd.ControllerLocation -Path $previousMedia
