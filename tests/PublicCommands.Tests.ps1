@@ -125,6 +125,26 @@ Describe 'Invoke-LazyVMMaintenance' {
     }
 }
 
+Describe 'Invoke-LazyVMRebuild' {
+    BeforeEach {
+        Mock -ModuleName $module Assert-Administrator { }
+        $vm = $testVM
+        Mock -ModuleName $module Initialize-CommandRun { $vm }.GetNewClosure()
+        Mock -ModuleName $module Complete-CommandRun { }
+        Mock -ModuleName $module Sync-VMProfile { }
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Invoke-Rebuild { $true }
+    }
+
+    It 'records nothing and rebuilds nothing with -WhatIf (#292)' {
+        Invoke-LazyVMRebuild -Name Alpha -WhatIf
+
+        Should -Invoke -ModuleName $module Invoke-Rebuild -Times 0
+        Should -Invoke -ModuleName $module Sync-VMProfile -Times 0
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { -not $RecordHardware }
+    }
+}
+
 Describe 'Build-LazyVM' {
     BeforeEach {
         Mock -ModuleName $module Initialize-BuildTarget { }

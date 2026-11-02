@@ -648,6 +648,22 @@ Describe 'New-VMProfile' {
         (Read-TestJson -Path $path).MaintenanceTime | Should -Be $expected
     }
 
+    It 'gives each VM its own ProfileId, never copied with -From (#292)' {
+        $root = New-TestRoot
+
+        $ids = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            $null = New-VMProfile -Root $Root -Name 'Alpha'
+            $null = New-VMProfile -Root $Root -Name 'Beta' -From 'Alpha'
+            foreach ($name in 'Alpha', 'Beta') { (Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $name)).ProfileId }
+        }
+
+        $ids.Count | Should -Be 2
+        foreach ($id in $ids) { $id | Should -Match '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }
+        $ids[0] | Should -Not -Be $ids[1]
+    }
+
     It 'keeps the new profile as the first version in History' {
         $root = New-TestRoot
 
@@ -811,6 +827,7 @@ Describe 'Config templates' {
         @{ Case = 'a file with no Name'; Text = '{ "Settings": {} }'; Message = '*needs a Name*' }
         @{ Case = 'a name that is not a single word'; Text = '{ "Name": "My template", "Settings": {} }'; Message = "*'My template'*" }
         @{ Case = 'a file with no Settings'; Text = '{ "Name": "Mine" }'; Message = '*needs a Settings table*' }
+        @{ Case = 'Automatic that is not true or false'; Text = '{ "Name": "Mine", "Automatic": "yes", "Settings": {} }'; Message = '*"Automatic"*true or false*' }
         @{ Case = 'a setting that must differ between VMs'; Text = '{ "Name": "Mine", "Settings": { "logfile": "x.log" } }'; Message = "*'LogFile'*cannot be in a config template*" }
         @{ Case = 'state recorded inside a VM'; Text = '{ "Name": "Mine", "Settings": { "GuestEnvironment": null } }'; Message = "*'GuestEnvironment'*cannot be in a config template*" }
     ) {
@@ -826,6 +843,14 @@ Describe 'Config templates' {
 
         $template.Name | Should -Be 'Mine'
         $template.Settings.vCPU | Should -Be 6
+    }
+
+    It 'say whether LazyVM keeps them up to date: "Automatic": true (#292)' {
+        $automatic = New-TestFile -Text '{ "Name": "Alpha-latest", "Automatic": true, "Settings": { "vCPU": 6 } }'
+        $own = New-TestFile -Text '{ "Name": "Mine", "Settings": { "vCPU": 6 } }'
+
+        (InModuleScope $module -Parameters @{ Path = $automatic } { param($Path) Read-VMTemplateFile -Path $Path }).Automatic | Should -BeTrue
+        (InModuleScope $module -Parameters @{ Path = $own } { param($Path) Read-VMTemplateFile -Path $Path }).Automatic | Should -BeFalse
     }
 
     It 'each have a Problem, empty when the file is fine' {
@@ -1029,6 +1054,204 @@ Describe 'Export-VMTemplate (#250)' {
             }
         } | Should -Throw -ExpectedMessage '*WebDev.json already exists*'
         (Get-Content -LiteralPath (Join-Path -Path $folder.FullName -ChildPath 'WebDev.json') -Raw).Trim() | Should -Be 'not json'
+    }
+}
+
+Describe 'Update-AutomaticTemplate (#292)' {
+    BeforeAll {
+        $alphaId = '11111111-2222-4333-8444-555555555555'
+        $builtJson = '{ "ProfileId": "' + $alphaId + '", "vCPU": 4, "GuestComputerName": "ALPHA", "GuestEnvironment": { "MachineVariables": { "TEAM": "alpha" } } }'
+
+        function New-TestBuiltRoot {
+            <# A root with Alpha as it was first built: VM.json and VM.Template.json alike. #>
+            $root = New-TestRoot -Profiles @{ Alpha = $builtJson }
+            Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json') -Value $builtJson
+            return $root
+        }
+        function Set-TestProfile {
+            param([string]$Root, [string]$Json)
+            Set-Content -LiteralPath (Join-Path -Path $Root -ChildPath 'Alpha/Config/VM.json') -Value $Json
+        }
+        function Get-TestTemplatePath {
+            param([string]$Root, [string]$FileName = 'Alpha-latest.json')
+            Join-Path -Path $Root -ChildPath "Shared/Templates/$FileName"
+        }
+        function Invoke-TestAutomaticTemplate {
+            <# Runs the step for Alpha under $Root. #>
+            param([string]$Root)
+            InModuleScope $module -Parameters @{ Root = $Root } {
+                param($Root)
+                $null = Update-AutomaticTemplate -Root $Root -Name 'Alpha'
+            }
+        }
+        function Update-TestProfile {
+            <# Changes Alpha's VM.json the way LazyVM does. #>
+            param([string]$Root, [hashtable]$Change)
+            InModuleScope $module -Parameters @{ Root = $Root; Change = $Change } {
+                param($Root, $Change)
+                $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change $Change -Reason 'a test'
+            }
+        }
+    }
+
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry {}
+        Mock -ModuleName $module Get-ToolingCheckpointStamp { , @() }
+    }
+
+    It 'writes nothing while the configuration is still the one the VM was first built from' {
+        $root = New-TestBuiltRoot
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        Get-TestTemplatePath -Root $root | Should -Not -Exist
+    }
+
+    It 'writes Alpha-latest, named after the VM, from the latest configuration once it changed, without the settings each VM has its own of' {
+        $root = New-TestBuiltRoot
+        Set-TestProfile -Root $root -Json ('{ "ProfileId": "' + $alphaId + '", "vCPU": 8, "GuestComputerName": "ALPHA", "GuestEnvironment": { "MachineVariables": { "TEAM": "beta" } } }')
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        $template = Read-TestJson -Path (Get-TestTemplatePath -Root $root)
+        $template.Name | Should -Be 'Alpha-latest'
+        $template.Automatic | Should -BeTrue
+        $template.ProfileId | Should -Be $alphaId
+        $template.Settings.Keys | Should -Not -Contain 'ProfileId'
+        $template.Settings.vCPU | Should -Be 8
+        $template.Settings.Keys | Should -Not -Contain 'GuestComputerName'
+        $template.Settings.Keys | Should -Not -Contain 'GuestEnvironment'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'INFO' -and $Message -like '*Alpha-latest*-ConfigTemplate Alpha-latest*' -and $Message -like '*tooling list*recorded inside the VM*' }
+        $settings = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMTemplate -Root $Root -Name 'Alpha-latest' }
+        $settings.vCPU | Should -Be 8
+    }
+
+    It 'leaves the template alone while the configuration does not change, and rewrites it when it does' {
+        $root = New-TestBuiltRoot
+        Set-TestProfile -Root $root -Json ('{ "ProfileId": "' + $alphaId + '", "vCPU": 8 }')
+        Invoke-TestAutomaticTemplate -Root $root
+        $path = Get-TestTemplatePath -Root $root
+        # The same settings in another layout: only a rewrite would change the text.
+        $sameSettings = '{ "Name": "Alpha-latest", "Automatic": true, "ProfileId": "' + $alphaId + '", "Settings": ' + (ConvertTo-Json -InputObject (Read-TestJson -Path $path).Settings -Depth 20 -Compress) + ' }'
+        Set-Content -LiteralPath $path -Value $sameSettings
+
+        Invoke-TestAutomaticTemplate -Root $root
+        (Get-Content -LiteralPath $path -Raw).Trim() | Should -Be $sameSettings
+
+        Set-TestProfile -Root $root -Json ('{ "ProfileId": "' + $alphaId + '", "vCPU": 12 }')
+        Invoke-TestAutomaticTemplate -Root $root
+        (Read-TestJson -Path $path).Settings.vCPU | Should -Be 12
+    }
+
+    It 'never writes over a template of yours named after the VM, and says why: <Case>' -ForEach @(
+        @{ Case = 'its file'; FileName = 'Alpha-latest.json'; Text = '{ "Name": "Alpha-latest", "Settings": { "vCPU": 2 } }'; Says = '*Alpha-latest.json*no "Automatic": true*' }
+        @{ Case = 'another file with its Name'; FileName = 'mine.json'; Text = '{ "Name": "Alpha-latest", "Settings": { "vCPU": 2 } }'; Says = '*two config templates named*mine.json*' }
+        @{ Case = 'a copy of it, Automatic too'; FileName = 'Alpha-latest - Copy.json'; Text = '{ "Name": "Alpha-latest", "Automatic": true, "Settings": { "vCPU": 2 } }'; Says = '*two config templates named*Alpha-latest - Copy.json*' }
+    ) {
+        $root = New-TestBuiltRoot
+        Set-TestProfile -Root $root -Json ('{ "ProfileId": "' + $alphaId + '", "vCPU": 8 }')
+        $own = Get-TestTemplatePath -Root $root -FileName $FileName
+        New-Item -ItemType Directory -Path (Split-Path -Path $own -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $own -Value $Text
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        (Get-Content -LiteralPath $own -Raw).Trim() | Should -Be $Text
+        if ($FileName -ne 'Alpha-latest.json') { Get-TestTemplatePath -Root $root | Should -Not -Exist }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like "*'Alpha-latest'*" -and $Message -like $Says }
+    }
+
+    It 'never replaces the template kept from an earlier VM of the same name, and says what to do' {
+        $root = New-TestBuiltRoot
+        Set-TestProfile -Root $root -Json ('{ "ProfileId": "' + $alphaId + '", "vCPU": 8 }')
+        $path = Get-TestTemplatePath -Root $root
+        New-Item -ItemType Directory -Path (Split-Path -Path $path -Parent) -Force | Out-Null
+        $earlier = '{ "Name": "Alpha-latest", "Automatic": true, "ProfileId": "99999999-8888-4777-8666-555555555555", "Settings": { "vCPU": 2 } }'
+        Set-Content -LiteralPath $path -Value $earlier
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        (Get-Content -LiteralPath $path -Raw).Trim() | Should -Be $earlier
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter {
+            $Level -eq 'WARN' -and $Message -like "*'Alpha-latest'*earlier VM named Alpha*Rename or delete*"
+        }
+    }
+
+    It 'is not written for a VM with no ProfileId yet' {
+        $root = New-TestBuiltRoot
+        Set-TestProfile -Root $root -Json '{ "vCPU": 8 }'
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        Get-TestTemplatePath -Root $root | Should -Not -Exist
+    }
+
+    It 'leaves its file alone when it cannot be read, and says what is wrong with it' {
+        $root = New-TestBuiltRoot
+        Set-TestProfile -Root $root -Json ('{ "ProfileId": "' + $alphaId + '", "vCPU": 8 }')
+        $path = Get-TestTemplatePath -Root $root
+        New-Item -ItemType Directory -Path (Split-Path -Path $path -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $path -Value '{ "Name": "Alpha-latest", "Automatic": true, "Settings": { "vCPU": "many" } }'
+        $problem = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            @(Get-VMTemplate -Root $Root | Where-Object { $_.Path -like '*Alpha-latest.json' })[0].Problem
+        }
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        (Read-TestJson -Path $path).Settings.vCPU | Should -Be 'many'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter {
+            $Level -eq 'WARN' -and $Message -like '*cannot be read*fix or delete it*' -and $Message.Contains($problem)
+        }
+    }
+
+    It 'is refreshed as soon as LazyVM changes VM.json, whatever changed it' {
+        $root = New-TestBuiltRoot
+
+        Update-TestProfile -Root $root -Change @{ vCPU = 8 }
+        (Read-TestJson -Path (Get-TestTemplatePath -Root $root)).Settings.vCPU | Should -Be 8
+
+        Update-TestProfile -Root $root -Change @{ vCPU = 12 }
+        (Read-TestJson -Path (Get-TestTemplatePath -Root $root)).Settings.vCPU | Should -Be 12
+    }
+
+    It 'never fails the change to VM.json: a template that cannot be written is a warning' {
+        $root = New-TestBuiltRoot
+        Mock -ModuleName $module Update-AutomaticTemplate { throw 'the disk is full' }
+
+        { Update-TestProfile -Root $root -Change @{ vCPU = 8 } } | Should -Not -Throw
+
+        (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).vCPU | Should -Be 8
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like '*Alpha-latest*the disk is full*' }
+    }
+
+    It 'gets the tooling list of a VM made before VM.json held it, once that is folded in' {
+        $root = New-TestBuiltRoot
+        Set-TestProfile -Root $root -Json ('{ "ProfileId": "' + $alphaId + '", "vCPU": 4 }')
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json') -Value '{ "vCPU": 4 }'
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value $toolingJson
+
+        InModuleScope $module -Parameters @{ Root = $root } { param($Root) $null = Move-ToolingIntoProfile -Root $Root -Name 'Alpha' }
+
+        Get-TestWingetId -Settings (Read-TestJson -Path (Get-TestTemplatePath -Root $root)).Settings | Should -Be @('Git.Git')
+    }
+
+    It 'is not written for a VM that has not been built yet' {
+        $root = New-TestBuiltRoot
+        Remove-Item -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json')
+
+        Update-TestProfile -Root $root -Change @{ vCPU = 8 }
+
+        Get-TestTemplatePath -Root $root | Should -Not -Exist
+    }
+
+    It 'is written when the configuration the VM was first built from cannot be read' {
+        $root = New-TestBuiltRoot
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json') -Value 'not json'
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        (Read-TestJson -Path (Get-TestTemplatePath -Root $root)).Settings.vCPU | Should -Be 4
     }
 }
 
@@ -1248,6 +1471,16 @@ Describe 'Sync-VMProfile' {
         $vmProfile.LogFile | Should -Be '{VM}\Logs\{VM}.log'
         $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root }
         $result.MissingKeys | Should -BeNullOrEmpty
+    }
+
+    It 'gives a VM made before ProfileId its own, never the shared template''s (#292)' {
+        $root = New-TestRoot -HostSettings '{ "ProfileId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }' -Profiles @{ Alpha = '{ "vCPU": 2 }' }
+
+        Invoke-Sync -Root $root
+
+        $id = (Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).ProfileId
+        $id | Should -Match '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        $id | Should -Not -Be 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
     }
 
     It 'removes the settings LazyVM no longer uses from the profile, keeping the earlier version (#273)' {
@@ -1531,6 +1764,31 @@ Describe 'Initialize-CommandRun' {
 
         $wingetIds | Should -Be @('Git.Git')
         Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json' | Should -Not -Exist
+    }
+
+    It 'under -WhatIf, folds nothing in, so VM.json and Shared\Templates stay as they are (#292)' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "ProfileId": "11111111-2222-4333-8444-555555555555", "vCPU": 2 }' }
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json') -Value '{ "vCPU": 2 }'
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value $toolingJson
+        $profilePath = Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json'
+        $before = Get-Content -LiteralPath $profilePath -Raw
+
+        InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            $testRoot = $Root
+            Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $testRoot; Source = 'a test' } }.GetNewClosure()
+            Mock Start-Log {}
+            Mock Write-LogEntry {}
+            Mock Sync-GuestUserFromStore {}
+            Mock Get-CurrentUserSid { [pscustomobject]@{ Value = 'S-1-5-21-1-2-3-1001' } }
+            Mock Get-TrustedHostPath { @() }
+            $WhatIfPreference = $true
+            $null = Initialize-CommandRun -Title 'A test' -Name 'Alpha'
+        }
+
+        Get-Content -LiteralPath $profilePath -Raw | Should -Be $before
+        Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json' | Should -Exist
+        Join-Path -Path $root -ChildPath 'Shared/Templates' | Should -Not -Exist
     }
 
     It 'with -RecordHardware, records what Hyper-V says before the run uses the settings' {
