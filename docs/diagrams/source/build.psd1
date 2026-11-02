@@ -41,9 +41,9 @@
         @{
             Function = 'Register-RebuildSchedule'
             Area     = 'Maintenance'
-            Note     = 'before the phases, unless no one is there: asks for your Windows password so the schedule is in place even if the host restarts; a failure here is logged and the build goes on'
-            Includes = @('Test-Unattended', 'Register-LazyVMHostTask')
-            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'runs as you') })
+            Note     = 'before the phases, so the schedule is in place even if the host restarts; a failure here is logged and the build goes on'
+            Includes = @('Get-HostTaskCommand', 'Register-LazyVMHostTask')
+            Writes   = @(@{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'as SYSTEM, with -Root') })
         }
         @{
             Function = 'Invoke-VMBuild'
@@ -55,7 +55,7 @@
             Area     = 'Host'
             Caller   = 'Invoke-VMBuild'
             Note     = 'picks up after a host restart'
-            Reads    = @(@{ Label = 'phase to resume at'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase') })
+            Reads    = @(@{ Label = 'phase to resume at'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json') })
         }
         @{
             Function = 'Invoke-BuildPhase'
@@ -86,8 +86,8 @@
             Caller   = 'Invoke-BuildPhase'
             Note     = 'phase 2; returns RestartPending when the host must restart'
             Writes   = @(
-                @{ Label = 'resume task, only if a restart is needed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-ResumeAfterReboot-<VM>') }
-                @{ Label = 'where to resume'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase = 3') }
+                @{ Label = 'resume task, only if a restart is needed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-ResumeAfterReboot-<VM>', 'as SYSTEM, with -Root') }
+                @{ Label = 'where to resume'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json  (Phase 3)') }
             )
         }
         @{
@@ -169,7 +169,7 @@
             Area     = 'Host'
             Caller   = 'Invoke-VMBuild'
             Note     = 'unless the host is restarting'
-            Writes   = @(@{ Label = 'resume entries removed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('resume task deleted', 'ResumePhase cleared') })
+            Writes   = @(@{ Label = 'resume entries removed'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('resume task deleted', 'Resume.json deleted') })
         }
     )
 }

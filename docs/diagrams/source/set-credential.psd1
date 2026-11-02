@@ -40,7 +40,7 @@
             Area     = 'Credentials'
             Note     = 'local accounts only; Save-StoredCredential encrypts with the key'
             Writes   = @(
-                @{ Label = 'encrypted credential'; Kind = 'file'; Store = 'Credential store'; Items = @('(DPAPI: your Windows account only)', '<VM>\Credentials\guest.cred') }
+                @{ Label = 'encrypted credential'; Kind = 'file'; Store = 'Credential store'; Items = @('(DPAPI, this computer; folder: you + SYSTEM)', '<VM>\Credentials\guest.cred') }
             )
         }
     )

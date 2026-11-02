@@ -16,10 +16,10 @@ Only the latest release gets security fixes.
 
 ## What LazyVM protects, and from whom
 
-LazyVM is installed for one Windows user, and only that user can use it or read what it stores:
+LazyVM is installed for one Windows user. Other standard users on the computer cannot use it or read what it stores:
 
-- Stored passwords and the VMs' BitLocker recovery passwords are encrypted with Windows DPAPI for that user's account. No other account can decrypt them, local administrators and SYSTEM included.
-- The LazyVM folder is open to that user and SYSTEM only, with nothing inherited from the folder above. Hyper-V adds each VM's own access to its files.
-- The scheduled tasks run as that user. Task Scheduler, not LazyVM, keeps the user's Windows password for them.
+- Stored passwords and the VMs' BitLocker recovery passwords are encrypted with Windows DPAPI for the computer, with LazyVM's own entropy, so they cannot be read on another computer. Both the user and LazyVM's scheduled tasks can decrypt them.
+- The LazyVM folder is open to that user and SYSTEM only, with nothing inherited from the folder above; this is what keeps other users out. Hyper-V adds each VM's own access to its files. LazyVM refuses a folder in OneDrive.
+- The scheduled tasks run as SYSTEM, with no stored password. Their command names the LazyVM folder, and LazyVM uses it only if it is still locked to its owner and SYSTEM.
 
-What it does not protect against: a local administrator can take ownership of the files, the VM disks included, though not decrypt the stored passwords; the data inside each VM is protected by BitLocker. A password reset by someone else, rather than a change made by the user, loses the DPAPI keys and every stored secret with them, so keep a copy of the BitLocker recovery passwords (`Get-LazyVMCredential -RecoveryPassword`) somewhere safe.
+What it does not protect against: a local administrator can take ownership of the files, the VM disks included, or run a program as SYSTEM, and so read LazyVM's files and decrypt its stored passwords. The data inside each VM stays protected by BitLocker. Keep a copy of the BitLocker recovery passwords (`Get-LazyVMCredential -RecoveryPassword`) somewhere safe.

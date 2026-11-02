@@ -196,95 +196,26 @@ Describe 'Register-LazyVMHostTask (#284)' {
         }
     }
 
-    BeforeEach {
-        InModuleScope $module { $script:TaskCredential = $null }
-        Mock -ModuleName $module Test-Unattended { $false }
-        Mock -ModuleName $module Get-TaskUserName { 'MIKEPC\sean' }
-        Mock -ModuleName $module Get-Credential { [pscredential]::new('MIKEPC\sean', [Net.NetworkCredential]::new('', 'Windows-Pass-1').SecurePassword) }
+    It 'registers the task as SYSTEM, elevated, with no password, replacing one of the same name' {
         Mock -ModuleName $module Register-ScheduledTask { }
-    }
 
-    AfterAll {
-        InModuleScope $module { $script:TaskCredential = $null }
-    }
-
-    It 'registers the task as the user, elevated, with the Windows password, replacing one of the same name' {
         InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts }
 
         Should -Invoke -ModuleName $module Register-ScheduledTask -Times 1 -Exactly -ParameterFilter {
-            $TaskName -eq 'LazyVM-Maintain-Alpha' -and $User -eq 'MIKEPC\sean' -and $Password -eq 'Windows-Pass-1' -and "$RunLevel" -eq 'Highest' -and $Force
+            $TaskName -eq 'LazyVM-Maintain-Alpha' -and $Principal.UserId -eq 'SYSTEM' -and "$($Principal.LogonType)" -eq 'ServiceAccount' -and "$($Principal.RunLevel)" -eq 'Highest' -and $Force
         }
-    }
-
-    It 'asks for the password once per PowerShell session' {
-        InModuleScope $module -Parameters @{ Parts = $parts } {
-            param($Parts)
-            Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts
-            Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Beta' @Parts
-        }
-
-        Should -Invoke -ModuleName $module Get-Credential -Times 1 -Exactly -ParameterFilter { $UserName -eq 'MIKEPC\sean' }
-        Should -Invoke -ModuleName $module Register-ScheduledTask -Times 2 -Exactly
-    }
-
-    It 'says clearly when Windows does not accept the password, and asks again next time' {
-        Mock -ModuleName $module Register-ScheduledTask {
-            throw [Management.Automation.ErrorRecord]::new([Exception]::new('The user name or password is incorrect.'), 'HRESULT 0x8007052e,Register-ScheduledTask', 'SecurityError', $null)
-        }
-
-        { InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts } } |
-            Should -Throw -ExpectedMessage '*did not accept the password for MIKEPC\sean*not your PIN*'
-        { InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts } } | Should -Throw
-
-        Should -Invoke -ModuleName $module Get-Credential -Times 2 -Exactly
-    }
-
-    It 'stops without asking when nobody is there to type the password' {
-        Mock -ModuleName $module Test-Unattended { $true }
-
-        { InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts } } |
-            Should -Throw -ExpectedMessage '*Windows password*Register-LazyVMMaintenance*'
-
-        Should -Invoke -ModuleName $module Get-Credential -Times 0
-        Should -Invoke -ModuleName $module Register-ScheduledTask -Times 0
-    }
-
-    It 'takes the account name without the computer name, and registers the full one' {
-        Mock -ModuleName $module Get-Credential { [pscredential]::new('sean', [Net.NetworkCredential]::new('', 'Windows-Pass-1').SecurePassword) }
-
-        InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts }
-
-        Should -Invoke -ModuleName $module Register-ScheduledTask -Times 1 -Exactly -ParameterFilter { $User -eq 'MIKEPC\sean' }
-    }
-
-    It 'refuses the password of another account: the tasks always run as the user running LazyVM' {
-        Mock -ModuleName $module Get-Credential { [pscredential]::new('MIKEPC\kim', [Net.NetworkCredential]::new('', 'Other-Pass-2').SecurePassword) }
-
-        { InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts } } |
-            Should -Throw -ExpectedMessage '*MIKEPC\sean*MIKEPC\kim*'
-
-        Should -Invoke -ModuleName $module Register-ScheduledTask -Times 0
-    }
-
-    It 'stops when no password is entered' {
-        Mock -ModuleName $module Get-Credential { $null }
-
-        { InModuleScope $module -Parameters @{ Parts = $parts } { param($Parts) Register-LazyVMHostTask -TaskName 'LazyVM-Maintain-Alpha' @Parts } } |
-            Should -Throw -ExpectedMessage '*No password*'
     }
 }
-
 Describe 'Get-HostTaskCommand (#284)' {
-    It 'is the command <TaskName> runs' -ForEach @(
-        @{ TaskName = 'LazyVM-Maintain-Alpha'; Expected = "Invoke-LazyVMMaintenance -Name 'Alpha'" }
-        @{ TaskName = 'LazyVM-ResumeAfterReboot-Alpha'; Expected = "Build-LazyVM -Name 'Alpha'" }
+    It 'is the command <TaskName> runs, naming the LazyVM folder' -ForEach @(
+        @{ TaskName = 'LazyVM-Maintain-Alpha'; Expected = "Invoke-LazyVMMaintenance -Name 'Alpha' -Root 'C:\Users\sean\LazyVM'" }
+        @{ TaskName = 'LazyVM-ResumeAfterReboot-Alpha'; Expected = "Build-LazyVM -Name 'Alpha' -Root 'C:\Users\sean\LazyVM'" }
         @{ TaskName = 'LazyVM-Something-Else'; Expected = $null }
     ) {
-        InModuleScope $module -Parameters @{ TaskName = $TaskName } { param($TaskName) Get-HostTaskCommand -TaskName $TaskName } | Should -Be $Expected
+        InModuleScope $module -Parameters @{ TaskName = $TaskName } { param($TaskName) Get-HostTaskCommand -TaskName $TaskName -Root 'C:\Users\sean\LazyVM' } | Should -Be $Expected
     }
 }
-
-Describe 'The host tasks run as the user (#284)' {
+Describe 'The host tasks (#284)' {
     BeforeAll {
         $testVM = InModuleScope $module {
             $settings = @{
@@ -293,7 +224,8 @@ Describe 'The host tasks run as the user (#284)' {
                 RebuildThresholdDays = 10
                 ScheduleTaskName     = 'LazyVM-Maintain-Alpha'
                 ResumeTaskName       = 'LazyVM-ResumeAfterReboot-Alpha'
-                ResumeRegKey         = 'HKCU:\SOFTWARE\LazyVM\Alpha'
+                ResumeFile           = 'C:\Users\sean\LazyVM\Alpha\Config\Resume.json'
+                Root                 = 'C:\Users\sean\LazyVM'
             }
             [VMContext]::new($settings)
         }
@@ -302,26 +234,25 @@ Describe 'The host tasks run as the user (#284)' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Assert-GuestCredential { }
-        Mock -ModuleName $module Get-TaskUserName { 'MIKEPC\sean' }
         Mock -ModuleName $module Register-LazyVMHostTask { }
     }
 
-    It 'registers the daily maintenance as the user, without needing a guest credential yet (a build schedules it first)' {
+    It 'registers the daily maintenance, naming the LazyVM folder, without needing a guest credential yet (a build schedules it first)' {
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Register-RebuildSchedule -VM $VM }
 
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter {
-            $TaskName -eq 'LazyVM-Maintain-Alpha' -and "$(@($Action)[0].Arguments)" -like "*Invoke-LazyVMMaintenance -Name 'Alpha'*"
+            $TaskName -eq 'LazyVM-Maintain-Alpha' -and "$(@($Action)[0].Arguments)" -like "*Invoke-LazyVMMaintenance -Name 'Alpha' -Root 'C:\Users\sean\LazyVM'*"
         }
         Should -Invoke -ModuleName $module Assert-GuestCredential -Times 0
     }
 
-    It 'registers the task that resumes a build after a restart as the user' {
+    It 'registers the task that resumes a build after a restart, naming the LazyVM folder' {
         Mock -ModuleName $module Set-ResumePhase { }
 
         InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Register-ResumeTask -VM $VM -Phase 3 }
 
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter {
-            $TaskName -eq 'LazyVM-ResumeAfterReboot-Alpha' -and "$(@($Action)[0].Arguments)" -like "*Build-LazyVM -Name 'Alpha'*"
+            $TaskName -eq 'LazyVM-ResumeAfterReboot-Alpha' -and "$(@($Action)[0].Arguments)" -like "*Build-LazyVM -Name 'Alpha' -Root 'C:\Users\sean\LazyVM'*"
         }
     }
 }
@@ -362,19 +293,18 @@ Describe 'Build-LazyVM schedules the maintenance first (#284)' {
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Sync-VMProfile { }
         Mock -ModuleName $module Write-LogEntry { }
-        Mock -ModuleName $module Test-Unattended { $false }
         Mock -ModuleName $module Register-RebuildSchedule { $script:calls.Add('schedule') }
         Mock -ModuleName $module Invoke-VMBuild { $script:calls.Add('build'); $script:complete }
     }
 
-    It 'asks for the Windows password and schedules the maintenance before building, so a restart part-way loses nothing' {
+    It 'schedules the maintenance before building, so a restart part-way loses nothing' {
         Build-LazyVM -Name Alpha -Confirm:$false
 
         $script:calls | Should -Be @('schedule', 'build')
     }
 
     It 'builds anyway, warning how to schedule it, when scheduling fails' {
-        Mock -ModuleName $module Register-RebuildSchedule { throw 'No password was entered' }
+        Mock -ModuleName $module Register-RebuildSchedule { throw 'Task Scheduler is not running' }
 
         Build-LazyVM -Name Alpha -Confirm:$false
 
@@ -382,56 +312,25 @@ Describe 'Build-LazyVM schedules the maintenance first (#284)' {
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Register-LazyVMMaintenance -Name Alpha*' }
     }
 
-    It 'leaves the schedule alone in a build nobody is there for, such as one resumed after a restart' {
-        Mock -ModuleName $module Test-Unattended { $true }
-
-        Build-LazyVM -Name Alpha -Confirm:$false
-
-        $script:calls | Should -Be @('build')
-    }
 }
-
-Describe 'A task Windows could not sign in for (#284)' {
-    It 'is recognised by its last result, 0x8007052E' {
-        Mock -ModuleName $module Get-ScheduledTaskInfo { [pscustomobject]@{ LastTaskResult = 2147943726 } }
-
-        InModuleScope $module { Test-TaskLogonFailure -TaskName 'LazyVM-Maintain-Alpha' } | Should -BeTrue
-    }
-
-    It 'is not <Case>' -ForEach @(
-        @{ Case = 'a task that ran'; Info = { [pscustomobject]@{ LastTaskResult = 0 } } }
-        @{ Case = 'a task that is not there'; Info = { } }
-        @{ Case = 'a check that cannot be made'; Info = { throw 'Task Scheduler is not available' } }
-    ) {
-        Mock -ModuleName $module Get-ScheduledTaskInfo $Info
-
-        InModuleScope $module { Test-TaskLogonFailure -TaskName 'LazyVM-Maintain-Alpha' } | Should -BeFalse
-    }
-
-}
-
 Describe 'Write-MaintenanceTaskWarning (#284)' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
-        Mock -ModuleName $module Test-TaskLogonFailure { $false }
-        Mock -ModuleName $module Test-MaintenanceTaskMissing { $false }
     }
 
-    It 'points out <Case>, with the command that fixes it' -ForEach @(
-        @{ Case = 'a task Windows could not sign in for'; Failure = $true; Missing = $false; Expected = '*password*changed*Register-LazyVMMaintenance -Name Alpha*' }
-        @{ Case = 'a VM whose maintenance is not scheduled'; Failure = $false; Missing = $true; Expected = '*not scheduled*Register-LazyVMMaintenance -Name Alpha*' }
-    ) {
-        Mock -ModuleName $module Test-TaskLogonFailure { $Failure }.GetNewClosure()
-        Mock -ModuleName $module Test-MaintenanceTaskMissing { $Missing }.GetNewClosure()
+    It 'points out a built VM whose maintenance is not scheduled, with the command that fixes it' {
+        Mock -ModuleName $module Test-MaintenanceTaskMissing { $true }
 
         $warning = InModuleScope $module {
             Write-MaintenanceTaskWarning -VM ([VMContext]::new(@{ VMName = 'Alpha'; ScheduleTaskName = 'LazyVM-Maintain-Alpha' })) 3>&1
         }
 
-        "$warning" | Should -BeLike $Expected
+        "$warning" | Should -BeLike '*not scheduled*Register-LazyVMMaintenance -Name Alpha*'
     }
 
-    It 'says nothing when the maintenance will run' {
+    It 'says nothing when the maintenance is scheduled' {
+        Mock -ModuleName $module Test-MaintenanceTaskMissing { $false }
+
         $warning = InModuleScope $module {
             Write-MaintenanceTaskWarning -VM ([VMContext]::new(@{ VMName = 'Alpha'; ScheduleTaskName = 'LazyVM-Maintain-Alpha' })) 3>&1
         }
@@ -439,7 +338,6 @@ Describe 'Write-MaintenanceTaskWarning (#284)' {
         $warning | Should -BeNullOrEmpty
     }
 }
-
 Describe 'Test-MaintenanceTaskMissing (#284)' {
     It 'is <Expected> when <Case>' -ForEach @(
         @{ Case = 'the VM is built and has no task'; Task = $false; Built = $true; Expected = $true }
@@ -514,5 +412,135 @@ Describe 'Set-LazyVMRoot asks before it locks a folder (#284)' {
         (Get-Command -Name Set-LazyVMRoot).ScriptBlock.Attributes |
             Where-Object { $_ -is [System.Management.Automation.CmdletBindingAttribute] } |
             ForEach-Object { "$($_.ConfirmImpact)" } | Should -Be 'High'
+    }
+}
+
+Describe 'Test-CloudSyncedPath (#284)' {
+    BeforeEach {
+        $saved = @{ OneDrive = $env:OneDrive; OneDriveConsumer = $env:OneDriveConsumer; OneDriveCommercial = $env:OneDriveCommercial }
+        $env:OneDrive = 'C:\Users\sean\OneDrive'
+        $env:OneDriveConsumer = $null
+        $env:OneDriveCommercial = 'C:\Users\sean\OneDrive - Contoso'
+    }
+
+    AfterEach {
+        foreach ($name in $saved.Keys) { Set-Item -Path "Env:\$name" -Value $saved[$name] }
+    }
+
+    It 'is <Expected> for <Path>' -ForEach @(
+        @{ Path = 'C:\Users\sean\OneDrive\LazyVM'; Expected = $true }
+        @{ Path = 'C:\Users\sean\OneDrive - Contoso\VMs'; Expected = $true }
+        @{ Path = 'C:\Users\sean\LazyVM'; Expected = $false }
+        @{ Path = 'D:\DevVM'; Expected = $false }
+    ) {
+        InModuleScope $module -Parameters @{ Path = $Path } { param($Path) Test-CloudSyncedPath -Path $Path } | Should -Be $Expected
+    }
+
+    It 'knows a cloud file by its attributes: <Case>' -ForEach @(
+        @{ Case = 'online-only (unpinned)'; Attributes = 0x100000; Expected = $true }
+        @{ Case = 'always kept (pinned)'; Attributes = 0x80000; Expected = $true }
+        @{ Case = 'recalled when opened'; Attributes = 0x40000; Expected = $true }
+        @{ Case = 'an ordinary folder'; Attributes = 0x10; Expected = $false }
+    ) {
+        InModuleScope $module -Parameters @{ Attributes = $Attributes } { param($Attributes) Test-CloudFileAttribute -Attributes $Attributes } | Should -Be $Expected
+    }
+}
+
+Describe 'A LazyVM folder in OneDrive (#284)' {
+    It 'is refused before anything is locked' {
+        Mock -ModuleName $module Test-CloudSyncedPath { $true }
+
+        { InModuleScope $module { Assert-RootFolderUsable -Path 'C:\Users\sean\OneDrive\LazyVM' } } | Should -Throw -ExpectedMessage '*OneDrive*outside it*'
+    }
+
+    It 'is reported by Test-LazyVM, as is a module loaded from OneDrive' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Users\sean\OneDrive\Documents\PowerShell\Modules\LazyVM\6.0.0' }
+        Mock -ModuleName $module Test-CloudSyncedPath { $Path -like '*OneDrive*' }
+
+        $check = InModuleScope $module { Get-CloudSyncCheck -Name 'Alpha' -Root 'C:\Users\sean\LazyVM' }
+
+        $check.Status | Should -Be 'WARN'
+        $check.Detail | Should -BeLike '*Documents\PowerShell\Modules\LazyVM\6.0.0 in OneDrive*Install.ps1*'
+    }
+
+    It 'is not reported when neither is in OneDrive' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Users\sean\AppData\Local\LazyVM\Modules\LazyVM\6.0.0' }
+        Mock -ModuleName $module Test-CloudSyncedPath { $false }
+
+        (InModuleScope $module { Get-CloudSyncCheck -Name 'Alpha' -Root 'C:\Users\sean\LazyVM' }).Status | Should -Be 'OK'
+    }
+}
+
+Describe 'Assert-RootLocked (#284)' {
+    BeforeEach {
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType File -Path (Join-Path -Path $root -ChildPath 'Shared/Config/LazyVM.Settings.json') -Force | Out-Null
+    }
+
+    It 'accepts a LazyVM folder open to its owner and SYSTEM only' {
+        Mock -ModuleName $module Get-RootAccess { [pscustomobject]@{ Protected = $true; Sids = @('S-1-5-21-1-1001', 'S-1-5-18') } }
+
+        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Assert-RootLocked -Root $Root } } | Should -Not -Throw
+    }
+
+    It 'refuses a folder <Case>' -ForEach @(
+        @{ Case = 'open to anyone else'; Protected = $true; Sids = @('S-1-5-21-1-1001', 'S-1-5-18', 'S-1-5-32-545') }
+        @{ Case = 'that inherits access'; Protected = $false; Sids = @('S-1-5-21-1-1001', 'S-1-5-18') }
+    ) {
+        $access = [pscustomobject]@{ Protected = $Protected; Sids = $Sids }
+        Mock -ModuleName $module Get-RootAccess { $access }.GetNewClosure()
+
+        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Assert-RootLocked -Root $Root } } | Should -Throw -ExpectedMessage '*not locked*Set-LazyVMRoot*'
+    }
+
+    It 'refuses a folder that is not a LazyVM folder' {
+        $other = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $other | Out-Null
+
+        { InModuleScope $module -Parameters @{ Root = $other } { param($Root) Assert-RootLocked -Root $Root } } | Should -Throw -ExpectedMessage '*not a LazyVM folder*'
+    }
+
+    It 'is checked for a folder handed to a command with -Root, as the scheduled tasks do' {
+        Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
+        Mock -ModuleName $module Assert-RootLocked { throw 'not locked' }
+
+        { InModuleScope $module { Resolve-LazyVMRoot -Root 'D:\DevVM' } } | Should -Throw -ExpectedMessage '*not locked*'
+    }
+}
+
+Describe 'The resume point of an interrupted build (#284)' {
+    It 'is kept in the VM''s own folder, which the resume task, running as SYSTEM, reads' {
+        $file = Join-Path -Path $TestDrive -ChildPath "$([guid]::NewGuid().ToString('N'))/Config/Resume.json"
+        $vm = InModuleScope $module -Parameters @{ File = $file } { param($File) [VMContext]::new(@{ VMName = 'Alpha'; ResumeFile = $File }) }
+
+        $phases = InModuleScope $module -Parameters @{ VM = $vm; File = $file } {
+            param($VM, $File)
+            $before = Get-ResumePhase -VM $VM
+            Set-ResumePhase -Path $File -Phase 3
+            $during = Get-ResumePhase -VM $VM
+            Mock Get-ScheduledTask { }
+            Mock Write-LogEntry { }
+            Unregister-ResumeTask -VM $VM
+            $before, $during, (Get-ResumePhase -VM $VM)
+        }
+
+        $phases | Should -Be @(0, 3, 0)
+    }
+}
+
+Describe 'Initialize-BuildTarget -Root (#284)' {
+    It 'uses the folder handed in as it is, choosing and recording none' {
+        Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType File -Path (Join-Path -Path $root -ChildPath 'DevBox/Config/VM.json') -Force | Out-Null
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $root; Source = 'the -Root parameter' } }.GetNewClosure()
+        Mock -ModuleName $module Set-RegisteredRoot { }
+        Mock -ModuleName $module Initialize-RootFolder { }
+
+        InModuleScope $module -Parameters @{ Root = $root } { param($Root) Initialize-BuildTarget -Name 'DevBox' -Root $Root } 6> $null
+
+        Should -Invoke -ModuleName $module Resolve-LazyVMRoot -Times 1 -Exactly -ParameterFilter { $Root -eq $root }
+        Should -Invoke -ModuleName $module Set-RegisteredRoot -Times 0
+        Should -Invoke -ModuleName $module Initialize-RootFolder -Times 0
     }
 }

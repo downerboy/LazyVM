@@ -28,7 +28,7 @@ UML use case diagrams for the LazyVM module, drawn from the code in `src/`, not 
 
 ![All LazyVM use cases by actor](use-cases/01-overview.svg)
 
-Actors: Host user, Administrator (a Host user), Task Scheduler running as the user who installed LazyVM.
+Actors: Host user, Administrator (a Host user), Task Scheduler running as SYSTEM.
 
 - Host user: Show LazyVM and its commands (`Show-LazyVM`, or just `LazyVM`), List VMs (`Get-LazyVM`), View settings (`Get-LazyVMSetting`), Create a VM profile (`New-LazyVM`), Save a VM as a config template (`Export-LazyVMTemplate`).
 - Administrator, also:
@@ -65,7 +65,7 @@ Build a VM is extended by:
 
 ![Run daily maintenance use cases](use-cases/03-maintenance.svg)
 
-Actors: Task Scheduler (daily at `MaintenanceTime`, as the user who installed LazyVM), Administrator. Systems: Hyper-V, Guest Windows.
+Actors: Task Scheduler (daily at `MaintenanceTime`, as SYSTEM), Administrator. Systems: Hyper-V, Guest Windows.
 
 Run daily maintenance includes, every day:
 
@@ -151,7 +151,7 @@ Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Window
 - View the guest account (`Get-LazyVMCredential`).
 - Check the license (`Get-LazyVMLicense`) reads the license inside the guest. Extended by **Start the VM** when the VM is off.
 - Check a VM end to end (`Test-LazyVM`) checks the folder, the ISOs, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only: a VM that is off is not started.
-- Remove a VM (`Remove-LazyVM`) includes **List what will be deleted and kept**, then deletes the VM, its tasks, its registry key, its disks (Dev Drive and User disk included), checkpoints, state, profile and log. Anything another VM also uses is kept. It asks first unless `-Force`; `-WhatIf` only lists.
+- Remove a VM (`Remove-LazyVM`) includes **List what will be deleted and kept**, then deletes the VM, its tasks, its disks (Dev Drive and User disk included), checkpoints, state, profile and log. Anything another VM also uses is kept. It asks first unless `-Force`; `-WhatIf` only lists.
 
 ## 9. Install the module
 

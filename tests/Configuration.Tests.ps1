@@ -189,7 +189,7 @@ Describe 'The settings schema' {
 
         $defaults.Keys | Should -Contain 'vCPU'
         $defaults.Keys | Should -Contain 'MaintenanceTime'
-        foreach ($derived in 'Root', 'ScheduleTaskName', 'ResumeRegKey', 'GuestCredFile', 'GuestSqlDataDir', 'SeedDiskPath') {
+        foreach ($derived in 'Root', 'ScheduleTaskName', 'ResumeFile', 'GuestCredFile', 'GuestSqlDataDir', 'SeedDiskPath') {
             $defaults.Keys | Should -Not -Contain $derived
         }
     }
@@ -381,6 +381,8 @@ Describe 'Resolve-LazyVMRoot' {
     BeforeEach {
         # No machine-wide install from before #284.
         Mock -ModuleName $module Get-RegisteredRoot { $null } -ParameterFilter { $Key -like 'HKLM:*' }
+        # Its access is tested in PerUser.Tests.ps1.
+        Mock -ModuleName $module Assert-RootLocked { }
     }
 
     It 'prefers -Root to the registered folder' {
@@ -470,7 +472,7 @@ Describe 'Add-DerivedSetting' {
         $settings.EnvironmentCredFile | Should -Be "$root\Alpha\Credentials\environment.cred"
         $settings.AppSettingsCredFile | Should -Be "$root\Alpha\Credentials\appsettings.cred"
         $settings.BitLockerCredFile | Should -Be "$root\Alpha\Credentials\bitlocker.cred"
-        $settings.ResumeRegKey | Should -Be 'HKCU:\SOFTWARE\LazyVM\Alpha'
+        $settings.ResumeFile | Should -Be "$root\Alpha\Config\Resume.json"
         $settings.ResumeTaskName | Should -Be 'LazyVM-ResumeAfterReboot-Alpha'
         $settings.ScheduleTaskName | Should -Be 'LazyVM-Maintain-Alpha'
     }
@@ -1490,7 +1492,8 @@ Describe 'Initialize-CommandRun' {
 
         InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $Root; Source = 'a test' } }.GetNewClosure()
+            $testRoot = $Root
+            Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $testRoot; Source = 'a test' } }.GetNewClosure()
             Mock Start-Log {}
             Mock Write-LogEntry {}
             Mock Sync-GuestUserFromStore {}
@@ -1513,7 +1516,8 @@ Describe 'Initialize-CommandRun' {
 
         $wingetIds = InModuleScope $module -Parameters @{ Root = $root } {
             param($Root)
-            Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $Root; Source = 'a test' } }.GetNewClosure()
+            $testRoot = $Root
+            Mock Resolve-LazyVMRoot { [pscustomobject]@{ Path = $testRoot; Source = 'a test' } }.GetNewClosure()
             Mock Start-Log {}
             Mock Write-LogEntry {}
             Mock Sync-GuestUserFromStore {}
@@ -2661,7 +2665,7 @@ Describe 'Restore-GuestSqlState (#131)' {
 }
 
 Describe 'The credential store (#284)' {
-    It 'reads back what it stored, marked as protected for the current user' {
+    It 'reads back what it stored, marked as protected for this computer' {
         $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
 
         $password = InModuleScope $module -Parameters @{ Folder = $folder } {
@@ -2673,7 +2677,7 @@ Describe 'The credential store (#284)' {
         }
 
         $password.Length | Should -Be 24
-        (Get-Content -LiteralPath "$folder/Alpha/guest.cred" -Raw | ConvertFrom-Json).Protection | Should -Be 'DPAPI-CurrentUser'
+        (Get-Content -LiteralPath "$folder/Alpha/guest.cred" -Raw | ConvertFrom-Json).Protection | Should -Be 'DPAPI-LocalMachine'
     }
 
     It 'returns nothing when no credential is stored' {
@@ -2701,14 +2705,14 @@ Describe 'The credential store (#284)' {
     It 'refuses a credential it cannot decrypt, rather than treating it as not stored' {
         $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path "$folder/Alpha" -Force | Out-Null
-        Set-Content -LiteralPath "$folder/Alpha/guest.cred" -Value '{ "UserName": "sean", "Password": "not hex", "Protection": "DPAPI-CurrentUser" }'
+        Set-Content -LiteralPath "$folder/Alpha/guest.cred" -Value '{ "UserName": "sean", "Password": "bm90IHByb3RlY3RlZA==", "Protection": "DPAPI-LocalMachine" }'
 
         {
             InModuleScope $module -Parameters @{ Folder = $folder } {
                 param($Folder)
                 Get-StoredCredential -Path "$Folder/Alpha/guest.cred"
             }
-        } | Should -Throw -ExpectedMessage '*cannot be read*only the Windows account that stored it*'
+        } | Should -Throw -ExpectedMessage '*cannot be read*only be read on the computer that stored it*'
     }
 
     It 'has no key file any more' {

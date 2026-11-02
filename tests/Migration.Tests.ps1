@@ -10,7 +10,7 @@ BeforeAll {
     Import-LazyVMModule
 
     $module = 'LazyVM'
-    Mock -ModuleName $module Get-TaskUserName { 'MIKEPC\sean' }
+    Mock -ModuleName $module Get-CurrentUserName { 'MIKEPC\sean' }
 
     function New-LegacyKey {
         <# A key file as LazyVM 5 made it, under $Root\Shared\Credentials. Returns the key. #>
@@ -76,7 +76,7 @@ Describe 'Get-LegacyCredentialKeyPath (#284)' {
 }
 
 Describe 'Convert-LegacyCredentialFile (#284)' {
-    It 're-encrypts a credential for the current user, keeping the account and password' {
+    It 're-encrypts a credential for this computer, keeping the account and password' {
         $root = New-TestFolder
         $key = New-LegacyKey -Root $root
         $cred = Join-Path -Path $root -ChildPath 'Alpha/Credentials/guest.cred'
@@ -149,7 +149,7 @@ Describe 'Convert-LegacyCredential (#284)' {
         InModuleScope $module -Parameters @{ Root = $root } { param($Root) Convert-LegacyCredential -Root $Root }
 
         foreach ($file in "$root/Alpha/Credentials/guest.cred", "$root/Alpha/Credentials/bitlocker.cred", "$root/Beta/Credentials/guest.cred") {
-            (Get-Content -LiteralPath $file -Raw | ConvertFrom-Json).Protection | Should -Be 'DPAPI-CurrentUser'
+            (Get-Content -LiteralPath $file -Raw | ConvertFrom-Json).Protection | Should -Be 'DPAPI-LocalMachine'
         }
         "$root/Shared/Credentials/.lazyvm.key" | Should -Not -Exist
     }
@@ -179,54 +179,59 @@ Describe 'Convert-LegacyCredential (#284)' {
     }
 }
 
-Describe 'Move-LegacyTask (#284)' {
+Describe 'Update-LegacyTask (#284)' {
     BeforeAll {
         # Real task parts, as Get-ScheduledTask returns them.
         $script:oldTrigger = New-ScheduledTaskTrigger -Daily -At '02:00'
         $script:oldSettings = New-ScheduledTaskSettingsSet
-        $script:oldAction = New-ScheduledTaskAction -Execute 'pwsh.exe' -Argument "Import-Module 'C:\Program Files\PowerShell\Modules\LazyVM\5.2.4\LazyVM.psd1'"
+        $script:oldAction = New-ScheduledTaskAction -Execute 'pwsh.exe' -Argument "Import-Module -Name 'LazyVM'; Invoke-LazyVMMaintenance -Name 'Alpha'"
     }
 
     BeforeEach {
+        $script:oldRoot = New-TestFolder
+        $script:newRoot = New-TestFolder
+        New-Item -ItemType File -Path (Join-Path -Path $script:oldRoot -ChildPath 'Alpha/Config/VM.json') -Force | Out-Null
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Register-LazyVMHostTask { }
         Mock -ModuleName $module Get-ScheduledTask {
-            [pscustomobject]@{ TaskName = 'LazyVM-Maintain-Alpha'; Principal = [pscustomobject]@{ UserId = 'SYSTEM' }; Actions = @($script:oldAction); Triggers = @($script:oldTrigger); Settings = $script:oldSettings }
-            [pscustomobject]@{ TaskName = 'LazyVM-Maintain-Other'; Principal = [pscustomobject]@{ UserId = 'MIKEPC\kim' }; Actions = @($script:oldAction); Triggers = @($script:oldTrigger); Settings = $script:oldSettings }
-            [pscustomobject]@{ TaskName = 'LazyVM-Unknown'; Principal = [pscustomobject]@{ UserId = 'SYSTEM' }; Actions = @($script:oldAction); Triggers = @($script:oldTrigger); Settings = $script:oldSettings }
+            foreach ($name in 'LazyVM-Maintain-Alpha', 'LazyVM-Maintain-Other', 'LazyVM-Unknown') {
+                [pscustomobject]@{ TaskName = $name; Principal = [pscustomobject]@{ UserId = 'SYSTEM' }; Actions = @($script:oldAction); Triggers = @($script:oldTrigger); Settings = $script:oldSettings }
+            }
         }
     }
 
-    It 're-registers each task that runs as SYSTEM to run as the user, keeping when it runs and making its action again' {
-        InModuleScope $module { Move-LegacyTask }
+    It 'registers this install''s tasks again, keeping when they run, with an action naming the new folder' {
+        InModuleScope $module -Parameters @{ Old = $script:oldRoot; New = $script:newRoot } { param($Old, $New) Update-LegacyTask -OldRoot $Old -NewRoot $New }
 
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter {
             $TaskName -eq 'LazyVM-Maintain-Alpha' -and
-            "$(@($Action)[0].Arguments)" -like "*Invoke-LazyVMMaintenance -Name 'Alpha'*" -and
-            "$(@($Action)[0].Arguments)" -notlike '*5.2.4*' -and
+            "$(@($Action)[0].Arguments)" -like "*Invoke-LazyVMMaintenance -Name 'Alpha' -Root '$script:newRoot'*" -and
             @($Trigger)[0] -eq $script:oldTrigger -and $Settings -eq $script:oldSettings
         }
     }
 
-    It 'leaves another user''s tasks alone' {
-        InModuleScope $module { Move-LegacyTask }
+    It 'leaves the tasks of VMs that are not in this install alone' {
+        InModuleScope $module -Parameters @{ Old = $script:oldRoot; New = $script:newRoot } { param($Old, $New) Update-LegacyTask -OldRoot $Old -NewRoot $New }
 
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 0 -ParameterFilter { $TaskName -eq 'LazyVM-Maintain-Other' }
     }
 
     It 'leaves a task LazyVM does not make as it was, and says so' {
-        InModuleScope $module { Move-LegacyTask }
+        InModuleScope $module -Parameters @{ Old = $script:oldRoot; New = $script:newRoot } { param($Old, $New) Update-LegacyTask -OldRoot $Old -NewRoot $New }
 
         Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 0 -ParameterFilter { $TaskName -eq 'LazyVM-Unknown' }
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*LazyVM-Unknown*left as it was*' -and $Level -eq 'WARN' }
     }
 
-    It 'looks only at LazyVM''s tasks' {
-        InModuleScope $module { Move-LegacyTask }
+    It 'finds a VM already moved to the new folder, when it runs again' {
+        Move-Item -LiteralPath (Join-Path -Path $script:oldRoot -ChildPath 'Alpha') -Destination $script:newRoot
 
-        Should -Invoke -ModuleName $module Get-ScheduledTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-*' }
+        InModuleScope $module -Parameters @{ Old = $script:oldRoot; New = $script:newRoot } { param($Old, $New) Update-LegacyTask -OldRoot $Old -NewRoot $New }
+
+        Should -Invoke -ModuleName $module Register-LazyVMHostTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-Maintain-Alpha' }
     }
 }
+
 Describe 'ConvertTo-NewRootPath (#284)' {
     It 'maps <Path> to <Expected>' -ForEach @(
         @{ Path = 'C:\LazyVM\Alpha\Disks\Alpha-OS.vhdx'; Expected = 'C:\Users\sean\LazyVM\Alpha\Disks\Alpha-OS.vhdx' }
@@ -432,11 +437,11 @@ Describe 'Copy-LegacyRegistry (#284)' {
         Mock -ModuleName $module Set-RegisteredRoot { }
     }
 
-    It 'records the new folder and every interrupted build''s resume phase for the user' {
+    It 'records the new folder for the user, and every interrupted build''s resume phase in its VM''s folder' {
         InModuleScope $module { Copy-LegacyRegistry -NewRoot 'C:\Users\sean\LazyVM' }
 
         Should -Invoke -ModuleName $module Set-RegisteredRoot -Times 1 -Exactly -ParameterFilter { $Path -eq 'C:\Users\sean\LazyVM' }
-        Should -Invoke -ModuleName $module Set-ResumePhase -Times 1 -Exactly -ParameterFilter { $Key -eq 'HKCU:\SOFTWARE\LazyVM\MSDevBox' -and $Phase -eq 7 }
+        Should -Invoke -ModuleName $module Set-ResumePhase -Times 1 -Exactly -ParameterFilter { $Path -like 'C:\Users\sean\LazyVM?MSDevBox?Config?Resume.json' -and $Phase -eq 7 }
     }
 }
 
@@ -448,7 +453,7 @@ Describe 'Invoke-InstallationMigration (#284)' {
         Mock -ModuleName $module Start-Log { }
         Mock -ModuleName $module Stop-Log { }
         Mock -ModuleName $module Test-Path { $true } -ParameterFilter { $LiteralPath -eq 'C:\LazyVM' }
-        Mock -ModuleName $module Move-LegacyTask { $script:calls.Add('tasks') }
+        Mock -ModuleName $module Update-LegacyTask { $script:calls.Add('tasks') }
         Mock -ModuleName $module Convert-LegacyCredential { $script:calls.Add('credentials') }
         Mock -ModuleName $module Initialize-RootFolder { $script:calls.Add("lock $Path") }
         Mock -ModuleName $module Move-LegacyVMStorage { $script:calls.Add('vm storage') }
@@ -547,7 +552,7 @@ Describe 'Remove-LegacyInstallation (#284)' {
         Mock -ModuleName $module Test-Path { $true }
         Mock -ModuleName $module Get-ChildItem { }
         Mock -ModuleName $module Test-MachineWideModuleRemovable { $true }
-        Mock -ModuleName $module Get-UserModuleFolder { 'C:\Users\sean\Documents\PowerShell\Modules' }
+        Mock -ModuleName $module Get-UserModuleFolder { 'C:\Users\sean\AppData\Local\LazyVM\Modules' }
     }
 
     It 'removes the old folder once it is empty, the machine-wide module copy, and the HKLM key last' {
@@ -586,11 +591,11 @@ Describe 'Remove-LegacyInstallation (#284)' {
 
 Describe 'Test-MachineWideModuleRemovable (#284)' {
     BeforeEach {
-        Mock -ModuleName $module Get-UserModuleFolder { 'C:\Users\sean\Documents\PowerShell\Modules' }
-        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Users\sean\Documents\PowerShell\Modules\LazyVM\6.0.0' }
+        Mock -ModuleName $module Get-UserModuleFolder { 'C:\Users\sean\AppData\Local\LazyVM\Modules' }
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Users\sean\AppData\Local\LazyVM\Modules\LazyVM\6.0.0' }
         Mock -ModuleName $module Get-Module {
             [pscustomobject]@{ Name = 'LazyVM'; ModuleBase = 'C:\Program Files\PowerShell\Modules\LazyVM\5.2.4' }
-            [pscustomobject]@{ Name = 'LazyVM'; ModuleBase = 'C:\Users\sean\Documents\PowerShell\Modules\LazyVM\6.0.0' }
+            [pscustomobject]@{ Name = 'LazyVM'; ModuleBase = 'C:\Users\sean\AppData\Local\LazyVM\Modules\LazyVM\6.0.0' }
         } -ParameterFilter { $ListAvailable }
     }
 

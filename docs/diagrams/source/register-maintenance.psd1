@@ -21,13 +21,13 @@
         @{
             Function = 'Register-RebuildSchedule'
             Area     = 'Maintenance'
-            Note     = 'refuses without a stored credential or a valid HH:mm MaintenanceTime; asks for your Windows password once per session'
+            Note     = 'refuses without a stored credential or a valid HH:mm MaintenanceTime; the task runs as SYSTEM and names the LazyVM folder'
             Includes = @('Assert-GuestCredential', 'Register-LazyVMHostTask')
             Reads    = @(
                 @{ Label = 'guest credential'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\guest.cred') }
             )
             Writes   = @(
-                @{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'as you, elevated,', 'wake to run,', '6 h limit', '2 retries') }
+                @{ Label = 'daily maintenance task'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'daily at MaintenanceTime', 'as SYSTEM,', 'wake to run,', '6 h limit', '2 retries') }
             )
         }
     )

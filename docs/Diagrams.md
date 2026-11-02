@@ -48,7 +48,8 @@ Called by: `Install-FromRepository.cmd` (asks for administrator rights).
    - Writes D8, test results: out\ (testResults.xml)
 5. `Install.ps1 -Path out` (script): only when every check passed: copies the newest built version and unblocks it
    - Reads D9, built module: out\LazyVM\ (<version>\)
-   - Writes D10, module installed for you only: Documents\PowerShell\ (Modules\LazyVM\<version>\)
+   - Writes D10, module installed for you only, outside OneDrive: %LOCALAPPDATA%\LazyVM\ (Modules\LazyVM\<version>\)
+   - Writes D11, module folder on your PSModulePath: HKCU:\Environment (PSModulePath)
 
 <a id="install-from-release"></a>
 
@@ -62,9 +63,10 @@ Copies the module from a downloaded release to your own module folder, where Pow
 
 1. `Copy-Item` (Install.ps1): newest version folder beside the script
    - Reads D1, module from the zip: LazyVM\LazyVM\ (<version>\)
-   - Writes D2, module installed for you only: Documents\PowerShell\ (Modules\LazyVM\, <version>\)
+   - Writes D2, module installed for you only, outside OneDrive: %LOCALAPPDATA%\LazyVM\ (Modules\LazyVM\, <version>\)
+   - Writes D3, module folder on your PSModulePath: HKCU:\Environment (PSModulePath)
 2. `Unblock-File` (Install.ps1): removes the downloaded-from-the-internet mark, which would stop PowerShell loading the module
-   - Writes D3, files PowerShell will load: Modules\LazyVM\ (<version>\  (unblocked))
+   - Writes D4, files PowerShell will load: Modules\LazyVM\ (<version>\  (unblocked))
 
 <a id="convert-installation"></a>
 
@@ -86,7 +88,7 @@ Once, after updating from LazyVM 5. Moves C:\LazyVM, its tasks, passwords and re
    - Writes D3, migration log: <new>\Shared\Logs\ (Migration.log)
 4. `Initialize-RootFolder` (Settings, called by Invoke-InstallationMigration): the new folder, open to you and SYSTEM only; again at the end, so everything moved in inherits it
    - Writes D4, folder access: <new> (you + SYSTEM, nothing inherited)
-5. `Move-LegacyTask` (Migration, called by Invoke-InstallationMigration): first, so no nightly run starts mid-move; keeps when each runs and makes its action again; asks for your Windows password once
+5. `Update-LegacyTask` (Migration, called by Invoke-InstallationMigration): first, so no nightly run starts mid-move: this install's tasks, still as SYSTEM, keep when they run and get an action naming the new folder and loading this module
    - Also runs `Get-HostTaskCommand`, `New-LazyVMTaskAction`, `Register-LazyVMHostTask`
    - Reads D5, tasks run as SYSTEM: Task Scheduler (LazyVM-Maintain-<VM>, LazyVM-ResumeAfterReboot-<VM>)
    - Writes D6, same tasks, as you: Task Scheduler (elevated, signed in or not)
@@ -108,12 +110,13 @@ Once, after updating from LazyVM 5. Moves C:\LazyVM, its tasks, passwords and re
 11. `Mount-MovedDvdMedia` (Migration, called by Invoke-InstallationMigration): on any run: attaches the noted ISOs again from the new folder, then forgets them
    - Reads D15, ejected ISOs: <new>\Shared\ (Migration.EjectedMedia.json)
    - Writes D16, DVD drives: VMs (ISO from <new>)
-12. `Copy-LegacyRegistry` (Migration, called by Invoke-InstallationMigration): the folder and any interrupted build
+12. `Copy-LegacyRegistry` (Migration, called by Invoke-InstallationMigration): the folder, to your registry; any interrupted build, to its VM's folder
    - Also runs `Get-LegacyResumePhase`, `Set-ResumePhase`, `Set-RegisteredRoot`
-   - Writes D17, your registry: HKCU:\SOFTWARE\LazyVM (Root = <new>, <VM>  ResumePhase)
+   - Writes D17, your registry: HKCU:\SOFTWARE\LazyVM (Root = <new>)
+   - Writes D18, resume points: <new>\<VM>\Config\ (Resume.json)
 13. `Remove-LegacyInstallation` (Migration, called by Invoke-InstallationMigration): last: the old folder once empty, the Program Files copy when you have your own, then the HKLM key
    - Also runs `Test-MachineWideModuleRemovable`
-   - Writes D18, old install removed: Machine-wide (<old>  (if empty), Program Files\PowerShell\Modules\LazyVM, HKLM:\SOFTWARE\LazyVM)
+   - Writes D19, old install removed: Machine-wide (<old>  (if empty), Program Files\PowerShell\Modules\LazyVM, HKLM:\SOFTWARE\LazyVM)
 
 <a id="show"></a>
 
@@ -200,7 +203,7 @@ Optional before a build: Build-LazyVM generates an account if none is stored. Th
 3. `Get-Credential` (PowerShell): prompt, if -Credential was not given
    - Reads D4, credential typed in: You (user name, password, (empty = generate one))
 4. `Set-StoredGuestCredential` (Credentials): local accounts only; Save-StoredCredential encrypts with the key
-   - Writes D5, encrypted credential: Credential store ((DPAPI: your Windows account only), <VM>\Credentials\guest.cred)
+   - Writes D5, encrypted credential: Credential store ((DPAPI, this computer; folder: you + SYSTEM), <VM>\Credentials\guest.cred)
 
 <a id="build"></a>
 
@@ -225,12 +228,12 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
 3. `Sync-VMProfile` (Settings): fills in any setting VM.json lacks from the shared template
    - Reads D8, shared template: Shared\Config\ (LazyVM.Settings.json)
    - Writes D9, complete profile: <VM>\Config\ (VM.json, VM.Template.json  (first time only))
-4. `Register-RebuildSchedule` (Maintenance): before the phases, unless no one is there: asks for your Windows password so the schedule is in place even if the host restarts; a failure here is logged and the build goes on
-   - Also runs `Test-Unattended`, `Register-LazyVMHostTask`
-   - Writes D10, daily maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, daily at MaintenanceTime, runs as you)
+4. `Register-RebuildSchedule` (Maintenance): before the phases, so the schedule is in place even if the host restarts; a failure here is logged and the build goes on
+   - Also runs `Get-HostTaskCommand`, `Register-LazyVMHostTask`
+   - Writes D10, daily maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, daily at MaintenanceTime, as SYSTEM, with -Root)
 5. `Invoke-VMBuild` (Host): runs the phases from -FromPhase or the resume point, whichever is later
 6. `Get-ResumePhase` (Host, called by Invoke-VMBuild): picks up after a host restart
-   - Reads D11, phase to resume at: HKCU:\SOFTWARE\LazyVM\<VM> (ResumePhase)
+   - Reads D11, phase to resume at: <VM>\Config\ (Resume.json)
 7. `Invoke-BuildPhase` (Host, called by Invoke-VMBuild): runs each phase of Get-BuildPhase in order (steps 7-18); when a phase throws, deletes the answer-file disc first
    - Also runs `Get-BuildPhase`, `Remove-UnattendSeedDisk`
 8. `Initialize-InstallationIso` (Host, called by Invoke-BuildPhase): the Windows ISO, before anything changes; opens the download page and stops if there is none
@@ -239,8 +242,8 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
 9. `Repair-HyperVService` and `Test-HostReadiness` (Host, called by Invoke-BuildPhase): phases 0 and 1: the Hyper-V services, then CPU, SLAT, memory and free space
    - Reads D14, host checks: This PC (vmms, vmcompute, CPU, SLAT, RAM, free space)
 10. `Enable-HyperVFeature` (Host, called by Invoke-BuildPhase): phase 2; returns RestartPending when the host must restart
-   - Writes D15, resume task, only if a restart is needed: Task Scheduler (LazyVM-ResumeAfterReboot-<VM>)
-   - Writes D16, where to resume: HKCU:\SOFTWARE\LazyVM\<VM> (ResumePhase = 3)
+   - Writes D15, resume task, only if a restart is needed: Task Scheduler (LazyVM-ResumeAfterReboot-<VM>, as SYSTEM, with -Root)
+   - Writes D16, where to resume: <VM>\Config\ (Resume.json  (Phase 3))
 11. `Initialize-HostFolder` (Host, called by Invoke-BuildPhase): phase 3
    - Writes D17, folders created if missing: <Root>\ (Shared\ ISO, Installers, Credentials, <VM>\ Disks, Credentials, Backups,, Logs, Checkpoints)
 12. `Initialize-SqlServerIso` (Host, called by Invoke-BuildPhase): phase 4: downloads the SQL Server ISO if it is missing
@@ -269,7 +272,7 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
    - Reads D32, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
    - Writes D33, configured guest: Guest (user databases on D:\SQLData, VS settings imported, or pending, for nightly maintenance)
 19. `Unregister-ResumeTask` (Host, called by Invoke-VMBuild): unless the host is restarting
-   - Writes D34, resume entries removed: Task Scheduler (resume task deleted, ResumePhase cleared)
+   - Writes D34, resume entries removed: Task Scheduler (resume task deleted, Resume.json deleted)
 
 <a id="maintenance"></a>
 
@@ -279,7 +282,7 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
 
 Each night: records hardware changes made in Hyper-V, looks after the disks, records what changed in the guest, backs up the databases, keeps the guest up to date, and acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry. With -WhatIf, Get-MaintenancePreview says what a run would do and nothing else runs. A VM whose build is still in progress (a resume point is set, or the VM is not there yet) is skipped that night. Returns None, Rearmed or Rebuilt.
 
-Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as the user).
+Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM, with -Root).
 
 ![Daily maintenance: call order and data flow](diagrams/maintenance.svg)
 
@@ -293,7 +296,7 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as the user).
    - Writes D6, complete profile: <VM>\Config\ (VM.json, VM.Template.json  (first time only))
 3. `Invoke-Maintenance` (Maintenance): steps 4-23 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night
    - Also runs `Test-BuildInProgress`, `Get-ResumePhase`
-   - Reads D7, build in progress: HKCU:\SOFTWARE\LazyVM\<VM> (ResumePhase)
+   - Reads D7, build in progress: <VM>\Config\ (Resume.json)
    - Reads D8, does the VM exist: Hyper-V (Get-VM <VM>)
 4. `Open-GuestSession` (Guest, called by Invoke-Maintenance): starts the VM if it is off and waits for it, then opens the session
    - Reads D9, guest credential: Credential store (<VM>\Credentials\guest.cred)
@@ -367,10 +370,10 @@ Build-LazyVM already does this. Use it after changing MaintenanceTime, or if sch
 1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
    - Reads D1, settings, VM profile, guest user name: VM context sources (HKCU:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
-2. `Register-RebuildSchedule` (Maintenance): refuses without a stored credential or a valid HH:mm MaintenanceTime; asks for your Windows password once per session
+2. `Register-RebuildSchedule` (Maintenance): refuses without a stored credential or a valid HH:mm MaintenanceTime; the task runs as SYSTEM and names the LazyVM folder
    - Also runs `Assert-GuestCredential`, `Register-LazyVMHostTask`
    - Reads D3, guest credential: Credential store (<VM>\Credentials\guest.cred)
-   - Writes D4, daily maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, daily at MaintenanceTime, as you, elevated,, wake to run,, 6 h limit, 2 retries)
+   - Writes D4, daily maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, daily at MaintenanceTime, as SYSTEM,, wake to run,, 6 h limit, 2 retries)
 
 <a id="rebuild"></a>
 
@@ -630,12 +633,11 @@ Deletes the VM and everything created for it, Dev Drive and User disk included. 
    - Writes D5, removal list: Log and screen (what will be deleted, what is kept, and why)
 3. `Invoke-VMRemoval` (Maintenance): after you confirm; stops at the VM if it cannot be removed
    - Writes D6, tasks deleted: Task Scheduler (LazyVM-Maintain-<VM>, LazyVM-ResumeAfterReboot-<VM>)
-   - Writes D7, registry key deleted: HKCU:\SOFTWARE\LazyVM\<VM> (deleted)
-   - Writes D8, VM deleted: Hyper-V (VM <VM> turned off, removed)
+   - Writes D7, VM deleted: Hyper-V (VM <VM> turned off, removed)
 4. `Remove-PathWithRetry` (Maintenance, called by Invoke-VMRemoval): what is outside the VM folder first, then the folder; the log goes last, after Stop-Log closes it
    - Also runs `Stop-Log`
-   - Writes D9, files deleted: Files outside the VM folder (disks, state or backups that a setting put elsewhere; anything another VM uses is kept)
-   - Writes D10, VM folder deleted: VM folder (<VM>\ and everything in it: Config, Disks, Checkpoints, State, Backups, Credentials, Logs, Virtual Machines; the log last)
+   - Writes D8, files deleted: Files outside the VM folder (disks, state or backups that a setting put elsewhere; anything another VM uses is kept)
+   - Writes D9, VM folder deleted: VM folder (<VM>\ and everything in it: Config, Disks, Checkpoints, State, Backups, Credentials, Logs, Virtual Machines; the log last)
 
 <a id="status"></a>
 

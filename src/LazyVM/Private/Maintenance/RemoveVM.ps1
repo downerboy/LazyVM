@@ -7,7 +7,6 @@
 #  Remove-LazyVM deletes the VM and everything created to support it:
 #
 #    scheduled tasks   its maintenance task and any resume-after-reboot task
-#    registry          its resume key
 #    Hyper-V           the VM itself, with its checkpoints
 #    VM folder         <Root>\<Name>, with everything in it: disks and their
 #                      checkpoint disks, configuration, profile, state,
@@ -22,8 +21,8 @@
 #  What every VM uses is never touched: the root folder, Shared (the ISO,
 #  installers, settings and the credential key) and the module itself. Anything another
 #  VM also uses is kept too: a path another VM's settings name, a folder
-#  holding one, a disk attached to another VM, a task name or registry key
-#  another VM shares. The confirmation lists exactly what will go and what is
+#  holding one, a disk attached to another VM, or a task name another VM
+#  shares. The confirmation lists exactly what will go and what is
 #  kept, and why.
 #
 #  The planning is kept apart from the deleting (Get-VMRemovalPlan takes
@@ -215,20 +214,8 @@ function Get-VMRemovalPlan {
         $tasks += $taskName
     }
 
-    $registryKey = $null
-    if ($Settings.ResumeRegKey) {
-        $sharedWith = @($OtherSettings | Where-Object { $_.ResumeRegKey -and (Test-PathWithin -Path $_.ResumeRegKey -Folder $Settings.ResumeRegKey) })
-        if ($sharedWith.Count -gt 0) {
-            $kept.Add([pscustomobject]@{ Path = $Settings.ResumeRegKey; Reason = "VM '$($sharedWith[0].VMName)' uses $($sharedWith[0].ResumeRegKey)" })
-        }
-        else {
-            $registryKey = $Settings.ResumeRegKey
-        }
-    }
-
     return [pscustomobject]@{
         Tasks       = $tasks
-        RegistryKey = $registryKey
         VMRoot      = $vmRoot
         Files       = $files
         Folders     = $folders
@@ -337,12 +324,11 @@ function Get-VMRemovalContext {
 
     # Only what is actually there is listed and deleted.
     $tasks = @($plan.Tasks | Where-Object { Get-ScheduledTask -TaskName $_ -ErrorAction SilentlyContinue })
-    $registryKey = if ($plan.RegistryKey -and (Test-Path -LiteralPath $plan.RegistryKey)) { $plan.RegistryKey } else { $null }
     $files = @($plan.Files | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     $folders = @($plan.Folders | Where-Object { Test-Path -LiteralPath $_ -PathType Container })
     $vmRoot = if (Test-Path -LiteralPath $plan.VMRoot -PathType Container) { $plan.VMRoot } else { $null }
 
-    if (-not $machine -and $tasks.Count -eq 0 -and -not $registryKey -and -not $vmRoot -and $files.Count + $folders.Count -eq 0) {
+    if (-not $machine -and $tasks.Count -eq 0 -and -not $vmRoot -and $files.Count + $folders.Count -eq 0) {
         Write-LogEntry "Nothing of '$($VM.Name)' was found to remove." 'INFO'
         return $null
     }
@@ -352,7 +338,6 @@ function Get-VMRemovalContext {
         Write-LogEntry "  Hyper-V VM   $($VM.Name) ($($machine.State), $checkpointCount checkpoint(s))" 'INFO'
     }
     foreach ($task in $tasks) { Write-LogEntry "  Task         $task" 'INFO' }
-    if ($registryKey) { Write-LogEntry "  Registry     $registryKey" 'INFO' }
     $total = 0
     foreach ($path in @($vmRoot | Where-Object { $_ }) + $files + $folders) {
         $size = Get-PathSize -Path $path
@@ -383,7 +368,6 @@ function Get-VMRemovalContext {
     return [pscustomobject]@{
         Machine     = $machine
         Tasks       = $tasks
-        RegistryKey = $registryKey
         VMRoot      = $vmRoot
         Files       = $files
         Folders     = $folders
@@ -411,14 +395,6 @@ function Invoke-VMRemoval {
             Write-LogEntry "Task removed: $task" 'OK'
         }
         catch { $failures.Add("task $task - $($_.Exception.Message)") }
-    }
-
-    if ($Context.RegistryKey) {
-        try {
-            Remove-Item -LiteralPath $Context.RegistryKey -Recurse -Force -ErrorAction Stop
-            Write-LogEntry "Registry key removed: $($Context.RegistryKey)" 'OK'
-        }
-        catch { $failures.Add("$($Context.RegistryKey) - $($_.Exception.Message)") }
     }
 
     if ($Context.Machine) {

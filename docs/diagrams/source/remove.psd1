@@ -40,7 +40,6 @@
             Note     = 'after you confirm; stops at the VM if it cannot be removed'
             Writes   = @(
                 @{ Label = 'tasks deleted'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'LazyVM-ResumeAfterReboot-<VM>') }
-                @{ Label = 'registry key deleted'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM\<VM>'; Items = @('deleted') }
                 @{ Label = 'VM deleted'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('VM <VM> turned off', 'removed') }
             )
         }

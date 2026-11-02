@@ -5,13 +5,13 @@ function Remove-LazyVM {
 
     .DESCRIPTION
     Removes the Hyper-V VM with its checkpoints, its disks (including the SQL
-    data disk and the Dev Drive with its source code), its scheduled tasks
-    and registry key, its stored passwords, captured state, logs, and its
+    data disk and the Dev Drive with its source code), its scheduled tasks,
+    its stored passwords, captured state, logs, and its
     profile and tooling history.
 
     What every VM uses is kept: the LazyVM folder itself, the ISOs and
     installers, and your settings file. So is anything another VM also uses,
-    such as the key that encrypts the stored passwords.
+    such as a disk or folder another VM's settings name.
 
     Everything that would be deleted is listed first, with sizes, and you are
     asked to confirm. Use -WhatIf to see the list without deleting anything.

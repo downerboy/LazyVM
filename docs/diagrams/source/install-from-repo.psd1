@@ -58,7 +58,10 @@
             Area     = 'script'
             Note     = 'only when every check passed: copies the newest built version and unblocks it'
             Reads    = @(@{ Label = 'built module'; Kind = 'folder'; Store = 'out\LazyVM\'; Items = @('<version>\') })
-            Writes   = @(@{ Label = 'module installed for you only'; Kind = 'folder'; Store = 'Documents\PowerShell\'; Items = @('Modules\LazyVM\<version>\') })
+            Writes   = @(
+                @{ Label = 'module installed for you only, outside OneDrive'; Kind = 'folder'; Store = '%LOCALAPPDATA%\LazyVM\'; Items = @('Modules\LazyVM\<version>\') }
+                @{ Label = 'module folder on your PSModulePath'; Kind = 'registry'; Store = 'HKCU:\Environment'; Items = @('PSModulePath') }
+            )
         }
     )
 }

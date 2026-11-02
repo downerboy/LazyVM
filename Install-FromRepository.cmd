@@ -8,7 +8,7 @@ rem
 rem Nothing is installed unless the analyzer and every test pass.
 setlocal
 
-rem Not elevated: LazyVM is installed per user, in this user's Documents (#284).
+rem Not elevated: LazyVM is installed per user, in %LOCALAPPDATA%\LazyVM (#284).
 rem Run from the repository's root, wherever the file was started from.
 cd /d "%~dp0"
 

@@ -420,18 +420,21 @@ function Sync-VMProfile {
 function Initialize-BuildTarget {
     <#
       Everything Build-LazyVM needs before it can start, set up on first use
-      so a single command is enough: the LazyVM folder, recorded once, and
+      so a single command is enough: the LazyVM folder, recorded once (or
+      -Root, which must be one already), and
       the VM's profile, from -ConfigTemplate when one is given. Says what it
       set up. A VM that already has a profile keeps it: its VM.json, not a
       config template, decides how it is built.
     #>
     param(
         [string]$Name,
-        [string]$ConfigTemplate
+        [string]$ConfigTemplate,
+        [string]$Root
     )
 
     Assert-NoLegacyInstallation
-    $root = Get-RegisteredRoot
+    # A folder handed in, as the resume task does, is used as it is.
+    $root = if ($Root) { (Resolve-LazyVMRoot -Root $Root).Path } else { Get-RegisteredRoot }
     if (-not $root) {
         $root = Get-DefaultRoot
         Assert-RootFolderUsable -Path $root

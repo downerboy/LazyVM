@@ -146,7 +146,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="147.5" y="64" text-anchor="middle">LazyVM-Maintain-&lt;VM&gt;</text>
 <line class="div" x1="20" y1="71" x2="275" y2="71"/>
 <text class="at" x="30" y="86">daily at MaintenanceTime</text>
-<text class="at" x="30" y="103">as the user</text>
+<text class="at" x="30" y="103">as SYSTEM, with -Root</text>
 </g>
 <g class="bx-cmd"><rect x="335" y="34" width="305" height="84" rx="3"/>
 <text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
@@ -224,10 +224,10 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="345" y="603">does nothing that night</text>
 </g>
 <g class="bx-store"><rect x="20" y="500" width="255" height="84" rx="3"/>
-<text class="st" x="147.5" y="514" text-anchor="middle">«registry»</text>
-<text class="nm" x="147.5" y="530" text-anchor="middle">HKCU:\SOFTWARE\LazyVM\&lt;VM&gt;</text>
+<text class="st" x="147.5" y="514" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="530" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="20" y1="537" x2="275" y2="537"/>
-<text class="at" x="30" y="552">ResumePhase</text>
+<text class="at" x="30" y="552">Resume.json</text>
 </g>
 <g class="bx-store"><rect x="20" y="596" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="610" text-anchor="middle">«Hyper-V»</text>

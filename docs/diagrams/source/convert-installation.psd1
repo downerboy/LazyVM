@@ -10,7 +10,7 @@
         'Resolve-SettingsRoot' = 'checks -Path is a folder on a local drive'
         'Get-DefaultRoot'      = 'the new folder when -Path is left out: %USERPROFILE%\LazyVM'
         'Test-SamePath'        = 'tells a move in place, which keeps the data where it is, from a move'
-        'Get-TaskUserName'     = 'names the user in the log'
+        'Get-CurrentUserName'  = 'names the user in the confirmation and the log'
     }
     Steps      = @(
         @{
@@ -41,10 +41,10 @@
             Writes   = @(@{ Label = 'folder access'; Kind = 'folder'; Store = '<new>'; Items = @('you + SYSTEM', 'nothing inherited') })
         }
         @{
-            Function = 'Move-LegacyTask'
+            Function = 'Update-LegacyTask'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 'first, so no nightly run starts mid-move; keeps when each runs and makes its action again; asks for your Windows password once'
+            Note     = 'first, so no nightly run starts mid-move: this install''s tasks, still as SYSTEM, keep when they run and get an action naming the new folder and loading this module'
             Includes = @('Get-HostTaskCommand', 'New-LazyVMTaskAction', 'Register-LazyVMHostTask')
             Reads    = @(@{ Label = 'tasks run as SYSTEM'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'LazyVM-ResumeAfterReboot-<VM>') })
             Writes   = @(@{ Label = 'same tasks, as you'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('elevated, signed in or not') })
@@ -103,9 +103,12 @@
             Function = 'Copy-LegacyRegistry'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 'the folder and any interrupted build'
+            Note     = 'the folder, to your registry; any interrupted build, to its VM''s folder'
             Includes = @('Get-LegacyResumePhase', 'Set-ResumePhase', 'Set-RegisteredRoot')
-            Writes   = @(@{ Label = 'your registry'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root = <new>', '<VM>  ResumePhase') })
+            Writes   = @(
+                @{ Label = 'your registry'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root = <new>') }
+                @{ Label = 'resume points'; Kind = 'file'; Store = '<new>\<VM>\Config\'; Items = @('Resume.json') }
+            )
         }
         @{
             Function = 'Remove-LegacyInstallation'

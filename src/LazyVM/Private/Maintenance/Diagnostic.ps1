@@ -32,19 +32,6 @@ function Get-IsoCheck {
     return New-DiagnosticCheck -Name $Name -Area Host -Check $Check -Status $status -Detail "$Path $why"
 }
 
-function Get-RootAccess {
-    <# Who the LazyVM folder at $Root lets in, as security identifiers, and whether it inherits access from the folder above. #>
-    param([Parameter(Mandatory)][string]$Root)
-
-    $acl = Get-Acl -LiteralPath $Root
-    return [pscustomobject]@{
-        Protected = $acl.AreAccessRulesProtected
-        Sids      = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) |
-                Where-Object { "$($_.AccessControlType)" -eq 'Allow' } |
-                ForEach-Object { $_.IdentityReference.Value } | Select-Object -Unique)
-    }
-}
-
 function ConvertTo-AccountName {
     <# The account name for a security identifier, or the identifier itself when it has no name. #>
     param([Parameter(Mandatory)][string]$Sid)
@@ -73,6 +60,24 @@ function Get-RootAccessCheck {
     return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status WARN -Detail "$($problems -join '; '). Lock it again with: Set-LazyVMRoot -Path $Root"
 }
 
+function Get-CloudSyncCheck {
+    <#
+      Whether the LazyVM folder or the module LazyVM runs from is in
+      OneDrive (#284), where files can be online-only while the tasks run
+      and are copied to the cloud.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Root
+    )
+
+    $synced = @(@($Root, (Get-LazyVMModuleBase)) | Where-Object { Test-CloudSyncedPath -Path $_ })
+    if ($synced.Count -eq 0) {
+        return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status OK -Detail 'the LazyVM folder and the module are outside OneDrive'
+    }
+    return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status WARN -Detail "$($synced -join ' and ') in OneDrive: files there can be online-only while the tasks run, and are copied to the cloud. Install the module with Install.ps1, and move the LazyVM folder outside OneDrive."
+}
+
 function Get-LazyVMDiagnostic {
     <#
       The checks Test-LazyVM reports, in order. Reads only: a VM that is not
@@ -98,6 +103,7 @@ function Get-LazyVMDiagnostic {
     $settings = $configuration.Settings
     New-DiagnosticCheck -Name $vmName -Area Host -Check 'LazyVM folder' -Status OK -Detail "$($root.Path) (from $($root.Source))"
     Get-RootAccessCheck -Name $vmName -Root $root.Path
+    Get-CloudSyncCheck -Name $vmName -Root $root.Path
     Get-IsoCheck -Name $vmName -Check 'Windows ISO' -Path $settings.ISOPath
     Get-IsoCheck -Name $vmName -Check 'SQL Server ISO' -Path $settings.SQLIsoPath -Downloadable
 
@@ -151,6 +157,5 @@ function Get-LazyVMDiagnostic {
     # 0x41303 (267011): the task has not run yet.
     $taskStatus = switch ([long]$info.LastTaskResult) { 0 { 'OK' } 267011 { 'INFO' } default { 'FAIL' } }
     $last = if ($taskStatus -eq 'INFO') { 'has not run yet' } else { "last ran $($info.LastRunTime), result 0x$('{0:X}' -f [long]$info.LastTaskResult)" }
-    if (Test-TaskLogonFailure -TaskName $settings.ScheduleTaskName) { $last = Get-TaskLogonFailureMessage -VMName $vmName }
     New-DiagnosticCheck -Name $vmName -Area Schedule -Check 'Maintenance task' -Status $taskStatus -Detail "$last; next run $($info.NextRunTime)"
 }

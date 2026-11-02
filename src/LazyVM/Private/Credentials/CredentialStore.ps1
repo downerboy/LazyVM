@@ -1,14 +1,13 @@
 ﻿# CredentialStore.ps1 - Encrypted store for the guest and certificate passwords.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# Encrypted with DPAPI for the current user (#284): only the Windows account
-# that stored a secret can read it back, so no other account can decrypt
-# it, local administrators and SYSTEM included. LazyVM's scheduled tasks run
-# as that same account, so they can read it too.
-#
-# DPAPI keys follow the account's password. Changing your own password keeps
-# them; a password reset by someone else loses them, and with them every
-# secret stored here.
+# Encrypted with DPAPI for this computer (LocalMachine), with LazyVM's own
+# entropy (#284): LazyVM's scheduled tasks run as SYSTEM and the user runs
+# LazyVM elevated, and both must read the same secrets. What keeps other
+# accounts out is the LazyVM folder's access, the installing user and
+# SYSTEM only: a standard user cannot open the files. A local administrator
+# can, by taking ownership or running as SYSTEM, and could then decrypt
+# them. The files are useless on another computer.
 #
 # Get- functions only read. A missing credential file is created only by
 # Save-StoredCredential and Get-OrNewStoredCredential, and nothing here ever
@@ -17,20 +16,48 @@
 # Marks a file as encrypted this way. Older LazyVM versions wrote files
 # without it, encrypted with a machine key file (Convert-LazyVMInstallation
 # moves them over).
-$script:CredentialProtection = 'DPAPI-CurrentUser'
+$script:CredentialProtection = 'DPAPI-LocalMachine'
+# Mixed into every encryption, so another program using DPAPI on this
+# computer cannot decrypt LazyVM's secrets by accident.
+$script:CredentialEntropy = [Text.Encoding]::UTF8.GetBytes('LazyVM credential store')
+
+function Protect-CredentialSecret {
+    <# $Secret encrypted with DPAPI for this computer and LazyVM's entropy, as Base64. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][securestring]$Secret)
+
+    Add-Type -AssemblyName System.Security.Cryptography.ProtectedData
+    $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-PlainText -Secure $Secret))
+    try {
+        $protected = [Security.Cryptography.ProtectedData]::Protect($bytes, $script:CredentialEntropy, [Security.Cryptography.DataProtectionScope]::LocalMachine)
+        return [Convert]::ToBase64String($protected)
+    }
+    finally { [Array]::Clear($bytes, 0, $bytes.Length) }
+}
+
+function Unprotect-CredentialSecret {
+    <# The secret Protect-CredentialSecret encrypted. Throws when it cannot be decrypted. #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'DPAPI hands the secret back as bytes; it becomes a SecureString straight away.')]
+    [OutputType([securestring])]
+    param([Parameter(Mandatory)][string]$Text)
+
+    Add-Type -AssemblyName System.Security.Cryptography.ProtectedData
+    $bytes = [Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($Text), $script:CredentialEntropy, [Security.Cryptography.DataProtectionScope]::LocalMachine)
+    try { return ConvertTo-SecureString -String ([Text.Encoding]::UTF8.GetString($bytes)) -AsPlainText -Force }
+    finally { [Array]::Clear($bytes, 0, $bytes.Length) }
+}
 
 function ConvertTo-StoredCredentialText {
-    <# The text of a credential file: the user name, and the password encrypted for the current user. #>
+    <# The text of a credential file: the user name, and the password encrypted for this computer. #>
     [OutputType([string])]
     param(
         [Parameter(Mandatory)][string]$UserName,
         [Parameter(Mandatory)][securestring]$Password
     )
 
-    # Without -Key, ConvertFrom-SecureString encrypts with DPAPI for the current user.
     $blob = [pscustomobject]@{
         UserName   = $UserName
-        Password   = ConvertFrom-SecureString -SecureString $Password
+        Password   = Protect-CredentialSecret -Secret $Password
         Protection = $script:CredentialProtection
     }
     return ConvertTo-Json -InputObject $blob
@@ -49,16 +76,15 @@ function ConvertFrom-StoredCredentialText {
         throw "The credential at $Path was stored by an older LazyVM, with a key every administrator could read. Move it over first: Convert-LazyVMInstallation"
     }
     try {
-        $secure = ConvertTo-SecureString -String $blob.Password
-        return [pscredential]::new($blob.UserName, $secure)
+        return [pscredential]::new($blob.UserName, (Unprotect-CredentialSecret -Text $blob.Password))
     }
     catch {
-        throw "The credential at $Path cannot be read ($($_.Exception.Message)): only the Windows account that stored it can read it, and only while that account's password has not been reset by someone else. Store the password again with Set-LazyVMCredential."
+        throw "The credential at $Path cannot be read ($($_.Exception.Message)): it can only be read on the computer that stored it. Store the password again with Set-LazyVMCredential."
     }
 }
 
 function Test-ProtectedCredentialBlob {
-    <# Whether a credential file's content is encrypted for the current user, rather than with an older LazyVM's machine key. #>
+    <# Whether a credential file's content is encrypted the way this LazyVM does it, rather than with an older LazyVM's machine key. #>
     [OutputType([bool])]
     param([Parameter(Mandatory)][psobject]$Blob)
 

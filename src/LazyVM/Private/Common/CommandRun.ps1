@@ -12,7 +12,7 @@ function Assert-Administrator {
 function Test-Unattended {
     <#
       True when nobody is there to answer a question or fix a problem: a
-      scheduled task, running whether the user is signed in or not. Such a run uses the last good copy
+      scheduled task, running as SYSTEM. Such a run uses the last good copy
       of a broken settings file rather than stopping.
     #>
     return -not [Environment]::UserInteractive
@@ -30,12 +30,13 @@ function Initialize-CommandRun {
     param(
         [Parameter(Mandatory)][string]$Title,
         [string]$Name,
+        [string]$Root,
         [switch]$RecordHardware
     )
 
-    $root = Resolve-LazyVMRoot
-    Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $root.Path)
-    $configuration = Read-VMSetting -Root $root.Path -VMName $Name -Unattended:(Test-Unattended)
+    $folder = Resolve-LazyVMRoot -Root $Root
+    Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $folder.Path)
+    $configuration = Read-VMSetting -Root $folder.Path -VMName $Name -Unattended:(Test-Unattended)
     $vm = [VMContext]::new($configuration.Settings)
 
     Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
@@ -47,7 +48,7 @@ function Initialize-CommandRun {
     Write-LogEntry "  User    : $env:USERDOMAIN\$env:USERNAME" 'INFO'
     Write-LogEntry "  Module  : $($MyInvocation.MyCommand.Module.Version) on PowerShell $($PSVersionTable.PSVersion)" 'INFO'
     Write-LogEntry "  VM      : $($vm.Name) ($($configuration.ProfilePath))" 'INFO'
-    Write-LogEntry "  Root    : $($root.Path) (from $($root.Source))" 'INFO'
+    Write-LogEntry "  Root    : $($folder.Path) (from $($folder.Source))" 'INFO'
     $missing = @($configuration.MissingKeys)
     Write-LogEntry "  Profile : $(if ($missing.Count -gt 0) { "$($missing.Count) setting(s) not yet in VM.json, taken from the shared template" } else { 'complete' })" 'INFO'
     Write-LogEntry $rule 'INFO'
@@ -55,11 +56,11 @@ function Initialize-CommandRun {
 
     # A VM from before #130 has its tooling list in files of its own: they
     # go into VM.json before anything reads it.
-    $changed = Move-ToolingIntoProfile -Root $root.Path -Name $vm.Name
+    $changed = Move-ToolingIntoProfile -Root $folder.Path -Name $vm.Name
     # A rebuild must make the VM as it is now, not as it was first set up.
     if ($RecordHardware -and (Save-VMHardware -VM $vm)) { $changed = $true }
     if ($changed) {
-        $configuration = Read-VMSetting -Root $root.Path -VMName $vm.Name -Unattended:(Test-Unattended)
+        $configuration = Read-VMSetting -Root $folder.Path -VMName $vm.Name -Unattended:(Test-Unattended)
         $vm = [VMContext]::new($configuration.Settings)
     }
 
@@ -93,13 +94,14 @@ function Invoke-CommandRun {
         [string]$FailureMessage,
         [System.Management.Automation.PSCmdlet]$Cmdlet,
         [scriptblock]$ScriptBlock,
+        [string]$Root,
         [switch]$RecordHardware
     )
 
     Assert-Administrator
     $context = $null
     try {
-        $context = Initialize-CommandRun -Title $Title -Name $Name -RecordHardware:$RecordHardware
+        $context = Initialize-CommandRun -Title $Title -Name $Name -Root $Root -RecordHardware:$RecordHardware
         & $ScriptBlock $context
     }
     catch {
@@ -136,19 +138,21 @@ function Get-LazyVMModuleBase {
 
 function Get-ModuleImportCommand {
     <#
-      How a scheduled task loads this module. By name when it is installed
-      where PowerShell looks for modules, so an updated version is picked up
-      automatically; otherwise by the path it was loaded from.
+      How a scheduled task loads this module. Always by path: the tasks run
+      as SYSTEM, whose module path does not include the user's module
+      folder. Installed (in <folder>\LazyVM\<version>), by the LazyVM folder
+      above the version, so PowerShell loads the newest version installed
+      and an update is picked up without registering the tasks again;
+      otherwise by the manifest it was loaded from.
     #>
-    $moduleBase = Get-LazyVMModuleBase
-    foreach ($searchPath in @($env:PSModulePath -split [IO.Path]::PathSeparator | Where-Object { $_ })) {
-        $folder = $searchPath.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-        if ($moduleBase.StartsWith($folder, [StringComparison]::OrdinalIgnoreCase)) {
-            return "Import-Module -Name 'LazyVM'"
-        }
-    }
-    $manifest = Join-Path -Path $moduleBase -ChildPath 'LazyVM.psd1'
-    return "Import-Module -Name '$($manifest.Replace("'", "''"))'"
+    [OutputType([string])]
+    param()
+
+    $moduleBase = (Get-LazyVMModuleBase).TrimEnd('\', '/')
+    $parent = Split-Path -Path $moduleBase -Parent
+    $path = if ((Split-Path -Path $moduleBase -Leaf) -as [version] -and (Split-Path -Path $parent -Leaf) -eq 'LazyVM') { $parent }
+    else { Join-Path -Path $moduleBase -ChildPath 'LazyVM.psd1' }
+    return "Import-Module -Name '$($path.Replace("'", "''"))'"
 }
 
 function New-LazyVMTaskAction {

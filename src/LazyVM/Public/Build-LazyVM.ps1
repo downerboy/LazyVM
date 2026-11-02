@@ -14,8 +14,8 @@
         it into the LazyVM folder; with no ISO anywhere it opens the download
         page and stops, so you download it and run the same command again
       - creates the administrator account inside the VM
-      - schedules the daily maintenance before the first phase, asking for
-        your Windows password, so it is in place even if the host restarts
+      - schedules the daily maintenance before the first phase, so it is in
+        place even if the host restarts
 
     The build runs these phases, skipping whatever is already done, so it is
     safe to run again after a failure:
@@ -55,6 +55,12 @@
     Start at this phase, skipping the earlier ones. Mostly for picking up
     after fixing a problem in a later phase.
 
+    .PARAMETER Root
+    The LazyVM folder, instead of the one recorded for you. LazyVM's
+    scheduled tasks pass it, since they run as SYSTEM, which cannot read
+    your registry. It must be a LazyVM folder locked to its owner and
+    SYSTEM (see Set-LazyVMRoot).
+
     .PARAMETER NoUnattend
     Do not give the VM an answer file: Windows Setup has to be completed by
     hand in VMConnect, and Phase 7 waits for that.
@@ -85,7 +91,9 @@
         [ValidateScript({ Test-BuildPhaseNumber -Number $_ }, ErrorMessage = "There is no build phase {0}. Get-Help Build-LazyVM lists the phases.")]
         [int]$FromPhase = 0,
 
-        [switch]$NoUnattend
+        [switch]$NoUnattend,
+
+        [string]$Root
     )
 
     process {
@@ -94,21 +102,18 @@
         $setup = if ($NoUnattend) { ', with Windows Setup completed by hand' } else { '' }
         $vmProfile = if ($ConfigTemplate) { "profile (from the config template '$ConfigTemplate')" } else { 'profile' }
         if (-not $PSCmdlet.ShouldProcess($target, "Build from phase $FromPhase$setup, first setting up the LazyVM folder, $vmProfile and Windows ISO if they are missing")) { return }
-        Initialize-BuildTarget -Name $Name -ConfigTemplate $ConfigTemplate
-        Invoke-CommandRun -Title 'Build' -Name $Name -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+        Initialize-BuildTarget -Name $Name -ConfigTemplate $ConfigTemplate -Root $Root
+        Invoke-CommandRun -Title 'Build' -Name $Name -Root $Root -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
             Sync-VMProfile -VM $VM
-            # The daily maintenance first, while someone is here to give the
-            # Windows password: a build that restarts the host carries on
-            # unattended. A problem here is reported but does not stop the build.
-            if (-not (Test-Unattended)) {
-                try {
-                    Register-RebuildSchedule -VM $VM
-                }
-                catch {
-                    Write-LogEntry "The daily maintenance could not be scheduled: $($_.Exception.Message)" 'WARN'
-                    Write-LogEntry "  Schedule it with: Register-LazyVMMaintenance -Name $($VM.Name)" 'INFO'
-                }
+            # The daily maintenance first, so it is in place even if the host
+            # restarts part-way. A problem here is reported but does not stop the build.
+            try {
+                Register-RebuildSchedule -VM $VM
+            }
+            catch {
+                Write-LogEntry "The daily maintenance could not be scheduled: $($_.Exception.Message)" 'WARN'
+                Write-LogEntry "  Schedule it with: Register-LazyVMMaintenance -Name $($VM.Name)" 'INFO'
             }
             $outcome = Invoke-VMBuild -VM $VM -FromPhase $FromPhase -NoUnattend:$NoUnattend
             if ($outcome -eq [BuildOutcome]::RestartPending) {

@@ -1,9 +1,9 @@
 ﻿# Constants.ps1 - Names LazyVM uses in more than one place, defined once.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
-# Where the root folder is recorded for every later run, including the
-# scheduled tasks, which run as the same user (#284). Each VM's resume point
-# is a subkey.
+# Where the root folder is recorded for the user's later runs (#284). The
+# scheduled tasks run as SYSTEM, which cannot read it: their command names
+# the root folder itself (Get-HostTaskCommand).
 $script:RootRegistryKey = 'HKCU:\SOFTWARE\LazyVM'
 
 # Where a machine-wide install, before #284, recorded its root folder, with
@@ -119,10 +119,6 @@ $script:WingetExitMeanings = @{
 # break a working install of either. Wildcards as -like takes them.
 $script:WingetUpgradeNever = @('Microsoft.VisualStudio.*', 'Microsoft.SQLServer.*', 'Microsoft.SQLServerManagementStudio*')
 
-# A scheduled task's last result when Windows could not sign its account
-# in (0x8007052E), as after the user changed their password (HostTask.ps1).
-$script:LogonFailureResult = [long]2147943726
-
 # Every scheduled task LazyVM registers, on the host or in the guest, starts
 # with this; the guest capture leaves such tasks out.
 $script:TaskPrefix = 'LazyVM-'
@@ -130,6 +126,11 @@ $script:TaskPrefix = 'LazyVM-'
 # maintenance, and the build that carries on after a host restart.
 $script:MaintenanceTaskPrefix = "${script:TaskPrefix}Maintain-"
 $script:ResumeTaskPrefix = "${script:TaskPrefix}ResumeAfterReboot-"
+
+# In <Root>\<Name>\Config while a build waits to carry on after a host
+# restart: the phase it carries on from (HyperV.ps1). In the VM's own
+# folder, which the resume task, running as SYSTEM, can read.
+$script:ResumeFileName = 'Resume.json'
 
 # In <Root>\Shared during Convert-LazyVMInstallation: the ISOs it ejected to
 # move them, until it attaches them again (Migration.ps1).

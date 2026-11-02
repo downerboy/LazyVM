@@ -29,6 +29,7 @@ Describe 'Get-LazyVMDiagnostic' {
             }
             [pscustomobject]@{ VMName = 'Alpha'; Settings = $settings }
         }
+        Mock -ModuleName $module Get-CloudSyncCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'OneDrive'; Status = 'OK'; Detail = '' } }
         Mock -ModuleName $module Get-RootAccessCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'LazyVM folder access'; Status = 'OK'; Detail = '' } }
         Mock -ModuleName $module Test-IsoFile { $true }
         Mock -ModuleName $module Get-Item { [pscustomobject]@{ Length = 6GB } }
@@ -99,15 +100,6 @@ Describe 'Get-LazyVMDiagnostic' {
         Mock -ModuleName $module Get-ScheduledTaskInfo { [pscustomobject]@{ LastRunTime = $null; LastTaskResult = $Result; NextRunTime = [datetime]'2026-11-01 03:00' } }.GetNewClosure()
 
         (Get-TestCheck)['Maintenance task'].Status | Should -Be $Status
-    }
-
-    It 'explains a maintenance task Windows could not sign in for, with the command that fixes it (#284)' {
-        Mock -ModuleName $module Get-ScheduledTaskInfo { [pscustomobject]@{ LastRunTime = $null; LastTaskResult = 2147943726; NextRunTime = [datetime]'2026-11-01 03:00' } }
-
-        $check = (Get-TestCheck)['Maintenance task']
-
-        $check.Status | Should -Be 'FAIL'
-        $check.Detail | Should -BeLike '*password*changed*Register-LazyVMMaintenance -Name Alpha*'
     }
 }
 

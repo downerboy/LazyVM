@@ -5,23 +5,25 @@
 
     .DESCRIPTION
     LazyVM before version 6 was installed for every user of the computer:
-    its folder (C:\LazyVM by default) and registry key were shared, its
-    scheduled tasks ran as SYSTEM, and every administrator could decrypt its
-    stored passwords. LazyVM 6 is installed per user, and refuses to run
-    until such an install has been moved with this command, once.
+    its folder (C:\LazyVM by default) and registry key were shared, and its
+    stored passwords were encrypted with a key file every administrator
+    could read. LazyVM 6 is installed per user, with its folder open to that
+    user and SYSTEM only, and refuses to run until such an install has been
+    moved with this command, once.
 
     It moves, in this order:
-    - the scheduled tasks, to run as you (it asks for your Windows password
-      once; use your account's password, not your PIN);
-    - the stored passwords and BitLocker recovery keys, re-encrypted so only
-      your Windows account can read them, each read back before the old one
-      is replaced; then the old key file is deleted;
+    - the scheduled tasks, which still run as SYSTEM, now naming the new
+      folder and loading this module;
+    - the stored passwords and BitLocker recovery keys, re-encrypted with
+      DPAPI for this computer, each read back before the old one is
+      replaced; then the old key file is deleted;
     - each VM's files, with Hyper-V's storage migration, so a running VM
       keeps running. Hyper-V copies them, so the drive needs room for the
       largest VM a second time;
     - every other file, to the same place in the new folder, which only you
       and SYSTEM can open;
-    - the folder and any interrupted build, to your part of the registry.
+    - the folder to your part of the registry, and any interrupted build to
+      its VM's folder.
     Only then are the old folder (once empty), the machine-wide copy of the
     module in Program Files (when you have your own copy) and the old
     registry key removed.
@@ -75,7 +77,7 @@
     Assert-MigrationTarget -OldRoot $oldRoot -NewRoot $newRoot
 
     $what = if (Test-SamePath -Path $oldRoot -Other $newRoot) { "keep the files in $newRoot and lock it to you and SYSTEM" } else { "move its VMs and files to $newRoot, locked to you and SYSTEM" }
-    $action = "Move LazyVM, installed for every user, to $(Get-TaskUserName): its tasks and passwords; $what; then remove the old registry key and the copy of the module in Program Files"
+    $action = "Move LazyVM, installed for every user, to $(Get-CurrentUserName): its tasks and passwords; $what; then remove the old registry key and the copy of the module in Program Files"
     if (-not $PSCmdlet.ShouldProcess($oldRoot, $action)) {
         return
     }

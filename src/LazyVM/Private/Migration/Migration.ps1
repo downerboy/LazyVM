@@ -105,7 +105,7 @@ function Convert-LegacyCredential {
             if (Convert-LegacyCredentialFile -KeyPath $keyPath -Path $file.FullName) { $converted++ }
         }
     }
-    Write-LogEntry "$converted credential file(s) re-encrypted for $(Get-TaskUserName) only" 'OK'
+    Write-LogEntry "$converted credential file(s) re-encrypted for this computer" 'OK'
 
     foreach ($keyPath in $keyPaths) {
         if (Test-Path -LiteralPath $keyPath -PathType Leaf) {
@@ -116,7 +116,7 @@ function Convert-LegacyCredential {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  TASKS: SYSTEM -> the current user
+#  TASKS: the action names the new folder and the module
 # ─────────────────────────────────────────────────────────────────────────────
 function Assert-NoRunningTask {
     <# Stops while a LazyVM task is running: it would work on files while they move. #>
@@ -126,24 +126,33 @@ function Assert-NoRunningTask {
     }
 }
 
-function Move-LegacyTask {
+function Update-LegacyTask {
     <#
-      Re-registers each LazyVM task that runs as SYSTEM to run as the
-      current user, keeping when it runs (its triggers and settings). Its
-      action is made again, as this version makes it, from the task's name.
-      A task of the same name replaces it in one step. Tasks of other users
-      are left alone.
+      Registers again each LazyVM task of the VMs in this install (a VM
+      with a profile in $OldRoot or $NewRoot), keeping when it runs (its
+      triggers and settings), with its action made as this version makes it:
+      from the task's name, naming $NewRoot and loading this module. It
+      still runs as SYSTEM. A task of the same name replaces it in one step.
+      Other tasks are left alone.
     #>
-    $system = 'SYSTEM', 'NT AUTHORITY\SYSTEM', 'S-1-5-18'
+    param(
+        [Parameter(Mandatory)][string]$OldRoot,
+        [Parameter(Mandatory)][string]$NewRoot
+    )
+
     foreach ($task in @(Get-ScheduledTask -TaskName "$script:TaskPrefix*" -ErrorAction SilentlyContinue)) {
-        if ($system -notcontains "$($task.Principal.UserId)") { continue }
-        $command = Get-HostTaskCommand -TaskName $task.TaskName
+        $command = Get-HostTaskCommand -TaskName $task.TaskName -Root $NewRoot
         if (-not $command) {
             Write-LogEntry "Task '$($task.TaskName)' is not one LazyVM makes, so it is left as it was" 'WARN'
             continue
         }
+        $vmName = $task.TaskName -replace "^($([regex]::Escape($script:MaintenanceTaskPrefix))|$([regex]::Escape($script:ResumeTaskPrefix)))", ''
+        $inThisInstall = foreach ($root in $OldRoot, $NewRoot) {
+            Test-Path -LiteralPath (Join-Path -Path $root -ChildPath "$vmName/$script:ConfigFolderName/$script:ProfileFileName") -PathType Leaf
+        }
+        if ($inThisInstall -notcontains $true) { continue }
         Register-LazyVMHostTask -TaskName $task.TaskName -Action (New-LazyVMTaskAction -Command $command) -Trigger $task.Triggers -Settings $task.Settings
-        Write-LogEntry "Task '$($task.TaskName)' now runs as $(Get-TaskUserName) instead of SYSTEM" 'OK'
+        Write-LogEntry "Task '$($task.TaskName)' now runs LazyVM from $NewRoot" 'OK'
     }
 }
 
@@ -402,23 +411,32 @@ function Get-LegacyResumePhase {
 }
 
 function Copy-LegacyRegistry {
-    <# Records the new folder, and every interrupted build's resume phase, in the current user's registry. #>
+    <#
+      Records the new folder in the current user's registry, and every
+      interrupted build's resume phase in its VM's folder, where the resume
+      task, running as SYSTEM, reads it.
+    #>
     param([Parameter(Mandatory)][string]$NewRoot)
 
     $phases = Get-LegacyResumePhase
     foreach ($name in $phases.Keys) {
-        Set-ResumePhase -Key "$script:RootRegistryKey\$name" -Phase $phases[$name]
+        $file = Join-Path -Path $NewRoot -ChildPath "$name/$script:ConfigFolderName/$script:ResumeFileName"
+        Set-ResumePhase -Path $file -Phase $phases[$name]
     }
     Set-RegisteredRoot -Path $NewRoot
     Write-LogEntry "Recorded $NewRoot in $script:RootRegistryKey" 'OK'
 }
 
 function Get-UserModuleFolder {
-    <# The current user's own PowerShell 7 module folder, Documents\PowerShell\Modules, where Install.ps1 puts LazyVM. #>
+    <#
+      The current user's own module folder, %LOCALAPPDATA%\LazyVM\Modules,
+      where Install.ps1 puts LazyVM: on this computer only, never synced by
+      OneDrive as Documents can be. Install.ps1 names the same folder.
+    #>
     [OutputType([string])]
     param()
 
-    return Join-Path -Path ([Environment]::GetFolderPath('MyDocuments')) -ChildPath 'PowerShell/Modules'
+    return Join-Path -Path ([Environment]::GetFolderPath('LocalApplicationData')) -ChildPath 'LazyVM/Modules'
 }
 
 function Test-MachineWideModuleRemovable {
@@ -517,8 +535,8 @@ function Invoke-InstallationMigration {
     Initialize-RootFolder -Path $NewRoot
     Start-Log -Path "$($NewRoot.TrimEnd('\'))\$script:SharedFolderName\Logs\Migration.log" -MaxSizeMB 10
     try {
-        Write-LogEntry "Moving LazyVM from every user to $(Get-TaskUserName): $OldRoot -> $NewRoot" 'PHASE'
-        Move-LegacyTask
+        Write-LogEntry "Moving LazyVM from every user to $(Get-CurrentUserName): $OldRoot -> $NewRoot" 'PHASE'
+        Update-LegacyTask -OldRoot $OldRoot -NewRoot $NewRoot
         Convert-LegacyCredential -Root $OldRoot
         if (-not $inPlace) {
             if (Test-Path -LiteralPath $OldRoot) {
@@ -533,7 +551,7 @@ function Invoke-InstallationMigration {
         # Again, now that everything is in it, so every file inherits it.
         Initialize-RootFolder -Path $NewRoot
         Remove-LegacyInstallation -OldRoot $OldRoot -InPlace:$inPlace
-        Write-LogEntry "LazyVM is now yours alone, in $NewRoot" 'OK'
+        Write-LogEntry "LazyVM is now yours, in $NewRoot, open to you and SYSTEM only" 'OK'
     }
     catch {
         Write-LogError 'Moving LazyVM stopped. What has moved stays moved; the old install''s registry key and module copy are kept. Fix the problem and run Convert-LazyVMInstallation again: it carries on where it stopped.' $_

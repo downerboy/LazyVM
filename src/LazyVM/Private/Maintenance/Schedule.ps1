@@ -24,11 +24,12 @@ function Register-RebuildSchedule {
     # miss it entirely if the host happened to be off that day.
     $nextRun = (Get-Date).Date.AddDays(1).Add($time.TimeOfDay)
 
-    # The VM is named in the task; the root folder comes from the registry.
+    # The VM and the root folder are named in the task: it runs as SYSTEM,
+    # which cannot read the user's registry.
     # Registering again replaces the task, which is how an existing one is
     # updated.
     $trigger = New-ScheduledTaskTrigger -Daily -DaysInterval 1 -At $nextRun
-    $action = New-LazyVMTaskAction -Command (Get-HostTaskCommand -TaskName $settings.ScheduleTaskName)
+    $action = New-LazyVMTaskAction -Command (Get-HostTaskCommand -TaskName $settings.ScheduleTaskName -Root $settings.Root)
     $taskSettings = New-ScheduledTaskSettingsSet `
         -WakeToRun `
         -StartWhenAvailable `
@@ -40,7 +41,7 @@ function Register-RebuildSchedule {
     Register-LazyVMHostTask -TaskName $settings.ScheduleTaskName -Action $action -Trigger $trigger -Settings $taskSettings
 
     Write-LogEntry "Scheduled task '$($settings.ScheduleTaskName)' registered for VM '$($VM.Name)' - daily at $($settings.MaintenanceTime), first run $($nextRun.ToString('yyyy-MM-dd HH:mm'))" 'OK'
-    Write-LogEntry "  Runs daily as $(Get-TaskUserName), signed in or not, and does nothing until the evaluation is within" 'INFO'
+    Write-LogEntry '  Runs daily as SYSTEM, signed in or not, and does nothing until the evaluation is within' 'INFO'
     Write-LogEntry "  $($settings.RebuildThresholdDays) days of expiry. It then captures state and rearms Windows;" 'INFO'
     Write-LogEntry '  only when rearms are exhausted does it capture, rebuild and restore.' 'INFO'
 }

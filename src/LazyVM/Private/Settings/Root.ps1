@@ -76,7 +76,9 @@ function Resolve-LazyVMRoot {
     Assert-NoLegacyInstallation
     if ($Root) {
         $source = 'the -Root parameter'
-        return [pscustomobject]@{ Path = Resolve-SettingsRoot -Path $Root -Source $source; Source = $source }
+        $path = Resolve-SettingsRoot -Path $Root -Source $source
+        Assert-RootLocked -Root $path
+        return [pscustomobject]@{ Path = $path; Source = $source }
     }
     $registered = Get-RegisteredRoot
     if ($registered) {
@@ -86,9 +88,85 @@ function Resolve-LazyVMRoot {
     throw "LazyVM does not know which folder to keep its VMs in yet. Choose one with: Set-LazyVMRoot -Path D:\DevVM"
 }
 
+function Get-RootAccess {
+    <# Who the LazyVM folder at $Root lets in, as security identifiers, and whether it inherits access from the folder above. #>
+    param([Parameter(Mandatory)][string]$Root)
+
+    $acl = Get-Acl -LiteralPath $Root
+    return [pscustomobject]@{
+        Protected = $acl.AreAccessRulesProtected
+        Sids      = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) |
+                Where-Object { "$($_.AccessControlType)" -eq 'Allow' } |
+                ForEach-Object { $_.IdentityReference.Value } | Select-Object -Unique)
+    }
+}
+
+function Assert-RootLocked {
+    <#
+      Stops unless $Root is a LazyVM folder locked as Initialize-RootFolder
+      leaves it: its settings file is there, it inherits nothing, and it is
+      open to SYSTEM and one other account, its owner, only. Checked when a
+      command is handed the folder with -Root, as the scheduled tasks are.
+    #>
+    param([Parameter(Mandatory)][string]$Root)
+
+    $settings = Join-Path -Path $Root -ChildPath "$script:SharedFolderName/$script:ConfigFolderName/$script:SettingsFileName"
+    if (-not (Test-Path -LiteralPath $settings -PathType Leaf)) {
+        throw "$Root is not a LazyVM folder: it has no $script:SharedFolderName\$script:ConfigFolderName\$script:SettingsFileName."
+    }
+    $access = Get-RootAccess -Root $Root
+    $others = @($access.Sids | Where-Object { $_ -ne 'S-1-5-18' })
+    if (-not $access.Protected -or $others.Count -ne 1) {
+        throw "$Root is not locked to its owner and SYSTEM, so LazyVM will not use it. As the user it belongs to, lock it with: Set-LazyVMRoot -Path $Root"
+    }
+}
+
+function Test-CloudSyncedPath {
+    <#
+      Whether $Path is in a folder OneDrive (or another cloud service)
+      keeps in step: under the OneDrive folders Windows names, or in a
+      folder marked as a cloud file. Files there can be online-only, so a
+      task running while signed out or offline cannot open them, and they
+      are copied to the cloud and other computers.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    foreach ($folder in @($env:OneDrive, $env:OneDriveConsumer, $env:OneDriveCommercial | Where-Object { $_ })) {
+        if (Test-PathWithin -Path $Path -Folder $folder) { return $true }
+    }
+    $current = $Path
+    while ($current) {
+        if (Test-Path -LiteralPath $current) {
+            if (Test-CloudFileAttribute -Attributes ([long](Get-Item -LiteralPath $current -Force).Attributes)) { return $true }
+        }
+        $parent = Split-Path -Path $current -Parent
+        if (-not $parent -or $parent -eq $current) { break }
+        $current = $parent
+    }
+    return $false
+}
+
+function Test-CloudFileAttribute {
+    <# Whether file attributes mark a cloud file: pinned, unpinned (online-only), or recalled on open or on access. #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][long]$Attributes)
+
+    # FILE_ATTRIBUTE_PINNED 0x80000, UNPINNED 0x100000, RECALL_ON_OPEN 0x40000, RECALL_ON_DATA_ACCESS 0x400000.
+    return ($Attributes -band 0x5C0000) -ne 0
+}
+
 function Get-DefaultRoot {
     <# LazyVM in the user's profile folder (#284): the folder LazyVM uses when nobody has chosen one. #>
     return Join-Path -Path ([Environment]::GetFolderPath('UserProfile')) -ChildPath 'LazyVM'
+}
+
+function Get-CurrentUserName {
+    <# The Windows account running LazyVM, as DOMAIN\user or COMPUTER\user. #>
+    [OutputType([string])]
+    param()
+
+    return [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 }
 
 function Get-CurrentUserSid {
@@ -126,7 +204,8 @@ function New-RootFolderSecurity {
 
 function Assert-RootFolderUsable {
     <#
-      Stops before LazyVM locks a folder that holds anything else: locked,
+      Stops for a folder in OneDrive, and before LazyVM locks a folder that
+      holds anything else: locked,
       it would be open to the current user and SYSTEM only, shutting every
       other account out of what is in it. A folder that is not there yet, an
       empty one, a LazyVM folder (with Shared\Config\LazyVM.Settings.json) and
@@ -135,6 +214,9 @@ function Assert-RootFolderUsable {
     #>
     param([Parameter(Mandatory)][string]$Path)
 
+    if (Test-CloudSyncedPath -Path $Path) {
+        throw "$Path is in OneDrive (or another folder kept in step with the cloud). LazyVM's disks and secrets must stay on this computer, and its tasks must open them while you are signed out. Choose a folder outside it, such as $(Get-DefaultRoot)."
+    }
     if (-not (Test-Path -LiteralPath $Path)) { return }
     if (-not (Get-ChildItem -LiteralPath $Path -Force | Select-Object -First 1)) { return }
     $settings = Join-Path -Path $Path -ChildPath "$script:SharedFolderName/$script:ConfigFolderName/$script:SettingsFileName"

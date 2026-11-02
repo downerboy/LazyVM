@@ -40,7 +40,6 @@ BeforeAll {
             GuestCredFile    = "D:\DevVM\$Name\Credentials\guest.cred"
             CertCredFile     = "D:\DevVM\$Name\Credentials\certs.cred"
             StateDir         = "D:\DevVM\$Name\State"
-            ResumeRegKey     = "HKCU:\SOFTWARE\LazyVM\$Name"
             ResumeTaskName   = "LazyVM-ResumeAfterReboot-$Name"
             ScheduleTaskName = "LazyVM-Maintain-$Name"
         }
@@ -154,9 +153,8 @@ Describe 'Get-VMRemovalPlan' {
             $plan.Files | Should -BeNullOrEmpty
         }
 
-        It 'removes both scheduled tasks and the resume registry key' {
+        It 'removes both scheduled tasks' {
             $plan.Tasks | Should -Be @('LazyVM-Maintain-Alpha', 'LazyVM-ResumeAfterReboot-Alpha')
-            $plan.RegistryKey | Should -Be 'HKCU:\SOFTWARE\LazyVM\Alpha'
         }
 
         It 'keeps nothing back' {
@@ -225,15 +223,6 @@ Describe 'Get-VMRemovalPlan' {
         $plan.Tasks | Should -Be @('LazyVM-ResumeAfterReboot-Alpha')
         $plan.Kept.Path | Should -Contain 'task Shared-Task'
     }
-
-    It 'keeps a registry key that holds another VM''s key' {
-        $alpha = New-TestVMSetting -Name 'Alpha' -Overrides @{ ResumeRegKey = 'HKCU:\SOFTWARE\LazyVM' }
-
-        $plan = Get-TestPlan -Settings $alpha -OtherSettings @(New-TestVMSetting -Name 'Beta')
-
-        $plan.RegistryKey | Should -BeNullOrEmpty
-        $plan.Kept.Path | Should -Contain 'HKCU:\SOFTWARE\LazyVM'
-    }
 }
 
 Describe 'Invoke-VMRemoval' {
@@ -257,7 +246,6 @@ Describe 'Invoke-VMRemoval' {
         $context = [pscustomobject]@{
             Machine     = $null
             Tasks       = @()
-            RegistryKey = $null
             VMRoot      = $vmRoot
             Files       = @()
             Folders     = @()

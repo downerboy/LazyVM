@@ -1,4 +1,4 @@
-# HyperV.ps1 - Build phases 0-2: Hyper-V services, host readiness, turning Hyper-V on.
+﻿# HyperV.ps1 - Build phases 0-2: Hyper-V services, host readiness, turning Hyper-V on.
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 function Repair-HyperVService {
@@ -206,10 +206,10 @@ function Register-ResumeTask {
     )
 
     $settings = $VM.Settings
-    Set-ResumePhase -Key $settings.ResumeRegKey -Phase $Phase
+    Set-ResumePhase -Path $settings.ResumeFile -Phase $Phase
 
-    # Build-LazyVM reads the resume phase from the registry key above.
-    $action = New-LazyVMTaskAction -Command (Get-HostTaskCommand -TaskName $settings.ResumeTaskName)
+    # Build-LazyVM reads the resume phase from the file above.
+    $action = New-LazyVMTaskAction -Command (Get-HostTaskCommand -TaskName $settings.ResumeTaskName -Root $settings.Root)
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $trigger.Delay = 'PT2M'   # let services settle before the build resumes
     $taskSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 6) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
@@ -219,16 +219,13 @@ function Register-ResumeTask {
 }
 
 function Set-ResumePhase {
-    <# Records under $Key the phase a build interrupted by a restart carries on from. #>
+    <# Records in the file $Path the phase a build interrupted by a restart carries on from. #>
     param(
-        [Parameter(Mandatory)][string]$Key,
+        [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][int]$Phase
     )
 
-    if (-not (Test-Path -LiteralPath $Key)) {
-        New-Item -Path $Key -Force | Out-Null
-    }
-    Set-ItemProperty -Path $Key -Name 'ResumePhase' -Value $Phase -Type DWord
+    Write-TextFileAtomic -Path $Path -Text (ConvertTo-Json -InputObject ([pscustomobject]@{ Phase = $Phase }))
 }
 
 function Unregister-ResumeTask {
@@ -239,8 +236,8 @@ function Unregister-ResumeTask {
         Unregister-ScheduledTask -TaskName $settings.ResumeTaskName -Confirm:$false
         Write-LogEntry "Resume task '$($settings.ResumeTaskName)' removed" 'INFO'
     }
-    if (Test-Path -LiteralPath $settings.ResumeRegKey) {
-        Remove-ItemProperty -Path $settings.ResumeRegKey -Name 'ResumePhase' -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $settings.ResumeFile) {
+        Remove-Item -LiteralPath $settings.ResumeFile -Force
     }
 }
 
@@ -252,7 +249,8 @@ function Get-ResumePhase {
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $props = Get-ItemProperty -Path $VM.Settings.ResumeRegKey -ErrorAction SilentlyContinue
-    if (-not $props -or -not $props.PSObject.Properties['ResumePhase']) { return 0 }
-    return [int]$props.ResumePhase
+    if (-not (Test-Path -LiteralPath $VM.Settings.ResumeFile -PathType Leaf)) { return 0 }
+    $resume = Get-Content -LiteralPath $VM.Settings.ResumeFile -Raw | ConvertFrom-Json
+    if (-not $resume -or -not $resume.PSObject.Properties['Phase']) { return 0 }
+    return [int]$resume.Phase
 }

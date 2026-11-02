@@ -17,7 +17,8 @@
                 @{ Label = 'module from the zip'; Kind = 'folder'; Store = 'LazyVM\LazyVM\'; Items = @('<version>\') }
             )
             Writes   = @(
-                @{ Label = 'module installed for you only'; Kind = 'folder'; Store = 'Documents\PowerShell\'; Items = @('Modules\LazyVM\', '<version>\') }
+                @{ Label = 'module installed for you only, outside OneDrive'; Kind = 'folder'; Store = '%LOCALAPPDATA%\LazyVM\'; Items = @('Modules\LazyVM\', '<version>\') }
+                @{ Label = 'module folder on your PSModulePath'; Kind = 'registry'; Store = 'HKCU:\Environment'; Items = @('PSModulePath') }
             )
         }
         @{

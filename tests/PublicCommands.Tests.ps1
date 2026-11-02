@@ -365,28 +365,17 @@ Describe 'Export-LazyVMTemplate (#250)' {
     }
 }
 
-Describe 'Get-ModuleImportCommand' {
-    It 'imports by name when the module is installed where PowerShell looks for modules' {
-        InModuleScope $module {
-            $base = $ExecutionContext.SessionState.Module.ModuleBase
-            $saved = $env:PSModulePath
-            try {
-                $env:PSModulePath = (Split-Path -Path $base -Parent) + [IO.Path]::PathSeparator + $saved
-                Get-ModuleImportCommand | Should -Be "Import-Module -Name 'LazyVM'"
-            }
-            finally { $env:PSModulePath = $saved }
-        }
+Describe 'Get-ModuleImportCommand (#284)' {
+    It 'imports an installed module by its folder above the version, so the task loads the newest version installed' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Users\sean\AppData\Local\LazyVM\Modules\LazyVM\6.0.0' }
+
+        InModuleScope $module { Get-ModuleImportCommand } | Should -Be "Import-Module -Name 'C:\Users\sean\AppData\Local\LazyVM\Modules\LazyVM'"
     }
 
-    It 'imports by path otherwise' {
-        InModuleScope $module {
-            $saved = $env:PSModulePath
-            try {
-                $env:PSModulePath = ''
-                Get-ModuleImportCommand | Should -BeLike "Import-Module -Name '*LazyVM.psd1'"
-            }
-            finally { $env:PSModulePath = $saved }
-        }
+    It 'imports a module that is not in a version folder by its manifest' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'S:\Source\LazyVM\src\LazyVM' }
+
+        InModuleScope $module { Get-ModuleImportCommand } | Should -Be "Import-Module -Name 'S:\Source\LazyVM\src\LazyVM\LazyVM.psd1'"
     }
 }
 

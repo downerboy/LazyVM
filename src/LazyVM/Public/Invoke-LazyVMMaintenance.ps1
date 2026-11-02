@@ -31,9 +31,16 @@
     .PARAMETER Name
     The VM. May be left out while there is only one.
 
-    With -WhatIf, says what a run would do without doing any of it: build
-    the VM, rearm, rebuild, or only the daily checks. It reads the VM's
+    With -WhatIf, says what a run would do without doing any of it: nothing
+    while the build is still in progress, rearm, rebuild, or only the daily
+    checks. It reads the VM's
     evaluation while the VM is running, and starts nothing.
+
+    .PARAMETER Root
+    The LazyVM folder, instead of the one recorded for you. LazyVM's
+    scheduled tasks pass it, since they run as SYSTEM, which cannot read
+    your registry. It must be a LazyVM folder locked to its owner and
+    SYSTEM (see Set-LazyVMRoot).
 
     .EXAMPLE
     Invoke-LazyVMMaintenance -Name DevBox
@@ -50,12 +57,14 @@
     [OutputType([string])]
     param(
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [string]$Name
+        [string]$Name,
+
+        [string]$Root
     )
 
     process {
         # -WhatIf reads, but records nothing: not even a hardware change in VM.json.
-        Invoke-CommandRun -Title 'Maintenance' -Name $Name -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
+        Invoke-CommandRun -Title 'Maintenance' -Name $Name -Root $Root -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
             param($VM)
             if ($WhatIfPreference) {
                 $null = $PSCmdlet.ShouldProcess($VM.Name, (Get-MaintenancePreview -VM $VM))

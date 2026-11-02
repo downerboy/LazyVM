@@ -4,7 +4,7 @@
     Command    = 'Invoke-LazyVMMaintenance'
     Parameters = @('-Name <VM>', '-WhatIf  (optional)')
     Summary    = 'Each night: records hardware changes made in Hyper-V, looks after the disks, records what changed in the guest, backs up the databases, keeps the guest up to date, and acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry. With -WhatIf, Get-MaintenancePreview says what a run would do and nothing else runs. A VM whose build is still in progress (a resume point is set, or the VM is not there yet) is skipped that night. Returns None, Rearmed or Rebuilt.'
-    CalledBy   = @{ Name = 'LazyVM-Maintain-<VM>'; Kind = 'task'; Notes = @('daily at MaintenanceTime', 'as the user') }
+    CalledBy   = @{ Name = 'LazyVM-Maintain-<VM>'; Kind = 'task'; Notes = @('daily at MaintenanceTime', 'as SYSTEM, with -Root') }
     Covers     = @('Invoke-LazyVMMaintenance', 'Invoke-Maintenance', 'Invoke-DailyMaintenance')
     Omits      = @{
         'Get-MaintenancePreview' = 'runs only with -WhatIf, in place of everything else; the summary says so'
@@ -36,7 +36,7 @@
             Note     = 'steps 4-23 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
             Includes = @('Test-BuildInProgress', 'Get-ResumePhase')
             Reads    = @(
-                @{ Label = 'build in progress'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase') }
+                @{ Label = 'build in progress'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json') }
                 @{ Label = 'does the VM exist'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('Get-VM <VM>') }
             )
         }
