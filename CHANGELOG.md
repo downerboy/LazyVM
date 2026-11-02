@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.0.0](https://github.com/downerboy/LazyVM/compare/v5.2.4...v6.0.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* LazyVM is installed for one Windows user. Its module goes in `%ProgramFiles%\LazyVM\Modules` (installed as administrator), its data folder is locked to that user and SYSTEM, and its secrets use DPAPI LocalMachine. An install from LazyVM 5 (`C:\LazyVM`, HKLM key, AES-key credentials) must be moved once with `Convert-LazyVMInstallation`; until then every other command stops and names it.
+
+### Features
+
+* install LazyVM per user ([#285](https://github.com/downerboy/LazyVM/issues/285)) ([98a462e](https://github.com/downerboy/LazyVM/commit/98a462e3defd1b46e54b82682c656ff45ef17c2a))
+
 ## [5.2.4](https://github.com/downerboy/LazyVM/compare/v5.2.3...v5.2.4) (2026-11-02)
 
 
