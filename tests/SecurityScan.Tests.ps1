@@ -682,7 +682,7 @@ Describe 'The sign-in opener' {
     }
 
     It 'opens the file in Notepad, by its full path, and records it, when a scan asked for it and it was not opened for that scan' {
-        Mock Get-ItemProperty { if ($Path -like 'HKLM:*') { [pscustomobject]@{ SecurityFindingsAlert = '20261102-024000' } } else { [pscustomobject]@{ SecurityFindingsOpened = '20261101-024000' } } }
+        Mock Get-ItemPropertyValue { if ("$Path" -like 'HKLM:*') { '20261102-024000' } else { '20261101-024000' } }
 
         & ([scriptblock]::Create($command))
 
@@ -694,12 +694,20 @@ Describe 'The sign-in opener' {
         @{ Case = 'it was opened for that scan already'; Alert = '20261102-024000'; Opened = '20261102-024000' }
         @{ Case = 'no scan asked for it'; Alert = $null; Opened = '20261101-024000' }
     ) {
-        Mock Get-ItemProperty { if ($Path -like 'HKLM:*') { if ($Alert) { [pscustomobject]@{ SecurityFindingsAlert = $Alert } } } else { [pscustomobject]@{ SecurityFindingsOpened = $Opened } } }
+        Mock Get-ItemPropertyValue { if ("$Path" -like 'HKLM:*') { $Alert } else { $Opened } }
 
         & ([scriptblock]::Create($command))
 
         Should -Invoke Start-Process -Times 0
         Should -Invoke Set-ItemProperty -Times 0
+    }
+
+    It 'reads a value that is not set yet, or its key, as none, under StrictMode too' {
+        Mock Get-ItemPropertyValue { Write-Error 'Property SecurityFindingsAlert does not exist' }
+
+        { Set-StrictMode -Version 3.0; & ([scriptblock]::Create($command)) } | Should -Not -Throw
+
+        Should -Invoke Start-Process -Times 0
     }
 
     It 'reads the names the scan writes' {

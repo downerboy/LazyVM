@@ -199,13 +199,14 @@ $script:GuestSecurityScanWork = {
 # before Notepad starts, so it never opens twice for one scan. It runs as
 # the task's -Command, one statement to a line joined with '; '
 # (Get-SecurityFindingOpenerArgument), so there is no script file anyone
-# could change; hence no comments or double quotes inside it.
+# could change; hence no comments or double quotes inside it. Each value is
+# read so that one not set yet, or its key, is $null, under StrictMode too.
 $script:SecurityFindingOpener = {
-    $alert = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\LazyVM' -Name 'SecurityFindingsAlert' -ErrorAction SilentlyContinue).SecurityFindingsAlert
+    $alert = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\LazyVM' -Name 'SecurityFindingsAlert' -ErrorAction SilentlyContinue
     $file = [System.IO.Path]::Combine([Environment]::GetFolderPath('CommonDesktopDirectory'), 'LazyVM Findings.txt')
     if (-not $alert -or -not (Test-Path -LiteralPath $file)) { return }
     $userKey = 'HKCU:\SOFTWARE\LazyVM'
-    if ((Get-ItemProperty -Path $userKey -Name 'SecurityFindingsOpened' -ErrorAction SilentlyContinue).SecurityFindingsOpened -eq $alert) { return }
+    if ((Get-ItemPropertyValue -Path $userKey -Name 'SecurityFindingsOpened' -ErrorAction SilentlyContinue) -eq $alert) { return }
     if (-not (Test-Path -LiteralPath $userKey)) { New-Item -Path $userKey -Force | Out-Null }
     Set-ItemProperty -Path $userKey -Name 'SecurityFindingsOpened' -Value $alert
     Start-Process -FilePath ($env:SystemRoot + '\System32\notepad.exe') -ArgumentList ([string][char]34 + $file + [char]34)
