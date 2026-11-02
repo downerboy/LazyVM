@@ -49,10 +49,30 @@ function Set-RegisteredRoot {
     Set-ItemProperty -Path $script:RootRegistryKey -Name 'Root' -Value $Path -Type String
 }
 
+function Get-LegacyRoot {
+    <# The root folder a machine-wide install (before #284) recorded, or $null when there is none. #>
+    $props = Get-ItemProperty -Path $script:LegacyRootRegistryKey -ErrorAction SilentlyContinue
+    if ($props -and $props.PSObject.Properties['Root'] -and $props.Root) { return [string]$props.Root }
+    return $null
+}
+
+function Assert-NoLegacyInstallation {
+    <#
+      Stops while a machine-wide install is still there: its VMs, encrypted
+      passwords and tasks must be moved to this user first, or they would
+      be hidden behind a new, empty LazyVM folder.
+    #>
+    $legacy = Get-LegacyRoot
+    if ($legacy) {
+        throw "LazyVM was installed for every user of this computer, with its VMs in $legacy. Move it to your Windows account first, in PowerShell 7 run as administrator: Convert-LazyVMInstallation"
+    }
+}
+
 function Resolve-LazyVMRoot {
     <# The root folder for this run: -Root if given, else the registered one. #>
     param([string]$Root)
 
+    Assert-NoLegacyInstallation
     if ($Root) {
         $source = 'the -Root parameter'
         return [pscustomobject]@{ Path = Resolve-SettingsRoot -Path $Root -Source $source; Source = $source }

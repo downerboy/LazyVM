@@ -2,8 +2,14 @@
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 # Where the root folder is recorded for every later run, including the
-# scheduled tasks, which run as SYSTEM. Each VM's resume point is a subkey.
-$script:RootRegistryKey = 'HKLM:\SOFTWARE\LazyVM'
+# scheduled tasks, which run as the same user (#284). Each VM's resume point
+# is a subkey.
+$script:RootRegistryKey = 'HKCU:\SOFTWARE\LazyVM'
+
+# Where a machine-wide install, before #284, recorded its root folder, with
+# the VMs' resume points as subkeys. Read only to find and move such an
+# install (Convert-LazyVMInstallation).
+$script:LegacyRootRegistryKey = 'HKLM:\SOFTWARE\LazyVM'
 
 # Inside the guest: the answer file's first-logon command sets Provisioned=1
 # here once Windows Setup and OOBE are done.

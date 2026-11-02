@@ -30,6 +30,7 @@
     )
 
     Assert-Administrator
+    Assert-NoLegacyInstallation
     $root = Resolve-SettingsRoot -Path $Path -Source 'the -Path parameter'
 
     $previous = Get-RegisteredRoot

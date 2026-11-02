@@ -430,6 +430,7 @@ function Initialize-BuildTarget {
         [string]$ConfigTemplate
     )
 
+    Assert-NoLegacyInstallation
     $root = Get-RegisteredRoot
     if (-not $root) {
         $root = Get-DefaultRoot

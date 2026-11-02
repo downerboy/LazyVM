@@ -2,7 +2,7 @@
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 function Assert-Administrator {
-    <# Hyper-V, the registry under HKLM and scheduled tasks all need an elevated session. #>
+    <# Hyper-V and scheduled tasks that run elevated both need an elevated session. #>
     $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'LazyVM needs an elevated PowerShell: right-click PowerShell 7 and choose Run as administrator.'
@@ -12,7 +12,7 @@ function Assert-Administrator {
 function Test-Unattended {
     <#
       True when nobody is there to answer a question or fix a problem: a
-      scheduled task, running as SYSTEM. Such a run uses the last good copy
+      scheduled task, running whether the user is signed in or not. Such a run uses the last good copy
       of a broken settings file rather than stopping.
     #>
     return -not [Environment]::UserInteractive
