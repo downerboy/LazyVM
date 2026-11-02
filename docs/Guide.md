@@ -324,7 +324,7 @@ A step that fails is logged and the rest still run. Then it reads the license an
 | Within 10 days, rearms available | Captures the VM's state, runs the Windows rearm and restarts the VM. The evaluation clock resets to another 90 days. No rebuild, nothing to migrate. |
 | Within 10 days, no rearms left | Captures the VM's state, retires the old VM, builds a new one unattended, restores the capture and verifies the result. |
 | No evaluation countdown | Nothing. A fully licensed Windows is never rebuilt. |
-| The VM does not exist | Builds it. |
+| The VM's build is still in progress (it waits to carry on after a host restart, or the VM is not there yet) | Nothing that night: the log says "build still in progress - skipping tonight". Maintenance never starts a build beside the one in progress. |
 
 The 10-day threshold is `RebuildThresholdDays` ([section 8](#8-settings)).
 

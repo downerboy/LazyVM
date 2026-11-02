@@ -91,7 +91,6 @@ Describe 'Invoke-LazyVMMaintenance' {
         @{ Step = 'None'; Expected = 'None'; Rebuilds = 0 }
         @{ Step = 'Rearmed'; Expected = 'Rearmed'; Rebuilds = 0 }
         @{ Step = 'Rebuild'; Expected = 'Rebuilt'; Rebuilds = 1 }
-        @{ Step = 'Build'; Expected = 'Built'; Rebuilds = 1 }
     ) {
         Mock -ModuleName $module Invoke-Maintenance { $Step }.GetNewClosure()
 

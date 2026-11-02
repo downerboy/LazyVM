@@ -3,7 +3,7 @@
     Title      = 'Daily maintenance'
     Command    = 'Invoke-LazyVMMaintenance'
     Parameters = @('-Name <VM>', '-WhatIf  (optional)')
-    Summary    = 'Each night: records hardware changes made in Hyper-V, looks after the disks, records what changed in the guest, backs up the databases, keeps the guest up to date, and acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry. With -WhatIf, Get-MaintenancePreview says what a run would do and nothing else runs. Returns None, Rearmed, Rebuilt or Built.'
+    Summary    = 'Each night: records hardware changes made in Hyper-V, looks after the disks, records what changed in the guest, backs up the databases, keeps the guest up to date, and acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry. With -WhatIf, Get-MaintenancePreview says what a run would do and nothing else runs. A VM whose build is still in progress (a resume point is set, or the VM is not there yet) is skipped that night. Returns None, Rearmed or Rebuilt.'
     CalledBy   = @{ Name = 'LazyVM-Maintain-<VM>'; Kind = 'task'; Notes = @('daily at MaintenanceTime', 'as the user') }
     Covers     = @('Invoke-LazyVMMaintenance', 'Invoke-Maintenance', 'Invoke-DailyMaintenance')
     Omits      = @{
@@ -33,8 +33,12 @@
         @{
             Function = 'Invoke-Maintenance'
             Area     = 'Maintenance'
-            Note     = 'steps 4-23 are its calls; no VM: returns Build and Invoke-Rebuild builds one instead'
-            Reads    = @(@{ Label = 'does the VM exist'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('Get-VM <VM>') })
+            Note     = 'steps 4-23 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
+            Includes = @('Test-BuildInProgress', 'Get-ResumePhase')
+            Reads    = @(
+                @{ Label = 'build in progress'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM\<VM>'; Items = @('ResumePhase') }
+                @{ Label = 'does the VM exist'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('Get-VM <VM>') }
+            )
         }
         @{
             Function = 'Open-GuestSession'

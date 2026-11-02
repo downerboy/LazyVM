@@ -277,7 +277,7 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
 
 `Invoke-LazyVMMaintenance` `-Name <VM>` `-WhatIf  (optional)`
 
-Each night: records hardware changes made in Hyper-V, looks after the disks, records what changed in the guest, backs up the databases, keeps the guest up to date, and acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry. With -WhatIf, Get-MaintenancePreview says what a run would do and nothing else runs. Returns None, Rearmed, Rebuilt or Built.
+Each night: records hardware changes made in Hyper-V, looks after the disks, records what changed in the guest, backs up the databases, keeps the guest up to date, and acts on the evaluation license only when it is within RebuildThresholdDays (10) of expiry. With -WhatIf, Get-MaintenancePreview says what a run would do and nothing else runs. A VM whose build is still in progress (a resume point is set, or the VM is not there yet) is skipped that night. Returns None, Rearmed or Rebuilt.
 
 Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as the user).
 
@@ -291,65 +291,67 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as the user).
 2. `Sync-VMProfile` (Settings): fills in any setting VM.json lacks from the shared template
    - Reads D5, shared template: Shared\Config\ (LazyVM.Settings.json)
    - Writes D6, complete profile: <VM>\Config\ (VM.json, VM.Template.json  (first time only))
-3. `Invoke-Maintenance` (Maintenance): steps 4-23 are its calls; no VM: returns Build and Invoke-Rebuild builds one instead
-   - Reads D7, does the VM exist: Hyper-V (Get-VM <VM>)
+3. `Invoke-Maintenance` (Maintenance): steps 4-23 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night
+   - Also runs `Test-BuildInProgress`, `Get-ResumePhase`
+   - Reads D7, build in progress: HKCU:\SOFTWARE\LazyVM\<VM> (ResumePhase)
+   - Reads D8, does the VM exist: Hyper-V (Get-VM <VM>)
 4. `Open-GuestSession` (Guest, called by Invoke-Maintenance): starts the VM if it is off and waits for it, then opens the session
-   - Reads D8, guest credential: Credential store (<VM>\Credentials\guest.cred)
-   - Writes D9, PowerShell Direct session: VM <VM> (running, reachable)
+   - Reads D9, guest credential: Credential store (<VM>\Credentials\guest.cred)
+   - Writes D10, PowerShell Direct session: VM <VM> (running, reachable)
 5. `Invoke-DailyMaintenance` (Maintenance, called by Invoke-Maintenance): steps 6-22 are its calls; a step that fails is logged and the rest still run
 6. `Expand-GuestSystemDrive` (Installation, called by Invoke-DailyMaintenance): only when the OS disk has new space: checkpoint, moves the recovery partition to the end and extends C:
-   - Writes D10, bigger C:: Running guest (C: over the whole OS disk)
+   - Writes D11, bigger C:: Running guest (C: over the whole OS disk)
 7. `Install-UserDisk` (Disks, called by Invoke-DailyMaintenance): an older VM gets its User disk; what the personal folders hold on C: is copied to it
-   - Writes D11, User disk: <VM>\Disks\ (<VM>-User.vhdx  (U:, if missing))
+   - Writes D12, User disk: <VM>\Disks\ (<VM>-User.vhdx  (U:, if missing))
 8. `Protect-GuestPersistentDisk` (Disks, called by Invoke-DailyMaintenance): BitLocker on C:, then on each persistent disk that does not have it
-   - Writes D12, encrypted disks, recovery passwords: Guest and credential store (C:, D:, W:, U: with auto-unlock, <VM>\Credentials\)
+   - Writes D13, encrypted disks, recovery passwords: Guest and credential store (C:, D:, W:, U: with auto-unlock, <VM>\Credentials\)
 9. `Backup-UserDisk` (Disks, called by Invoke-DailyMaintenance): one copy of the User disk, still encrypted, made only when its files changed
-   - Reads D13, User disk: <VM>\Disks\ (<VM>-User.vhdx)
-   - Writes D14, copy: <VM>\Backups\ (<VM>-User.vhdx  (or BackupDir))
+   - Reads D14, User disk: <VM>\Disks\ (<VM>-User.vhdx)
+   - Writes D15, copy: <VM>\Backups\ (<VM>-User.vhdx  (or BackupDir))
 10. `Update-ToolingRecord` (Tooling, called by Invoke-DailyMaintenance): takes a checkpoint before adopting a tooling change
-   - Reads D15, what is installed: Guest tooling (vswhere + vs_installer export, winget export, Marketplace extensions)
-   - Reads D16, last recorded tooling list: <VM>\Config\ (VM.json  Tooling)
-   - Writes D17, checkpoint, only on a change: <VM>\Checkpoints\ (checkpoint "Tooling <stamp>", oldest pruned past ToolingCheckpointsToKeep (3))
-   - Writes D18, new tooling version, only on a change: <VM>\Config\ (VM.json, History\VM-<stamp>.json)
+   - Reads D16, what is installed: Guest tooling (vswhere + vs_installer export, winget export, Marketplace extensions)
+   - Reads D17, last recorded tooling list: <VM>\Config\ (VM.json  Tooling)
+   - Writes D18, checkpoint, only on a change: <VM>\Checkpoints\ (checkpoint "Tooling <stamp>", oldest pruned past ToolingCheckpointsToKeep (3))
+   - Writes D19, new tooling version, only on a change: <VM>\Config\ (VM.json, History\VM-<stamp>.json)
 11. `Update-GuestEnvironmentRecord` (Capture, called by Invoke-DailyMaintenance): environment variables, PATH, hosts entries and mapped drives; then the same for the other records
    - Also runs `Update-GuestFirewallRecord`, `Update-GuestScheduledTaskRecord`, `Update-GuestSqlRecord`, `Update-GuestAppSettingRecord`
-   - Reads D19, guest settings: Running guest (environment, firewall rules, scheduled tasks, SQL logins, settings, Agent jobs, AppSettings registry values)
-   - Writes D20, records, only on a change: <VM>\Config\ (VM.json  GuestEnvironment, GuestFirewallRules,, GuestScheduledTasks, GuestSql, GuestAppSettings)
-   - Writes D21, secret values: Credential store (<VM>\Credentials\)
+   - Reads D20, guest settings: Running guest (environment, firewall rules, scheduled tasks, SQL logins, settings, Agent jobs, AppSettings registry values)
+   - Writes D21, records, only on a change: <VM>\Config\ (VM.json  GuestEnvironment, GuestFirewallRules,, GuestScheduledTasks, GuestSql, GuestAppSettings)
+   - Writes D22, secret values: Credential store (<VM>\Credentials\)
 12. `Backup-GuestUserDatabase` (Capture, called by Invoke-DailyMaintenance): DBCC CHECKDB each user database and, only when it passes, backs it up: one good backup of each
-   - Reads D22, databases: SQL Server (online, writable user databases)
-   - Writes D23, backups: D:\SQLBackup\ (<database>.bak)
+   - Reads D23, databases: SQL Server (online, writable user databases)
+   - Writes D24, backups: D:\SQLBackup\ (<database>.bak)
 13. `Start-GuestStoreAppUpdate` (Maintenance, called by Invoke-DailyMaintenance): asks the Microsoft Store to check for app updates, as a guest task as SYSTEM
-   - Writes D24, update scan: Microsoft Store (UpdateScanMethod)
+   - Writes D25, update scan: Microsoft Store (UpdateScanMethod)
 14. `Set-GuestSysmon` (Installation, called by Invoke-DailyMaintenance): turns Sysmon on and installs it if it is not; applies the configuration again only when LazyVM ships a new one
-   - Reads D25, configuration: Module Data\Sysmon\ (sysmonconfig.xml)
-   - Writes D26, Sysmon: Running guest (Sysmon feature and service, HKLM:\SOFTWARE\LazyVM  config hash)
+   - Reads D26, configuration: Module Data\Sysmon\ (sysmonconfig.xml)
+   - Writes D27, Sysmon: Running guest (Sysmon feature and service, HKLM:\SOFTWARE\LazyVM  config hash)
 15. `Repair-GuestAutoLogon` (Maintenance, called by Invoke-DailyMaintenance): unattended VMs only: when Windows turned automatic sign-in off or a logon count remains, turns it back on with no limit
-   - Reads D27, sign-in state: Running guest (Winlogon AutoAdminLogon, AutoLogonCount, HKLM:\SOFTWARE\LazyVM  Provisioned)
-   - Reads D28, guest credential: Credential store (<VM>\Credentials\guest.cred)
-   - Writes D29, automatic sign-in: Running guest (LSA secret DefaultPassword, Winlogon AutoAdminLogon = 1, no count)
+   - Reads D28, sign-in state: Running guest (Winlogon AutoAdminLogon, AutoLogonCount, HKLM:\SOFTWARE\LazyVM  Provisioned)
+   - Reads D29, guest credential: Credential store (<VM>\Credentials\guest.cred)
+   - Writes D30, automatic sign-in: Running guest (LSA secret DefaultPassword, Winlogon AutoAdminLogon = 1, no count)
 16. `Update-GuestVisualStudioSetting` (Maintenance, called by Invoke-DailyMaintenance): applies the captured Visual Studio settings while they are pending, once Visual Studio has been opened and is closed
-   - Reads D30, settings backup: <VM>\Backups\ (VisualStudio.vssettings)
-   - Writes D31, settings applied: Visual Studio (imported settings, pending flag cleared)
+   - Reads D31, settings backup: <VM>\Backups\ (VisualStudio.vssettings)
+   - Writes D32, settings applied: Visual Studio (imported settings, pending flag cleared)
 17. `Update-GuestWingetPackage` (Maintenance, called by Invoke-DailyMaintenance): winget upgrades, except Visual Studio, SQL Server, pinned packages and running programs
-   - Writes D32, upgraded packages: Running guest (new versions; the tooling list is unchanged)
+   - Writes D33, upgraded packages: Running guest (new versions; the tooling list is unchanged)
 18. `Update-GuestWindows` (Maintenance, called by Invoke-DailyMaintenance): quality and security updates; restarts only when nobody can be disturbed
-   - Reads D33, updates: Windows Update (quality and security updates)
-   - Writes D34, patched Windows: Running guest (updates installed, restart now or left pending)
+   - Reads D34, updates: Windows Update (quality and security updates)
+   - Writes D35, patched Windows: Running guest (updates installed, restart now or left pending)
 19. `Get-GuestLicenseStatus` (Maintenance, called by Invoke-DailyMaintenance): days left, rearms left
-   - Reads D35, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
+   - Reads D36, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
 20. `Get-MaintenanceDecision` (Maintenance, called by Invoke-DailyMaintenance): more than the threshold left, or no countdown: none; rearms left: rearm; otherwise: rebuild
-   - Reads D36, threshold: VM settings (RebuildThresholdDays = 10)
+   - Reads D37, threshold: VM settings (RebuildThresholdDays = 10)
 21. `Test-GuestStateChanged` (Capture, called by Invoke-DailyMaintenance): decision none: has anything only a capture keeps changed since the last capture?
-   - Reads D37, fingerprint now: Running guest (certificates, Visual Studio settings)
-   - Reads D38, fingerprint then: <VM>\State\ (manifest.json)
+   - Reads D38, fingerprint now: Running guest (certificates, Visual Studio settings)
+   - Reads D39, fingerprint then: <VM>\State\ (manifest.json)
 22. `Save-GuestState` (Capture, called by Invoke-DailyMaintenance): on a rearm or rebuild, or when the state changed (see Capture state)
-   - Reads D39, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
-   - Writes D40, captured state: <VM>\State\ (Captures\<stamp>\  vs\  windows\, manifest.json, D:\SQLBackup\<database>.bak)
+   - Reads D40, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
+   - Writes D41, captured state: <VM>\State\ (Captures\<stamp>\  vs\  windows\, manifest.json, D:\SQLBackup\<database>.bak)
 23. `Invoke-GuestRearm` (Maintenance, called by Invoke-DailyMaintenance): decision rearm: slmgr rearm, then a restart
-   - Writes D41, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
+   - Writes D42, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
 24. `Stop-GuestGracefully` (Maintenance, called by Invoke-Maintenance): only if the run started the VM, and not before a rebuild
-   - Writes D42, VM back off: VM <VM> (off)
+   - Writes D43, VM back off: VM <VM> (off)
 25. `Invoke-Rebuild -SkipCapture` (Maintenance): only when no rearms are left or the rearm failed (see Rebuild a VM); without -SkipCapture when there is no VM
 
 <a id="register-maintenance"></a>

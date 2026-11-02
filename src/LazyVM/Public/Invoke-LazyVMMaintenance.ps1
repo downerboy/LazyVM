@@ -19,7 +19,9 @@
     capture when the certificates or Visual Studio settings changed. Then the VM's state is captured and
     Windows rearmed, which gives another 90 days for the price of a restart.
     Only when no rearms are left is the VM rebuilt (see
-    Invoke-LazyVMRebuild). A VM that does not exist yet is built.
+    Invoke-LazyVMRebuild). A VM whose build is still in progress - one
+    waiting to carry on after a host restart, or not there yet - is left
+    alone that night, so maintenance never starts a second build.
 
     Register-LazyVMMaintenance schedules this to run daily, unattended. If a
     settings file has a problem when it runs, the copy from the last time
@@ -42,7 +44,7 @@
     Says whether tonight's run would rearm or rebuild DevBox, changing nothing.
 
     .OUTPUTS
-    System.String: what was done - None, Rearmed, Rebuilt or Built.
+    System.String: what was done - None, Rearmed or Rebuilt.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -78,13 +80,6 @@
                         throw "The rebuild of '$($VM.Name)' did not complete cleanly. The log says what happened and how to go back: $($VM.Settings.LogFile)"
                     }
                     return 'Rebuilt'
-                }
-                ([MaintenanceStep]::Build) {
-                    Write-LogEntry 'Maintenance found no VM - building one' 'INFO'
-                    if ((Invoke-Rebuild -VM $VM) -ne $true) {
-                        throw "Building '$($VM.Name)' did not complete cleanly. The log says what happened: $($VM.Settings.LogFile)"
-                    }
-                    return 'Built'
                 }
                 default {
                     throw "Maintenance of '$($VM.Name)' could not run. The log says why: $($VM.Settings.LogFile)"

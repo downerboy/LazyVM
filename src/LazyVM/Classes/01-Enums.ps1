@@ -15,7 +15,6 @@ enum MaintenanceStep {
     None
     Rearmed
     Rebuild
-    Build
     Error
 }
 

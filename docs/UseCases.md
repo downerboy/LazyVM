@@ -85,7 +85,8 @@ It is extended by:
 - **Capture state** when the evaluation is within `RebuildThresholdDays` (10) of expiry, or the certificates or Visual Studio settings changed since the last capture.
 - **Rearm the evaluation** when rearms are left.
 - **Rebuild the VM** when no rearms are left or the rearm failed.
-- **Build a VM** when the VM does not exist.
+
+It does nothing that night while the VM's build is still in progress: a build waits to carry on after a host restart, or the VM is not there yet.
 
 Schedule daily maintenance (`Register-LazyVMMaintenance`) registers the task with Task Scheduler. Build a VM does this too.
 
