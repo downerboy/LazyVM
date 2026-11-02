@@ -65,7 +65,7 @@ function Get-VMProfilePath {
     return Join-Path -Path (Get-VMProfileDir -Root $Root -Name $Name) -ChildPath $script:ProfileFileName
 }
 
-function Get-VMProfileTemplatePath {
+function Get-VMAsBuiltProfilePath {
     <# A VM's VM.Template.json: its VM.json as it was first built, never changed. #>
     [OutputType([string])]
     param(
@@ -449,7 +449,7 @@ function Sync-VMProfile {
     # Writes nothing unless a setting was missing or one LazyVM no longer uses is still there (#273).
     $null = Update-VMProfile -Root $root -Name $name -Change $missing -Reason 'brought up to date with the shared template'
 
-    $templatePath = Get-VMProfileTemplatePath -Root $root -Name $name
+    $templatePath = Get-VMAsBuiltProfilePath -Root $root -Name $name
     if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) {
         Copy-Item -LiteralPath $path -Destination $templatePath
         Write-LogEntry "Kept a copy of the configuration this VM is built from: $templatePath" 'INFO'

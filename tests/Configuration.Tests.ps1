@@ -811,6 +811,7 @@ Describe 'Config templates' {
         @{ Case = 'a file with no Name'; Text = '{ "Settings": {} }'; Message = '*needs a Name*' }
         @{ Case = 'a name that is not a single word'; Text = '{ "Name": "My template", "Settings": {} }'; Message = "*'My template'*" }
         @{ Case = 'a file with no Settings'; Text = '{ "Name": "Mine" }'; Message = '*needs a Settings table*' }
+        @{ Case = 'Automatic that is not true or false'; Text = '{ "Name": "Mine", "Automatic": "yes", "Settings": {} }'; Message = '*"Automatic"*true or false*' }
         @{ Case = 'a setting that must differ between VMs'; Text = '{ "Name": "Mine", "Settings": { "logfile": "x.log" } }'; Message = "*'LogFile'*cannot be in a config template*" }
         @{ Case = 'state recorded inside a VM'; Text = '{ "Name": "Mine", "Settings": { "GuestEnvironment": null } }'; Message = "*'GuestEnvironment'*cannot be in a config template*" }
     ) {
@@ -1093,7 +1094,7 @@ Describe 'Update-AutomaticTemplate (#292)' {
         $template.Settings.vCPU | Should -Be 8
         $template.Settings.Keys | Should -Not -Contain 'GuestComputerName'
         $template.Settings.Keys | Should -Not -Contain 'GuestEnvironment'
-        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'INFO' -and $Message -like '*Alpha-latest*-ConfigTemplate Alpha-latest*' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'INFO' -and $Message -like '*Alpha-latest*-ConfigTemplate Alpha-latest*' -and $Message -like '*tooling list*recorded inside the VM*' }
         $settings = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMTemplate -Root $Root -Name 'Alpha-latest' }
         $settings.vCPU | Should -Be 8
     }
@@ -1116,9 +1117,9 @@ Describe 'Update-AutomaticTemplate (#292)' {
     }
 
     It 'never writes over a template of yours named after the VM, and says why: <Case>' -ForEach @(
-        @{ Case = 'its file'; FileName = 'Alpha-latest.json'; Text = '{ "Name": "Alpha-latest", "Settings": { "vCPU": 2 } }' }
-        @{ Case = 'another file with its Name'; FileName = 'mine.json'; Text = '{ "Name": "Alpha-latest", "Settings": { "vCPU": 2 } }' }
-        @{ Case = 'a file that cannot be read'; FileName = 'Alpha-latest.json'; Text = 'not json' }
+        @{ Case = 'its file'; FileName = 'Alpha-latest.json'; Text = '{ "Name": "Alpha-latest", "Settings": { "vCPU": 2 } }'; Says = '*Alpha-latest.json*no "Automatic": true*' }
+        @{ Case = 'another file with its Name'; FileName = 'mine.json'; Text = '{ "Name": "Alpha-latest", "Settings": { "vCPU": 2 } }'; Says = '*two config templates named*mine.json*' }
+        @{ Case = 'a copy of it, Automatic too'; FileName = 'Alpha-latest - Copy.json'; Text = '{ "Name": "Alpha-latest", "Automatic": true, "Settings": { "vCPU": 2 } }'; Says = '*two config templates named*Alpha-latest - Copy.json*' }
     ) {
         $root = New-TestBuiltRoot
         Set-TestProfile -Root $root -Json '{ "vCPU": 8 }'
@@ -1130,7 +1131,46 @@ Describe 'Update-AutomaticTemplate (#292)' {
 
         (Get-Content -LiteralPath $own -Raw).Trim() | Should -Be $Text
         if ($FileName -ne 'Alpha-latest.json') { Get-TestTemplatePath -Root $root | Should -Not -Exist }
-        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like "*Alpha-latest*$FileName*" }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like "*'Alpha-latest'*" -and $Message -like $Says }
+    }
+
+    It 'leaves its file alone when it cannot be read, and says what is wrong with it' {
+        $root = New-TestBuiltRoot
+        Set-TestProfile -Root $root -Json '{ "vCPU": 8 }'
+        $path = Get-TestTemplatePath -Root $root
+        New-Item -ItemType Directory -Path (Split-Path -Path $path -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $path -Value '{ "Name": "Alpha-latest", "Automatic": true, "Settings": { "vCPU": "many" } }'
+        $problem = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            @(Get-VMTemplate -Root $Root | Where-Object { $_.Path -like '*Alpha-latest.json' })[0].Problem
+        }
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        (Read-TestJson -Path $path).Settings.vCPU | Should -Be 'many'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter {
+            $Level -eq 'WARN' -and $Message -like '*cannot be read*fix or delete it*' -and $Message.Contains($problem)
+        }
+    }
+
+    It 'on the first night of a VM made before VM.json held its tooling list, compares it with the list folded in' {
+        $root = New-TestBuiltRoot
+        Set-TestProfile -Root $root -Json '{ "vCPU": 4 }'
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json') -Value '{ "vCPU": 4 }'
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Tooling.json') -Value $toolingJson
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        Get-TestWingetId -Settings (Read-TestJson -Path (Get-TestTemplatePath -Root $root)).Settings | Should -Be @('Git.Git')
+    }
+
+    It 'writes the template when the configuration the VM was first built from cannot be read' {
+        $root = New-TestBuiltRoot
+        Remove-Item -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.Template.json')
+
+        Invoke-TestAutomaticTemplate -Root $root
+
+        (Read-TestJson -Path (Get-TestTemplatePath -Root $root)).Settings.vCPU | Should -Be 4
     }
 }
 

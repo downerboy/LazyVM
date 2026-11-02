@@ -63,7 +63,7 @@ function Read-VMTemplateFile {
         switch ($key) {
             '$schema' { break }
             'Name' { $name = $document[$key]; break }
-            'Automatic' { $automatic = $document[$key] -eq $true; break }
+            'Automatic' { $automatic = $document[$key]; break }
             'Settings' { $settings = $document[$key]; break }
             default { $misplaced.Add("'$key'") }
         }
@@ -75,6 +75,9 @@ function Read-VMTemplateFile {
         throw "This config template needs a Name, such as `"Name`": `"WebDev`":`n  $Path"
     }
     Assert-TemplateName -Name $name -Path $Path
+    if ($automatic -isnot [bool]) {
+        throw "This config template's `"Automatic`" must be true or false; leave it out of your own templates:`n  $Path"
+    }
     if ($settings -isnot [System.Collections.IDictionary]) {
         throw "This config template needs a Settings table holding the settings it changes, such as `"Settings`": { `"vCPU`": 8 }:`n  $Path"
     }
@@ -205,6 +208,23 @@ function Assert-TemplateNameAvailable {
     }
 }
 
+function Get-TemplateSetting {
+    <#
+      The settings a config template made from the VM holds: its settings
+      and tooling list, without the ones each VM has its own of. An older
+      VM's Tooling.json is folded into its VM.json first, so the list is
+      there.
+    #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    $null = Move-ToolingIntoProfile -Root $Root -Name $Name
+    return Get-ShareableSetting -Root $Root -Name $Name
+}
+
 function Export-VMTemplate {
     <#
       Saves a VM's settings and tooling list, without the ones each VM has
@@ -225,10 +245,7 @@ function Export-VMTemplate {
     $path = Get-UserTemplatePath -Root $Root -TemplateName $TemplateName
     # The template points at the schema copies in Shared\Config, for the editor.
     Initialize-ConfigFolder -ConfigDir (Get-ConfigDir -Root $Root)
-    # The tooling list goes in the template, so an older VM's Tooling.json
-    # must be in its VM.json first.
-    $null = Move-ToolingIntoProfile -Root $Root -Name $Name
-    $settings = Get-ShareableSetting -Root $Root -Name $Name
+    $settings = Get-TemplateSetting -Root $Root -Name $Name
     $document = [ordered]@{
         '$schema' = "../$script:ConfigFolderName/$script:TemplateSchemaFileName"
         Name      = $TemplateName
@@ -244,37 +261,61 @@ function Export-VMTemplate {
 
 function Update-AutomaticTemplate {
     <#
-      Keeps the config template <VM>-latest in <Root>\Shared\Templates the
-      same as the VM's latest configuration, so new VMs can start from it
-      (#292). Writes it only when the VM's settings that a template can hold
-      differ from it or, before there is one, from the configuration the VM
-      was first built from (VM.Template.json). A template of the user's with
-      that name, or in that file, is never written over: the log says why.
-      Returns the template's path when it was written.
+      Keeps the config template <VM>-latest, in <Root>\Shared\Templates\
+      <VM>-latest.json, the same as the VM's latest configuration, so new VMs
+      can start from it (#292). Its tooling list is what was recorded inside
+      the VM. Writes it only when the settings a template can hold differ
+      from that file's or, before there is one, from the configuration the
+      VM was first built from (VM.Template.json; one that cannot be read
+      counts as different). Writes nothing, and the log says why, when
+      another template file has that name, or the file cannot be read or is
+      the user's own (it has no "Automatic": true). Returns the template's
+      path when it was written.
     #>
     [OutputType([string])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $root = $VM.Settings.Root
     $templateName = "$($VM.Name)-$script:AutomaticTemplateSuffix"
-    $fileName = Split-Path -Path (Get-UserTemplatePath -Root $root -TemplateName $templateName) -Leaf
-    $named = @(Get-VMTemplate -Root $root | Where-Object { -not $_.BuiltIn -and ($_.Name -eq $templateName -or (Split-Path -Path $_.Path -Leaf) -eq $fileName) })
-    $own = @($named | Where-Object { -not $_.Automatic })
-    if ($own.Count -gt 0) {
-        Write-LogEntry "The config template '$templateName' was not updated from this VM's latest configuration: this file is not one LazyVM keeps up to date (it has no `"Automatic`": true), and LazyVM never writes over your own. Rename or move it to let LazyVM keep '$templateName':`n  $($own[0].Path)" 'WARN'
+    $path = Get-UserTemplatePath -Root $root -TemplateName $templateName
+    $fileName = Split-Path -Path $path -Leaf
+    $userTemplates = @(Get-VMTemplate -Root $root | Where-Object { -not $_.BuiltIn })
+    $file = @($userTemplates | Where-Object { (Split-Path -Path $_.Path -Leaf) -eq $fileName }) | Select-Object -First 1
+    $sameName = @($userTemplates | Where-Object { $_.Name -eq $templateName -and (Split-Path -Path $_.Path -Leaf) -ne $fileName })
+    $notUpdated = "The config template '$templateName' was not updated from this VM's latest configuration"
+    if ($sameName.Count -gt 0) {
+        Write-LogEntry "$notUpdated, as there would be two config templates named '$templateName'. Rename or delete this one:`n$(($sameName | ForEach-Object { "  $($_.Path)" }) -join "`n")" 'WARN'
+        return
+    }
+    if ($file -and $file.Problem) {
+        Write-LogEntry "$notUpdated, as its file cannot be read; fix or delete it:`n$($file.Problem)" 'WARN'
+        return
+    }
+    if ($file -and -not $file.Automatic) {
+        Write-LogEntry "$notUpdated, as $fileName has no `"Automatic`": true: it is one of your own, and LazyVM never writes over yours. Rename or move it to let LazyVM keep '$templateName':`n  $($file.Path)" 'WARN'
         return
     }
 
-    $latest = Get-ShareableSetting -Root $root -Name $VM.Name
-    $previous = if ($named.Count -gt 0) {
-        $named[0].Settings
-    }
-    else {
-        Select-ShareableSetting -Settings (Read-SettingsFile -Path (Get-VMProfileTemplatePath -Root $root -Name $VM.Name))
-    }
-    if ((ConvertTo-ComparableJson $latest) -eq (ConvertTo-ComparableJson $previous)) { return }
+    $latest = Get-TemplateSetting -Root $root -Name $VM.Name
+    $previous = if ($file) { $file.Settings } else { Get-AsBuiltTemplateSetting -Root $root -Name $VM.Name }
+    if ($null -ne $previous -and (ConvertTo-ComparableJson $latest) -eq (ConvertTo-ComparableJson $previous)) { return }
 
-    $path = Export-VMTemplate -Root $root -Name $VM.Name -TemplateName $templateName -Automatic
-    Write-LogEntry "Saved this VM's latest configuration as the config template '$templateName'. Build a new VM from it with -ConfigTemplate $templateName`:`n  $path" 'INFO'
+    $null = Export-VMTemplate -Root $root -Name $VM.Name -TemplateName $templateName -Automatic
+    Write-LogEntry "Saved this VM's latest configuration as the config template '$templateName'. Its tooling list is what LazyVM recorded inside the VM; build a new VM from it with -ConfigTemplate $templateName`:`n  $path" 'INFO'
     return $path
+}
+
+function Get-AsBuiltTemplateSetting {
+    <#
+      The settings a config template made from the VM as it was first built
+      (VM.Template.json) would hold; $null when that file cannot be read.
+    #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    try { return Select-ShareableSetting -Settings (Read-SettingsFile -Path (Get-VMAsBuiltProfilePath -Root $Root -Name $Name)) }
+    catch { return $null }
 }

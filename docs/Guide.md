@@ -846,9 +846,9 @@ Build-LazyVM -Name DevBox2 -ConfigTemplate DevBox-latest
 ```
 
 - It is written only when the configuration changed: the first time once it differs from the one the VM was first built from (`VM.Template.json`), then whenever it differs from the template. A night with no change leaves the file alone.
-- Like `Export-LazyVMTemplate`, it leaves out the settings that must differ between VMs and what LazyVM recorded inside the VM.
-- It has `"Automatic": true`, which marks it as the one LazyVM keeps up to date, so a change you make to it is replaced the next time the VM's configuration changes. To keep a version, export it under another name, or remove the `"Automatic"` line: LazyVM then leaves that file alone.
-- A template of yours is never written over. If one of yours is named `<VM>-latest`, or is in the file `<VM>-latest.json`, without `"Automatic": true`, LazyVM leaves it as it is and the log says so each night; rename or move yours to let LazyVM keep `<VM>-latest`.
+- Like `Export-LazyVMTemplate`, it leaves out the settings that must differ between VMs and what LazyVM recorded inside the VM. Its tooling list, though, is the one maintenance recorded inside the VM, so a VM built from it installs what was installed there; look through it before building from it.
+- It has `"Automatic": true`, which marks it as the one LazyVM keeps up to date: LazyVM rewrites it to match the VM, so a change you make to it is replaced unless you remove the `"Automatic"` line, and LazyVM then leaves that file alone. To keep a version as it is, you can also export it under another name.
+- A template of yours is never written over. LazyVM leaves `<VM>-latest.json` as it is, and the log says why each night, when the file has no `"Automatic": true`, when it cannot be read (fix or delete it), or when another file in `Shared\Templates`, such as a copy of it, is also named `<VM>-latest` (rename or delete that one, since two templates of one name cannot be used).
 - Removing a VM leaves its `<VM>-latest` template, so you can still build from it; delete the file when you no longer want it.
 - If saving it fails, the log says why and the rest of maintenance carries on.
 
