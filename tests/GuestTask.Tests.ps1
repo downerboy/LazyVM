@@ -150,26 +150,35 @@ Describe 'Get-GuestPrivateFolderProblem' {
 Describe 'New-GuestPrivateFolder' -Skip:(-not $IsWindows) {
     BeforeAll {
         $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $helpers = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.Helpers.ps1'
+
+        function Invoke-InGuestPowerShell {
+            <# Runs $Script with the guest helpers in Windows PowerShell 5.1, as the guest does, and returns what it wrote. #>
+            param([Parameter(Mandatory)][string]$Script)
+
+            $command = ". '$helpers'`n$Script"
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+            return (@(& powershell.exe -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1 | ForEach-Object { "$_" }) -join "`n").Trim()
+        }
     }
 
     It 'makes a folder whose owner and ACL are exactly those it checks for, <Case>' -ForEach @(
-        @{ Case = 'for SYSTEM and Administrators only'; Access = @{} }
-        @{ Case = 'readable by a user'; Access = @{ ReadSid = 'me' } }
-        @{ Case = 'changeable by a user'; Access = @{ ModifySid = 'me' } }
+        @{ Case = 'for SYSTEM and Administrators only'; Access = '' }
+        @{ Case = 'readable by a user'; Access = '-ReadSid' }
+        @{ Case = 'changeable by a user'; Access = '-ModifySid' }
     ) {
         $path = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-        $access = @{}
-        foreach ($name in $Access.Keys) { $access[$name] = $me }
+        $access = if ($Access) { "$Access '$me'" } else { '' }
 
-        New-GuestPrivateFolder -Path $path @access
-
-        Get-GuestPrivateFolderProblem -Path $path @access | Should -BeExactly ''
+        Invoke-InGuestPowerShell -Script "New-GuestPrivateFolder -Path '$path' $access; Get-GuestPrivateFolderProblem -Path '$path' $access" | Should -BeExactly ''
     }
 
     It 'fails, and uses nothing, when the folder it made does not have the ACL it gave (#302 SEC-001)' {
-        Mock Get-GuestPrivateFolderProblem { 'it is owned by S-1-5-21-1-2-3-1001, not Administrators' }
+        $path = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $fake = "function Get-GuestPrivateFolderProblem { 'it is owned by S-1-5-21-1-2-3-1001, not Administrators' }"
+        $script = "$fake`ntry { New-GuestPrivateFolder -Path '$path'; 'made' } catch { `$_.Exception.Message }"
 
-        { New-GuestPrivateFolder -Path (Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))) } | Should -Throw '*owned by S-1-5-21-1-2-3-1001*'
+        Invoke-InGuestPowerShell -Script $script | Should -BeLike '*was not made private: it is owned by S-1-5-21-1-2-3-1001*'
     }
 
     It 'refuses anything already there' {
