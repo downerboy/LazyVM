@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.2.2](https://github.com/downerboy/LazyVM/compare/v5.2.1...v5.2.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* wait for the guest to settle after the build's Windows Update restart ([#277](https://github.com/downerboy/LazyVM/issues/277)) ([eafd0d5](https://github.com/downerboy/LazyVM/commit/eafd0d5362ff0564bd52f1bf2b7b0416b6ecf4cb))
+
 ## [5.2.1](https://github.com/downerboy/LazyVM/compare/v5.2.0...v5.2.1) (2026-11-01)
 
 
