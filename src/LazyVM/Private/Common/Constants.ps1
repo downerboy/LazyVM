@@ -32,6 +32,8 @@ $script:ProfileFileName = 'VM.json'
 # Which of a VM's BitLocker recovery passwords were last exported, by disk
 # GUID and key ID, never the passwords (RecoveryKeyExport.ps1).
 $script:RecoveryKeyExportFileName = 'RecoveryKeyExport.json'
+# The last nightly security scan's findings, in <Name>\Logs (SecurityScan.ps1).
+$script:SecurityFindingsFileName = 'SecurityFindings.json'
 # The VM.json a VM was first built from, kept beside it to diff against it.
 $script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'

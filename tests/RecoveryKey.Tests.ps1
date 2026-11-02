@@ -335,6 +335,8 @@ Describe 'Write-RunReminder' {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Test-Unattended { $false }
         Mock -ModuleName $module Test-MaintenanceTaskMissing { $true }
+        # Its own reminder is tested in SecurityScan.Tests.ps1.
+        Mock -ModuleName $module Write-SecurityFindingReminder { }
         InModuleScope $module { Complete-CommandRun -VM $null }
     }
 

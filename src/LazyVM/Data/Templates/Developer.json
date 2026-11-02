@@ -5,6 +5,7 @@
     "InstallVisualStudio": true,
     "InstallSqlServer": true,
     "UseDevDrive": true,
-    "GuestDeveloperMode": true
+    "GuestDeveloperMode": true,
+    "GuestSecurityScan": true
   }
 }

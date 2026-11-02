@@ -20,7 +20,7 @@
         @{ Name = 'State'; Diagrams = @('capture', 'restore') }
         @{ Name = 'Templates'; Diagrams = @('export-template') }
         @{ Name = 'Remove'; Diagrams = @('remove') }
-        @{ Name = 'Check'; Diagrams = @('status', 'settings', 'license', 'credential-view', 'recovery-key-export', 'test') }
+        @{ Name = 'Check'; Diagrams = @('status', 'settings', 'license', 'credential-view', 'recovery-key-export', 'security-finding', 'test') }
     )
     Footer    = 'Drawn by `./Update-Diagram.ps1` from `docs/diagrams/source`, one source per diagram. When a command''s calls change, change its source and run it: the tests fail while a diagram names a function that does not exist, leaves out a call the code it covers makes, or has not been redrawn.'
 }

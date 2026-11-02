@@ -30,7 +30,7 @@ The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyV
 
 - **Build.** Create the VM and install Windows unattended. Then install everything in the VM's tooling list (Visual Studio, SSMS, SQL Server, winget packages) with no input from you.
 - **Configure.** Attach and prepare the SQL data disk, the Dev Drive and the User disk, encrypt them and `C:` with BitLocker, and relocate databases onto the data disk.
-- **Maintain.** Every night, record what changed in the VM (tools you added or removed, taking a checkpoint first so you can go back, and your environment, firewall rules, scheduled tasks, SQL logins and application settings), back up the databases, and keep Windows, winget packages, Store apps and Sysmon up to date. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
+- **Maintain.** Every night, record what changed in the VM (tools you added or removed, taking a checkpoint first so you can go back, and your environment, firewall rules, scheduled tasks, SQL logins and application settings), back up the databases, and keep Windows, winget packages, Store apps and Sysmon up to date, and scan the VM for security problems, which it reports and never changes. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
 
 ### What survives a rebuild
 
@@ -191,6 +191,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Set-LazyVMCredential` | Stores the administrator account LazyVM uses inside the VM. |
 | `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password, and `-ToClipboard` puts it on the clipboard for VMConnect's sign-in box. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
 | `Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt` | Writes every VM's BitLocker recovery passwords (or those of the VMs `-Name` matches; wildcards work) to a file you keep offline. Never writes over a file without `-Force`, which replaces it. See [Keeping the recovery passwords offline](#keeping-the-recovery-passwords-offline). |
+| `Get-LazyVMSecurityFinding` | What the last nightly security scan of the VM found: each finding with its severity, what was found, why it matters, how to fix it, and whether it is new, still open or resolved. Read-only. See [The nightly security scan](#the-nightly-security-scan). |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
 | `Test-LazyVM` | Checks what a build or maintenance run depends on: the LazyVM folder, the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only. `-ReportPath` also writes a text report. |
@@ -315,7 +316,8 @@ Each night the maintenance run, in this order:
 11. keeps automatic sign-in on: if it is off, even if you turned it off yourself, or a sign-in count or a clear-text password remains, as on a VM built before LazyVM removed the 99-sign-in limit, it turns it back on with no limit. Automatic sign-in stays on for the VM's life; the only way to have a VM without it is to build it with `-NoUnattend`, and such a VM is left as you set it. The password is stored as the LSA secret Windows' own automatic sign-in uses, never in the registry;
 12. applies the Visual Studio settings if the build could not ([Visual Studio settings](#visual-studio-settings));
 13. upgrades the winget packages ([winget upgrades](#winget-upgrades));
-14. installs Windows updates ([Windows updates](#windows-updates)).
+14. installs Windows updates ([Windows updates](#windows-updates));
+15. scans the VM for security problems, last, so it reports on the VM as the night leaves it ([The nightly security scan](#the-nightly-security-scan)).
 
 A step that fails is logged and the rest still run. Then it reads the license and does this:
 
@@ -346,6 +348,47 @@ The upgrades run as the guest account, so packages installed for that account al
 Each build, at the end of phase 7, and each night's maintenance install Windows' quality and security updates in the VM. Feature updates (a new version of Windows) are left out, since a rebuild brings the new version, and so are driver updates: the Hyper-V drivers come with Windows. Each update and its result is in the log.
 
 The VM is restarted for them only when nobody can be disturbed by it: during a build, when maintenance started the VM itself, or when nobody is signed in to it. If someone is signed in (at the console, in a VMConnect or Remote Desktop window, or in a disconnected session), the restart is left pending and Windows asks them when to restart. Windows' own automatic updates are set the same way: they never restart the VM while someone is signed in. Automatic sign-in signs the guest account in whenever the VM starts, so on a VM left running the restart usually waits for you; a VM that is off when maintenance runs is started, updated and restarted by it. After the restart during a build, LazyVM waits, up to `GuestWaitMinutes`, until Windows has stopped restarting and automatic sign-in has signed the guest account in, before it goes on to phase 8. If automatic sign-in is off in the VM, it does not wait for the sign-in, and phase 8 leaves the Visual Studio settings to nightly maintenance unless you sign in yourself.
+
+### The nightly security scan
+
+The last step of each night's maintenance checks the VM's security. It **only reports**: it changes nothing in the VM except the findings file on its desktop and the task that opens it. Every finding says how to fix it.
+
+What it checks:
+
+- **Microsoft Defender:** a quick scan every night, then whether Defender Antivirus, real-time protection and tamper protection are on, whether its virus definitions are more than 7 days old, and every threat it detected since the last scan.
+- **Settings, measured against the Microsoft security baseline:** the firewall profiles, User Account Control, BitLocker on each disk, the old SMB 1 protocol, Network Level Authentication for Remote Desktop, the Guest account, LSA protection, Secure Boot, virtualization-based security (VBS), AutoRun, and whether Windows updates are paused.
+- **Automatic sign-in** is on by design ([section 5](#5-the-90-day-cycle), step 11), so it is listed as Info.
+
+The scan runs in the VM as SYSTEM, with up to 20 minutes for the whole scan and 15 of them for the quick scan; a quick scan that takes longer is stopped and runs again the next night. A check that cannot be read is logged and the others still run; its findings from the night before stay open rather than being taken as resolved.
+
+Each finding has these fields, one to a line, so a screen reader reads one at a time:
+
+```
+Id: Firewall:Public:Off
+Severity: High
+Title: The Windows Firewall is off for the Public profile
+What we found: The firewall's Public profile is turned off.
+Why it matters: Any program on the network can connect to the services running in this VM.
+How to fix: Open Windows Security in the VM, choose Firewall and network protection, then Public network, and turn on Microsoft Defender Firewall.
+First seen: 2026-11-02 02:40
+Status: New
+```
+
+- **Severity** is High, Medium, Low or Info.
+- **Id** is made from what was found, so the same thing found again has the same Id, and when it changes, so does the Id. A Defender detection's Id includes Defender's detection id, so each detection is a finding of its own.
+- **Status** compares the scan with the one before: **New**, **Still open**, or **Resolved** when it is no longer found. A resolved finding is listed once, by the scan that no longer found it. A Defender detection is reported by the scan after it happened, and is resolved the night after.
+
+Where you see the findings:
+
+- **On the host:** every finding is in the VM's log, and kept in `Logs\SecurityFindings.json` in the VM's folder. `Get-LazyVMSecurityFinding -Name DevBox` lists them. While High or Medium findings are open, the first command you run on the VM reminds you in one line.
+- **In the VM:** `LazyVM Findings.txt` on the desktop, replaced after every scan. When the scan found something **new** that is High or Medium, the file opens in Notepad the next time you sign in, once for that scan; it does not open again until a later scan finds something new. A scheduled task in the VM, `LazyVM-SecurityFindings`, does this at every sign-in, in your own session with your normal rights. There is no notification.
+
+```powershell
+Get-LazyVMSecurityFinding -Name DevBox
+Get-LazyVMSecurityFinding -Name DevBox | Where-Object Status -ne 'Resolved'
+```
+
+`GuestSecurityScan = false` in the VM's `VM.json` turns the scan off.
 
 ### Why rearm first
 
@@ -417,7 +460,7 @@ D:\DevVM\
     State\          manifest.json, Captures\<stamp>\ (the newest three)
     Backups\        VisualStudio.vssettings, DevBox-User.vhdx
     Credentials\    guest.cred, certs.cred, environment.cred, appsettings.cred, bitlocker.cred
-    Logs\           DevBox.log
+    Logs\           DevBox.log, SecurityFindings.json
 ```
 
 | Path | Purpose |
@@ -433,7 +476,7 @@ D:\DevVM\
 | `D:\DevVM\DevBox\State` | Captured state: each capture in a folder of its own, `Captures\<stamp>`, with its own manifest, and the newest three kept. `manifest.json` is a copy of the newest capture's manifest, the one a restore reads. Also `reinstall-by-hand.txt`, and the inventories `Get-LazyVMTooling` saves. Never touched by a rebuild. |
 | `D:\DevVM\DevBox\Backups` | The Visual Studio settings backup, and the nightly copy of the User disk unless `BackupDir` puts it elsewhere. |
 | `D:\DevVM\DevBox\Credentials` | The VM's encrypted account and certificate credentials, and its disks' BitLocker recovery passwords. |
-| `D:\DevVM\DevBox\Logs` | `DevBox.log`: every run for that VM appends here. Set aside at 5 MB. |
+| `D:\DevVM\DevBox\Logs` | `DevBox.log`: every run for that VM appends here. Set aside at 5 MB. `SecurityFindings.json`: the last security scan's findings ([The nightly security scan](#the-nightly-security-scan)). |
 
 `Shared` cannot be used as a VM name.
 
@@ -448,6 +491,7 @@ The module itself is installed in `%ProgramFiles%\LazyVM\Modules\LazyVM`. Nothin
 | `W:` | The Dev Drive: working repositories, package caches, build output. |
 | `U:` | The User disk: `Documents`, `Desktop` and `Downloads` are redirected here, and `%USERPROFILE%\.ssh` and `%USERPROFILE%\source\repos` are links to folders here. |
 | `C:\LazyVMSetup` | The folder LazyVM uses for installers and staging. |
+| `C:\Users\Public\Desktop\LazyVM Findings.txt` | The last security scan's findings, on every user's desktop ([The nightly security scan](#the-nightly-security-scan)). |
 
 ### Credential storage
 
@@ -644,6 +688,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `GuestRemoveOneDrive` | true | Removes OneDrive and stops it installing for new users. |
 | `GuestDarkMode`, `GuestShowFileExtensions`, `GuestTaskbarLeft`, `GuestHideWidgets`, `GuestHideTaskbarSearch` | true | Windows appearance in the VM, applied for every user at every build. |
 | `GuestDeveloperMode` | true | Turns on Developer Mode in the VM at every build. Visual Studio needs it to build and run WinUI and other packaged apps. |
+| `GuestSecurityScan` | true | Scans the VM every night and reports what it finds. See [The nightly security scan](#the-nightly-security-scan). `false` leaves the VM unscanned. |
 | `GuestSysmon` | true | Turns on the Sysmon built into Windows 11 with LazyVM's configuration, checked at every build and every night. See [Sysmon](#sysmon). `false` leaves Sysmon as it is. |
 
 ### Adding tools to a VM
@@ -819,8 +864,8 @@ One of your own templates with the same `Name` as a built-in one replaces it, as
 
 | Template | What the VM gets |
 |---|---|
-| `Developer` | The full developer set-up: `InstallVisualStudio`, `InstallSqlServer` (with its SQL data disk), `UseDevDrive` and `GuestDeveloperMode` are `true`, whatever `LazyVM.Settings.json` says. The tooling list is the shared template's: the default one unless `LazyVM.Settings.json` has its own. |
-| `PlainWindows` | Plain Windows with no developer tools: `InstallVisualStudio`, `InstallSqlServer` (so no SQL data disk), `UseDevDrive` and `GuestDeveloperMode` are `false`, and the tooling list is empty. Build it, then install and set up the apps you want by hand. |
+| `Developer` | The full developer set-up: `InstallVisualStudio`, `InstallSqlServer` (with its SQL data disk), `UseDevDrive`, `GuestDeveloperMode` and `GuestSecurityScan` are `true`, whatever `LazyVM.Settings.json` says. The tooling list is the shared template's: the default one unless `LazyVM.Settings.json` has its own. |
+| `PlainWindows` | Plain Windows with no developer tools: `InstallVisualStudio`, `InstallSqlServer` (so no SQL data disk), `UseDevDrive` and `GuestDeveloperMode` are `false`, and the tooling list is empty. `GuestSecurityScan` is `true`, as on every VM. Build it, then install and set up the apps you want by hand. |
 
 ### Making your own config template
 
@@ -973,6 +1018,7 @@ Get-Service MSSQLSERVER | Select-Object Name, Status
 - **Check `Get-LazyVMLicense` occasionally**, so the rearm count is never a surprise.
 - **Export the recovery passwords when LazyVM reminds you**, to a USB drive kept offline: `Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt -Force`. Without them, a lost credential store means lost disks.
 - **Install tools inside the VM, the normal way.** The daily run records them, so they come back after a rebuild. `Save-LazyVMTooling` records them at once.
+- **Read the security findings when LazyVM reminds you**, with `Get-LazyVMSecurityFinding`, or in `LazyVM Findings.txt` on the VM's desktop. Each one says how to fix it.
 - **Push before you revert.** A revert takes every disk back, the Dev Drive included.
 - **Take a checkpoint before risky work.** Tooling changes get one automatically; take your own before anything else risky.
 

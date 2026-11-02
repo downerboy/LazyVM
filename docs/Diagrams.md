@@ -20,7 +20,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - State: [Capture state](#capture), [Restore state](#restore)
 - Templates: [Save a VM as a config template](#export-template)
 - Remove: [Remove a VM](#remove)
-- Check: [List VMs](#status), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [Export the recovery passwords](#recovery-key-export), [Check a VM end to end](#test)
+- Check: [List VMs](#status), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [Export the recovery passwords](#recovery-key-export), [See the security findings](#security-finding), [Check a VM end to end](#test)
 
 <a id="install-from-repo"></a>
 
@@ -300,14 +300,14 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM, with -Ro
 2. `Sync-VMProfile` (Settings): fills in any setting VM.json lacks from the shared template
    - Reads D5, shared template: Shared\Config\ (LazyVM.Settings.json)
    - Writes D6, complete profile: <VM>\Config\ (VM.json, VM.Template.json  (first time only))
-3. `Invoke-Maintenance` (Maintenance): steps 4-23 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night
+3. `Invoke-Maintenance` (Maintenance): steps 4-24 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night
    - Also runs `Test-BuildInProgress`, `Get-ResumePhase`
    - Reads D7, build in progress: <VM>\Config\ (Resume.json)
    - Reads D8, does the VM exist: Hyper-V (Get-VM <VM>)
 4. `Open-GuestSession` (Guest, called by Invoke-Maintenance): starts the VM if it is off and waits for it, then opens the session
    - Reads D9, guest credential: Credential store (<VM>\Credentials\guest.cred)
    - Writes D10, PowerShell Direct session: VM <VM> (running, reachable)
-5. `Invoke-DailyMaintenance` (Maintenance, called by Invoke-Maintenance): steps 6-22 are its calls; a step that fails is logged and the rest still run
+5. `Invoke-DailyMaintenance` (Maintenance, called by Invoke-Maintenance): steps 6-23 are its calls; a step that fails is logged and the rest still run
 6. `Expand-GuestSystemDrive` (Installation, called by Invoke-DailyMaintenance): only when the OS disk has new space: checkpoint, moves the recovery partition to the end and extends C:
    - Writes D11, bigger C:: Running guest (C: over the whole OS disk)
 7. `Install-UserDisk` (Disks, called by Invoke-DailyMaintenance): an older VM gets its User disk; what the personal folders hold on C: is copied to it
@@ -349,21 +349,27 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM, with -Ro
 19. `Update-GuestWindows` (Maintenance, called by Invoke-DailyMaintenance): quality and security updates; restarts only when nobody can be disturbed
    - Reads D35, updates: Windows Update (quality and security updates)
    - Writes D36, patched Windows: Running guest (updates installed, restart now or left pending)
-20. `Get-GuestLicenseStatus` (Maintenance, called by Invoke-DailyMaintenance): days left, rearms left
-   - Reads D37, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
-21. `Get-MaintenanceDecision` (Maintenance, called by Invoke-DailyMaintenance): more than the threshold left, or no countdown: none; rearms left: rearm; otherwise: rebuild
-   - Reads D38, threshold: VM settings (RebuildThresholdDays = 10)
-22. `Test-GuestStateChanged` (Capture, called by Invoke-DailyMaintenance): decision none: has anything only a capture keeps changed since the last capture?
-   - Reads D39, fingerprint now: Running guest (certificates, Visual Studio settings)
-   - Reads D40, fingerprint then: <VM>\State\ (manifest.json)
-23. `Save-GuestState` (Capture, called by Invoke-DailyMaintenance): on a rearm or rebuild, or when the state changed (see Capture state)
-   - Reads D41, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
-   - Writes D42, captured state: <VM>\State\ (Captures\<stamp>\  vs\  windows\, manifest.json, D:\SQLBackup\<database>.bak)
-24. `Invoke-GuestRearm` (Maintenance, called by Invoke-DailyMaintenance): decision rearm: slmgr rearm, then a restart
-   - Writes D43, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
-25. `Stop-GuestGracefully` (Maintenance, called by Invoke-Maintenance): only if the run started the VM, and not before a rebuild
-   - Writes D44, VM back off: VM <VM> (off)
-26. `Invoke-Rebuild -SkipCapture` (Maintenance): only when no rearms are left or the rearm failed (see Rebuild a VM); without -SkipCapture when there is no VM
+20. `Invoke-GuestSecurityScan` (Security, called by Invoke-DailyMaintenance): unless GuestSecurityScan is off: a Defender quick scan and the security settings, read as SYSTEM; findings marked New, Still open or Resolved against the last scan. Only reports
+   - Also runs `Get-GuestSecurityFact`, `ConvertTo-SecurityFinding`, `Compare-SecurityFinding`, `Save-SecurityFindingRecord`, `Publish-GuestSecurityFinding`
+   - Reads D37, security facts: Running guest (Defender status and detections, firewall, UAC, BitLocker, SMB 1, RDP, Guest,, LSA, Secure Boot, VBS, AutoRun, paused updates)
+   - Reads D38, last findings: <VM>\Logs\ (SecurityFindings.json)
+   - Writes D39, findings: <VM>\Logs\ (SecurityFindings.json, <VM>.log  (each finding))
+   - Writes D40, findings file, sign-in opener: Running guest (Public Desktop\LazyVM Findings.txt, task LazyVM-SecurityFindings, HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert)
+21. `Get-GuestLicenseStatus` (Maintenance, called by Invoke-DailyMaintenance): days left, rearms left
+   - Reads D41, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
+22. `Get-MaintenanceDecision` (Maintenance, called by Invoke-DailyMaintenance): more than the threshold left, or no countdown: none; rearms left: rearm; otherwise: rebuild
+   - Reads D42, threshold: VM settings (RebuildThresholdDays = 10)
+23. `Test-GuestStateChanged` (Capture, called by Invoke-DailyMaintenance): decision none: has anything only a capture keeps changed since the last capture?
+   - Reads D43, fingerprint now: Running guest (certificates, Visual Studio settings)
+   - Reads D44, fingerprint then: <VM>\State\ (manifest.json)
+24. `Save-GuestState` (Capture, called by Invoke-DailyMaintenance): on a rearm or rebuild, or when the state changed (see Capture state)
+   - Reads D45, state to keep: Running guest (VS settings, SQL databases + logins, env, certs, tasks, apps)
+   - Writes D46, captured state: <VM>\State\ (Captures\<stamp>\  vs\  windows\, manifest.json, D:\SQLBackup\<database>.bak)
+25. `Invoke-GuestRearm` (Maintenance, called by Invoke-DailyMaintenance): decision rearm: slmgr rearm, then a restart
+   - Writes D47, rearmed Windows: Running guest (evaluation reset to 90 days, one rearm used)
+26. `Stop-GuestGracefully` (Maintenance, called by Invoke-Maintenance): only if the run started the VM, and not before a rebuild
+   - Writes D48, VM back off: VM <VM> (off)
+27. `Invoke-Rebuild -SkipCapture` (Maintenance): only when no rearms are left or the rearm failed (see Rebuild a VM); without -SkipCapture when there is no VM
 
 <a id="register-maintenance"></a>
 
@@ -770,6 +776,24 @@ Writes the BitLocker recovery passwords of the VM, or of every VM, to a file you
 8. `Save-RecoveryKeyExportRecord` (Disks, called by Use-RunRoot): which keys each VM's export held, by disk GUID and key ID, never the passwords
    - Writes D6, export record: <VM>\Config\ (RecoveryKeyExport.json)
    - Writes D7, the file: Pipeline (FileInfo)
+
+<a id="security-finding"></a>
+
+## See the security findings
+
+`Get-LazyVMSecurityFinding` `-Name <VM>`
+
+Lists what the last nightly security scan found, from what it kept. Does not start or scan the VM.
+
+![See the security findings: call order and data flow](diagrams/security-finding.svg)
+
+1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
+   - Reads D1, settings, VM profile, guest user name: VM context sources (HKCU:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
+   - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
+2. `Get-SecurityFindingList` (Security): each finding of the last scan, with the VM's name; a warning when no scan has run yet
+   - Also runs `Read-SecurityFindingRecord`
+   - Reads D3, last findings: <VM>\Logs\ (SecurityFindings.json)
+   - Writes D4, findings: Pipeline (LazyVM.SecurityFinding: Name, Id, Severity, Title,, WhatWeFound, WhyItMatters, HowToFix, FirstSeen, Status)
 
 <a id="test"></a>
 

@@ -33,7 +33,7 @@
         @{
             Function = 'Invoke-Maintenance'
             Area     = 'Maintenance'
-            Note     = 'steps 4-23 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
+            Note     = 'steps 4-24 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
             Includes = @('Test-BuildInProgress', 'Get-ResumePhase')
             Reads    = @(
                 @{ Label = 'build in progress'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json') }
@@ -52,7 +52,7 @@
             Function = 'Invoke-DailyMaintenance'
             Area     = 'Maintenance'
             Caller   = 'Invoke-Maintenance'
-            Note     = 'steps 6-22 are its calls; a step that fails is logged and the rest still run'
+            Note     = 'steps 6-23 are its calls; a step that fails is logged and the rest still run'
         }
         @{
             Function = 'Expand-GuestSystemDrive'
@@ -172,6 +172,21 @@
             Note     = 'quality and security updates; restarts only when nobody can be disturbed'
             Reads    = @(@{ Label = 'updates'; Kind = 'web'; Store = 'Windows Update'; Items = @('quality and security updates') })
             Writes   = @(@{ Label = 'patched Windows'; Kind = 'guest'; Store = 'Running guest'; Items = @('updates installed', 'restart now or left pending') })
+        }
+        @{
+            Function = 'Invoke-GuestSecurityScan'
+            Area     = 'Security'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'unless GuestSecurityScan is off: a Defender quick scan and the security settings, read as SYSTEM; findings marked New, Still open or Resolved against the last scan. Only reports'
+            Includes = @('Get-GuestSecurityFact', 'ConvertTo-SecurityFinding', 'Compare-SecurityFinding', 'Save-SecurityFindingRecord', 'Publish-GuestSecurityFinding')
+            Reads    = @(
+                @{ Label = 'security facts'; Kind = 'guest'; Store = 'Running guest'; Items = @('Defender status and detections', 'firewall, UAC, BitLocker, SMB 1, RDP, Guest,', 'LSA, Secure Boot, VBS, AutoRun, paused updates') }
+                @{ Label = 'last findings'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('SecurityFindings.json') }
+            )
+            Writes   = @(
+                @{ Label = 'findings'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('SecurityFindings.json', '<VM>.log  (each finding)') }
+                @{ Label = 'findings file, sign-in opener'; Kind = 'guest'; Store = 'Running guest'; Items = @('Public Desktop\LazyVM Findings.txt', 'task LazyVM-SecurityFindings', 'HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert') }
+            )
         }
         @{
             Function = 'Get-GuestLicenseStatus'
