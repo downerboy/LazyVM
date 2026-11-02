@@ -760,7 +760,7 @@
     "GuestSetupDir": {
       "type": "string",
       "default": "C:\\LazyVMSetup",
-      "description": "A working folder inside the VM for installers and captured files.",
+      "description": "A working folder inside the VM where LazyVM stages files it copies in and out. A folder of its own directly in a drive's root; LazyVM keeps it to administrators and SYSTEM, deleting and recreating one that is not.",
       "pattern": "^[A-Za-z]:\\\\"
     },
     "GuestDataDriveLetter": {

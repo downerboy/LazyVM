@@ -139,7 +139,7 @@ Describe 'Initialize-GuestPrivateFolder' {
     }
 
     It 'makes the folder when there is none, with access for the task''s user' {
-        Initialize-GuestPrivateFolder -Path $path -ModifySid $user
+        Initialize-GuestPrivateFolder -Path $path -ModifySid $user | Should -BeExactly ''
 
         Should -Invoke New-GuestPrivateFolder -Times 1 -Exactly -ParameterFilter { $Path -eq $path -and $ModifySid -eq $user }
     }
@@ -149,7 +149,7 @@ Describe 'Initialize-GuestPrivateFolder' {
         $null = New-Item -ItemType File -Path (Join-Path $path 'bootstrap.exe')
         Mock Get-GuestPrivateFolderProblem { '' }
 
-        Initialize-GuestPrivateFolder -Path $path
+        Initialize-GuestPrivateFolder -Path $path | Should -BeExactly ''
 
         Join-Path $path 'bootstrap.exe' | Should -Exist
         Should -Invoke New-GuestPrivateFolder -Times 0 -Exactly
@@ -160,7 +160,7 @@ Describe 'Initialize-GuestPrivateFolder' {
         $null = New-Item -ItemType File -Path (Join-Path $path 'LazyVM-x.work.ps1')
         Mock Get-GuestPrivateFolderProblem { 'it inherits access from the folder above' }
 
-        Initialize-GuestPrivateFolder -Path $path
+        Initialize-GuestPrivateFolder -Path $path | Should -Be 'it inherits access from the folder above'
 
         Join-Path $path 'LazyVM-x.work.ps1' | Should -Not -Exist
         Should -Invoke New-GuestPrivateFolder -Times 1 -Exactly -ParameterFilter { $Path -eq $path }
@@ -187,6 +187,157 @@ Describe 'Initialize-GuestPrivateFolder' {
         Initialize-GuestPrivateFolder -Path $path
 
         $kept.FullName | Should -Exist
+    }
+}
+
+Describe 'Initialize-GuestSetupFolder' {
+    BeforeAll {
+        $saved = @{}
+        $windowsFolders = @{
+            SystemRoot          = 'C:\Windows'
+            ProgramFiles        = 'C:\Program Files'
+            'ProgramFiles(x86)' = 'C:\Program Files (x86)'
+            ProgramData         = 'C:\ProgramData'
+            PUBLIC              = 'C:\Users\Public'
+        }
+        foreach ($name in $windowsFolders.Keys) {
+            $saved[$name] = [Environment]::GetEnvironmentVariable($name)
+            [Environment]::SetEnvironmentVariable($name, $windowsFolders[$name])
+        }
+    }
+
+    AfterAll {
+        foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
+    }
+
+    BeforeEach {
+        Mock Initialize-GuestPrivateFolder { '' }
+    }
+
+    It 'makes <SetupDir> private, for SYSTEM and Administrators only' -ForEach @(
+        @{ SetupDir = 'C:\LazyVMSetup' }
+        @{ SetupDir = 'D:\Setup\' }
+    ) {
+        Initialize-GuestSetupFolder -Path $SetupDir | Should -BeExactly ''
+
+        Should -Invoke Initialize-GuestPrivateFolder -Times 1 -Exactly -ParameterFilter { $Path -eq $SetupDir.TrimEnd('\') -and -not $ModifySid }
+    }
+
+    It 'says why it replaced the folder that was there' {
+        Mock Initialize-GuestPrivateFolder { 'it inherits access from the folder above' }
+
+        Initialize-GuestSetupFolder -Path 'C:\LazyVMSetup' | Should -Be 'it inherits access from the folder above'
+    }
+
+    # Everything in a folder that is not right is deleted.
+    It 'never touches <Path>, which is not a folder of its own in a drive''s root' -ForEach @(
+        @{ Path = 'C:\' }
+        @{ Path = 'C:\Windows' }
+        @{ Path = 'c:\program files\' }
+        @{ Path = 'C:\Program Files (x86)' }
+        @{ Path = 'C:\ProgramData' }
+        @{ Path = 'C:\Users' }
+        @{ Path = 'C:\Users\devadmin\Setup' }
+        @{ Path = 'C:\..' }
+        @{ Path = 'C:\Setup/Inner' }
+    ) {
+        { Initialize-GuestSetupFolder -Path $Path } | Should -Throw '*GuestSetupDir*'
+
+        Should -Invoke Initialize-GuestPrivateFolder -Times 0 -Exactly
+    }
+}
+
+Describe 'Protect-GuestSetupFolder' {
+    BeforeAll {
+        $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; GuestSetupDir = 'C:\LazyVMSetup' }) }
+    }
+
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+    }
+
+    It 'makes the setup folder private in the guest and returns it' {
+        Mock -ModuleName $module Invoke-GuestScript { '' }
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Protect-GuestSetupFolder -VM $VM } | Should -Be 'C:\LazyVMSetup'
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $ArgumentList[0] -eq 'C:\LazyVMSetup' -and "$ScriptBlock" -match 'Initialize-GuestSetupFolder'
+        }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly
+    }
+
+    It 'logs that it replaced a folder other guest users could change, and goes on' {
+        Mock -ModuleName $module Invoke-GuestScript { 'it inherits access from the folder above' }
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Protect-GuestSetupFolder -VM $VM } | Should -Be 'C:\LazyVMSetup'
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter {
+            $Message -like '*C:\LazyVMSetup*inherits access*' -and $Level -eq 'INFO'
+        }
+    }
+}
+
+Describe 'What LazyVM stages in the guest''s setup folder (#302)' {
+    BeforeEach {
+        $calls = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Protect-GuestSetupFolder { $calls.Add('protect'); 'C:\LazyVMSetup' }
+        Mock -ModuleName $module Write-LogEntry { }
+        $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; GuestSetupDir = 'C:\LazyVMSetup'; ToolingWingetCheck = @() }) }
+    }
+
+    It 'goes there only through Protect-GuestSetupFolder, so the folder is always made private first' {
+        $private = Join-Path $script:LazyVMModuleDir 'Private'
+        $direct = @(Get-ChildItem -LiteralPath $private -Recurse -Filter '*.ps1' |
+                Select-String -Pattern 'Settings\.GuestSetupDir' |
+                Where-Object { $_.Line -notmatch '^\s*#' } |
+                ForEach-Object { "$($_.Filename):$($_.LineNumber)" })
+
+        # Protect-GuestSetupFolder itself, and Invoke-GuestTask's clean-up of the files tasks once kept there.
+        $direct | Should -HaveCount 2
+        $direct | ForEach-Object { $_ | Should -BeLike 'GuestScript.ps1:*' }
+    }
+
+    It 'copies a capture archive in only once the folder is private' {
+        $archive = Join-Path $TestDrive 'winstate.zip'
+        Set-Content -LiteralPath $archive -Value 'zip'
+        Mock -ModuleName $module Copy-ToGuest { $calls.Add("copy $GuestPath") }
+
+        $guestZip = InModuleScope $module -Parameters @{ VM = $vm; Archive = $archive } {
+            param($VM, $Archive)
+            Send-CaptureArchive -VM $VM -Area ([pscustomobject]@{ Archive = $Archive }) -What 'Windows environment'
+        }
+
+        $calls[0] | Should -Be 'protect'
+        $calls[1] | Should -BeLike 'copy C:?LazyVMSetup?winstate.zip'
+        $guestZip | Should -BeLike 'C:?LazyVMSetup?winstate.zip'
+    }
+
+    It 'takes the tooling inventory in the private folder' {
+        Mock -ModuleName $module Invoke-GuestScript { $calls.Add("inventory $($ArgumentList[0])") }
+
+        $null = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-GuestToolingInventory -VM $VM }
+
+        ($calls -join ',') | Should -Be 'protect,inventory C:\LazyVMSetup'
+    }
+
+    It 'lists winget upgrades in the private folder' {
+        Mock -ModuleName $module Invoke-GuestScript { $calls.Add("list $($ArgumentList[1])") }
+
+        $null = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-GuestWingetUpgrade -VM $VM -Winget 'winget.exe' }
+
+        ($calls -join ',') | Should -Be 'protect,list C:\LazyVMSetup'
+    }
+
+    It 'stages the Visual Studio capture in the private folder' {
+        $vmWithVs = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; GuestSetupDir = 'C:\LazyVMSetup'; InstallVisualStudio = $true }) }
+        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ InstanceId = 'a1'; ProductLine = '2026'; DisplayName = 'VS'; Version = '18' } }
+        Mock -ModuleName $module Invoke-GuestScript { $calls.Add("capture $($ArgumentList[0])"); [pscustomobject]@{ Settings = $null; SettingsMarker = $null; NuGetConfig = $null; GitConfig = $null; UserItems = $null; Notes = @() } }
+        Mock -ModuleName $module Copy-FromGuest { }
+
+        $null = InModuleScope $module -Parameters @{ VM = $vmWithVs; Dir = $TestDrive } { param($VM, $Dir) Save-GuestVisualStudioState -VM $VM -CaptureDir $Dir }
+
+        ($calls -join ',') | Should -Be 'protect,capture C:\LazyVMSetup'
     }
 }
 

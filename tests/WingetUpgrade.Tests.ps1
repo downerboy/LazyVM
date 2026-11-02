@@ -342,6 +342,7 @@ Describe 'Get-GuestWingetUpgrade (#235)' {
     BeforeEach {
         Mock Get-ItemProperty { [pscustomobject]@{ DisplayName = 'Git'; InstallLocation = 'D:\Tools\Git'; DisplayIcon = '' } }
         $listVM = InModuleScope $module -Parameters @{ SetupDir = "$TestDrive" } { param($SetupDir) [VMContext]::new(@{ VMName = 'Alpha'; GuestSetupDir = $SetupDir }) }
+        Mock -ModuleName $module Protect-GuestSetupFolder { $VM.Settings.GuestSetupDir }
         # Runs the script block here, as it would run in the guest, where the guest helpers are.
         Mock -ModuleName $module Invoke-GuestScript { & ([scriptblock]::Create($ScriptBlock.ToString())) @ArgumentList }
     }

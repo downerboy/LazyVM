@@ -1060,18 +1060,45 @@ function Initialize-GuestPrivateFolder {
     <#
       Makes $Path a private folder (New-GuestPrivateFolder). A folder already
       there is kept, with what it holds, only when its owner and ACL are
-      exactly right; anything else there is deleted first.
+      exactly right; anything else there is deleted first. Returns why what
+      was there was deleted, or '' when nothing was.
     #>
+    [OutputType([string])]
     param(
         [Parameter(Mandatory)][string]$Path,
         [string]$ModifySid
     )
 
+    $problem = ''
     if (Test-Path -LiteralPath $Path) {
-        if (-not (Get-GuestPrivateFolderProblem -Path $Path -ModifySid $ModifySid)) { return }
+        $problem = Get-GuestPrivateFolderProblem -Path $Path -ModifySid $ModifySid
+        if (-not $problem) { return '' }
         Remove-GuestFolderEntry -Path $Path
     }
     New-GuestPrivateFolder -Path $Path -ModifySid $ModifySid
+    return $problem
+}
+
+function Initialize-GuestSetupFolder {
+    <#
+      Makes $Path, the setup folder (GuestSetupDir) where LazyVM stages what
+      it copies in and out over PowerShell Direct, a private folder
+      (Initialize-GuestPrivateFolder), so no other guest user can change or
+      read what is staged there (#302). Returns why the folder that was there
+      was replaced, or '' when it was right or new. A folder that is not
+      right is deleted with everything in it, so only a folder of its own,
+      directly in a drive's root and not one Windows uses, is accepted.
+    #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    $folder = $Path.TrimEnd('\')
+    $windowsFolders = @($env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData, ("$env:PUBLIC" -replace '\\[^\\]*$', '')) |
+        Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') }
+    if ($folder -notmatch '^[A-Za-z]:\\[^\\/]+$' -or $folder -match '^[A-Za-z]:\\\.+$' -or $windowsFolders -contains $folder) {
+        throw "GuestSetupDir must be a folder of its own directly in a drive's root, such as C:\LazyVMSetup, not $Path"
+    }
+    return Initialize-GuestPrivateFolder -Path $folder
 }
 
 function Remove-GuestFolderEntry {
@@ -1172,7 +1199,7 @@ function Initialize-GuestTaskFolder {
     # Inherits Program Files' access: only administrators can change it.
     New-GuestFolder -Path (Split-Path -Path $folder -Parent)
     $modifySid = if ($UserName) { Get-GuestAccountSid -UserName $UserName } else { '' }
-    Initialize-GuestPrivateFolder -Path $folder -ModifySid $modifySid
+    $null = Initialize-GuestPrivateFolder -Path $folder -ModifySid $modifySid
     return $folder
 }
 

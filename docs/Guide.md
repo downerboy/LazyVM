@@ -450,7 +450,7 @@ The module itself is installed in `%ProgramFiles%\LazyVM\Modules\LazyVM`. Nothin
 | `D:` | The SQL data disk: `SQLData`, `SQLLog` and `SQLBackup`. `tempdb` stays on C:, since SQL Server recreates it at every start. |
 | `W:` | The Dev Drive: working repositories, package caches, build output. |
 | `U:` | The User disk: `Documents`, `Desktop` and `Downloads` are redirected here, and `%USERPROFILE%\.ssh` and `%USERPROFILE%\source\repos` are links to folders here. |
-| `C:\LazyVMSetup` | The folder LazyVM uses for installers and staging. |
+| `C:\LazyVMSetup` | The folder LazyVM stages files in when it copies them in and out (`GuestSetupDir`). Only administrators and SYSTEM can change or read it. If LazyVM finds it open to other users, or a link, it deletes it with everything in it, makes it again and logs that. It must be a folder of its own directly in a drive's root. |
 | `C:\Program Files\LazyVM\Tasks` | A folder for each of LazyVM's scheduled tasks, with the script it runs, the files it is given, its result and its transcript (`<task>.log`). Only administrators and SYSTEM can change them; a task that runs as the guest account, not elevated, also gives that account access to its own folder. |
 
 ### Credential storage

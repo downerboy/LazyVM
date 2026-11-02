@@ -22,10 +22,9 @@ function Get-GuestToolingInventory {
     param([Parameter(Mandatory)][VMContext]$VM)
 
     return Invoke-GuestScript -VM $VM -Activity 'tooling inventory' -TimeoutMinutes 30 `
-        -ArgumentList @($VM.Settings.GuestSetupDir, @($VM.Settings.ToolingWingetCheck)) -ScriptBlock {
+        -ArgumentList @((Protect-GuestSetupFolder -VM $VM), @($VM.Settings.ToolingWingetCheck)) -ScriptBlock {
         param($setupDir, $wingetCheck)
         $ErrorActionPreference = 'Stop'
-        New-GuestFolder -Path $setupDir
 
         $notes = [System.Collections.Generic.List[string]]::new()
 

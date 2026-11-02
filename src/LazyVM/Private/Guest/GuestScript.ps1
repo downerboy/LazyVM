@@ -196,6 +196,28 @@ function Invoke-GuestTask {
     return $done
 }
 
+function Protect-GuestSetupFolder {
+    <#
+      Makes the guest's setup folder (GuestSetupDir) one only administrators
+      and SYSTEM can change or read (Initialize-GuestSetupFolder in
+      Guest.Helpers.ps1), before LazyVM stages files there (#302), and
+      returns its path. A folder other guest users could change, or a link,
+      is deleted with everything in it, since they may have put anything
+      there, and made again; the log says so, and the run goes on.
+    #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $setupDir = $VM.Settings.GuestSetupDir
+    $replaced = Invoke-GuestScript -VM $VM -Activity 'preparing the setup folder' -TimeoutMinutes 5 -ArgumentList @($setupDir) -ScriptBlock {
+        param($setupDir) Initialize-GuestSetupFolder -Path $setupDir
+    }
+    if ("$replaced") {
+        Write-LogEntry "  The guest's setup folder $setupDir was replaced with an empty one only administrators can change, as $replaced" 'INFO'
+    }
+    return $setupDir
+}
+
 function Get-GuestInstallerTaskName {
     <# The guest task Invoke-GuestInstaller runs installer $Name as; files the installer is given go in its folder (New-GuestTaskFolder). #>
     [OutputType([string])]

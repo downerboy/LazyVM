@@ -195,11 +195,10 @@ function Save-GuestVisualStudioState {
     }
 
     $info = Invoke-GuestScript -VM $VM -Activity 'Visual Studio capture' -TimeoutMinutes 20 -ArgumentList @(
-        $VM.Settings.GuestSetupDir, $vs.InstanceId, "$($vs.ProductLine)"
+        (Protect-GuestSetupFolder -VM $VM), $vs.InstanceId, "$($vs.ProductLine)"
     ) -ScriptBlock {
         param($setupDir, $instanceId, $productLine)
         $ErrorActionPreference = 'Stop'
-        New-GuestFolder -Path $setupDir
         $out = [ordered]@{ Settings = $null; SettingsMarker = $null; NuGetConfig = $null; GitConfig = $null; UserItems = $null; Notes = @() }
 
         $out.Settings = Get-GuestVisualStudioSettingsFile -InstanceId $instanceId
@@ -422,7 +421,8 @@ function Save-GuestWindowsState {
         [Parameter(Mandatory)][string]$CaptureDir
     )
 
-    $staging = Join-Path $VM.Settings.GuestSetupDir 'winstate'
+    $setupDir = Protect-GuestSetupFolder -VM $VM
+    $staging = Join-Path $setupDir 'winstate'
     $null = Invoke-GuestScript -VM $VM -Activity 'Windows capture staging' -TimeoutMinutes 5 -ArgumentList @($staging) -ScriptBlock {
         param($staging)
         Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
@@ -442,7 +442,7 @@ function Save-GuestWindowsState {
     $summary = [pscustomobject]@{
         Certificates = @($certificates.Certificates)
     }
-    $zip = Invoke-GuestScript -VM $VM -Activity 'Windows capture archive' -TimeoutMinutes 15 -ArgumentList @($staging, ($summary | ConvertTo-Json -Depth 8), $VM.Settings.GuestSetupDir) -ScriptBlock {
+    $zip = Invoke-GuestScript -VM $VM -Activity 'Windows capture archive' -TimeoutMinutes 15 -ArgumentList @($staging, ($summary | ConvertTo-Json -Depth 8), $setupDir) -ScriptBlock {
         param($staging, $summaryJson, $setupDir)
         Set-Content -Path (Join-Path $staging 'environment.json') -Value $summaryJson -Encoding UTF8
         $zip = Join-Path $setupDir 'winstate.zip'

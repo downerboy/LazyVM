@@ -48,7 +48,7 @@ function Send-CaptureArchive {
         Write-LogEntry "  $What capture archive missing at $archive - skipping" 'WARN'
         return $null
     }
-    $guestZip = Join-Path $VM.Settings.GuestSetupDir ([IO.Path]::GetFileName($archive))
+    $guestZip = Join-Path (Protect-GuestSetupFolder -VM $VM) ([IO.Path]::GetFileName($archive))
     Copy-ToGuest -VM $VM -HostPath $archive -GuestPath $guestZip
     return $guestZip
 }
@@ -70,9 +70,10 @@ function Restore-GuestWindowsState {
         return
     }
 
-    $work = Invoke-GuestScript -VM $VM -Activity 'Windows restore staging' -TimeoutMinutes 10 -ArgumentList @($guestZip, $VM.Settings.GuestSetupDir) -ScriptBlock {
-        param($zip, $setupDir)
-        $work = Join-Path $setupDir 'winstate-restore'
+    # Unpacked beside the archive, in the setup folder Send-CaptureArchive made private.
+    $work = Invoke-GuestScript -VM $VM -Activity 'Windows restore staging' -TimeoutMinutes 10 -ArgumentList @($guestZip) -ScriptBlock {
+        param($zip)
+        $work = Join-Path (Split-Path -Path $zip -Parent) 'winstate-restore'
         Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
         Expand-GuestZip -Archive $zip -Destination $work
         return $work
@@ -343,11 +344,12 @@ function Restore-GuestVisualStudioState {
     }
 
     $files = [RecordReader]::Field($Manifest.VisualStudio, 'Files')
+    $setupDir = Protect-GuestSetupFolder -VM $VM
     $pushed = @{}
     foreach ($key in 'NuGetConfig', 'GitConfig', 'UserItems') {
         $hostPath = [RecordReader]::Text($files, $key)
         if (-not $hostPath -or -not (Test-Path -LiteralPath $hostPath)) { continue }
-        $guestPath = Join-Path $VM.Settings.GuestSetupDir ([IO.Path]::GetFileName($hostPath))
+        $guestPath = Join-Path $setupDir ([IO.Path]::GetFileName($hostPath))
         try {
             Copy-ToGuest -VM $VM -HostPath $hostPath -GuestPath $guestPath
             $pushed[$key] = $guestPath
@@ -565,12 +567,13 @@ function Restore-GuestAppSetting {
         return
     }
 
+    $setupDir = Protect-GuestSetupFolder -VM $VM
     foreach ($entry in $saved) {
         if (-not (Test-Path -LiteralPath $entry.File)) {
             Write-LogEntry "  $($entry.Name) - settings file missing at $($entry.File)" 'WARN'
             continue
         }
-        $guestFile = Join-Path $VM.Settings.GuestSetupDir "app-$($entry.Name).reg"
+        $guestFile = Join-Path $setupDir "app-$($entry.Name).reg"
         Copy-ToGuest -VM $VM -HostPath $entry.File -GuestPath $guestFile
         $imported = Invoke-GuestScript -VM $VM -Activity "$($entry.Name) settings import" -TimeoutMinutes 5 -ArgumentList @($guestFile) -ScriptBlock {
             param($file)

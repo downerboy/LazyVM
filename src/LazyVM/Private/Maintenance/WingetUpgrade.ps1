@@ -32,7 +32,7 @@ function Get-GuestWingetUpgrade {
         [Parameter(Mandatory)][string]$Winget
     )
 
-    return Invoke-GuestScript -VM $VM -Activity 'listing winget upgrades' -TimeoutMinutes 10 -ArgumentList @($Winget, $VM.Settings.GuestSetupDir) -ScriptBlock {
+    return Invoke-GuestScript -VM $VM -Activity 'listing winget upgrades' -TimeoutMinutes 10 -ArgumentList @($Winget, (Protect-GuestSetupFolder -VM $VM)) -ScriptBlock {
         param($winget, $setupDir)
 
         # winget writes UTF-8; read as anything else, its ellipsis and column alignment are lost.
@@ -43,7 +43,6 @@ function Get-GuestWingetUpgrade {
         # winget export lists whole ids, to complete any the table cut short.
         $knownIds = @()
         if (@($rows | Where-Object { $_.Id.EndsWith([string][char]0x2026) }).Count -gt 0) {
-            New-GuestFolder -Path $setupDir
             $exportFile = Join-Path $setupDir 'upgrade-winget.json'
             Remove-Item -LiteralPath $exportFile -Force -ErrorAction SilentlyContinue
             & $winget export --output $exportFile --source winget --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
