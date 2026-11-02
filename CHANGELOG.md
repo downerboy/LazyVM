@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.4.0](https://github.com/downerboy/LazyVM/compare/v6.3.0...v6.4.0) (2026-11-02)
+
+
+### Features
+
+* nightly updates for Visual Studio, PowerShell Gallery modules and dotnet tools ([#296](https://github.com/downerboy/LazyVM/issues/296)) ([2947820](https://github.com/downerboy/LazyVM/commit/2947820651475358bc0535c2a022ee5313c525dd))
+
 ## [6.3.0](https://github.com/downerboy/LazyVM/compare/v6.2.0...v6.3.0) (2026-11-02)
 
 
