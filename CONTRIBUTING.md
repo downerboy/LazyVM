@@ -18,6 +18,8 @@ LazyVM uses [GitHub Flow](https://docs.github.com/en/get-started/using-github/gi
 
    If the change adds, removes or reorders what a command calls, update that command's diagram source in `docs/diagrams/source` and run `./Update-Diagram.ps1`; the tests fail until the diagrams match the code. Update the [guide](docs/Guide.md), the [use cases](docs/UseCases.md) and the command's own help in the same pull request.
 
+   Pass values to code that runs in a guest only through `-ArgumentList`, never in the script's text: every guest logs the text of each script it runs (event 4104), so a password in that text would be in the log. `tests/GuestScriptSafety.Tests.ps1` fails on a script block made from a string or an expandable string passed as `-ScriptBlock` or `-Work`.
+
 3. Push the branch and open a pull request into `main`, with a title in the form described under [Versioning](#versioning). Put `Fixes #42` in the description to close the issue when it merges.
 4. CI (**Build, analyze and test**) and the title check (**Conventional Commits title**) must pass before the pull request can merge. `main` does not accept direct pushes, from anyone.
 5. Squash-merge, so the pull request becomes one commit on `main` whose message is its title. GitHub then deletes the branch (**Automatically delete head branches** is on).

@@ -140,6 +140,14 @@
             Writes   = @(@{ Label = 'Sysmon'; Kind = 'guest'; Store = 'Running guest'; Items = @('Sysmon feature and service', 'HKLM:\SOFTWARE\LazyVM  config hash') })
         }
         @{
+            Function = 'Set-GuestEventLogging'
+            Area     = 'Installation'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'puts back what is missing of the event log sizes, audit policy, command-line auditing and script block logging (Microsoft security baseline)'
+            Reads    = @(@{ Label = 'logging state'; Kind = 'guest'; Store = 'Running guest'; Items = @('event log sizes and modes', 'auditpol /backup', 'policy registry values') })
+            Writes   = @(@{ Label = 'logging, only on a change'; Kind = 'guest'; Store = 'Running guest'; Items = @('event log sizes, overwrite oldest', 'audit subcategories', 'command-line auditing', 'script block logging') })
+        }
+        @{
             Function = 'Repair-GuestAutoLogon'
             Area     = 'Maintenance'
             Caller   = 'Invoke-DailyMaintenance'

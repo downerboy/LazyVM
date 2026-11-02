@@ -29,16 +29,13 @@ function Set-GuestSysmon {
         return
     }
 
-    # Big enough that a day of a developer's work does not roll over (Sean's decision on #236).
-    $eventLogSizeBytes = 256MB
-
     try {
         # Read inside the try: a configuration file that is missing or locked must not stop the run either.
         $configPath = Join-Path -Path $script:DataDir -ChildPath 'Sysmon\sysmonconfig.xml'
         $configText = Get-Content -LiteralPath $configPath -Raw
         $configHash = (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash
         $notes = Invoke-GuestScript -VM $VM -Activity 'Sysmon' -TimeoutMinutes 15 `
-            -ArgumentList @($configText, $configHash, $eventLogSizeBytes, $script:GuestMarkerKey) -ScriptBlock {
+            -ArgumentList @($configText, $configHash, $script:GuestBusyEventLogSize, $script:GuestMarkerKey) -ScriptBlock {
             param($configText, $configHash, $eventLogSizeBytes, $markerKey)
             $ErrorActionPreference = 'Stop'
             $notes = @()
