@@ -50,6 +50,8 @@ $script:TemplatesFolderName = 'Templates'
 $script:TemplateNamePattern = '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$'
 # The automatic config template LazyVM keeps for each VM is <VM>-latest (#292).
 $script:AutomaticTemplateSuffix = 'latest'
+# The setting in VM.json that tells this VM from an earlier one of the same name (#292).
+$script:ProfileIdSettingName = 'ProfileId'
 # The setting in VM.json that holds the VM's tooling list.
 $script:ToolingSettingName = 'Tooling'
 # What a winget package identifier looks like (WingetMatch.ps1); anything

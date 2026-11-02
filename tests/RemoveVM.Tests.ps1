@@ -300,7 +300,7 @@ Describe 'Invoke-VMRemoval' {
         }
 
         $template | Should -Exist
-        @($said | Where-Object { "$_".Contains('Alpha-latest') -and "$_".Contains('kept') -and "$_".Contains($template) }).Count | Should -Be 1
+        @($said | Where-Object { "$_".Contains('Alpha-latest') -and "$_".Contains('kept') -and "$_".Contains('will not replace it') -and "$_".Contains($template) }).Count | Should -Be 1
     }
 }
 

@@ -65,6 +65,14 @@ function Get-VMProfilePath {
     return Join-Path -Path (Get-VMProfileDir -Root $Root -Name $Name) -ChildPath $script:ProfileFileName
 }
 
+function New-ProfileId {
+    <# A new VM's ProfileId: a GUID, so two VMs of the same name made one after the other are told apart (#292). #>
+    [OutputType([string])]
+    param()
+
+    return [guid]::NewGuid().ToString()
+}
+
 function Get-VMAsBuiltProfilePath {
     <# A VM's VM.Template.json: its VM.json as it was first built, never changed. #>
     [OutputType([string])]
@@ -249,7 +257,7 @@ function Get-SharedTemplateSetting {
 function Get-PerVMSettingName {
     <#
       Settings that belong to one VM: file locations, the guest computer
-      name, the maintenance time, the recorded identity of its disks and
+      name, the maintenance time, its ProfileId, the recorded identity of its disks and
       what LazyVM recorded inside it. A VM copied with -From takes these
       from the shared template, which names everything after the VM and
       records nothing, rather than from the VM it copies; a config template
@@ -258,7 +266,7 @@ function Get-PerVMSettingName {
     [OutputType([string[]])]
     param()
 
-    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime') + @($script:DataDiskIdentitySettings) + @($script:RecordedGuestStateSettings)
+    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime', $script:ProfileIdSettingName) + @($script:DataDiskIdentitySettings) + @($script:RecordedGuestStateSettings)
 }
 
 function Get-ShareableSetting {
@@ -333,6 +341,7 @@ function New-VMProfile {
 
     $maintenanceTime = Get-NextMaintenanceTime -Root $Root -VMNames $existing
     if ($maintenanceTime) { $settings['MaintenanceTime'] = $maintenanceTime }
+    $settings[$script:ProfileIdSettingName] = New-ProfileId
 
     $path = Get-VMProfilePath -Root $Root -Name $Name
     $text = ConvertTo-SettingsJson -Settings $settings -ForProfile
@@ -450,6 +459,8 @@ function Sync-VMProfile {
     foreach ($key in $template.Keys) {
         if (-not $current.ContainsKey($key)) { $missing[$key] = $template[$key] }
     }
+    # Its own, never one the shared template names (#292).
+    if (-not $current[$script:ProfileIdSettingName]) { $missing[$script:ProfileIdSettingName] = New-ProfileId }
     # Writes nothing unless a setting was missing or one LazyVM no longer uses is still there (#273).
     $null = Update-VMProfile -Root $root -Name $name -Change $missing -Reason 'brought up to date with the shared template'
 
