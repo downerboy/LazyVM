@@ -65,6 +65,17 @@ function Get-VMProfilePath {
     return Join-Path -Path (Get-VMProfileDir -Root $Root -Name $Name) -ChildPath $script:ProfileFileName
 }
 
+function Get-VMProfileTemplatePath {
+    <# A VM's VM.Template.json: its VM.json as it was first built, never changed. #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    return Join-Path -Path (Get-VMProfileDir -Root $Root -Name $Name) -ChildPath $script:ProfileTemplateFileName
+}
+
 function Get-VMProfileName {
     <# The VMs this host knows about: each folder in the LazyVM folder that holds a profile. #>
     param([Parameter(Mandatory)][string]$Root)
@@ -263,11 +274,18 @@ function Get-ShareableSetting {
         [Parameter(Mandatory)][string]$Name
     )
 
+    return Select-ShareableSetting -Settings (Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $Name))
+}
+
+function Select-ShareableSetting {
+    <# $Settings without the ones each VM has its own of (Get-PerVMSettingName). #>
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.IDictionary]$Settings)
+
     $perVM = Get-PerVMSettingName
-    $settings = Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $Name)
     $shareable = @{}
-    foreach ($key in $settings.Keys) {
-        if ($perVM -notcontains $key) { $shareable[$key] = $settings[$key] }
+    foreach ($key in $Settings.Keys) {
+        if ($perVM -notcontains $key) { $shareable[$key] = $Settings[$key] }
     }
     return $shareable
 }
@@ -431,7 +449,7 @@ function Sync-VMProfile {
     # Writes nothing unless a setting was missing or one LazyVM no longer uses is still there (#273).
     $null = Update-VMProfile -Root $root -Name $name -Change $missing -Reason 'brought up to date with the shared template'
 
-    $templatePath = Join-Path -Path (Split-Path -Path $path -Parent) -ChildPath $script:ProfileTemplateFileName
+    $templatePath = Get-VMProfileTemplatePath -Root $root -Name $name
     if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) {
         Copy-Item -LiteralPath $path -Destination $templatePath
         Write-LogEntry "Kept a copy of the configuration this VM is built from: $templatePath" 'INFO'

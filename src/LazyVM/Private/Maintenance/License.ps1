@@ -214,7 +214,8 @@ function Invoke-DailyMaintenance {
       the personal folders on the User disk, turns BitLocker on for C: and
       the persistent disks, copies the User disk when it changed, records
       the guest's tooling, environment, firewall rules, scheduled tasks, SQL
-      logins and Agent jobs, and application settings, checks and backs up
+      logins and Agent jobs, and application settings, saves the latest
+      configuration as the config template <VM>-latest, checks and backs up
       the databases, asks the Store to update its apps, sets up Sysmon,
       keeps automatic sign-in on, applies the Visual Studio settings when a build could not, upgrades
       the winget packages, installs Windows updates, then does
@@ -261,6 +262,10 @@ function Invoke-DailyMaintenance {
     catch { Write-LogError 'SQL logins, settings and Agent check failed (non-fatal)' $_ }
     try { $null = Update-GuestAppSettingRecord -VM $VM }
     catch { Write-LogError 'Application settings check failed (non-fatal)' $_ }
+
+    # The VM's latest configuration saved as the config template <VM>-latest, only when it changed (#292).
+    try { $null = Update-AutomaticTemplate -VM $VM }
+    catch { Write-LogError 'Automatic config template failed (non-fatal)' $_ }
 
     # Every user database checked with DBCC CHECKDB and, when it passes, backed up: one good backup of each (#133).
     try { $null = Backup-GuestUserDatabase -VM $VM }

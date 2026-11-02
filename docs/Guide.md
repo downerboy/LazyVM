@@ -30,7 +30,7 @@ The VM runs Windows 11 Enterprise Evaluation, which expires after 90 days. LazyV
 
 - **Build.** Create the VM and install Windows unattended. Then install everything in the VM's tooling list (Visual Studio, SSMS, SQL Server, winget packages) with no input from you.
 - **Configure.** Attach and prepare the SQL data disk, the Dev Drive and the User disk, encrypt them and `C:` with BitLocker, and relocate databases onto the data disk.
-- **Maintain.** Every night, record what changed in the VM (tools you added or removed, taking a checkpoint first so you can go back, and your environment, firewall rules, scheduled tasks, SQL logins and application settings), back up the databases, and keep Windows, winget packages, Store apps and Sysmon up to date. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
+- **Maintain.** Every night, record what changed in the VM (tools you added or removed, taking a checkpoint first so you can go back, and your environment, firewall rules, scheduled tasks, SQL logins and application settings) and save the VM's latest configuration as a config template, back up the databases, and keep Windows, winget packages, Store apps and Sysmon up to date. Then check the license. Extend it when possible, and rebuild and restore when it cannot be extended any further.
 
 ### What survives a rebuild
 
@@ -409,6 +409,7 @@ D:\DevVM\
     Config\         LazyVM.Settings.json and the schema
     ISO\            Win11Ent_Eval.iso
     Installers\     the SQL Server ISO
+    Templates\      your config templates, and DevBox-latest.json
   DevBox\
     Config\         VM.json, VM.Template.json, History\
     Virtual Machines\
@@ -425,8 +426,9 @@ D:\DevVM\
 | `D:\DevVM\Shared\Config` | The shared template `LazyVM.Settings.json`, used to create new VMs, and the schema beside it. |
 | `D:\DevVM\Shared\ISO` | The Windows installation ISO. |
 | `D:\DevVM\Shared\Installers` | The SQL Server ISO. |
+| `D:\DevVM\Shared\Templates` | Your own config templates, and the one maintenance keeps for each VM, `<VM>-latest.json` ([The template that follows each VM](#the-template-that-follows-each-vm)). |
 | `D:\DevVM\DevBox` | Everything that belongs to the VM DevBox. Removing the VM deletes this folder. |
-| `D:\DevVM\DevBox\Config` | The VM's configuration (`VM.json`), which includes its tooling list, the one it was first built from (`VM.Template.json`), and `History`: the three latest versions of `VM.json`, plus any older one a tooling restore point still needs. |
+| `D:\DevVM\DevBox\Config` | The VM's configuration (`VM.json`), which includes its tooling list, the one it was first built from (`VM.Template.json`), and `History`: the first version of `VM.json`, the one the VM was created with, the three latest versions, and any older one a tooling restore point still needs. |
 | `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
 | `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
 | `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive, the 20 GB User disk and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk, the Dev Drive and the User disk persist across rebuilds: they carry the databases and their backups, your working source, and your personal folders. |
@@ -563,7 +565,7 @@ In a VM's `VM.json`, the first line is `"$schema": "../../Shared/Config/LazyVM.S
 LazyVM keeps `VM.json` describing the VM as it is, so you never have to:
 
 - Before every build, maintenance run and rebuild, any setting `VM.json` lacks is filled in from the shared template. That covers a VM created before `VM.json` held every setting, and a setting added by a newer LazyVM. The log says which.
-- Every time LazyVM changes `VM.json`, the version it writes is kept in `<Name>\Config\History\VM-<date>-<time>.json`, so you can see what changed and go back. The three latest versions are kept, and any older one a tooling restore point still needs ([section 9](#9-tooling-and-going-back)).
+- Every time LazyVM changes `VM.json`, the version it writes is kept in `<Name>\Config\History\VM-<date>-<time>.json`, so you can see what changed and go back. The first version, the one the VM was created with, is always kept; so are the three latest versions, and any older one a tooling restore point still needs ([section 9](#9-tooling-and-going-back)). For a VM created before LazyVM kept the first version, it is the oldest version the VM still had then; `VM.Template.json` ([below](#what-the-vm-was-built-from)) is the configuration it was first built from.
 - A `VM.json` that cannot be read is never written over. The run uses the last copy that loaded cleanly and logs the problem.
 - It records which disk inside the VM is the SQL data disk, which is the Dev Drive and which is the User disk (see below).
 
@@ -796,7 +798,7 @@ A config template is a named starting point for a new VM. The new VM starts from
 
 LazyVM looks for templates in two places:
 - the module's `Data\Templates` folder, for the built-in ones;
-- `Shared\Templates` in the LazyVM folder, for your own.
+- `Shared\Templates` in the LazyVM folder, for your own and the `<VM>-latest` one maintenance keeps for each VM ([The template that follows each VM](#the-template-that-follows-each-vm)).
 
 Each template is a JSON file with a `Name`, which is what `-ConfigTemplate` takes (not the file name), and `Settings`, which lists only the settings it changes, like `LazyVM.Settings.json`:
 
@@ -834,6 +836,21 @@ Build-LazyVM -Name Office2 -ConfigTemplate Office
 `Export-LazyVMTemplate` writes the VM's `VM.json`, tooling list included, to `Shared\Templates\<TemplateName>.json`, with `Name` set to `-TemplateName` (the VM's name if you leave it out). Like `New-LazyVM -From`, it leaves out the settings that must differ between VMs. Press Tab after `-Name` to list the VMs. A name another template already has, built-in or your own, is refused, and an existing file is never written over.
 
 The difference from `-From`: `-From` copies a VM once and saves nothing, while the template stays and appears after `-ConfigTemplate` for as many VMs as you like. It does not follow the VM afterwards; export again under a new name to save a newer version. To change or remove a template, edit or delete its file.
+
+### The template that follows each VM
+
+You do not have to export a VM to build from its latest configuration. Each night, after maintenance has recorded what changed in the VM, it saves the VM's configuration as the config template `<VM>-latest`, in `Shared\Templates\<VM>-latest.json`:
+
+```powershell
+Build-LazyVM -Name DevBox2 -ConfigTemplate DevBox-latest
+```
+
+- It is written only when the configuration changed: the first time once it differs from the one the VM was first built from (`VM.Template.json`), then whenever it differs from the template. A night with no change leaves the file alone.
+- Like `Export-LazyVMTemplate`, it leaves out the settings that must differ between VMs and what LazyVM recorded inside the VM.
+- It has `"Automatic": true`, which marks it as the one LazyVM keeps up to date, so a change you make to it is replaced the next time the VM's configuration changes. To keep a version, export it under another name, or remove the `"Automatic"` line: LazyVM then leaves that file alone.
+- A template of yours is never written over. If one of yours is named `<VM>-latest`, or is in the file `<VM>-latest.json`, without `"Automatic": true`, LazyVM leaves it as it is and the log says so each night; rename or move yours to let LazyVM keep `<VM>-latest`.
+- Removing a VM leaves its `<VM>-latest` template, so you can still build from it; delete the file when you no longer want it.
+- If saving it fails, the log says why and the rest of maintenance carries on.
 
 Whichever way a VM starts, anything you install in it afterwards is added to its own tooling list by maintenance.
 

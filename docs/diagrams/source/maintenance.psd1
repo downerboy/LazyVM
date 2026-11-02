@@ -33,7 +33,7 @@
         @{
             Function = 'Invoke-Maintenance'
             Area     = 'Maintenance'
-            Note     = 'steps 4-23 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
+            Note     = 'steps 4-26 are its calls; while the build is still in progress (a resume point, or no VM yet) it logs that and does nothing that night'
             Includes = @('Test-BuildInProgress', 'Get-ResumePhase')
             Reads    = @(
                 @{ Label = 'build in progress'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Resume.json') }
@@ -52,7 +52,7 @@
             Function = 'Invoke-DailyMaintenance'
             Area     = 'Maintenance'
             Caller   = 'Invoke-Maintenance'
-            Note     = 'steps 6-22 are its calls; a step that fails is logged and the rest still run'
+            Note     = 'steps 6-25 are its calls; a step that fails is logged and the rest still run'
         }
         @{
             Function = 'Expand-GuestSystemDrive'
@@ -115,6 +115,18 @@
                 @{ Label = 'records, only on a change'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json  GuestEnvironment, GuestFirewallRules,', 'GuestScheduledTasks, GuestSql, GuestAppSettings') }
                 @{ Label = 'secret values'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\') }
             )
+        }
+        @{
+            Function = 'Update-AutomaticTemplate'
+            Area     = 'Settings'
+            Caller   = 'Invoke-DailyMaintenance'
+            Note     = 'saves the latest configuration as the config template <VM>-latest, only when it changed; one of yours with that name is left alone'
+            Includes = @('Export-VMTemplate')
+            Reads    = @(
+                @{ Label = 'latest and first configuration'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json', 'VM.Template.json') }
+                @{ Label = 'existing templates'; Kind = 'file'; Store = 'Config templates'; Items = @('Data\Templates\*.json', 'Shared\Templates\*.json') }
+            )
+            Writes   = @(@{ Label = 'automatic template, only on a change'; Kind = 'file'; Store = 'Shared\Templates\'; Items = @('<VM>-latest.json') })
         }
         @{
             Function = 'Backup-GuestUserDatabase'
