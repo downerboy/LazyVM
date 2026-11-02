@@ -14,7 +14,7 @@ LazyVM uses [GitHub Flow](https://docs.github.com/en/get-started/using-github/gi
    ./Invoke-AnalyzerAndTest.ps1
    ```
 
-   To check and also install what you built, double-click `Install-FromRepository.cmd`, or run `./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out` as administrator.
+   To check and also install what you built, double-click `Install-FromRepository.cmd`, or run `./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out`. Either installs LazyVM for you only, in your Documents\PowerShell\Modules.
 
    If the change adds, removes or reorders what a command calls, update that command's diagram source in `docs/diagrams/source` and run `./Update-Diagram.ps1`; the tests fail until the diagrams match the code. Update the [guide](docs/Guide.md), the [use cases](docs/UseCases.md) and the command's own help in the same pull request.
 
