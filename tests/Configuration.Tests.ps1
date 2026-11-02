@@ -70,6 +70,15 @@ BeforeAll {
 }
 
 Describe 'The settings schema' {
+    It 'has none of the settings LazyVM no longer uses (#273)' {
+        InModuleScope $module {
+            $schema = Get-SettingsSchema
+            foreach ($name in $script:RetiredSettingNames) {
+                $schema.properties.Contains($name) | Should -BeFalse -Because "'$name' is retired"
+            }
+        }
+    }
+
     It 'has a default (or a file holding it) and a description for every setting' {
         $schema = InModuleScope $module { Get-SettingsSchema }
 
@@ -188,8 +197,8 @@ Describe 'The settings schema' {
     It 'gives a fresh copy each time, so changing one cannot change the defaults' {
         InModuleScope $module {
             $first = Get-DefaultSetting
-            $first.GuestProjectPaths[0] = 'changed'
-            (Get-DefaultSetting).GuestProjectPaths[0] | Should -Not -Be 'changed'
+            $first.GuestRemoveApps[0] = 'changed'
+            (Get-DefaultSetting).GuestRemoveApps[0] | Should -Not -Be 'changed'
         }
     }
 }
@@ -225,12 +234,12 @@ Describe 'Read-SettingsFile' {
     }
 
     It 'accepts a single value where a list belongs, as a one-item list' {
-        $path = New-TestFile -Text '{ "ProjectExcludeDirs": "bin" }'
+        $path = New-TestFile -Text '{ "GuestRemoveApps": "Microsoft.BingNews" }'
 
         $values = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path }
 
-        , $values.ProjectExcludeDirs | Should -BeOfType [System.Collections.IList]
-        $values.ProjectExcludeDirs | Should -Be @('bin')
+        , $values.GuestRemoveApps | Should -BeOfType [System.Collections.IList]
+        $values.GuestRemoveApps | Should -Be @('Microsoft.BingNews')
     }
 
     It 'keeps a one-item list a list' {
@@ -256,7 +265,7 @@ Describe 'Read-SettingsFile' {
         @{ Case = 'the wrong kind of value'; Text = '{ "vCPU": "lots" }'; Message = "*'vCPU' should be a whole number, but is text.*" }
         @{ Case = 'a number out of range'; Text = '{ "vCPU": 0 }'; Message = "*'vCPU'*" }
         @{ Case = 'text that does not fit its pattern'; Text = '{ "MaintenanceTime": "2am" }'; Message = "*'MaintenanceTime'*" }
-        @{ Case = 'list items of the wrong kind'; Text = '{ "ProjectExcludeDirs": [ 1 ] }'; Message = "*'ProjectExcludeDirs, item 1' should be text, but is a whole number.*" }
+        @{ Case = 'list items of the wrong kind'; Text = '{ "GuestRemoveApps": [ 1 ] }'; Message = "*'GuestRemoveApps, item 1' should be text, but is a whole number.*" }
         @{ Case = 'an unknown field inside a list item'; Text = '{ "AppSettings": [ { "Name": "A", "RegistryKey": "HKCU\\A", "Extra": 1 } ] }'; Message = "*'AppSettings, item 1, Extra' is not allowed here.*" }
         @{ Case = 'a host path that is neither relative nor full'; Text = '{ "DiskDir": "D:VMs" }'; Message = "*'DiskDir'*" }
         @{ Case = 'JSON that does not parse'; Text = '{ "vCPU": 4 "UseDevDrive": true }'; Message = '*is not valid JSON*' }
@@ -277,10 +286,18 @@ Describe 'Read-SettingsFile' {
 
     It 'reports a problem inside a list together with a top-level one' {
         # PowerShell 7.6's Test-Json leaves out problems inside list items.
-        $path = New-TestFile -Text '{ "vCPU": "lots", "ProjectExcludeDirs": [ "bin", 2 ] }'
+        $path = New-TestFile -Text '{ "vCPU": "lots", "GuestRemoveApps": [ "Microsoft.BingNews", 2 ] }'
 
         { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } |
-            Should -Throw -ExpectedMessage "*has 2 problem(s)*'ProjectExcludeDirs, item 2' should be text*"
+            Should -Throw -ExpectedMessage "*has 2 problem(s)*'GuestRemoveApps, item 2' should be text*"
+    }
+
+    It 'leaves out the settings LazyVM no longer uses, so a file that still has them loads (#273)' {
+        $path = New-TestFile -Text '{ "vCPU": 6, "GuestProjectPaths": [ "x" ], "projectexcludedirs": [ "bin" ], "MaxProjectCaptureGB": 20, "GuestRestoreRoot": "C:\\src" }'
+
+        $values = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path }
+
+        @($values.Keys) | Should -BeExactly @('vCPU')
     }
 }
 
@@ -1224,6 +1241,18 @@ Describe 'Sync-VMProfile' {
         $vmProfile.LogFile | Should -Be '{VM}\Logs\{VM}.log'
         $result = InModuleScope $module -Parameters @{ Root = $root } { param($Root) Read-VMSetting -Root $Root }
         $result.MissingKeys | Should -BeNullOrEmpty
+    }
+
+    It 'removes the settings LazyVM no longer uses from the profile, keeping the earlier version (#273)' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2, "GuestProjectPaths": [ "x" ], "MaxProjectCaptureGB": 20 }' }
+
+        Invoke-Sync -Root $root
+
+        $vmProfile = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')
+        $vmProfile.vCPU | Should -Be 2
+        $vmProfile.Contains('GuestProjectPaths') | Should -BeFalse
+        $vmProfile.Contains('MaxProjectCaptureGB') | Should -BeFalse
+        @(Get-ChildItem -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/History') -Filter 'VM-*.json').Count | Should -BeGreaterThan 0
     }
 
     It 'is no longer affected by the shared template once complete' {

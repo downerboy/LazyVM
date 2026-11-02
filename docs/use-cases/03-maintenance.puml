@@ -10,7 +10,13 @@ rectangle "LazyVM" {
   usecase "Run daily maintenance\n<size:10>Invoke-LazyVMMaintenance</size>" as Maint
   usecase "Start the VM" as Start
   usecase "Extend C: to the whole disk" as ExpandC
+  usecase "Look after the User disk\nand BitLocker" as Disks
+  usecase "Copy the User disk" as CopyUser
   usecase "Record tooling changes" as Record
+  usecase "Record the guest's settings\n<size:10>environment, firewall, tasks,</size>\n<size:10>SQL logins, app settings</size>" as RecordGuest
+  usecase "Check and back up\nthe databases" as Backup
+  usecase "Keep the guest up to date\n<size:10>Store apps, Sysmon, winget,</size>\n<size:10>Windows updates</size>" as Update
+  usecase "Apply Visual Studio settings" as VsSettings
   usecase "Take a tooling checkpoint" as Checkpoint
   usecase "Check the evaluation license" as Lic
   usecase "Capture state" as Capture
@@ -28,11 +34,17 @@ Admin --> Reg
 Reg --> Sched
 
 Maint ..> ExpandC : <<include>>
+Maint ..> Disks : <<include>>
 Maint ..> Record : <<include>>
+Maint ..> RecordGuest : <<include>>
+Maint ..> Backup : <<include>>
+Maint ..> Update : <<include>>
 Maint ..> Lic : <<include>>
 Start ..> Maint : <<extend>>\n[VM is off]
 Checkpoint ..> Record : <<extend>>\n[tooling changed]
-Capture ..> Maint : <<extend>>\n[within RebuildThresholdDays]
+CopyUser ..> Maint : <<extend>>\n[User disk files changed]
+VsSettings ..> Maint : <<extend>>\n[settings still pending]
+Capture ..> Maint : <<extend>>\n[within RebuildThresholdDays,\nor certificates or VS\nsettings changed]
 Rearm ..> Maint : <<extend>>\n[rearms left]
 Rebuild ..> Maint : <<extend>>\n[no rearms left\nor rearm failed]
 Build ..> Maint : <<extend>>\n[VM does not exist]
@@ -40,7 +52,13 @@ Build ..> Maint : <<extend>>\n[VM does not exist]
 Start --> HV
 Checkpoint --> HV
 ExpandC --> Guest
+Disks --> Guest
+CopyUser --> HV
 Record --> Guest
+RecordGuest --> Guest
+Backup --> Guest
+Update --> Guest
+VsSettings --> Guest
 Lic --> Guest
 Rearm --> Guest
 Capture --> Guest

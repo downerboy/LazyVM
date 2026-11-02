@@ -25,13 +25,17 @@
          on by itself afterwards.
       3  The folders under the LazyVM folder
       4  The Windows ISO checked and the SQL Server ISO downloaded
-      5  The SQL data disk and the Dev Drive disk (never overwritten)
+      5  The SQL data disk, the Dev Drive and the User disk (never
+         overwritten)
       6  The VM: Generation 2, Secure Boot, TPM, dynamic memory, with an
          answer-file disc so Windows installs without any input
-      7  Windows, then everything in the VM's tooling list: Visual Studio and
-         SSMS with their workloads and extensions, SQL Server, and winget
-         packages
-      8  SQL data moved to the data disk, Visual Studio settings restored
+      7  Windows; the disks attached and prepared, BitLocker, Windows
+         appearance and Sysmon; then everything in the VM's tooling list:
+         Visual Studio and SSMS with their workloads and extensions, SQL
+         Server, winget packages and official installers; then Windows
+         updates
+      8  SQL data moved to the data disk, Visual Studio's first launch
+         answered and its settings restored
 
     Progress is shown as it goes and written to the VM's log. With -WhatIf,
     says what would be built and changes nothing, not even the first-use

@@ -9,10 +9,10 @@
     its Windows disk by renaming it, builds a fresh VM from the profile and
     tooling list, puts the captured state
     back and checks the result. The old Windows disk is deleted only once the
-    new VM has passed the check; if anything goes wrong it is kept, and the
-    log says how to go back to it.
+    new VM was built without problems and has passed the check; if anything
+    goes wrong it is kept, and the log says how to go back to it.
 
-    The SQL data disk and the Dev Drive are never touched.
+    The SQL data disk, the Dev Drive and the User disk are never touched.
 
     The daily maintenance does this by itself when the Windows evaluation is
     about to expire and no rearms are left.

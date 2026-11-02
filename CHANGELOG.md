@@ -1,5 +1,34 @@
 # Changelog
 
+## [5.2.2](https://github.com/downerboy/LazyVM/compare/v5.2.1...v5.2.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* wait for the guest to settle after the build's Windows Update restart ([#277](https://github.com/downerboy/LazyVM/issues/277)) ([eafd0d5](https://github.com/downerboy/LazyVM/commit/eafd0d5362ff0564bd52f1bf2b7b0416b6ecf4cb))
+
+## [5.2.1](https://github.com/downerboy/LazyVM/compare/v5.2.0...v5.2.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* delete the unused project-capture settings ([#274](https://github.com/downerboy/LazyVM/issues/274)) ([9a44f95](https://github.com/downerboy/LazyVM/commit/9a44f95589300c895e4f0374fe2b60f49a09f351))
+
+## [5.2.0](https://github.com/downerboy/LazyVM/compare/v5.1.1...v5.2.0) (2026-11-01)
+
+
+### Features
+
+* answer Visual Studio's first launch during the build with UI Automation ([#269](https://github.com/downerboy/LazyVM/issues/269)) ([fff8370](https://github.com/downerboy/LazyVM/commit/fff8370998404531b0de66969cb164354561aeb3))
+* retry the Visual Studio settings import nightly until it succeeds ([#267](https://github.com/downerboy/LazyVM/issues/267)) ([8ff1b99](https://github.com/downerboy/LazyVM/commit/8ff1b99ccf4841e9f753f4873c04010940ba78fa))
+
+## [5.1.1](https://github.com/downerboy/LazyVM/compare/v5.1.0...v5.1.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* stop the Visual Studio settings restore from hanging on devenv ([#263](https://github.com/downerboy/LazyVM/issues/263)) ([fcad7bb](https://github.com/downerboy/LazyVM/commit/fcad7bb29d5e2309e25716485b39c9011e02a6ee))
+
 ## [5.1.0](https://github.com/downerboy/LazyVM/compare/v5.0.1...v5.1.0) (2026-11-01)
 
 

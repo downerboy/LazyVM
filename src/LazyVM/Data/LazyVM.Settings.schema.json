@@ -896,52 +896,6 @@
       "default": true,
       "description": "Delete the old Windows disk once a rebuilt VM has been checked. false keeps every generation, which adds up fast."
     },
-    "GuestProjectPaths": {
-      "type": "array",
-      "default": [
-        "%USERPROFILE%\\source\\repos",
-        "%USERPROFILE%\\Documents",
-        "%USERPROFILE%\\Desktop",
-        "%USERPROFILE%\\.ssh"
-      ],
-      "description": "No longer used: Documents, Desktop, Downloads, .ssh and source\\repos are on the User disk, which a rebuild never touches (#137). Kept so older VM.json files still load; it can be deleted.",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "uniqueItems": true
-    },
-    "ProjectExcludeDirs": {
-      "type": "array",
-      "default": [
-        "bin",
-        "obj",
-        "node_modules",
-        "packages",
-        ".vs",
-        "TestResults",
-        ".git"
-      ],
-      "description": "No longer used, since GuestProjectPaths is not captured. Kept so older VM.json files still load; it can be deleted.",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "uniqueItems": true
-    },
-    "MaxProjectCaptureGB": {
-      "type": "integer",
-      "default": 20,
-      "description": "No longer used, since GuestProjectPaths is not captured. Kept so older VM.json files still load; it can be deleted.",
-      "minimum": 1,
-      "maximum": 1024
-    },
-    "GuestRestoreRoot": {
-      "type": "string",
-      "default": "%USERPROFILE%\\source",
-      "description": "No longer used, since GuestProjectPaths is not captured. Kept so older VM.json files still load; it can be deleted.",
-      "minLength": 1
-    },
     "ToolingCheckpointsToKeep": {
       "type": "integer",
       "default": 3,

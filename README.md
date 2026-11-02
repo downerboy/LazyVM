@@ -1,30 +1,30 @@
-### ALPHA - A masochistic exploration into Vibe Coding the wrong way.
-
-*Vibe coding is proving to be an exercise in herding cats. The code starts as spaghetti, gets refactored into gumbo, and eventually I realize some of the spaghetti never got served.*
-
-*Copilot was let go.  Both Copilot and Claude are a wee bit way too creative, but Claude's work output runs and tends to be aligned with the specs following the patterns and practices it has been provided.  Copilot's behavior and work output was discerning and I am concerned Copilot may have a substance use disorder.
-
 # LazyVM
 
-Currently this is a tool for setting up educational Visual Studio dev environment VMs on Windows using Hyper-V.  I have used it for myself.  Many of its behaviors are being addressed. 
+> **Alpha.** LazyVM works, and I use it myself, but much of its behaviour is still being worked on.
 
-If I master herding cats this will be a tool for deploying, maintainin and destroying Hyper-V virtual machine in Windows. VM templated configuration will be provided with this tool, changes to made to harnessed VMs created by this tool will create matching config templates in a qausi-green manner, to migitage template prolferation only the latest VM changes will be written to the corresponding template.  The goal is persist all environment changes, including changes to the VM's UI eg. dark mode, text size, Explorer.exe settings, tooling settings and etc with the exception of sensitive information like credentials, on the VM's configuration file.  Hopefully, this will support VMs that are not educational dev environments coupled to Windows Enterprise evaluation, Visual Sttudio, MsSQL and other tooling.
+LazyVM is a PowerShell module that builds, looks after and disposes of Hyper-V virtual machines on a Windows host, unattended. Today it makes development VMs: Windows 11 Enterprise Evaluation with Visual Studio, SQL Server Standard Developer and whatever other tools you install, with the 90-day evaluation handled for you. Windows lets an evaluation be rearmed a limited number of times, each for another 90 days. LazyVM uses every rearm Windows allows, then rebuilds the VM and puts your work back.
 
-Entities, like a independent contracdtors, will benefit having free reliable tooling that is intuitive, effortless and reliable for creating and maintaining VMs eg a bookkeeper needing to a dedicated isolated work environment for each customer.. The intention is lightening the load for disaster recovery, ethical a legally mandated  requiredments, e.g. HITECH/HIPAA requirements for health provider's business associate.
+### Where it is heading
 
-What it needs
+The aim is free, reliable tooling that makes creating, maintaining and disposing of Hyper-V VMs effortless, and not only for development:
 
-` A cert for signing code and whole lot more.
+- **Everything you change is kept.** Tools, settings and the VM's look and feel (dark mode, text size, File Explorer options) are recorded in the VM's configuration, so a rebuilt VM comes back as you left it. Credentials and other secrets are the exception: they are never written to the configuration.
+- **Templates that keep up.** Changes made in a VM can update a matching config template, keeping only the latest version, so templates do not multiply.
+- **Beyond developer VMs.** An independent contractor, such as a bookkeeper, could keep an isolated VM for each client. That lightens disaster recovery, and helps meet ethical and legal obligations such as HIPAA and HITECH for a health provider's business associates.
 
-## Currently What is it:
+Still needed: a code-signing certificate, and a good deal more.
 
--A PowerShell module that builds and looks after Hyper-V development VMs on a Windows host, unattended: Windows 11 Enterprise Evaluation, Visual Studio, SQL Server Standard Developer and whatever other tools you install, with the 90-day evaluation handled for you.  The reset flag has a lifespan of being flipped three times.  <code>4 * 90 = 360</code>
+### How it is being built
+
+*An experiment in vibe coding, done the hard way. Herding the AI is herding cats: the code starts as spaghetti, gets refactored into gumbo, and some of the spaghetti never gets served. Copilot's output proved too erratic, so it was let go. Claude can be a little too creative too, but given the project's patterns and practices, its code runs and follows the specs.*
 
 ## What it does
 
-- **Builds a VM with no input from you.** It creates the VM, installs Windows from an answer file, then installs everything in the VM's tooling list: Visual Studio and SSMS with their workloads and Marketplace extensions, SQL Server, and winget packages.
+- **Builds a VM with no input from you.** It creates the VM, installs Windows from an answer file, then installs everything in the VM's tooling list: Visual Studio and SSMS with their workloads and Marketplace extensions, SQL Server, winget packages and official installers.
 - **Keeps the VM's tooling list current.** Every day it records what you have added or removed in the VM, taking a Hyper-V checkpoint first, so any recorded version can be returned to.
 - **Makes the 90-day evaluation a non-event.** It watches the license and rearms Windows while it can. When it can't, it captures your state, rebuilds the VM and puts everything back: databases, logins, Visual Studio settings, certificates, environment and application settings.
+- **Keeps the VM up to date.** Every night it installs Windows updates, upgrades winget packages, asks the Store to update its apps and keeps Sysmon set up, restarting the VM only when nobody is using it.
+- **Records what you change.** Your environment, firewall rules, scheduled tasks, SQL logins and application settings are recorded in the VM's configuration whenever they change, and the databases are checked and backed up every night.
 - **Keeps your source and files safe across rebuilds.** Source lives on a Dev Drive, and Documents, Desktop, Downloads and `.ssh` on a User disk, whose disks a rebuild never touches.
 - **Runs several VMs on one host**, each with its own tools, disks, schedule and restore points.
 - **Never stops over a typo.** If a settings file breaks, the scheduled maintenance uses the last version that worked and says so in the log.
@@ -143,10 +143,13 @@ tests/                             Pester tests
 Invoke-AnalyzerAndTest.ps1         check a change: assemble, analyze, test
 Install-FromRepository.cmd         double-click: check, then install if all passed
 New-ReleasePackage.ps1             make the release zip
-build/                             the steps both use
+Update-Diagram.ps1                 redraw docs/Diagrams.md and its SVGs from docs/diagrams/source
+build/                             the steps these use
 ```
 
 `./Invoke-AnalyzerAndTest.ps1` assembles the module into `out\`, runs PSScriptAnalyzer (any finding fails) and runs the Pester tests. GitHub Actions runs the same on Windows for every push.
+
+Each flow diagram in `docs/Diagrams.md` is drawn from one source, `docs/diagrams/source/<id>.psd1`. When a command's calls change, change its source and run `./Update-Diagram.ps1`. The tests fail while a diagram names a function that no longer exists, leaves out a call the code it covers makes, or has not been redrawn, so the diagrams cannot drift from the code unnoticed.
 
 ## License
 

@@ -171,7 +171,25 @@ Describe 'Install-GuestSoftware Windows updates (#234)' {
         Mock -ModuleName $module Get-BuildTooling { $emptyTooling }
         Mock -ModuleName $module Wait-GuestNetwork { $true }
         Mock -ModuleName $module Write-ToolingReinstallReport { $true }
-        Mock -ModuleName $module Update-GuestWindows { }
+        Mock -ModuleName $module Update-GuestWindows { $false }
+        Mock -ModuleName $module Wait-GuestSettled { }
+    }
+
+    It 'waits for the guest to settle after it restarted it for the updates, before going on (#276)' {
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Update-GuestWindows { $script:order.Add('updates'); $true }
+        Mock -ModuleName $module Wait-GuestSettled { $script:order.Add('settle') }
+        Mock -ModuleName $module Initialize-VMTooling { $script:order.Add('tooling record') }
+
+        $null = InModuleScope $module -Parameters @{ VM = $buildVM } { param($VM) Install-GuestSoftware -VM $VM }
+
+        $script:order -join ',' | Should -Be 'updates,settle,tooling record'
+    }
+
+    It 'does not wait for the guest to settle when the updates did not restart it (#276)' {
+        $null = InModuleScope $module -Parameters @{ VM = $buildVM } { param($VM) Install-GuestSoftware -VM $VM }
+
+        Should -Invoke -ModuleName $module Wait-GuestSettled -Times 0 -Exactly
     }
 
     It 'installs Windows updates after the tooling, and may restart the new VM for them' {

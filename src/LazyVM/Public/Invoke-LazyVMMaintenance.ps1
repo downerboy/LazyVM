@@ -4,10 +4,19 @@
     Runs a VM's daily maintenance: the scheduled task's command.
 
     .DESCRIPTION
-    Records in VM.json any hardware change made to the VM in Hyper-V and
-    any tooling change in the VM (see Save-LazyVMTooling), then checks the
-    Windows evaluation. Until it is within RebuildThresholdDays of
-    expiring, nothing more happens. Then the VM's state is captured and
+    Records in VM.json any hardware change made to the VM in Hyper-V. Then,
+    in the VM: extends C: into new space, sees to the User disk and
+    BitLocker, copies the User disk when it changed, records any tooling
+    change (see Save-LazyVMTooling) and the environment, firewall rules,
+    scheduled tasks, SQL logins and application settings, checks and backs
+    up the databases, asks the Store to update its apps, keeps Sysmon set
+    up, applies the Visual Studio settings if a build could not, upgrades
+    the winget packages and installs Windows updates. A step that fails is
+    logged and the rest still run.
+
+    Then it checks the Windows evaluation. Until it is within
+    RebuildThresholdDays of expiring, nothing more happens, except a
+    capture when the certificates or Visual Studio settings changed. Then the VM's state is captured and
     Windows rearmed, which gives another 90 days for the price of a restart.
     Only when no rearms are left is the VM rebuilt (see
     Invoke-LazyVMRebuild). A VM that does not exist yet is built.

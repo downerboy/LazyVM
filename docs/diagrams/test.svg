@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 660" width="1030" height="660" role="img" aria-labelledby="t-test">
+<title id="t-test">Check a VM end to end: calls in order, with data flowing in from the left and out to the right</title>
+<style>
+svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
+@media (prefers-color-scheme: dark){svg{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#5d6b78;--mod:#1d2733;--store:#2a2418;--cmd:#1b2537;--call:#6ea2ff;--data:#f2a93b;--on:#0d1117}}
+text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(--fg)}
+.bg{fill:var(--bg)}
+.cap{font:600 11px system-ui,"Segoe UI",sans-serif;letter-spacing:.12em;fill:var(--muted)}
+.bx-cmd rect{fill:var(--cmd);stroke:var(--fg);stroke-width:1.6}
+.bx-caller rect{fill:var(--cmd);stroke:var(--call);stroke-width:1.2;stroke-dasharray:3 3}
+.bx-mod rect{fill:var(--mod);stroke:var(--line);stroke-width:1.2}
+.bx-store rect{fill:var(--store);stroke:var(--data);stroke-width:1.2;stroke-dasharray:6 3}
+.st{font-size:10px;fill:var(--muted)}
+.nm{font-size:13px;font-weight:600}
+.div{stroke:var(--line)}
+.at{font-size:11.5px;fill:var(--muted)}
+.cl{fill:none;stroke:var(--call);stroke-width:2}
+.df{fill:none;stroke:var(--data);stroke-width:2;stroke-dasharray:7 4}
+.sn circle{fill:var(--call)} .sn text{font:600 10px system-ui,sans-serif;fill:var(--on)}
+.bd circle{fill:var(--data)} .bd text{font:600 9px system-ui,sans-serif;fill:var(--on)}
+.mk-c{fill:var(--call)} .mk-d{fill:var(--data)}
+</style>
+<defs>
+<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
+<marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1030" height="660"/>
+<text class="cap" x="20" y="16">INPUTS</text>
+<text class="cap" x="335" y="16">CALLS IN ORDER</text>
+<text class="cap" x="740" y="16">OUTPUTS</text>
+<path class="cl" d="M335,76 L305,76 L305,566"/>
+<path class="cl" d="M305,166 L335,166" marker-end="url(#ac)"/>
+<path class="df" d="M275,188 L335,188" marker-end="url(#ad)"/>
+<path class="df" d="M275,284 L335,284" marker-end="url(#ad)"/>
+<path class="df" d="M275,380 L335,380" marker-end="url(#ad)"/>
+<path class="df" d="M275,476 L335,476" marker-end="url(#ad)"/>
+<path class="df" d="M640,188 L740,188" marker-end="url(#ad)"/>
+<path class="cl" d="M305,566 L335,566" marker-end="url(#ac)"/>
+<path class="df" d="M640,588 L740,588" marker-end="url(#ad)"/>
+<g class="bd"><circle cx="293" cy="188" r="10"/><text x="293" y="191.5" text-anchor="middle">D1</text></g>
+<g class="bd"><circle cx="293" cy="284" r="10"/><text x="293" y="287.5" text-anchor="middle">D2</text></g>
+<g class="bd"><circle cx="293" cy="380" r="10"/><text x="293" y="383.5" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="293" cy="476" r="10"/><text x="293" y="479.5" text-anchor="middle">D4</text></g>
+<g class="bd"><circle cx="690" cy="188" r="10"/><text x="690" y="191.5" text-anchor="middle">D5</text></g>
+<g class="bd"><circle cx="690" cy="588" r="10"/><text x="690" y="591.5" text-anchor="middle">D6</text></g>
+<g class="bx-cmd"><rect x="335" y="34" width="305" height="84" rx="3"/>
+<text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
+<text class="nm" x="487.5" y="64" text-anchor="middle">Test-LazyVM</text>
+<line class="div" x1="335" y1="71" x2="640" y2="71"/>
+<text class="at" x="345" y="86">-Name &lt;VM&gt;</text>
+<text class="at" x="345" y="103">-ReportPath &lt;file&gt; (optional)</text>
+</g>
+<g class="bx-mod"><rect x="335" y="146" width="305" height="372" rx="3"/>
+<text class="st" x="500.5" y="160" text-anchor="middle">«Maintenance»</text>
+<text class="nm" x="500.5" y="176" text-anchor="middle">Get-LazyVMDiagnostic()</text>
+<line class="div" x1="335" y1="183" x2="640" y2="183"/>
+<g class="sn"><circle cx="351" cy="167" r="10"/><text x="351" y="171" text-anchor="middle">1</text></g>
+<text class="at" x="345" y="198">every check in order; one that cannot be</text>
+<text class="at" x="345" y="215">made is a FAIL and the rest still run</text>
+</g>
+<g class="bx-store"><rect x="20" y="146" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="160" text-anchor="middle">«settings»</text>
+<text class="nm" x="147.5" y="176" text-anchor="middle">VM context sources</text>
+<line class="div" x1="20" y1="183" x2="275" y2="183"/>
+<text class="at" x="30" y="198">HKLM:\SOFTWARE\LazyVM Root</text>
+<text class="at" x="30" y="215">&lt;VM&gt;\Config\VM.json</text>
+</g>
+<g class="bx-store"><rect x="20" y="242" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="256" text-anchor="middle">«file»</text>
+<text class="nm" x="147.5" y="272" text-anchor="middle">Shared\</text>
+<line class="div" x1="20" y1="279" x2="275" y2="279"/>
+<text class="at" x="30" y="294">ISO\Win11Ent_Eval.iso</text>
+<text class="at" x="30" y="311">Installers\SQLServer2025 ISO</text>
+</g>
+<g class="bx-store"><rect x="20" y="338" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="352" text-anchor="middle">«Hyper-V»</text>
+<text class="nm" x="147.5" y="368" text-anchor="middle">Hyper-V and Task Scheduler</text>
+<line class="div" x1="20" y1="375" x2="275" y2="375"/>
+<text class="at" x="30" y="390">VM &lt;VM&gt;</text>
+<text class="at" x="30" y="407">LazyVM-Maintain-&lt;VM&gt;</text>
+</g>
+<g class="bx-store"><rect x="20" y="434" width="255" height="84" rx="3"/>
+<text class="st" x="147.5" y="448" text-anchor="middle">«guest»</text>
+<text class="nm" x="147.5" y="464" text-anchor="middle">Running guest</text>
+<line class="div" x1="20" y1="471" x2="275" y2="471"/>
+<text class="at" x="30" y="486">PowerShell Direct, disks</text>
+<text class="at" x="30" y="503">automatic sign-in on or off</text>
+</g>
+<g class="bx-store"><rect x="740" y="146" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="160" text-anchor="middle">«output»</text>
+<text class="nm" x="875" y="176" text-anchor="middle">Pipeline</text>
+<line class="div" x1="740" y1="183" x2="1010" y2="183"/>
+<text class="at" x="750" y="198">Status, Area, Check, Detail</text>
+</g>
+<g class="bx-mod"><rect x="335" y="546" width="305" height="84" rx="3"/>
+<text class="st" x="500.5" y="560" text-anchor="middle">«PowerShell»</text>
+<text class="nm" x="500.5" y="576" text-anchor="middle">Set-Content()</text>
+<line class="div" x1="335" y1="583" x2="640" y2="583"/>
+<g class="sn"><circle cx="351" cy="567" r="10"/><text x="351" y="571" text-anchor="middle">2</text></g>
+<text class="at" x="345" y="598">only with -ReportPath: the same checks</text>
+<text class="at" x="345" y="615">as a text report</text>
+</g>
+<g class="bx-store"><rect x="740" y="546" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="560" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="576" text-anchor="middle">-ReportPath</text>
+<line class="div" x1="740" y1="583" x2="1010" y2="583"/>
+<text class="at" x="750" y="598">&lt;file&gt;</text>
+</g>
+</svg>

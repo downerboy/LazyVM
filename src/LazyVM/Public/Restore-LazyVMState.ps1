@@ -4,9 +4,10 @@ function Restore-LazyVMState {
     Puts a VM's captured state back into it.
 
     .DESCRIPTION
-    Applies the capture Save-LazyVMState made: databases, logins, Visual
-    Studio settings, the Windows environment, project folders and
-    application settings. A rebuild does this by itself; run it on its own
+    Applies the newest capture Save-LazyVMState made, and what VM.json
+    records: the Windows environment, firewall rules, scheduled tasks and
+    certificates; Visual Studio files and settings; SQL Server settings,
+    logins, databases and Agent jobs; and application settings. A rebuild does this by itself; run it on its own
     to bring a capture into a VM built some other way.
 
     Starts the VM if it is off.

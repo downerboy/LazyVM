@@ -35,6 +35,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Backup-GuestUserDatabase { 'stray' }
         Mock -ModuleName $module Start-GuestStoreAppUpdate { 'stray' }
         Mock -ModuleName $module Set-GuestSysmon { 'stray' }
+        Mock -ModuleName $module Update-GuestVisualStudioSetting { 'stray' }
         Mock -ModuleName $module Update-GuestWingetPackage { 'stray' }
         Mock -ModuleName $module Update-GuestWindows { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
@@ -166,6 +167,17 @@ Describe 'Invoke-Maintenance' {
 
         "$($result[0])" | Should -Be 'None'
         Should -Invoke -ModuleName $module Set-GuestSysmon -Times 1 -Exactly
+    }
+
+    It 'tries to apply the Visual Studio settings every day, and carries on when that fails (#266)' {
+        Mock -ModuleName $module Get-GuestLicenseStatus { [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+        Mock -ModuleName $module Update-GuestVisualStudioSetting { throw 'the guest stopped answering' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        Should -Invoke -ModuleName $module Update-GuestVisualStudioSetting -Times 1 -Exactly
+        Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly -ParameterFilter { $Context -like '*Visual Studio settings*(non-fatal)*' }
     }
 
     It 'captures the state when it changed and nothing else is due (#20)' {
