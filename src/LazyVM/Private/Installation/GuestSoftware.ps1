@@ -93,7 +93,8 @@ function Install-GuestSoftware {
         # After a restart the guest is left to settle first, as Windows may
         # restart again and automatic sign-in comes a while later (#276).
         try {
-            if (Update-GuestWindows -VM $VM -StartedByLazyVM) { Wait-GuestSettled -VM $VM }
+            $restarted = Update-GuestWindows -VM $VM -StartedByLazyVM
+            if ($restarted) { Wait-GuestSettled -VM $VM }
         }
         catch { Write-LogError 'Windows updates failed (non-fatal); maintenance tries again tonight' $_ }
     }

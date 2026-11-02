@@ -252,7 +252,7 @@ function Restart-GuestGracefully {
     $null = Wait-Until -Activity 'The guest restart' -Timeout ([timespan]::FromMinutes($VM.Settings.GuestWaitMinutes)) -Interval ([timespan]::FromSeconds(20)) -Condition {
         # Each try is a one-off PowerShell Direct call: the guest goes away
         # and comes back between tries, which a kept session would not survive.
-        try { $now = Invoke-Command -VMName $VM.Name -Credential $credential -ScriptBlock $script:ReadGuestBootTime -ErrorAction Stop }
+        try { $now = Invoke-GuestCheck -VM $VM -Credential $credential -ScriptBlock $script:ReadGuestBootTime }
         catch { return $false }
         return ($null -ne $now -and "$now" -ne "$bootTime")
     }
@@ -266,18 +266,22 @@ function Wait-GuestSettled {
       signs the guest account in only a while after it starts, so the guest
       answering once is not enough (#276). Settled is PowerShell Direct
       answering, the boot time the same as at the check before (so no
-      further restart), and the guest account signed in. It says what it
-      waits for each time that changes. Bounded by GuestWaitMinutes; when
-      the guest has not settled by then it warns and returns, and the steps
+      further restart), and the guest account signed in, unless automatic
+      sign-in is off in the guest, when nobody would sign in. Each check is
+      a one-off call (Invoke-GuestCheck), so the wait keeps to
+      GuestWaitMinutes; the kept session is reopened once at the end. It
+      says what it waits for each time that changes. When the guest has not
+      settled in time it warns, with the last error, and returns; the steps
       after it say what they could not do. It never throws, so the build
       never hangs or stops here.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
+    $credential = Assert-GuestCredential -VM $VM
     $minutes = $VM.Settings.GuestWaitMinutes
     $account = $VM.Runtime.GuestAdminUser
     Write-LogEntry "Waiting up to $minutes minutes for the guest to settle: no further restart, and '$account' signed in..." 'INFO'
-    $progress = @{ BootTime = $null; WaitingFor = '' }
+    $progress = @{ BootTime = $null; WaitingFor = ''; LastError = '' }
 
     # Logs what the wait is for when that changes, not on every check.
     $waitFor = {
@@ -288,13 +292,17 @@ function Wait-GuestSettled {
     $settled = Wait-Until -Activity 'The guest settling' -Timeout ([timespan]::FromMinutes($minutes)) -Interval ([timespan]::FromSeconds(30)) -State $progress -NoThrow -Condition {
         param($p)
         try {
-            $bootTime = "$(Invoke-GuestScript -VM $VM -Activity 'reading the boot time' -TimeoutMinutes 2 -ScriptBlock $script:ReadGuestBootTime)"
-            $signedIn = @(Get-GuestSignedInUser -VM $VM) -contains $account
+            $bootTime = "$(Invoke-GuestCheck -VM $VM -Credential $credential -ScriptBlock $script:ReadGuestBootTime)"
+            $signedIn = Test-GuestAccountSignedIn -VM $VM -Credential $credential
+            $autoSignIn = $signedIn -or (Test-GuestAutoSignIn -VM $VM -Credential $credential)
         }
         catch {
-            & $waitFor $p 'PowerShell Direct to answer (the guest is restarting)'
+            $p.LastError = $_.Exception.Message
+            & $waitFor $p 'PowerShell Direct to answer'
             return $false
         }
+        # An error from an earlier check says nothing about the guest now (#227).
+        $p.LastError = ''
 
         $sameBoot = $bootTime -eq $p.BootTime
         if ($p.BootTime -and -not $sameBoot) { Write-LogEntry "  The guest restarted again (boot time $bootTime)" 'INFO' }
@@ -302,6 +310,10 @@ function Wait-GuestSettled {
         if (-not $sameBoot) {
             & $waitFor $p 'the boot time to stay the same (no further restart)'
             return $false
+        }
+        if (-not $autoSignIn) {
+            Write-LogEntry "  automatic sign-in is off in the guest, so '$account' signing in is not waited for" 'INFO'
+            return $true
         }
         if (-not $signedIn) {
             & $waitFor $p "automatic sign-in of '$account'"
@@ -312,9 +324,20 @@ function Wait-GuestSettled {
 
     if ($settled) {
         Write-LogEntry 'The guest has settled' 'OK'
-        return
     }
-    Write-LogEntry "The guest did not settle within $minutes minutes (still waiting for $($progress.WaitingFor)) - carrying on; the steps that need it say so" 'WARN'
+    else {
+        $lastError = if ($progress.LastError) { "; last error: $($progress.LastError)" } else { '' }
+        Write-LogEntry "The guest did not settle within $minutes minutes (still waiting for $($progress.WaitingFor)$lastError) - carrying on; the steps that need it say so" 'WARN'
+    }
+
+    # The guest may have restarted under the kept session; the steps after this use it.
+    try {
+        Remove-GuestSession -VM $VM -KeepCredential
+        $null = Connect-Guest -VM $VM -Credential $credential
+    }
+    catch {
+        Write-LogEntry "Could not reopen the guest session after waiting for the guest to settle: $($_.Exception.Message) - the next guest step tries again" 'WARN'
+    }
 }
 
 function Stop-GuestGracefully {

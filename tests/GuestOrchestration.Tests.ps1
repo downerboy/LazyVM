@@ -72,49 +72,62 @@ Describe 'Restore-GuestSession' {
 Describe 'Invoke-GuestScript after a dropped session (#276)' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
-        Mock -ModuleName $module Restore-GuestSession { [pscustomobject]@{ State = 'Opened' } }
-        Mock -ModuleName $module Remove-GuestSession { }
+        $vm = InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) [VMContext]::new($Settings) }
+        $vm.Runtime.Session = [pscustomobject]@{ State = 'Opened' }
+        # Reopens the session as Restore-GuestSession does when the guest dropped it.
+        Mock -ModuleName $module Restore-GuestSession {
+            if ($VM.Runtime.Session.State -ne 'Opened') { $VM.Runtime.Session = [pscustomobject]@{ State = 'Opened' } }
+            $VM.Runtime.Session
+        }
         Mock -ModuleName $module Invoke-Command { [pscustomobject]@{ State = 'Completed'; ChildJobs = @() } } -RemoveParameterType Session
         Mock -ModuleName $module Wait-Job { $true } -RemoveParameterType Job
         Mock -ModuleName $module Remove-Job { } -RemoveParameterType Job
         $script:runs = 0
-        $dropped = [System.Management.Automation.Remoting.PSRemotingTransportException]::new('The Hyper-V socket target process has ended.')
-        $vm = InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) [VMContext]::new($Settings) }
+        # The guest drops the session: it breaks, and the call fails.
+        $drop = { $vm.Runtime.Session.State = 'Broken'; throw 'The Hyper-V socket target process has ended.' }
     }
 
-    It 'reconnects and runs the script once more when the call allows it' {
-        Mock -ModuleName $module Receive-Job { $script:runs++; if ($script:runs -eq 1) { throw $dropped }; 'result' } -RemoveParameterType Job
+    It 'reconnects and runs the script once more when the guest dropped the session and the call allows it' {
+        Mock -ModuleName $module Receive-Job { $script:runs++; if ($script:runs -eq 1) { & $drop }; 'result' } -RemoveParameterType Job
 
         $result = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'reading' -ScriptBlock { 'x' } -RetryOnDisconnect }
 
         $result | Should -Be 'result'
         Should -Invoke -ModuleName $module Invoke-Command -Times 2 -Exactly
-        Should -Invoke -ModuleName $module Remove-GuestSession -Times 1 -Exactly -ParameterFilter { $KeepCredential }
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -match 'reading' -and $Message -match 'once more' }
     }
 
     It 'never runs the script again unless the call allows it, as the work may not be safe to repeat' {
-        Mock -ModuleName $module Receive-Job { throw $dropped } -RemoveParameterType Job
+        Mock -ModuleName $module Receive-Job { & $drop } -RemoveParameterType Job
 
         { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'moving' -ScriptBlock { 'x' } } } | Should -Throw '*socket target process has ended*'
 
         Should -Invoke -ModuleName $module Invoke-Command -Times 1 -Exactly
     }
 
-    It 'does not run the script again when it failed for any other reason' {
-        Mock -ModuleName $module Receive-Job { throw 'access denied' } -RemoveParameterType Job
+    It 'does not run the script again when it failed with the session still open' {
+        Mock -ModuleName $module Receive-Job { throw 'The Hyper-V socket target process has ended.' } -RemoveParameterType Job
 
-        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'reading' -ScriptBlock { 'x' } -RetryOnDisconnect } } | Should -Throw '*access denied*'
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'reading' -ScriptBlock { 'x' } -RetryOnDisconnect } } | Should -Throw '*socket target process has ended*'
 
         Should -Invoke -ModuleName $module Invoke-Command -Times 1 -Exactly
     }
 
     It 'tries only once more, and then gives the error' {
-        Mock -ModuleName $module Receive-Job { throw $dropped } -RemoveParameterType Job
+        Mock -ModuleName $module Receive-Job { & $drop } -RemoveParameterType Job
 
         { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'reading' -ScriptBlock { 'x' } -RetryOnDisconnect } } | Should -Throw '*socket target process has ended*'
 
         Should -Invoke -ModuleName $module Invoke-Command -Times 2 -Exactly
+    }
+
+    It 'gives the error the guest job failed with, unchanged' {
+        $reason = [System.InvalidOperationException]::new('the guest said no')
+        Mock -ModuleName $module Invoke-Command { [pscustomobject]@{ State = 'Failed'; ChildJobs = @([pscustomobject]@{ JobStateInfo = [pscustomobject]@{ Reason = $reason } }) } } -RemoveParameterType Session
+        Mock -ModuleName $module Receive-Job { } -RemoveParameterType Job
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestScript -VM $VM -Activity 'reading' -ScriptBlock { 'x' } } } |
+            Should -Throw -ExceptionType ([System.InvalidOperationException]) -ExpectedMessage 'the guest said no'
     }
 
     It '<Command> lets a dropped session be retried, as it only reads, or sets the same values again' -ForEach @(

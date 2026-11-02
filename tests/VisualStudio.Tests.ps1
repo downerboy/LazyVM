@@ -257,7 +257,7 @@ Describe 'Restore-GuestVisualStudioSetting' {
         Mock -ModuleName $module Copy-ToGuest { $copied.Settings = Get-Content -LiteralPath $HostPath -Raw }
         $task = @{ Work = $null; Devenv = $null }
         Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { $task.Work = $ScriptBlock }
-        Mock -ModuleName $module Get-GuestSignedInUser { @('devadmin') }
+        Mock -ModuleName $module Wait-GuestSignedIn { $true }
         Mock -ModuleName $module Complete-GuestVisualStudioFirstLaunch { $true }
         $devDrive = $settings.Clone()
         $devDrive.UseDevDrive = $true

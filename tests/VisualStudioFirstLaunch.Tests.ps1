@@ -187,7 +187,7 @@ Describe 'Restore-GuestVisualStudioSetting with the first launch automated' {
         $vs = [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' }
         $toApply = [pscustomobject]@{ Text = '<UserSettings/>'; HasBackup = $true; BackupHash = 'HASH'; ProjectsLocation = $null }
         Mock -ModuleName $module Get-VisualStudioSettingTarget { [pscustomobject]@{ VisualStudio = $vs; Settings = $toApply } }
-        Mock -ModuleName $module Get-GuestSignedInUser { @('devadmin') }
+        Mock -ModuleName $module Wait-GuestSignedIn { $true }
         $calls = [System.Collections.Generic.List[string]]::new()
         Mock -ModuleName $module Write-VisualStudioSettingMarker { $calls.Add('marker') }
         Mock -ModuleName $module Complete-GuestVisualStudioFirstLaunch { $calls.Add('first launch'); $true }
