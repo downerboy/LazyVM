@@ -409,3 +409,73 @@ class CaptureManifest {
         return ConvertTo-Json -InputObject $document -Depth 8
     }
 }
+
+# One finding of the nightly security scan (#290): what was found, why it
+# matters and how to fix it, and, once compared with the scan before, when
+# it was first seen and its status. The scan keeps them in
+# <VM>\Logs\SecurityFindings.json (ToRecord, FromObject).
+# Get-LazyVMSecurityFinding shows them as LazyVM.SecurityFinding, with the
+# VM's name added.
+class SecurityFinding {
+    static [string[]] $Severities = @('High', 'Medium', 'Low', 'Info')
+    static [string[]] $Statuses = @('New', 'Still open', 'Resolved')
+
+    # Made from what was found, area first ('Firewall:Public:Off'). Opaque:
+    # the same thing found again has the same Id, and when it changes, so
+    # does the Id.
+    [string]$Id
+    [string]$Severity
+    [string]$Title
+    [string]$WhatWeFound
+    # Full paths of the files a finding is about, such as a Defender
+    # detection's; the guest's desktop copy shows only their names.
+    [string[]]$Where = @()
+    [string]$WhyItMatters
+    [string]$HowToFix
+    [Nullable[datetimeoffset]]$FirstSeen
+    [string]$Status
+
+    SecurityFinding([string]$id, [string]$severity, [string]$title, [string]$whatWeFound, [string]$whyItMatters, [string]$howToFix) {
+        if ($severity -notin [SecurityFinding]::Severities) { throw "A security finding's severity is one of $([SecurityFinding]::Severities -join ', '), not '$severity'." }
+        $this.Id = $id
+        $this.Severity = $severity
+        $this.Title = $title
+        $this.WhatWeFound = $whatWeFound
+        $this.WhyItMatters = $whyItMatters
+        $this.HowToFix = $howToFix
+    }
+
+    # Its area: the part of the Id before the first colon, the name of the check that found it.
+    [string] Area() {
+        return ($this.Id -split ':', 2)[0]
+    }
+
+    # A copy, compared with the scan before: its status and when it was first seen.
+    [SecurityFinding] Compared([string]$status, [datetimeoffset]$firstSeen) {
+        if ($status -notin [SecurityFinding]::Statuses) { throw "A security finding's status is one of $([SecurityFinding]::Statuses -join ', '), not '$status'." }
+        $copy = [SecurityFinding]::new($this.Id, $this.Severity, $this.Title, $this.WhatWeFound, $this.WhyItMatters, $this.HowToFix)
+        $copy.Where = $this.Where
+        $copy.FirstSeen = $firstSeen
+        $copy.Status = $status
+        return $copy
+    }
+
+    static [SecurityFinding] FromObject([object]$item) {
+        $finding = [SecurityFinding]::new([RecordReader]::Text($item, 'Id'), [RecordReader]::Text($item, 'Severity'), [RecordReader]::Text($item, 'Title'),
+            [RecordReader]::Text($item, 'WhatWeFound'), [RecordReader]::Text($item, 'WhyItMatters'), [RecordReader]::Text($item, 'HowToFix'))
+        $finding.Where = [RecordReader]::Strings($item, 'Where')
+        $seen = [RecordReader]::Text($item, 'FirstSeen')
+        if ($seen) { $finding.FirstSeen = [datetimeoffset]::Parse($seen, [cultureinfo]::InvariantCulture) }
+        $finding.Status = [RecordReader]::Text($item, 'Status')
+        return $finding
+    }
+
+    # As the findings file keeps it: FirstSeen in ISO 8601 ('o').
+    [System.Collections.Specialized.OrderedDictionary] ToRecord() {
+        $record = [ordered]@{}
+        foreach ($property in $this.PSObject.Properties) { $record[$property.Name] = $property.Value }
+        $record.Where = @($this.Where)
+        $record.FirstSeen = if ($null -ne $this.FirstSeen) { ([datetimeoffset]$this.FirstSeen).ToString('o', [cultureinfo]::InvariantCulture) } else { $null }
+        return $record
+    }
+}

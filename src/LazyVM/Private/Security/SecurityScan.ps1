@@ -1,35 +1,42 @@
 # SecurityScan.ps1 - The nightly security scan of each guest, and where its findings go (#290).
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# The last step of the nightly maintenance. A self-contained script runs in
-# the guest as SYSTEM (Data\Guest.SecurityScan.ps1, Windows PowerShell 5.1,
-# without the guest helpers): a Defender quick scan, then the facts each
-# check needs, as JSON. The host turns them into findings (SecurityFinding.ps1),
-# keeps them in <VM>\Logs\SecurityFindings.json, logs each one, and writes
-# them to LazyVM Findings.txt on the guest's desktop. When the scan found
-# something new that is High or Medium, the file opens in Notepad at the
-# next sign-in, once for that scan. The scan only reports: it changes nothing
-# in the guest but that file and what opens it.
+# The last step of the nightly maintenance. The collector runs in the guest
+# as SYSTEM ($script:GuestSecurityScanWork): a Defender quick scan, then the
+# facts each check needs, as JSON. The host turns them into findings
+# (SecurityFinding.ps1), logs each one, writes them to LazyVM Findings.txt on
+# the guest's desktop, and keeps them in <VM>\Logs\SecurityFindings.json.
+# When the scan found something new that is High or Medium, the file opens
+# in Notepad the next time someone signs in, connects or unlocks, once for
+# that scan for each user. The scan only reports: it changes nothing in the
+# guest but that file and what opens it.
 
-# The guest script's time budget: the quick scan gets most of it.
+# The collector's time budget: the quick scan gets most of it.
 $script:SecurityScanTimeoutMinutes = 20
 $script:SecurityQuickScanMinutes = 15
 
 # In the guest: the findings file, on the desktop every user sees, and the
-# task that opens it at sign-in (Data\Guest.SecurityFindingOpener.ps1). The
-# scan sets the alert value under the guest's LazyVM key to its stamp when
-# the file is to open; the opener records in the user's own key the stamp
-# it opened it for, so it opens once for each such scan.
+# task that opens it ($script:SecurityFindingOpener). A scan that finds
+# something new that is High or Medium sets the alert value under the
+# guest's LazyVM key to its stamp; the opener records in the user's own key
+# the stamp it opened the file for.
 $script:GuestSecurityFindingsFileName = 'LazyVM Findings.txt'
 $script:GuestSecurityFindingsTaskName = "${script:TaskPrefix}SecurityFindings"
-$script:GuestSecurityFindingOpenerFileName = 'SecurityFindingOpener.ps1'
 $script:GuestSecurityAlertValueName = 'SecurityFindingsAlert'
+# Besides sign-in, the opener runs when a session is connected at the
+# console (1), connected remotely (3) or unlocked (8): the
+# MSFT_TaskSessionStateChangeTrigger states.
+$script:GuestSecurityFindingsSessionStates = @(1, 3, 8)
+# The opener's script file of an earlier version, removed.
+$script:GuestSecurityFindingOpenerFileName = 'SecurityFindingOpener.ps1'
 
 function Invoke-GuestSecurityScan {
     <#
       The nightly scan: collects the guest's facts, turns them into findings,
-      marks each New, Still open or Resolved against the last scan, keeps
-      them, logs them, and puts them on the guest's desktop. Skipped when
+      marks each New, Still open or Resolved against the last scan, logs
+      them, puts them on the guest's desktop, and only then keeps them, so a
+      scan whose findings did not reach the guest counts as not done and its
+      new findings are still new the next night. Skipped when
       GuestSecurityScan is off.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -41,7 +48,7 @@ function Invoke-GuestSecurityScan {
 
     Write-LogEntry 'Security scan: Defender quick scan, then the security settings...' 'INFO'
     $facts = Get-GuestSecurityFact -VM $VM
-    $scannedAt = [datetimeoffset]::Now
+    $scannedAt = [datetimeoffset]::Parse([string]$facts.CollectedAt, [cultureinfo]::InvariantCulture).ToLocalTime()
     $previous = Read-SecurityFindingRecord -VM $VM
     $since = $null
     $previousFindings = @()
@@ -52,26 +59,26 @@ function Invoke-GuestSecurityScan {
     $current = @(ConvertTo-SecurityFinding -Check $facts.Checks -Since $since -ScannedAt $scannedAt)
     $findings = @(Compare-SecurityFinding -Current $current -Previous $previousFindings -ScannedAt $scannedAt -Unchecked (Get-UncheckedSecurityArea -Check $facts.Checks))
 
-    Save-SecurityFindingRecord -VM $VM -ScannedAt $scannedAt -Finding $findings
     Write-SecurityFindingLog -Finding $findings
+    Install-GuestSecurityFindingOpener -VM $VM
     $alertScanId = if (Test-SecurityFindingAlert -Finding $findings) { $scannedAt.ToString($script:StampFormat) } else { '' }
     Publish-GuestSecurityFinding -VM $VM -Text (Format-SecurityFindingReport -Finding $findings -VMName $VM.Name -ScannedAt $scannedAt) -AlertScanId $alertScanId
+    Save-SecurityFindingRecord -VM $VM -ScannedAt $scannedAt -Finding $findings
 }
 
 function Get-GuestSecurityFact {
     <#
-      Runs Data\Guest.SecurityScan.ps1 in the guest as SYSTEM, which the
-      Defender cmdlets and some of the settings need, within its time
-      budget, and logs what it reports about itself, such as a check it
-      could not read. Returns its facts: Notes, and Checks by area. Its only
-      argument is the quick scan's time limit; nothing secret is passed.
+      Runs the collector in the guest as SYSTEM, which the Defender cmdlets
+      and some of the settings need, within its time budget, and logs what
+      it reports about itself, such as an area it could not read. Returns
+      its facts: CollectedAt, Notes, and Checks by area. Its only argument
+      is the quick scan's time limit; nothing secret is passed.
     #>
     [OutputType([pscustomobject])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $work = [scriptblock]::Create((Get-Content -LiteralPath (Join-Path -Path $script:DataDir -ChildPath 'Guest.SecurityScan.ps1') -Raw))
     $json = Invoke-GuestTask -VM $VM -TaskName "${script:TaskPrefix}security-scan" -Activity 'security scan' -TimeoutMinutes $script:SecurityScanTimeoutMinutes `
-        -Work $work -ArgumentList @($script:SecurityQuickScanMinutes)
+        -Work $script:GuestSecurityScanWork -ArgumentList @($script:SecurityQuickScanMinutes)
     $facts = ConvertFrom-Json -InputObject $json -DateKind String
     Write-GuestNote -Notes @($facts.Notes)
     return $facts
@@ -79,9 +86,9 @@ function Get-GuestSecurityFact {
 
 function Read-SecurityFindingRecord {
     <#
-      The VM's last scan: when it ran (ScannedAt) and its Findings. $null
-      before the first scan, or when the record cannot be read, which then
-      counts as no scan, and is logged.
+      The VM's last scan: when the guest collected its facts (ScannedAt) and
+      its Findings. $null before the first scan, or when the record cannot
+      be read, which then counts as no scan, and is logged.
     #>
     [OutputType([pscustomobject])]
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -92,7 +99,7 @@ function Read-SecurityFindingRecord {
         $record = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -DateKind String
         return [pscustomobject]@{
             ScannedAt = [datetimeoffset]::Parse([string]$record.ScannedAt, [cultureinfo]::InvariantCulture)
-            Findings  = @($record.Findings)
+            Findings  = [SecurityFinding[]]@(@($record.Findings) | ForEach-Object { [SecurityFinding]::FromObject($_) })
         }
     }
     catch {
@@ -102,23 +109,23 @@ function Read-SecurityFindingRecord {
 }
 
 function Save-SecurityFindingRecord {
-    <# Keeps the scan's findings in <VM>\Logs\SecurityFindings.json, with when it ran. Holds no secrets. #>
+    <# Keeps the scan's findings in <VM>\Logs\SecurityFindings.json, with when the guest collected them. Holds no secrets. #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][datetimeoffset]$ScannedAt,
-        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Finding
+        [Parameter(Mandatory)][AllowEmptyCollection()][SecurityFinding[]]$Finding
     )
 
     $record = [ordered]@{
         ScannedAt = $ScannedAt.ToString('o', [cultureinfo]::InvariantCulture)
-        Findings  = @($Finding)
+        Findings  = @($Finding | ForEach-Object { $_.ToRecord() })
     }
     Write-TextFileAtomic -Path $VM.Settings.SecurityFindingsFile -Text (ConvertTo-Json -InputObject $record -Depth 4)
 }
 
 function Write-SecurityFindingLog {
     <# Logs how many findings the scan has, then each finding one field to a line: new High and Medium ones as warnings, resolved ones as done. #>
-    param([AllowEmptyCollection()][object[]]$Finding = @())
+    param([AllowEmptyCollection()][SecurityFinding[]]$Finding = @())
 
     $summary = if ($Finding.Count -eq 0) { 'no findings' } else { Format-SecurityFindingCount -Finding $Finding }
     Write-LogEntry "Security scan: $summary" $(if (Test-SecurityFindingAlert -Finding $Finding) { 'WARN' } else { 'OK' })
@@ -128,12 +135,46 @@ function Write-SecurityFindingLog {
     }
 }
 
+function Install-GuestSecurityFindingOpener {
+    <#
+      Registers, again each night, the guest task that runs the opener at
+      every user's sign-in, console or remote connect and unlock, in their
+      own session with their normal rights (BUILTIN\Users, by its SID). The
+      opener is the task's -Command, so no file holds it; the script file an
+      earlier version used is removed.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    # A guest path, so joined as text: the host may not have its drive.
+    $oldOpenerFile = '{0}\{1}' -f $VM.Settings.GuestSetupDir.TrimEnd('\'), $script:GuestSecurityFindingOpenerFileName
+    $arguments = @($script:GuestSecurityFindingsTaskName, (Get-SecurityFindingOpenerArgument), $script:GuestSecurityFindingsSessionStates, $oldOpenerFile)
+    $null = Invoke-GuestScript -VM $VM -Activity 'security findings opener' -TimeoutMinutes 5 -ArgumentList $arguments -ScriptBlock {
+        param($taskName, $openerArgument, $sessionStates, $oldOpenerFile)
+        $ErrorActionPreference = 'Stop'
+
+        $sessionClass = Get-CimClass -Namespace 'Root/Microsoft/Windows/TaskScheduler' -ClassName 'MSFT_TaskSessionStateChangeTrigger'
+        $triggers = @(New-ScheduledTaskTrigger -AtLogOn)
+        foreach ($state in $sessionStates) {
+            $trigger = New-CimInstance -CimClass $sessionClass -ClientOnly
+            $trigger.StateChange = [int]$state
+            $trigger.Enabled = $true
+            $triggers += $trigger
+        }
+        $action = New-ScheduledTaskAction -Execute (Join-Path -Path $env:SystemRoot -ChildPath 'System32\WindowsPowerShell\v1.0\powershell.exe') -Argument $openerArgument
+        $principal = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel Limited
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Force | Out-Null
+
+        Remove-Item -LiteralPath $oldOpenerFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Publish-GuestSecurityFinding {
     <#
       Writes $Text to LazyVM Findings.txt on the guest's public desktop,
-      which every user's desktop shows, and makes sure the sign-in task that
-      opens it is there. With an $AlertScanId, the file opens at the next
-      sign-in, once; without one, it does not open.
+      which every user's desktop shows. With an $AlertScanId, records it as
+      the scan the file is to open for; without one the stamp is left as it
+      is, so a file not opened yet still opens.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -141,30 +182,18 @@ function Publish-GuestSecurityFinding {
         [Parameter(Mandatory)][AllowEmptyString()][string]$AlertScanId
     )
 
-    $openerText = Get-Content -LiteralPath (Join-Path -Path $script:DataDir -ChildPath 'Guest.SecurityFindingOpener.ps1') -Raw
-    $arguments = @($Text, $openerText, $VM.Settings.GuestSetupDir, $script:GuestSecurityFindingsTaskName, $script:GuestMarkerKey, $script:GuestSecurityAlertValueName, $AlertScanId,
-        $script:GuestSecurityFindingsFileName, $script:GuestSecurityFindingOpenerFileName)
+    $arguments = @($Text, $script:GuestSecurityFindingsFileName, $script:GuestMarkerKey, $script:GuestSecurityAlertValueName, $AlertScanId)
     $null = Invoke-GuestScript -VM $VM -Activity 'security findings file' -TimeoutMinutes 5 -ArgumentList $arguments -ScriptBlock {
-        param($text, $openerText, $setupDir, $taskName, $markerKey, $alertName, $alertScanId, $fileName, $openerFileName)
+        param($text, $fileName, $markerKey, $alertName, $alertScanId)
         $ErrorActionPreference = 'Stop'
-        # With a byte order mark, so Windows PowerShell 5.1 and Notepad read it as UTF-8.
-        $encoding = New-Object System.Text.UTF8Encoding $true
 
+        # With a byte order mark, so Notepad reads it as UTF-8.
         $file = Join-Path -Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) -ChildPath $fileName
-        [System.IO.File]::WriteAllText($file, $text, $encoding)
-        New-GuestFolder -Path $setupDir
-        $opener = Join-Path -Path $setupDir -ChildPath $openerFileName
-        [System.IO.File]::WriteAllText($opener, $openerText, $encoding)
-
-        if (-not (Test-Path -LiteralPath $markerKey)) { New-Item -Path $markerKey -Force | Out-Null }
-        if ($alertScanId) { Set-ItemProperty -LiteralPath $markerKey -Name $alertName -Value $alertScanId }
-        else { Remove-ItemProperty -LiteralPath $markerKey -Name $alertName -ErrorAction SilentlyContinue }
-
-        # At every user's sign-in, in their own session with their normal rights (BUILTIN\Users, by its SID).
-        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$opener`" -Path `"$file`""
-        $principal = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel Limited
-        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger (New-ScheduledTaskTrigger -AtLogOn) -Principal $principal -Settings $settings -Force | Out-Null
+        [System.IO.File]::WriteAllText($file, $text, (New-Object System.Text.UTF8Encoding $true))
+        if ($alertScanId) {
+            if (-not (Test-Path -LiteralPath $markerKey)) { New-Item -Path $markerKey -Force | Out-Null }
+            Set-ItemProperty -LiteralPath $markerKey -Name $alertName -Value $alertScanId
+        }
     }
 }
 
@@ -189,7 +218,7 @@ function Write-SecurityFindingReminder {
 }
 
 function Get-SecurityFindingList {
-    <# Get-LazyVMSecurityFinding: the last scan's findings, each with the VM's name. Says so when no scan has run yet. #>
+    <# Get-LazyVMSecurityFinding: the last scan's findings, each with the VM's name first. Says so when no scan has run yet. #>
     [OutputType('LazyVM.SecurityFinding')]
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -199,17 +228,8 @@ function Get-SecurityFindingList {
         return
     }
     foreach ($finding in $record.Findings) {
-        [pscustomobject]@{
-            PSTypeName   = 'LazyVM.SecurityFinding'
-            Name         = $VM.Name
-            Id           = $finding.Id
-            Severity     = $finding.Severity
-            Title        = $finding.Title
-            WhatWeFound  = $finding.WhatWeFound
-            WhyItMatters = $finding.WhyItMatters
-            HowToFix     = $finding.HowToFix
-            FirstSeen    = $finding.FirstSeen
-            Status       = $finding.Status
-        }
+        $shown = [ordered]@{ PSTypeName = 'LazyVM.SecurityFinding'; Name = $VM.Name }
+        foreach ($property in $finding.PSObject.Properties) { $shown[$property.Name] = $property.Value }
+        [pscustomobject]$shown
     }
 }

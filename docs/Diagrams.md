@@ -352,12 +352,12 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM, with -Ro
 20. `Update-GuestWindows` (Maintenance, called by Invoke-DailyMaintenance): quality and security updates; restarts only when nobody can be disturbed
    - Reads D37, updates: Windows Update (quality and security updates)
    - Writes D38, patched Windows: Running guest (updates installed, restart now or left pending)
-21. `Invoke-GuestSecurityScan` (Security, called by Invoke-DailyMaintenance): unless GuestSecurityScan is off: a Defender quick scan and the security settings, read as SYSTEM; findings marked New, Still open or Resolved against the last scan. Only reports
-   - Also runs `Get-GuestSecurityFact`, `ConvertTo-SecurityFinding`, `Compare-SecurityFinding`, `Save-SecurityFindingRecord`, `Publish-GuestSecurityFinding`
+21. `Invoke-GuestSecurityScan` (Security, called by Invoke-DailyMaintenance): unless GuestSecurityScan is off: a Defender quick scan and the security settings, read as SYSTEM; findings marked New, Still open or Resolved against the last scan, put in the guest, then kept. Only reports
+   - Also runs `Get-GuestSecurityFact`, `ConvertTo-SecurityFinding`, `Compare-SecurityFinding`, `Install-GuestSecurityFindingOpener`, `Publish-GuestSecurityFinding`, `Save-SecurityFindingRecord`
    - Reads D39, security facts: Running guest (Defender status and detections, firewall, UAC, BitLocker, SMB 1, RDP, Guest,, LSA, Secure Boot, VBS, AutoRun, paused updates)
    - Reads D40, last findings: <VM>\Logs\ (SecurityFindings.json)
    - Writes D41, findings: <VM>\Logs\ (SecurityFindings.json, <VM>.log  (each finding))
-   - Writes D42, findings file, sign-in opener: Running guest (Public Desktop\LazyVM Findings.txt, task LazyVM-SecurityFindings, HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert)
+   - Writes D42, findings file, sign-in opener: Running guest (Public Desktop\LazyVM Findings.txt, task LazyVM-SecurityFindings (sign-in, connect, unlock), HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert)
 22. `Get-GuestLicenseStatus` (Maintenance, called by Invoke-DailyMaintenance): days left, rearms left
    - Reads D43, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
 23. `Get-MaintenanceDecision` (Maintenance, called by Invoke-DailyMaintenance): more than the threshold left, or no countdown: none; rearms left: rearm; otherwise: rebuild

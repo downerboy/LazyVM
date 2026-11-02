@@ -8,14 +8,11 @@
 # time. Every finding says what was found, why it matters and how to fix it;
 # LazyVM itself changes nothing.
 #
-# A finding's Id is made from what was found, area first, such as
-# 'Firewall:Public:Off'. The same thing found again has the same Id; when it
-# changes, so does the Id. The area is the facts' name for the check, so a
-# check the guest could not read tonight keeps its findings open.
-
-# The order findings are listed in: most serious first, then the newest.
-$script:SecurityFindingSeverities = @('High', 'Medium', 'Low', 'Info')
-$script:SecurityFindingStatuses = @('New', 'Still open', 'Resolved')
+# A finding (the SecurityFinding class) has an Id made from what was found,
+# area first, such as 'Firewall:Public:Off'. Ids are opaque: the same thing
+# found again has the same Id; when it changes, so does the Id. The area is
+# the facts' name for the check ($script:SecurityCheck), so a check the guest
+# could not read tonight keeps its findings open.
 
 # Defender's own threshold for virus definitions that are out of date.
 $script:DefenderSignatureMaxAgeDays = 7
@@ -38,83 +35,77 @@ $script:DefenderThreatStatus = @{
 $script:DefenderThreatHandled = @(2, 3, 4, 6)
 
 function New-SecurityFinding {
-    <# One finding, before it is compared with the last scan. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    <# One finding, before it is compared with the last scan; $Where lists the full paths of the files it is about, if any. #>
+    [OutputType([SecurityFinding])]
     param(
         [Parameter(Mandatory)][string]$Id,
         [Parameter(Mandatory)][ValidateSet('High', 'Medium', 'Low', 'Info')][string]$Severity,
         [Parameter(Mandatory)][string]$Title,
         [Parameter(Mandatory)][string]$WhatWeFound,
         [Parameter(Mandatory)][string]$WhyItMatters,
-        [Parameter(Mandatory)][string]$HowToFix
+        [Parameter(Mandatory)][string]$HowToFix,
+        [string[]]$Where = @()
     )
 
-    return [pscustomobject]@{
-        PSTypeName   = 'LazyVM.SecurityFinding'
-        Id           = $Id
-        Severity     = $Severity
-        Title        = $Title
-        WhatWeFound  = $WhatWeFound
-        WhyItMatters = $WhyItMatters
-        HowToFix     = $HowToFix
-    }
+    $finding = [SecurityFinding]::new($Id, $Severity, $Title, $WhatWeFound, $WhyItMatters, $HowToFix)
+    $finding.Where = $Where
+    return $finding
 }
 
-function Get-SecurityFindingArea {
-    <# The area of the finding Id $Id: the part before the first colon. #>
-    [OutputType([string])]
-    param([Parameter(Mandatory)][string]$Id)
-
-    return ($Id -split ':', 2)[0]
+# Each area the guest script reads, in its order, with the check that turns
+# its facts into findings. Each check gets the area's facts and the scan
+# (Since: when the last scan collected, $null for the first; ScannedAt).
+# The guest script's areas are these (SecurityScan.Tests.ps1 checks).
+$script:SecurityCheck = [ordered]@{
+    Defender          = { param($fact) Get-DefenderStatusFinding -Fact $fact }
+    DefenderDetection = { param($fact, $scan) Get-DefenderDetectionFinding -Fact $fact -Since $scan.Since }
+    Firewall          = { param($fact) Get-FirewallFinding -Fact $fact }
+    UAC               = { param($fact) Get-UacFinding -Fact $fact }
+    BitLocker         = { param($fact) Get-BitLockerFinding -Fact $fact }
+    SMBv1             = { param($fact) Get-Smb1Finding -Fact $fact }
+    RemoteDesktop     = { param($fact) Get-RemoteDesktopFinding -Fact $fact }
+    Account           = { param($fact) Get-GuestAccountFinding -Fact $fact }
+    LSA               = { param($fact) Get-LsaProtectionFinding -Fact $fact }
+    SecureBoot        = { param($fact) Get-SecureBootFinding -Fact $fact }
+    VBS               = { param($fact) Get-VbsFinding -Fact $fact }
+    AutoRun           = { param($fact) Get-AutoRunFinding -Fact $fact }
+    WindowsUpdate     = { param($fact, $scan) Get-WindowsUpdatePauseFinding -Fact $fact -ScannedAt $scan.ScannedAt }
+    AutoLogon         = { param($fact) Get-AutoLogonFinding -Fact $fact }
 }
 
 function ConvertTo-SecurityFinding {
     <#
-      Every finding in the facts $Check the guest script collected: the
-      Defender checks, then the settings measured against the Microsoft
-      security baseline. An area the guest could not read ($null) gives
-      none. $Since is when the last scan ran, $null for the first.
+      Every finding in the facts $Check the guest script collected, area by
+      area ($script:SecurityCheck): the Defender checks, then the settings
+      measured against the Microsoft security baseline. An area the guest
+      could not read ($null) gives none. $Since is when the last scan
+      collected, $null for the first.
     #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param(
         [Parameter(Mandatory)][object]$Check,
         [AllowNull()][object]$Since,
         [Parameter(Mandatory)][datetimeoffset]$ScannedAt
     )
 
-    # By area; an area the facts do not have is $null, as one the guest could not read.
-    $fact = @{}
-    foreach ($property in $Check.PSObject.Properties) { $fact[$property.Name] = $property.Value }
-    $found = @(
-        if ($null -ne $fact.Defender) { Get-DefenderStatusFinding -Fact $fact.Defender }
-        if ($null -ne $fact.DefenderDetection) { Get-DefenderDetectionFinding -Fact $fact.DefenderDetection -Since $Since }
-        if ($null -ne $fact.Firewall) { Get-FirewallFinding -Fact $fact.Firewall }
-        if ($null -ne $fact.UAC) { Get-UacFinding -Fact $fact.UAC }
-        if ($null -ne $fact.BitLocker) { Get-BitLockerFinding -Fact $fact.BitLocker }
-        if ($null -ne $fact.SMBv1) { Get-Smb1Finding -Fact $fact.SMBv1 }
-        if ($null -ne $fact.RemoteDesktop) { Get-RemoteDesktopFinding -Fact $fact.RemoteDesktop }
-        if ($null -ne $fact.Account) { Get-GuestAccountFinding -Fact $fact.Account }
-        if ($null -ne $fact.LSA) { Get-LsaProtectionFinding -Fact $fact.LSA }
-        if ($null -ne $fact.SecureBoot) { Get-SecureBootFinding -Fact $fact.SecureBoot }
-        if ($null -ne $fact.VBS) { Get-VbsFinding -Fact $fact.VBS }
-        if ($null -ne $fact.AutoRun) { Get-AutoRunFinding -Fact $fact.AutoRun }
-        if ($null -ne $fact.WindowsUpdate) { Get-WindowsUpdatePauseFinding -Fact $fact.WindowsUpdate -ScannedAt $ScannedAt }
-        if ($null -ne $fact.AutoLogon) { Get-AutoLogonFinding -Fact $fact.AutoLogon }
-    )
-    return $found
+    $scan = @{ Since = $Since; ScannedAt = $ScannedAt }
+    foreach ($area in $script:SecurityCheck.Keys) {
+        $fact = [RecordReader]::Field($Check, $area)
+        if ($null -ne $fact) { & $script:SecurityCheck[$area] $fact $scan }
+    }
 }
 
 function Get-UncheckedSecurityArea {
-    <# The areas of the facts $Check the guest could not read tonight. #>
+    <# The areas the guest could not read tonight: those the facts $Check have no facts for. #>
     [OutputType([string[]])]
     param([Parameter(Mandatory)][object]$Check)
 
-    return @($Check.PSObject.Properties | Where-Object { $null -eq $_.Value } | ForEach-Object { $_.Name })
+    return @($script:SecurityCheck.Keys | Where-Object { $null -eq [RecordReader]::Field($Check, $_) })
 }
 
 function Get-DefenderStatusFinding {
     <# Defender Antivirus, its real-time and tamper protection, and how old its virus definitions are. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     $openDefender = 'Open Windows Security in the VM, choose Virus and threat protection, and turn it on under Manage settings.'
@@ -148,24 +139,29 @@ function Get-DefenderStatusFinding {
 function Get-DefenderDetectionFinding {
     <#
       Each threat Defender detected since the last scan ($Since; every one
-      it still lists on the first scan), by its detection id, so each
-      detection is a finding of its own.
+      it still lists on the first scan), and each it still lists as active,
+      however long ago it was found, by its detection id, so each detection
+      is a finding of its own. A detection is not resolved by time passing:
+      it stays a finding while Defender lists its threat as active.
     #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param(
         [Parameter(Mandatory)][object]$Fact,
         [AllowNull()][object]$Since
     )
 
+    $active = @($Fact.ActiveThreatIds | ForEach-Object { "$_" })
     foreach ($detection in @($Fact.Detections)) {
         $detectedAt = [datetimeoffset]::Parse([string]$detection.DetectedAt, [cultureinfo]::InvariantCulture)
-        if ($null -ne $Since -and $detectedAt -le [datetimeoffset]$Since) { continue }
+        $isActive = "$($detection.ThreatId)" -in $active
+        $isNew = $null -eq $Since -or $detectedAt -gt [datetimeoffset]$Since
+        if (-not $isNew -and -not $isActive) { continue }
 
         $status = [int]$detection.ThreatStatusId
         $done = if ($script:DefenderThreatStatus.ContainsKey($status)) { $script:DefenderThreatStatus[$status] } else { "reported status $status" }
-        $handled = $status -in $script:DefenderThreatHandled -and $detection.ActionSuccess
+        $handled = -not $isActive -and $status -in $script:DefenderThreatHandled -and $detection.ActionSuccess
         $where = @($detection.Resources | ForEach-Object { "$_" -replace '^[a-z]+:_', '' })
-        $whereText = if ($where.Count -gt 0) { " in $($where -join '; ')" } else { '' }
+        $still = if ($isActive) { ' Defender still lists it as active.' } else { '' }
         $fix = if ($handled) {
             'Defender dealt with it. Think about where the file came from, and do not run it again. Open Windows Security, choose Virus and threat protection, then Protection history, for the details.'
         }
@@ -174,15 +170,15 @@ function Get-DefenderDetectionFinding {
         }
         New-SecurityFinding -Id "DefenderDetection:$($detection.ThreatName):$($detection.DetectionId)" -Severity $(if ($handled) { 'Medium' } else { 'High' }) `
             -Title "Defender found $($detection.ThreatName)" `
-            -WhatWeFound "Defender found $($detection.ThreatName) on $($detectedAt.ToLocalTime().ToString('yyyy-MM-dd HH:mm'))$whereText. Defender $done." `
+            -WhatWeFound "Defender found $($detection.ThreatName) on $($detectedAt.ToLocalTime().ToString('yyyy-MM-dd HH:mm')). Defender $done.$still" `
             -WhyItMatters 'Malware got into this VM. Whatever brought it in may bring more.' `
-            -HowToFix $fix
+            -HowToFix $fix -Where $where
     }
 }
 
 function Get-FirewallFinding {
     <# Each Windows Firewall profile that is off, or that lets every connection in. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     foreach ($firewallProfile in @($Fact.Profiles)) {
@@ -204,7 +200,7 @@ function Get-FirewallFinding {
 
 function Get-UacFinding {
     <# User Account Control: off, elevating administrators without asking, or asking off the secure desktop. A value not set is Windows' default, which is on. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     $policy = 'Change it in Local Security Policy (secpol.msc), under Local Policies, then Security Options,'
@@ -230,7 +226,7 @@ function Get-UacFinding {
 
 function Get-BitLockerFinding {
     <# Each disk in the VM whose BitLocker protection is off. A locked disk, whose state is unknown, is left out. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     foreach ($volume in @($Fact.Volumes | Where-Object { "$($_.ProtectionStatus)" -eq 'Off' })) {
@@ -244,7 +240,7 @@ function Get-BitLockerFinding {
 
 function Get-Smb1Finding {
     <# The SMB 1 file-sharing protocol, when the file server still accepts it. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     if ($Fact.Enabled) {
@@ -257,7 +253,7 @@ function Get-Smb1Finding {
 
 function Get-RemoteDesktopFinding {
     <# Remote Desktop that lets anyone reach the sign-in screen, without Network Level Authentication. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     if ($Fact.Enabled -and -not $Fact.Nla) {
@@ -270,7 +266,7 @@ function Get-RemoteDesktopFinding {
 
 function Get-GuestAccountFinding {
     <# The built-in Guest account, when it is turned on. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     if ($Fact.GuestEnabled) {
@@ -283,7 +279,7 @@ function Get-GuestAccountFinding {
 
 function Get-LsaProtectionFinding {
     <# LSA protection, when Windows did not start LSASS as a protected process and is not set to. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     $setToStart = $null -ne $Fact.RunAsPPL -and [int]$Fact.RunAsPPL -in 1, 2
@@ -297,7 +293,7 @@ function Get-LsaProtectionFinding {
 
 function Get-SecureBootFinding {
     <# Secure Boot, when it is off. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     if (-not $Fact.On) {
@@ -310,20 +306,20 @@ function Get-SecureBootFinding {
 
 function Get-VbsFinding {
     <# Virtualization-based security, when it is not running. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     if (-not $Fact.Running) {
         New-SecurityFinding -Id 'VBS:Status:NotRunning' -Severity Low -Title 'Virtualization-based security is not running' `
             -WhatWeFound 'Windows is not running virtualization-based security (VBS), so Memory integrity and Credential Guard cannot run either.' `
             -WhyItMatters 'VBS keeps sign-in secrets and the Windows kernel apart from the rest of the system, out of malware''s reach.' `
-            -HowToFix 'VBS in a Hyper-V VM needs nested virtualization. On the host, as administrator, with the VM off, run: Set-VMProcessor -VMName <the VM''s name> -ExposeVirtualizationExtensions $true. Then start the VM, and in Windows Security, under Device security, then Core isolation details, turn on Memory integrity.'
+            -HowToFix 'VBS in a Hyper-V VM needs nested virtualization, which does not work with dynamic memory. On the host, as administrator, with the VM off, run: Set-VMMemory -VMName <the VM''s name> -DynamicMemoryEnabled $false, then Set-VMProcessor -VMName <the VM''s name> -ExposeVirtualizationExtensions $true. Then start the VM, and in Windows Security, under Device security, then Core isolation details, turn on Memory integrity. The VM then always uses its full memory, and a rebuild makes it again without either change.'
     }
 }
 
 function Get-AutoRunFinding {
     <# AutoRun, when it is not off for every drive as the Microsoft security baseline sets it. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     $off = $null -ne $Fact.NoAutorun -and [int]$Fact.NoAutorun -eq 1 -and $null -ne $Fact.NoDriveTypeAutoRun -and [int]$Fact.NoDriveTypeAutoRun -eq 255
@@ -337,7 +333,7 @@ function Get-AutoRunFinding {
 
 function Get-WindowsUpdatePauseFinding {
     <# Windows Update, when its updates are paused until a date still to come. Dates that cannot be read are left out. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param(
         [Parameter(Mandatory)][object]$Fact,
         [Parameter(Mandatory)][datetimeoffset]$ScannedAt
@@ -348,8 +344,9 @@ function Get-WindowsUpdatePauseFinding {
             if ([datetimeoffset]::TryParse([string]$_, [cultureinfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)) { $parsed }
         } | Where-Object { $_ -gt $ScannedAt } | Sort-Object -Descending)
     if ($until.Count -gt 0) {
-        New-SecurityFinding -Id 'WindowsUpdate:Updates:Paused' -Severity Medium -Title 'Windows updates are paused' `
-            -WhatWeFound "Windows Update is paused until $($until[0].ToLocalTime().ToString('yyyy-MM-dd'))." `
+        $date = $until[0].ToLocalTime().ToString('yyyy-MM-dd')
+        New-SecurityFinding -Id "WindowsUpdate:PausedUntil:$date" -Severity Medium -Title 'Windows updates are paused' `
+            -WhatWeFound "Windows Update is paused until $date." `
             -WhyItMatters 'Security fixes do not install while updates are paused, and nightly maintenance cannot install them either.' `
             -HowToFix 'In the VM, open Settings, then Windows Update, and choose Resume updates.'
     }
@@ -357,7 +354,7 @@ function Get-WindowsUpdatePauseFinding {
 
 function Get-AutoLogonFinding {
     <# Automatic sign-in, which LazyVM keeps on by design: reported for information. #>
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     if ($Fact.On) {
@@ -377,56 +374,33 @@ function Compare-SecurityFinding {
       read tonight, it is kept as Still open instead. Most serious first,
       then the newest.
     #>
-    [OutputType([pscustomobject])]
+    [OutputType([SecurityFinding])]
     param(
-        [AllowEmptyCollection()][object[]]$Current = @(),
-        [AllowEmptyCollection()][object[]]$Previous = @(),
+        [AllowEmptyCollection()][SecurityFinding[]]$Current = @(),
+        [AllowEmptyCollection()][SecurityFinding[]]$Previous = @(),
         [Parameter(Mandatory)][datetimeoffset]$ScannedAt,
         [AllowEmptyCollection()][string[]]$Unchecked = @()
     )
 
     $open = @{}
     foreach ($finding in @($Previous | Where-Object { $_.Status -ne 'Resolved' })) { $open[$finding.Id] = $finding }
-    $now = $ScannedAt.ToString('yyyy-MM-dd HH:mm')
     $currentIds = @($Current | ForEach-Object { $_.Id })
 
     $result = @(
         foreach ($finding in $Current) {
             $earlier = $open[$finding.Id]
-            ConvertTo-ComparedSecurityFinding -Finding $finding -Status $(if ($earlier) { 'Still open' } else { 'New' }) -FirstSeen $(if ($earlier) { $earlier.FirstSeen } else { $now })
+            if ($earlier) { $finding.Compared('Still open', $earlier.FirstSeen) } else { $finding.Compared('New', $ScannedAt) }
         }
         foreach ($finding in $open.Values) {
             if ($finding.Id -in $currentIds) { continue }
-            $status = if ((Get-SecurityFindingArea -Id $finding.Id) -in $Unchecked) { 'Still open' } else { 'Resolved' }
-            ConvertTo-ComparedSecurityFinding -Finding $finding -Status $status -FirstSeen $finding.FirstSeen
+            $finding.Compared($(if ($finding.Area() -in $Unchecked) { 'Still open' } else { 'Resolved' }), $finding.FirstSeen)
         }
     )
     return @($result | Sort-Object -Property @(
-            @{ Expression = { $script:SecurityFindingSeverities.IndexOf($_.Severity) } }
-            @{ Expression = { $script:SecurityFindingStatuses.IndexOf($_.Status) } }
+            @{ Expression = { [SecurityFinding]::Severities.IndexOf($_.Severity) } }
+            @{ Expression = { [SecurityFinding]::Statuses.IndexOf($_.Status) } }
             @{ Expression = { $_.Id } }
         ))
-}
-
-function ConvertTo-ComparedSecurityFinding {
-    <# $Finding with its Status and when it was FirstSeen, in the order the findings file keeps. #>
-    [OutputType([pscustomobject])]
-    param(
-        [Parameter(Mandatory)][object]$Finding,
-        [Parameter(Mandatory)][string]$Status,
-        [Parameter(Mandatory)][string]$FirstSeen
-    )
-
-    return [pscustomobject][ordered]@{
-        Id           = $Finding.Id
-        Severity     = $Finding.Severity
-        Title        = $Finding.Title
-        WhatWeFound  = $Finding.WhatWeFound
-        WhyItMatters = $Finding.WhyItMatters
-        HowToFix     = $Finding.HowToFix
-        FirstSeen    = $FirstSeen
-        Status       = $Status
-    }
 }
 
 function Test-SecurityFindingAlert {
@@ -438,20 +412,37 @@ function Test-SecurityFindingAlert {
 }
 
 function Format-SecurityFinding {
-    <# One finding as lines of text, one field to a line. #>
+    <#
+      One finding as lines of text, one field to a line. The files it is
+      about are listed by full path, or with -NamesOnly by file name only,
+      as on the guest's desktop, which every user of the VM can read.
+    #>
     [OutputType([string[]])]
-    param([Parameter(Mandatory)][object]$Finding)
+    param(
+        [Parameter(Mandatory)][SecurityFinding]$Finding,
+        [switch]$NamesOnly
+    )
 
+    $where = @($Finding.Where | ForEach-Object { if ($NamesOnly) { Split-Path -Path $_ -Leaf } else { $_ } })
     return @(
         "Id: $($Finding.Id)"
         "Severity: $($Finding.Severity)"
         "Title: $($Finding.Title)"
         "What we found: $($Finding.WhatWeFound)"
+        if ($where.Count -gt 0) { "Where: $($where -join '; ')" }
         "Why it matters: $($Finding.WhyItMatters)"
         "How to fix: $($Finding.HowToFix)"
-        "First seen: $($Finding.FirstSeen)"
+        "First seen: $(Format-SecurityFindingTime -Time $Finding.FirstSeen)"
         "Status: $($Finding.Status)"
     )
+}
+
+function Format-SecurityFindingTime {
+    <# A scan's time as the findings show it: local, to the minute. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][datetimeoffset]$Time)
+
+    return $Time.ToLocalTime().ToString('yyyy-MM-dd HH:mm')
 }
 
 function Format-SecurityFindingCount {
@@ -468,18 +459,18 @@ function Format-SecurityFindingReport {
     <#
       The text of LazyVM Findings.txt on the guest's desktop: what it is,
       when the scan ran, then each finding one field to a line, with a blank
-      line between, and Windows line endings for Notepad.
+      line between, files by name only, and Windows line endings for Notepad.
     #>
     [OutputType([string])]
     param(
-        [AllowEmptyCollection()][object[]]$Finding = @(),
+        [AllowEmptyCollection()][SecurityFinding[]]$Finding = @(),
         [Parameter(Mandatory)][string]$VMName,
         [Parameter(Mandatory)][datetimeoffset]$ScannedAt
     )
 
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("LazyVM security findings for $VMName")
-    $lines.Add("Scanned on $($ScannedAt.ToString('yyyy-MM-dd HH:mm')).")
+    $lines.Add("Scanned on $(Format-SecurityFindingTime -Time $ScannedAt).")
     $lines.Add('LazyVM only reports what it finds. It changed nothing in this VM.')
     $lines.Add('This file is replaced after every nightly scan.')
     $lines.Add('')
@@ -492,7 +483,7 @@ function Format-SecurityFindingReport {
         for ($i = 0; $i -lt $Finding.Count; $i++) {
             $lines.Add('')
             $lines.Add("Finding $($i + 1) of $($Finding.Count)")
-            foreach ($line in (Format-SecurityFinding -Finding $Finding[$i])) { $lines.Add($line) }
+            foreach ($line in (Format-SecurityFinding -Finding $Finding[$i] -NamesOnly)) { $lines.Add($line) }
         }
     }
     return ($lines -join "`r`n") + "`r`n"

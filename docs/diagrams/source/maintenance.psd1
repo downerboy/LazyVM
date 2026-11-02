@@ -185,15 +185,15 @@
             Function = 'Invoke-GuestSecurityScan'
             Area     = 'Security'
             Caller   = 'Invoke-DailyMaintenance'
-            Note     = 'unless GuestSecurityScan is off: a Defender quick scan and the security settings, read as SYSTEM; findings marked New, Still open or Resolved against the last scan. Only reports'
-            Includes = @('Get-GuestSecurityFact', 'ConvertTo-SecurityFinding', 'Compare-SecurityFinding', 'Save-SecurityFindingRecord', 'Publish-GuestSecurityFinding')
+            Note     = 'unless GuestSecurityScan is off: a Defender quick scan and the security settings, read as SYSTEM; findings marked New, Still open or Resolved against the last scan, put in the guest, then kept. Only reports'
+            Includes = @('Get-GuestSecurityFact', 'ConvertTo-SecurityFinding', 'Compare-SecurityFinding', 'Install-GuestSecurityFindingOpener', 'Publish-GuestSecurityFinding', 'Save-SecurityFindingRecord')
             Reads    = @(
                 @{ Label = 'security facts'; Kind = 'guest'; Store = 'Running guest'; Items = @('Defender status and detections', 'firewall, UAC, BitLocker, SMB 1, RDP, Guest,', 'LSA, Secure Boot, VBS, AutoRun, paused updates') }
                 @{ Label = 'last findings'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('SecurityFindings.json') }
             )
             Writes   = @(
                 @{ Label = 'findings'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('SecurityFindings.json', '<VM>.log  (each finding)') }
-                @{ Label = 'findings file, sign-in opener'; Kind = 'guest'; Store = 'Running guest'; Items = @('Public Desktop\LazyVM Findings.txt', 'task LazyVM-SecurityFindings', 'HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert') }
+                @{ Label = 'findings file, sign-in opener'; Kind = 'guest'; Store = 'Running guest'; Items = @('Public Desktop\LazyVM Findings.txt', 'task LazyVM-SecurityFindings (sign-in, connect, unlock)', 'HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert') }
             )
         }
         @{

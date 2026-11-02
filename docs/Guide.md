@@ -360,7 +360,7 @@ What it checks:
 - **Settings, measured against the Microsoft security baseline:** the firewall profiles, User Account Control, BitLocker on each disk, the old SMB 1 protocol, Network Level Authentication for Remote Desktop, the Guest account, LSA protection, Secure Boot, virtualization-based security (VBS), AutoRun, and whether Windows updates are paused.
 - **Automatic sign-in** is on by design ([section 5](#5-the-90-day-cycle), step 12), so it is listed as Info.
 
-The scan runs in the VM as SYSTEM, with up to 20 minutes for the whole scan and 15 of them for the quick scan; a quick scan that takes longer is stopped and runs again the next night. A check that cannot be read is logged and the others still run; its findings from the night before stay open rather than being taken as resolved.
+The scan runs in the VM as SYSTEM, with up to 20 minutes for the whole scan and 15 of them for the quick scan; a quick scan that takes longer is stopped and runs again the next night. A check that cannot be read is logged and the others still run; its findings from the night before stay open rather than being taken as resolved. When the findings cannot be written to the VM, the scan is not kept, so its new findings are still new the next night.
 
 Each finding has these fields, one to a line, so a screen reader reads one at a time:
 
@@ -376,20 +376,21 @@ Status: New
 ```
 
 - **Severity** is High, Medium, Low or Info.
-- **Id** is made from what was found, so the same thing found again has the same Id, and when it changes, so does the Id. A Defender detection's Id includes Defender's detection id, so each detection is a finding of its own.
-- **Status** compares the scan with the one before: **New**, **Still open**, or **Resolved** when it is no longer found. A resolved finding is listed once, by the scan that no longer found it. A Defender detection is reported by the scan after it happened, and is resolved the night after.
+- **Id** is made from what was found, so the same thing found again has the same Id, and when it changes, so does the Id: `WindowsUpdate:PausedUntil:2026-11-20`, for one, carries the date. Treat Ids as opaque names, not something to take apart. A Defender detection's Id includes Defender's detection id, so each detection is a finding of its own.
+- **Where**, only on a finding about files, such as a Defender detection, lists them by full path. The copy on the VM's desktop, which every user of the VM can read, shows only their names.
+- **Status** compares the scan with the one before: **New**, **Still open**, or **Resolved** when it is no longer found. A resolved finding is listed once, by the scan that no longer found it. A Defender detection is reported by the scan after it happened, and stays open while Defender lists its threat as active; it is resolved once Defender no longer does.
 
 Where you see the findings:
 
 - **On the host:** every finding is in the VM's log, and kept in `Logs\SecurityFindings.json` in the VM's folder. `Get-LazyVMSecurityFinding -Name DevBox` lists them. While High or Medium findings are open, the first command you run on the VM reminds you in one line.
-- **In the VM:** `LazyVM Findings.txt` on the desktop, replaced after every scan. When the scan found something **new** that is High or Medium, the file opens in Notepad the next time you sign in, once for that scan; it does not open again until a later scan finds something new. A scheduled task in the VM, `LazyVM-SecurityFindings`, does this at every sign-in, in your own session with your normal rights. There is no notification.
+- **In the VM:** `LazyVM Findings.txt` on the desktop, replaced after every scan. When a scan finds something **new** that is High or Medium, the file opens in Notepad the next time you sign in, connect (at the console, in VMConnect or by Remote Desktop) or unlock the VM, once for that scan; it does not open again until a later scan finds something new, and a scan that finds nothing new does not stop it opening. A scheduled task in the VM, `LazyVM-SecurityFindings`, does this, in your own session with your normal rights; what it runs is in the task itself, not in a file anyone could change. There is no notification.
 
 ```powershell
 Get-LazyVMSecurityFinding -Name DevBox
 Get-LazyVMSecurityFinding -Name DevBox | Where-Object Status -ne 'Resolved'
 ```
 
-`GuestSecurityScan = false` in the VM's `VM.json` turns the scan off.
+`GuestSecurityScan = false` in the VM's `VM.json` turns the scan off. The findings file and the task that opens it stay in the VM as they are.
 
 ### Why rearm first
 

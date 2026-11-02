@@ -755,7 +755,7 @@
     "GuestSecurityScan": {
       "type": "boolean",
       "default": true,
-      "description": "Scan the VM every night, as the last step of maintenance: a Microsoft Defender quick scan, Defender's own protection, and security settings measured against the Microsoft security baseline (firewall, User Account Control, BitLocker, SMB 1, Remote Desktop, the Guest account, LSA protection, Secure Boot, virtualization-based security, AutoRun, paused Windows updates). It only reports: findings go to the VM's log, to Logs\\SecurityFindings.json, to LazyVM Findings.txt on the VM's desktop, which opens at sign-in when something new is High or Medium, and to Get-LazyVMSecurityFinding. Set to false to leave the VM unscanned."
+      "description": "Scan the VM every night, as the last step of maintenance: a Microsoft Defender quick scan, Defender's own protection, and security settings measured against the Microsoft security baseline (firewall, User Account Control, BitLocker, SMB 1, Remote Desktop, the Guest account, LSA protection, Secure Boot, virtualization-based security, AutoRun, paused Windows updates). It only reports: findings go to the VM's log, to Logs\\SecurityFindings.json, to LazyVM Findings.txt on the VM's desktop, which opens at the next sign-in, connect or unlock when something new is High or Medium, and to Get-LazyVMSecurityFinding. Set to false to leave the VM unscanned; the findings file and the task that opens it stay in the VM as they are."
     },
     "GuestHideTaskbarSearch": {
       "type": "boolean",

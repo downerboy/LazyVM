@@ -10,15 +10,13 @@ BeforeAll {
     Import-LazyVMModule
 
     $module = 'LazyVM'
-    $scanScript = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.SecurityScan.ps1'
-    $openerScript = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.SecurityFindingOpener.ps1'
     $scannedAt = [datetimeoffset]::new(2026, 11, 2, 2, 40, 0, [timespan]::FromHours(-8))
 
     function New-GoodCheck {
         <# What the guest script reports for a guest that meets every check, as the host reads it back from JSON. #>
         $checks = [ordered]@{
             Defender          = @{ AMServiceEnabled = $true; AntivirusEnabled = $true; RealTimeProtectionEnabled = $true; IsTamperProtected = $true; AntivirusSignatureAge = 0; AntivirusSignatureLastUpdated = '2026-11-01' }
-            DefenderDetection = @{ Detections = @() }
+            DefenderDetection = @{ Detections = @(); ActiveThreatIds = @() }
             Firewall          = @{ Profiles = @(@{ Name = 'Domain'; Enabled = $true; DefaultInboundAction = 'Block' }, @{ Name = 'Private'; Enabled = $true; DefaultInboundAction = 'NotConfigured' }, @{ Name = 'Public'; Enabled = $true; DefaultInboundAction = 'Block' }) }
             UAC               = @{ EnableLUA = 1; ConsentPromptBehaviorAdmin = 5; PromptOnSecureDesktop = 1 }
             BitLocker         = @{ Volumes = @(@{ MountPoint = 'C:'; ProtectionStatus = 'On' }) }
@@ -36,18 +34,23 @@ BeforeAll {
     }
 
     function New-TestFinding {
-        <# A finding as the scan stores it. #>
+        <# A finding as the scan keeps it. #>
         param(
             [string]$Id = 'Firewall:Public:Off',
             [string]$Severity = 'High',
             [string]$Status = 'New',
-            [string]$FirstSeen = '2026-11-01 02:40'
+            [string]$FirstSeen = '2026-11-01T02:40:00.0000000-08:00',
+            [string[]]$Where = @()
         )
 
-        return [pscustomobject]@{
-            Id = $Id; Severity = $Severity; Title = "Title of $Id"; WhatWeFound = 'found'; WhyItMatters = 'why'; HowToFix = 'fix'
-            FirstSeen = $FirstSeen; Status = $Status
-        }
+        $record = @{ Id = $Id; Severity = $Severity; Title = "Title of $Id"; WhatWeFound = 'found'; Where = $Where; WhyItMatters = 'why'; HowToFix = 'fix'; FirstSeen = $FirstSeen; Status = $Status }
+        return InModuleScope $module -Parameters @{ Record = $record } { param($Record) [SecurityFinding]::FromObject($Record) }
+    }
+
+    function Format-TestTime {
+        <# A time as the findings show it. #>
+        param([Parameter(Mandatory)][string]$Time)
+        return ([datetimeoffset]::Parse($Time)).ToLocalTime().ToString('yyyy-MM-dd HH:mm')
     }
 
     function ConvertTo-TestFinding {
@@ -89,7 +92,7 @@ BeforeAll {
 
 Describe 'ConvertTo-SecurityFinding' {
     It 'finds nothing on a guest that meets every check' {
-        $found = ConvertTo-TestFinding -Check (New-GoodCheck)
+        $found = @(ConvertTo-TestFinding -Check (New-GoodCheck))
 
         $found.Count | Should -Be 0
     }
@@ -116,7 +119,7 @@ Describe 'ConvertTo-SecurityFinding' {
         $check = New-GoodCheck
         $check.$Area.$Field = $Value
 
-        $found = ConvertTo-TestFinding -Check $check
+        $found = @(ConvertTo-TestFinding -Check $check)
 
         $found.Count | Should -Be 1
         $found[0].Id | Should -Be $Id
@@ -129,16 +132,16 @@ Describe 'ConvertTo-SecurityFinding' {
         $check.Defender.AntivirusEnabled = $false
         $check.Defender.RealTimeProtectionEnabled = $false
 
-        (ConvertTo-TestFinding -Check $check).Id | Should -Be @('Defender:Antivirus:Off')
+        @(ConvertTo-TestFinding -Check $check).Id | Should -Be @('Defender:Antivirus:Off')
     }
 
     It 'says how old the virus definitions are, and leaves a week alone' {
         $check = New-GoodCheck
         $check.Defender.AntivirusSignatureAge = 7
-        (ConvertTo-TestFinding -Check $check).Count | Should -Be 0
+        @(ConvertTo-TestFinding -Check $check).Count | Should -Be 0
 
         $check.Defender.AntivirusSignatureAge = 12
-        (ConvertTo-TestFinding -Check $check)[0].WhatWeFound | Should -BeLike '*12 days old*2026-11-01*'
+        @(ConvertTo-TestFinding -Check $check)[0].WhatWeFound | Should -BeLike '*12 days old*2026-11-01*'
     }
 
     It 'reports a firewall profile that is <Case>' -ForEach @(
@@ -149,7 +152,7 @@ Describe 'ConvertTo-SecurityFinding' {
         $check.Firewall.Profiles[2].Enabled = $Enabled
         $check.Firewall.Profiles[2].DefaultInboundAction = $Inbound
 
-        $found = ConvertTo-TestFinding -Check $check
+        $found = @(ConvertTo-TestFinding -Check $check)
 
         $found.Id | Should -Be @($Id)
         $found[0].Severity | Should -Be $Severity
@@ -160,7 +163,7 @@ Describe 'ConvertTo-SecurityFinding' {
         $check = New-GoodCheck
         $check.BitLocker.Volumes = @([pscustomobject]@{ MountPoint = 'C:'; ProtectionStatus = 'On' }, [pscustomobject]@{ MountPoint = 'W:'; ProtectionStatus = 'Off' }, [pscustomobject]@{ MountPoint = 'U:'; ProtectionStatus = 'Unknown' })
 
-        $found = ConvertTo-TestFinding -Check $check
+        $found = @(ConvertTo-TestFinding -Check $check)
 
         $found.Id | Should -Be @('BitLocker:W:Off')
         $found[0].Severity | Should -Be 'Medium'
@@ -171,7 +174,7 @@ Describe 'ConvertTo-SecurityFinding' {
         $check.RemoteDesktop.Enabled = $false
         $check.RemoteDesktop.Nla = $false
 
-        (ConvertTo-TestFinding -Check $check).Count | Should -Be 0
+        @(ConvertTo-TestFinding -Check $check).Count | Should -Be 0
     }
 
     It 'takes LSA protection set to start at the next restart as on' {
@@ -179,17 +182,17 @@ Describe 'ConvertTo-SecurityFinding' {
         $check.LSA.ProtectedSinceBoot = $false
         $check.LSA.RunAsPPL = 2
 
-        (ConvertTo-TestFinding -Check $check).Count | Should -Be 0
+        @(ConvertTo-TestFinding -Check $check).Count | Should -Be 0
     }
 
     It 'reports Windows Update paused only until a date still to come' {
         $check = New-GoodCheck
         $check.WindowsUpdate.PausedUntil = @('2026-10-01T00:00:00Z')
-        (ConvertTo-TestFinding -Check $check).Count | Should -Be 0
+        @(ConvertTo-TestFinding -Check $check).Count | Should -Be 0
 
         $check.WindowsUpdate.PausedUntil = @('2026-10-01T00:00:00Z', '2026-11-20T08:00:00Z', 'not a date')
-        $found = ConvertTo-TestFinding -Check $check
-        $found.Id | Should -Be @('WindowsUpdate:Updates:Paused')
+        $found = @(ConvertTo-TestFinding -Check $check)
+        $found.Id | Should -Be @('WindowsUpdate:PausedUntil:' + ([datetimeoffset]'2026-11-20T08:00:00Z').ToLocalTime().ToString('yyyy-MM-dd'))
         $found[0].Severity | Should -Be 'Medium'
         $found[0].WhatWeFound | Should -BeLike '*2026-11-20*'
     }
@@ -199,37 +202,46 @@ Describe 'ConvertTo-SecurityFinding' {
         $check.Firewall = $null
         $check.Defender = $null
 
-        (ConvertTo-TestFinding -Check $check).Count | Should -Be 0
+        @(ConvertTo-TestFinding -Check $check).Count | Should -Be 0
     }
 
     Context 'Defender detections' {
         BeforeAll {
             function New-DetectionCheck {
-                param([object[]]$Detection)
+                param([object[]]$Detection, [string[]]$Active = @())
                 $check = New-GoodCheck
                 $check.DefenderDetection.Detections = @($Detection)
+                $check.DefenderDetection.ActiveThreatIds = @($Active)
                 return $check
             }
 
-            $quarantined = [pscustomobject]@{ DetectionId = '{D1}'; ThreatName = 'Trojan:Win32/Sample'; DetectedAt = '2026-11-01T20:00:00.0000000Z'; Resources = @('file:_C:\Users\dev\Downloads\x.exe'); ThreatStatusId = 3; ActionSuccess = $true }
-            $notRemoved = [pscustomobject]@{ DetectionId = '{D2}'; ThreatName = 'Backdoor:Win32/Other'; DetectedAt = '2026-11-01T21:00:00.0000000Z'; Resources = @('file:_C:\Tools\y.dll'); ThreatStatusId = 103; ActionSuccess = $false }
-            $old = [pscustomobject]@{ DetectionId = '{D0}'; ThreatName = 'Trojan:Win32/Old'; DetectedAt = '2026-10-20T10:00:00.0000000Z'; Resources = @(); ThreatStatusId = 4; ActionSuccess = $true }
+            $quarantined = [pscustomobject]@{ DetectionId = '{D1}'; ThreatId = '101'; ThreatName = 'Trojan:Win32/Sample'; DetectedAt = '2026-11-01T20:00:00.0000000Z'; Resources = @('file:_C:\Users\dev\Downloads\x.exe'); ThreatStatusId = 3; ActionSuccess = $true }
+            $notRemoved = [pscustomobject]@{ DetectionId = '{D2}'; ThreatId = '102'; ThreatName = 'Backdoor:Win32/Other'; DetectedAt = '2026-11-01T21:00:00.0000000Z'; Resources = @('file:_C:\Tools\y.dll'); ThreatStatusId = 103; ActionSuccess = $false }
+            $old = [pscustomobject]@{ DetectionId = '{D0}'; ThreatId = '100'; ThreatName = 'Trojan:Win32/Old'; DetectedAt = '2026-10-20T10:00:00.0000000Z'; Resources = @(); ThreatStatusId = 4; ActionSuccess = $true }
+            $since = [datetimeoffset]::Parse('2026-11-01T02:40:00-08:00')
         }
 
         It 'reports each detection since the last scan, by its detection id, Medium when Defender dealt with it and High when not' {
-            $since = [datetimeoffset]::Parse('2026-11-01T02:40:00-08:00')
-
-            $found = ConvertTo-TestFinding -Check (New-DetectionCheck -Detection $quarantined, $notRemoved, $old) -Since $since
+            $found = @(ConvertTo-TestFinding -Check (New-DetectionCheck -Detection $quarantined, $notRemoved, $old) -Since $since)
 
             $found.Id | Should -Be @('DefenderDetection:Trojan:Win32/Sample:{D1}', 'DefenderDetection:Backdoor:Win32/Other:{D2}')
             $found[0].Severity | Should -Be 'Medium'
-            $found[0].WhatWeFound | Should -BeLike '*Trojan:Win32/Sample*C:\Users\dev\Downloads\x.exe*quarantined*'
+            $found[0].WhatWeFound | Should -BeLike '*Trojan:Win32/Sample*quarantined*'
+            $found[0].Where | Should -Be @('C:\Users\dev\Downloads\x.exe')
             $found[1].Severity | Should -Be 'High'
             $found[1].WhatWeFound | Should -BeLike '*could not remove it*'
         }
 
+        It 'keeps reporting, as High, an older detection whose threat Defender still lists as active' {
+            $found = @(ConvertTo-TestFinding -Check (New-DetectionCheck -Detection $old -Active '100') -Since $since)
+
+            $found.Id | Should -Be @('DefenderDetection:Trojan:Win32/Old:{D0}')
+            $found[0].Severity | Should -Be 'High'
+            $found[0].WhatWeFound | Should -BeLike '*still lists it as active*'
+        }
+
         It 'reports every detection Defender still lists on the first scan' {
-            (ConvertTo-TestFinding -Check (New-DetectionCheck -Detection $quarantined, $old) -Since $null).Count | Should -Be 2
+            @(ConvertTo-TestFinding -Check (New-DetectionCheck -Detection $quarantined, $old) -Since $null).Count | Should -Be 2
         }
     }
 }
@@ -243,6 +255,13 @@ Describe 'Get-UncheckedSecurityArea' {
         $unchecked = InModuleScope $module -Parameters @{ Check = $check } { param($Check) Get-UncheckedSecurityArea -Check $Check }
 
         $unchecked | Should -Be @('Firewall', 'LSA')
+    }
+
+    It 'names an area the facts do not have at all' {
+        $check = New-GoodCheck
+        $check.PSObject.Properties.Remove('AutoRun')
+
+        InModuleScope $module -Parameters @{ Check = $check } { param($Check) Get-UncheckedSecurityArea -Check $Check } | Should -Be @('AutoRun')
     }
 }
 
@@ -270,17 +289,17 @@ Describe 'Compare-SecurityFinding' {
     }
 
     It 'marks a finding the last scan did not have as New, first seen now' {
-        $result = Compare-TestFinding -Current (New-CurrentFinding)
+        $result = @(Compare-TestFinding -Current (New-CurrentFinding))
 
         $result[0].Status | Should -Be 'New'
-        $result[0].FirstSeen | Should -Be '2026-11-02 02:40'
+        $result[0].FirstSeen | Should -Be $scannedAt
     }
 
     It 'marks a finding the last scan had as Still open, first seen when it was' {
-        $result = Compare-TestFinding -Current (New-CurrentFinding) -Previous (New-TestFinding -Status 'New' -FirstSeen '2026-10-30 02:40')
+        $result = @(Compare-TestFinding -Current (New-CurrentFinding) -Previous (New-TestFinding -Status 'New' -FirstSeen '2026-10-30T02:40:00.0000000-08:00'))
 
         $result[0].Status | Should -Be 'Still open'
-        $result[0].FirstSeen | Should -Be '2026-10-30 02:40'
+        $result[0].FirstSeen | Should -Be ([datetimeoffset]'2026-10-30T02:40:00-08:00')
     }
 
     It 'marks an open finding the scan no longer finds as Resolved, once' {
@@ -289,21 +308,21 @@ Describe 'Compare-SecurityFinding' {
             New-TestFinding -Id 'SMBv1:Server:On' -Status 'Resolved'
         )
 
-        $result = Compare-TestFinding -Previous $previous
+        $result = @(Compare-TestFinding -Previous $previous)
 
         $result.Id | Should -Be @('UAC:EnableLUA:Off')
         $result[0].Status | Should -Be 'Resolved'
     }
 
     It 'marks a finding that is back after it was resolved as New' {
-        $result = Compare-TestFinding -Current (New-CurrentFinding) -Previous (New-TestFinding -Status 'Resolved' -FirstSeen '2026-10-01 02:40')
+        $result = @(Compare-TestFinding -Current (New-CurrentFinding) -Previous (New-TestFinding -Status 'Resolved' -FirstSeen '2026-10-01T02:40:00.0000000-08:00'))
 
         $result[0].Status | Should -Be 'New'
-        $result[0].FirstSeen | Should -Be '2026-11-02 02:40'
+        $result[0].FirstSeen | Should -Be $scannedAt
     }
 
     It 'keeps an open finding of an area the guest could not read tonight as Still open' {
-        $result = Compare-TestFinding -Previous (New-TestFinding -Id 'Firewall:Public:Off' -Status 'New') -Unchecked 'Firewall'
+        $result = @(Compare-TestFinding -Previous (New-TestFinding -Id 'Firewall:Public:Off' -Status 'New') -Unchecked 'Firewall')
 
         $result[0].Status | Should -Be 'Still open'
         $result[0].Id | Should -Be 'Firewall:Public:Off'
@@ -316,7 +335,7 @@ Describe 'Compare-SecurityFinding' {
             New-CurrentFinding -Id 'SMBv1:Server:On' -Severity 'High'
         )
 
-        $result = Compare-TestFinding -Current $current -Previous (New-TestFinding -Id 'Account:Guest:Enabled' -Status 'New')
+        $result = @(Compare-TestFinding -Current $current -Previous (New-TestFinding -Id 'Account:Guest:Enabled' -Status 'New'))
 
         $result.Id | Should -Be @('SMBv1:Server:On', 'Account:Guest:Enabled', 'VBS:Status:NotRunning')
     }
@@ -339,13 +358,13 @@ Describe 'Test-SecurityFindingAlert' {
 
 Describe 'Format-SecurityFindingReport' {
     It 'says what it is, that LazyVM changed nothing, then each finding one field per line' {
-        $findings =@((New-TestFinding -Id 'Firewall:Public:Off'), (New-TestFinding -Id 'AutoLogon:Winlogon:On' -Severity 'Info' -Status 'Still open'))
+        $findings = @((New-TestFinding -Id 'Firewall:Public:Off' -Where 'C:\Users\dev\Downloads\x.exe'), (New-TestFinding -Id 'AutoLogon:Winlogon:On' -Severity 'Info' -Status 'Still open'))
 
         $text = InModuleScope $module -Parameters @{ Finding = $findings; ScannedAt = $scannedAt } { param($Finding, $ScannedAt) Format-SecurityFindingReport -Finding $Finding -VMName 'Alpha' -ScannedAt $ScannedAt }
         $lines = $text -split "`r`n"
 
         $lines[0] | Should -Be 'LazyVM security findings for Alpha'
-        $lines | Should -Contain 'Scanned on 2026-11-02 02:40.'
+        $lines | Should -Contain "Scanned on $(Format-TestTime -Time $scannedAt.ToString('o'))."
         $lines | Should -Contain 'LazyVM only reports what it finds. It changed nothing in this VM.'
         $lines | Should -Contain '2 findings: 1 new, 1 still open, 0 resolved.'
         $lines | Should -Contain 'Finding 1 of 2'
@@ -353,11 +372,19 @@ Describe 'Format-SecurityFindingReport' {
         $lines | Should -Contain 'Severity: High'
         $lines | Should -Contain 'Title: Title of Firewall:Public:Off'
         $lines | Should -Contain 'What we found: found'
+        $lines | Should -Contain 'Where: x.exe'
         $lines | Should -Contain 'Why it matters: why'
         $lines | Should -Contain 'How to fix: fix'
-        $lines | Should -Contain 'First seen: 2026-11-01 02:40'
+        $lines | Should -Contain "First seen: $(Format-TestTime -Time '2026-11-01T02:40:00-08:00')"
         $lines | Should -Contain 'Status: New'
         $text | Should -Not -Match "(?<!`r)`n"
+        $text | Should -Not -BeLike '*Downloads*'
+    }
+
+    It 'lists the full paths in the log' {
+        $lines = InModuleScope $module -Parameters @{ Finding = (New-TestFinding -Where 'C:\Users\dev\Downloads\x.exe') } { param($Finding) Format-SecurityFinding -Finding $Finding }
+
+        $lines | Should -Contain 'Where: C:\Users\dev\Downloads\x.exe'
     }
 
     It 'says so when there is nothing to report' {
@@ -391,9 +418,11 @@ Describe 'Get-SecurityFindingReminderMessage' {
 Describe 'Invoke-GuestSecurityScan' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Install-GuestSecurityFindingOpener { }
         Mock -ModuleName $module Publish-GuestSecurityFinding { }
         $script:check = New-GoodCheck
-        Mock -ModuleName $module Get-GuestSecurityFact { [pscustomobject]@{ Checks = $script:check } }
+        $script:collectedAt = '2026-11-02T10:40:00.0000000Z'
+        Mock -ModuleName $module Get-GuestSecurityFact { [pscustomobject]@{ CollectedAt = $script:collectedAt; Checks = $script:check } }
     }
 
     It 'leaves the guest alone when GuestSecurityScan is off' {
@@ -404,24 +433,38 @@ Describe 'Invoke-GuestSecurityScan' {
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -match 'turned off in the settings \(GuestSecurityScan\)' }
     }
 
-    It 'keeps the findings, logs each one, and opens the desktop file at sign-in for new High ones, once' {
+    It 'keeps the findings, logs each one, and asks the guest to open the desktop file for new High ones, once' {
         $vm = New-TestVM -Root (New-TestRoot)
         $script:check.SMBv1.Enabled = $true
 
         $result = @(InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM })
 
         $result.Count | Should -Be 0
-        $record = Get-Content -LiteralPath $vm.Settings.SecurityFindingsFile -Raw | ConvertFrom-Json
-        $record.Findings.Id | Should -Be @('SMBv1:Server:On')
-        $record.Findings[0].Status | Should -Be 'New'
+        $record = Get-Content -LiteralPath $vm.Settings.SecurityFindingsFile -Raw | ConvertFrom-Json -DateKind String
+        [datetimeoffset]::Parse($record.ScannedAt) | Should -Be ([datetimeoffset]$script:collectedAt)
+        @($record.Findings).Id | Should -Be @('SMBv1:Server:On')
+        @($record.Findings)[0].Status | Should -Be 'New'
+        [datetimeoffset]::Parse(@($record.Findings)[0].FirstSeen) | Should -Be ([datetimeoffset]$script:collectedAt)
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Id: SMBv1:Server:On*' -and $Level -eq 'WARN' }
+        Should -Invoke -ModuleName $module Install-GuestSecurityFindingOpener -Times 1 -Exactly
         Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -match '^\d{8}-\d{6}$' -and $Text -like '*Id: SMBv1:Server:On*' }
 
-        # The next night finds the same: still open, so the file is not opened again.
+        # The next night finds the same: still open, so the file is not asked to open again.
+        $script:collectedAt = '2026-11-03T10:40:00.0000000Z'
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
 
-        (Get-Content -LiteralPath $vm.Settings.SecurityFindingsFile -Raw | ConvertFrom-Json).Findings[0].Status | Should -Be 'Still open'
+        @((Get-Content -LiteralPath $vm.Settings.SecurityFindingsFile -Raw | ConvertFrom-Json).Findings)[0].Status | Should -Be 'Still open'
         Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -eq '' -and $Text -like '*Status: Still open*' }
+    }
+
+    It 'keeps nothing when the findings did not reach the guest, so the next night they are still new' {
+        $vm = New-TestVM -Root (New-TestRoot)
+        $script:check.SMBv1.Enabled = $true
+        Mock -ModuleName $module Publish-GuestSecurityFinding { throw 'the guest stopped answering' }
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM } } | Should -Throw '*stopped answering*'
+
+        $vm.Settings.SecurityFindingsFile | Should -Not -Exist
     }
 
     It 'takes findings it cannot read as a first scan, and says so' {
@@ -435,14 +478,20 @@ Describe 'Invoke-GuestSecurityScan' {
         Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly
     }
 
-    It 'asks the guest only for detections since the last scan' {
+    It 'keeps a detection open while Defender lists it as active, and resolves it once it does not' {
         $vm = New-TestVM -Root (New-TestRoot)
-        $script:check.DefenderDetection.Detections = @([pscustomobject]@{ DetectionId = '{D1}'; ThreatName = 'Trojan:Win32/Sample'; DetectedAt = '2000-01-01T00:00:00Z'; Resources = @(); ThreatStatusId = 3; ActionSuccess = $true })
+        # Detected an hour before the first collection.
+        $script:check.DefenderDetection.Detections = @([pscustomobject]@{ DetectionId = '{D1}'; ThreatId = '7'; ThreatName = 'Trojan:Win32/Sample'; DetectedAt = '2026-11-02T09:40:00Z'; Resources = @(); ThreatStatusId = 103; ActionSuccess = $false })
+        $script:check.DefenderDetection.ActiveThreatIds = @('7')
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
-        (Get-Content -LiteralPath $vm.Settings.SecurityFindingsFile -Raw | ConvertFrom-Json).Findings.Count | Should -Be 1
 
+        $script:collectedAt = '2026-11-03T10:40:00.0000000Z'
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
+        @((Get-Content -LiteralPath $vm.Settings.SecurityFindingsFile -Raw | ConvertFrom-Json).Findings)[0].Status | Should -Be 'Still open'
 
+        $script:collectedAt = '2026-11-04T10:40:00.0000000Z'
+        $script:check.DefenderDetection.ActiveThreatIds = @()
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
         $findings = @((Get-Content -LiteralPath $vm.Settings.SecurityFindingsFile -Raw | ConvertFrom-Json).Findings)
         $findings.Count | Should -Be 1
         $findings[0].Status | Should -Be 'Resolved'
@@ -452,34 +501,56 @@ Describe 'Invoke-GuestSecurityScan' {
 Describe 'Get-GuestSecurityFact' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
-        Mock -ModuleName $module Invoke-GuestTask { '{"Notes":[{"Level":"OK","Text":"Defender quick scan finished"}],"Checks":{"SMBv1":{"Enabled":false},"Firewall":null}}' }
+        Mock -ModuleName $module Invoke-GuestTask { '{"CollectedAt":"2026-11-02T10:40:00Z","Notes":[{"Level":"OK","Text":"Defender quick scan finished"}],"Checks":{"SMBv1":{"Enabled":false},"Firewall":null}}' }
     }
 
-    It 'runs the guest script as SYSTEM within its time budget, and logs what it reports' {
+    It 'runs the collector as SYSTEM within its time budget, and logs what it reports' {
         $vm = New-TestVM -Root (New-TestRoot)
 
         $facts = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-GuestSecurityFact -VM $VM }
 
         $facts.Checks.SMBv1.Enabled | Should -BeFalse
-        $expected = Get-Content -LiteralPath $scanScript -Raw
+        $facts.CollectedAt | Should -Be '2026-11-02T10:40:00Z'
+        $expected = InModuleScope $module { "$script:GuestSecurityScanWork" }
         Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
-            -not $AsGuestUser -and $TimeoutMinutes -eq 20 -and $Work.ToString() -eq $expected -and $ArgumentList[0] -eq 15
+            -not $AsGuestUser -and $TimeoutMinutes -eq 20 -and "$Work" -eq $expected -and $ArgumentList[0] -eq 15
         }
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Defender quick scan finished*' -and $Level -eq 'OK' }
     }
 }
 
 Describe 'Publish-GuestSecurityFinding' {
-    It 'writes the file and its sign-in opener through the guest session, with no secret' {
-        Mock -ModuleName $module Invoke-GuestScript { }
+    BeforeEach { Mock -ModuleName $module Invoke-GuestScript { } }
+
+    It 'writes the file through the guest session, with the stamp of the scan it is to open for' {
         $vm = New-TestVM -Root (New-TestRoot)
 
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Publish-GuestSecurityFinding -VM $VM -Text 'the findings' -AlertScanId '20261102-024000' }
 
-        $opener = Get-Content -LiteralPath $openerScript -Raw
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
-            $ArgumentList[0] -eq 'the findings' -and $ArgumentList[1] -eq $opener -and $ArgumentList[2] -eq 'C:\LazyVMSetup' -and
-            $ArgumentList[3] -eq 'LazyVM-SecurityFindings' -and $ArgumentList[6] -eq '20261102-024000'
+            $ArgumentList[0] -eq 'the findings' -and $ArgumentList[1] -eq 'LazyVM Findings.txt' -and $ArgumentList[2] -eq 'HKLM:\SOFTWARE\LazyVM' -and
+            $ArgumentList[3] -eq 'SecurityFindingsAlert' -and $ArgumentList[4] -eq '20261102-024000'
+        }
+    }
+
+    It 'never clears the stamp, so a file not opened yet still opens after a scan that found nothing new' {
+        $guest = InModuleScope $module { (Get-Command Publish-GuestSecurityFinding).ScriptBlock.ToString() }
+
+        $guest | Should -Not -Match 'Remove-ItemProperty'
+    }
+}
+
+Describe 'Install-GuestSecurityFindingOpener' {
+    It 'registers the task at sign-in, connect and unlock, with the opener as its command, and removes the old opener file' {
+        Mock -ModuleName $module Invoke-GuestScript { }
+        $vm = New-TestVM -Root (New-TestRoot)
+        $argument = InModuleScope $module { Get-SecurityFindingOpenerArgument }
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Install-GuestSecurityFindingOpener -VM $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $ArgumentList[0] -eq 'LazyVM-SecurityFindings' -and $ArgumentList[1] -eq $argument -and
+            "$($ArgumentList[2])" -eq '1 3 8' -and $ArgumentList[3] -like '*SecurityFindingOpener.ps1'
         }
     }
 }
@@ -541,7 +612,8 @@ Describe 'Get-LazyVMSecurityFinding' {
         $result.Id | Should -Be @('Firewall:Public:Off', 'VBS:Status:NotRunning')
         $result[0].Name | Should -Be 'Alpha'
         $result[0].PSObject.TypeNames[0] | Should -Be 'LazyVM.SecurityFinding'
-        @($result[0].PSObject.Properties.Name) | Should -Be @('Name', 'Id', 'Severity', 'Title', 'WhatWeFound', 'WhyItMatters', 'HowToFix', 'FirstSeen', 'Status')
+        $result[0].FirstSeen | Should -BeOfType [datetimeoffset]
+        @($result[0].PSObject.Properties.Name) | Should -Be @('Name', 'Id', 'Severity', 'Title', 'WhatWeFound', 'Where', 'WhyItMatters', 'HowToFix', 'FirstSeen', 'Status')
     }
 
     It 'says when no scan has run yet, and returns nothing' {
@@ -552,31 +624,48 @@ Describe 'Get-LazyVMSecurityFinding' {
     }
 }
 
-Describe 'Guest.SecurityScan.ps1' {
-    It 'reports each check it cannot read as a note and the check as not read, never failing' {
-        # On this test runner none of the Windows commands exist, so every check fails to read.
-        $json = & $scanScript 0
-        $facts = $json | ConvertFrom-Json
+Describe 'The guest collector' {
+    BeforeAll {
+        # Whatever this test runner has, every Windows command the collector
+        # reads through fails here, as in a guest that cannot answer.
+        $script:collectorCommands = @('Start-MpScan', 'Get-MpComputerStatus', 'Get-MpThreat', 'Get-MpThreatDetection', 'Get-NetFirewallProfile', 'Get-BitLockerVolume',
+            'Get-SmbServerConfiguration', 'Get-LocalUser', 'Get-CimInstance', 'Confirm-SecureBootUEFI', 'Get-WinEvent')
+        foreach ($name in $script:collectorCommands) { Set-Item -Path "function:global:$name" -Value { throw 'not available' } }
+    }
 
-        $areas = @($facts.Checks.PSObject.Properties.Name)
-        $areas | Should -Be @('Defender', 'DefenderDetection', 'Firewall', 'UAC', 'BitLocker', 'SMBv1', 'RemoteDesktop', 'Account', 'LSA', 'SecureBoot', 'VBS', 'AutoRun', 'WindowsUpdate', 'AutoLogon')
-        foreach ($area in 'Defender', 'DefenderDetection', 'Firewall', 'BitLocker', 'SMBv1', 'Account', 'SecureBoot', 'VBS') {
+    AfterAll {
+        foreach ($name in $script:collectorCommands) { Remove-Item -Path "function:global:$name" -ErrorAction SilentlyContinue }
+    }
+
+    It 'reads every area the host checks, in its order, and reports one it cannot read as a note, never failing' {
+        $facts = InModuleScope $module { & $script:GuestSecurityScanWork 0 } | ConvertFrom-Json
+        $checked = InModuleScope $module { @($script:SecurityCheck.Keys) }
+
+        @($facts.Checks.PSObject.Properties.Name) | Should -Be $checked
+        { [datetimeoffset]::Parse($facts.CollectedAt) } | Should -Not -Throw
+        @($facts.Notes | Where-Object { $_.Text -like '*quick scan could not run*' }).Count | Should -Be 1
+        foreach ($area in 'Defender', 'DefenderDetection', 'Firewall', 'BitLocker', 'SMBv1', 'Account', 'LSA', 'SecureBoot', 'VBS') {
             $facts.Checks.$area | Should -BeNullOrEmpty -Because $area
-            @($facts.Notes | Where-Object { $_.Level -eq 'WARN' -and $_.Text -like "*$area*" }).Count | Should -BeGreaterThan 0 -Because $area
+            @($facts.Notes | Where-Object { $_.Level -eq 'WARN' -and $_.Text -like "*read $area *" }).Count | Should -Be 1 -Because $area
         }
     }
 
     It 'reads the firewall profiles from the active store' {
-        function Get-NetFirewallProfile { param($PolicyStore) if ($PolicyStore -ne 'ActiveStore') { throw 'wrong store' }; [pscustomobject]@{ Name = 'Public'; Enabled = 'False'; DefaultInboundAction = 'Block' } }
+        Set-Item -Path 'function:global:Get-NetFirewallProfile' -Value { param($PolicyStore) if ($PolicyStore -ne 'ActiveStore') { throw 'wrong store' }; [pscustomobject]@{ Name = 'Public'; Enabled = 'False'; DefaultInboundAction = 'Block' } }
 
-        $facts = & $scanScript 0 | ConvertFrom-Json
+        $facts = InModuleScope $module { & $script:GuestSecurityScanWork 0 } | ConvertFrom-Json
 
         $facts.Checks.Firewall.Profiles[0].Name | Should -Be 'Public'
         $facts.Checks.Firewall.Profiles[0].Enabled | Should -BeFalse
     }
 }
 
-Describe 'Guest.SecurityFindingOpener.ps1' {
+Describe 'The sign-in opener' {
+    BeforeAll {
+        $argument = InModuleScope $module { Get-SecurityFindingOpenerArgument }
+        $command = [regex]::Match($argument, '-Command "(.*)"$').Groups[1].Value
+    }
+
     BeforeEach {
         Mock Start-Process { }
         Mock Set-ItemProperty { }
@@ -584,13 +673,21 @@ Describe 'Guest.SecurityFindingOpener.ps1' {
         Mock Test-Path { $true }
     }
 
-    It 'opens the file in Notepad and records it, when a scan asked for it and it was not opened for that scan' {
+    It 'is the task''s plain -Command, one line with no double quotes, so no file holds it and nothing is encoded' {
+        $argument | Should -Not -BeLike '*-EncodedCommand*'
+        $argument | Should -Not -Match ' -File '
+        $command | Should -Not -BeNullOrEmpty
+        $command | Should -Not -Match "[`"`r`n]"
+        $command | Should -BeLike '*\System32\notepad.exe*'
+    }
+
+    It 'opens the file in Notepad, by its full path, and records it, when a scan asked for it and it was not opened for that scan' {
         Mock Get-ItemProperty { if ($Path -like 'HKLM:*') { [pscustomobject]@{ SecurityFindingsAlert = '20261102-024000' } } else { [pscustomobject]@{ SecurityFindingsOpened = '20261101-024000' } } }
 
-        & $openerScript -Path 'C:\Users\Public\Desktop\LazyVM Findings.txt'
+        & ([scriptblock]::Create($command))
 
         Should -Invoke Set-ItemProperty -Times 1 -Exactly -ParameterFilter { $Name -eq 'SecurityFindingsOpened' -and $Value -eq '20261102-024000' }
-        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $FilePath -eq 'notepad.exe' -and "$ArgumentList" -eq '"C:\Users\Public\Desktop\LazyVM Findings.txt"' }
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $FilePath -like '*\System32\notepad.exe' -and "$ArgumentList" -like '"*LazyVM Findings.txt"' }
     }
 
     It 'leaves it closed when <Case>' -ForEach @(
@@ -599,16 +696,16 @@ Describe 'Guest.SecurityFindingOpener.ps1' {
     ) {
         Mock Get-ItemProperty { if ($Path -like 'HKLM:*') { if ($Alert) { [pscustomobject]@{ SecurityFindingsAlert = $Alert } } } else { [pscustomobject]@{ SecurityFindingsOpened = $Opened } } }
 
-        & $openerScript -Path 'C:\Users\Public\Desktop\LazyVM Findings.txt'
+        & ([scriptblock]::Create($command))
 
         Should -Invoke Start-Process -Times 0
         Should -Invoke Set-ItemProperty -Times 0
     }
 
-    It 'uses the alert value the scan sets' {
-        $name = InModuleScope $module { $script:GuestSecurityAlertValueName }
+    It 'reads the names the scan writes' {
+        $names = InModuleScope $module { @($script:GuestMarkerKey, $script:GuestSecurityAlertValueName, $script:GuestSecurityFindingsFileName) }
 
-        Get-Content -LiteralPath $openerScript -Raw | Should -Match "'$name'"
+        foreach ($name in $names) { $command | Should -BeLike "*'$name'*" }
     }
 }
 
