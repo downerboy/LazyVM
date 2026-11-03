@@ -228,6 +228,9 @@ Describe 'The persistence collector' {
     }
 
     It 'reads every area the host checks, in its order, and reports one it cannot read as a note, never failing' {
+        # The services, from the registry, fail too, as on a Windows runner they would not.
+        Mock -ModuleName $module Get-ChildItem -ParameterFilter { $LiteralPath -eq 'HKLM:\SYSTEM\CurrentControlSet\Services' } { throw 'not available' }
+
         $facts = Invoke-TestCollector
         $areas = InModuleScope $module { @($script:PersistenceCheck.Keys) }
 
