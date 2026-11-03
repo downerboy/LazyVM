@@ -1133,18 +1133,38 @@ function Get-GuestAdminFolderProblem {
     return ''
 }
 
-function Initialize-GuestAdminFolder {
+function New-GuestAdminFolder {
     <#
-      Makes sure the folder at $Path, above LazyVM's private folders, is one
-      only administrators can change (Get-GuestAdminFolderProblem). A missing
-      one is made, inheriting Program Files' access. One that is not right
-      is never changed or deleted: this stops, saying why.
+      A new folder at $Path, above LazyVM's private folders, owned by
+      Administrators whatever the token's default owner is, and inheriting
+      the access of the folder above it.
     #>
     param([Parameter(Mandatory)][string]$Path)
 
-    if (-not (Test-Path -LiteralPath $Path)) { $null = New-Item -ItemType Directory -Path $Path }
+    $acl = New-Object System.Security.AccessControl.DirectorySecurity
+    $acl.SetOwner((New-Object System.Security.Principal.SecurityIdentifier($script:GuestAdministratorsSid)))
+    $null = [IO.Directory]::CreateDirectory($Path, $acl)
+}
+
+function Assert-GuestAdminFolder {
+    <# Stops, saying why and changing nothing, when the folder at $Path is not one only administrators can change (Get-GuestAdminFolderProblem). #>
+    param([Parameter(Mandatory)][string]$Path)
+
     $problem = Get-GuestAdminFolderProblem -Path $Path
     if ($problem) { throw "$Path is not safe for LazyVM's files: $problem. LazyVM does not change it; an administrator must fix or remove it." }
+}
+
+function Initialize-GuestAdminFolder {
+    <#
+      Makes sure the folder at $Path, above LazyVM's private folders, is one
+      only administrators can change. A missing one is made
+      (New-GuestAdminFolder). One that is not right is never changed or
+      deleted: this stops, saying why.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { New-GuestAdminFolder -Path $Path }
+    Assert-GuestAdminFolder -Path $Path
 }
 
 function Get-GuestLazyVMFolder {
@@ -1153,6 +1173,30 @@ function Get-GuestLazyVMFolder {
     param()
 
     return [IO.Path]::Combine($env:ProgramFiles, 'LazyVM')
+}
+
+function Initialize-GuestLazyVMFolder {
+    <#
+      Makes %ProgramFiles%\LazyVM ready (Initialize-GuestAdminFolder) and
+      returns it, once %ProgramFiles% itself is checked; that one is only
+      checked, never changed.
+    #>
+    [OutputType([string])]
+    param()
+
+    Assert-GuestAdminFolder -Path $env:ProgramFiles
+    $lazyVM = Get-GuestLazyVMFolder
+    Initialize-GuestAdminFolder -Path $lazyVM
+    return $lazyVM
+}
+
+function Test-GuestReparsePoint {
+    <# Whether what is at $Path is a junction or link (false when nothing is): one a user made would lead a read elsewhere. #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    return [bool]($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint))
 }
 
 function Initialize-GuestStagingFolder {
@@ -1164,9 +1208,7 @@ function Initialize-GuestStagingFolder {
     [OutputType([pscustomobject])]
     param()
 
-    $lazyVM = Get-GuestLazyVMFolder
-    Initialize-GuestAdminFolder -Path $lazyVM
-    return Initialize-GuestPrivateFolder -Path ([IO.Path]::Combine($lazyVM, 'Staging'))
+    return Initialize-GuestPrivateFolder -Path ([IO.Path]::Combine((Initialize-GuestLazyVMFolder), 'Staging'))
 }
 
 function Get-GuestAccountSid {
@@ -1444,7 +1486,11 @@ function Invoke-GuestGalleryModuleUpdate {
 # of its own, %ProgramFiles%\LazyVM\Tasks\<task> (#302), and its result and
 # transcript in the Output folder inside it. A task under a user's limited
 # token can read its folder and change only Output, so what it is given
-# stays as LazyVM wrote it; its result is only that user's word.
+# stays as LazyVM wrote it; its result is only that user's word. As that
+# user can make anything in Output a link, administrators never write,
+# move or delete there, and read only what is not a link (#302). Each start
+# gets a nonce in its arguments, which the wrapper writes before the
+# result, so a result from an earlier start is never taken for this one.
 
 $script:GuestTaskWrapper = @'
 $ErrorActionPreference = 'Stop'
@@ -1454,17 +1500,20 @@ $TaskOutput = Join-Path $TaskFolder 'Output'
 $name = [IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
 $base = Join-Path $TaskFolder $name
 $done = Join-Path $TaskOutput "$name.done"
+$nonce = ''
 $transcribing = $false
 try { Start-Transcript -Path (Join-Path $TaskOutput "$name.log") -Force | Out-Null; $transcribing = $true } catch { $transcribing = $false }
 try {
+    $task = Get-Content -LiteralPath "$base.args.json" -Raw | ConvertFrom-Json
+    $nonce = "$($task.Nonce)"
     $arguments = @()
-    foreach ($item in (Get-Content -LiteralPath "$base.args.json" -Raw | ConvertFrom-Json)) { $arguments += , $item }
+    foreach ($item in $task.Arguments) { $arguments += , $item }
     $work = [scriptblock]::Create((Get-Content -LiteralPath "$base.work.ps1" -Raw))
     $result = & $work @arguments
     if ($null -eq $result) { $result = 'OK' }
-    "$(@($result)[-1])" | Set-Content -LiteralPath $done -Encoding UTF8
+    "$nonce $(@($result)[-1])" | Set-Content -LiteralPath $done -Encoding UTF8
 }
-catch { "FAILED: $($_.Exception.Message)" | Set-Content -LiteralPath $done -Encoding UTF8 }
+catch { "$nonce FAILED: $($_.Exception.Message)" | Set-Content -LiteralPath $done -Encoding UTF8 }
 finally { if ($transcribing) { Stop-Transcript | Out-Null } }
 '@
 
@@ -1499,9 +1548,7 @@ function Initialize-GuestTaskFolder {
         [switch]$Elevated
     )
 
-    $lazyVM = Get-GuestLazyVMFolder
-    Initialize-GuestAdminFolder -Path $lazyVM
-    Initialize-GuestAdminFolder -Path ([IO.Path]::Combine($lazyVM, 'Tasks'))
+    Initialize-GuestAdminFolder -Path ([IO.Path]::Combine((Initialize-GuestLazyVMFolder), 'Tasks'))
     $userSid = if ($UserName -and -not $Elevated) { Get-GuestAccountSid -UserName $UserName } else { '' }
     $folder = Get-GuestTaskFolder -TaskName $TaskName
     $null = Initialize-GuestPrivateFolder -Path $folder -ReadSid $userSid
@@ -1511,8 +1558,8 @@ function Initialize-GuestTaskFolder {
 
 function Start-GuestTask {
     <#
-      Writes the wrapper, the work and its arguments to the task's private
-      folder, registers the task and starts it. As SYSTEM, or with -UserName
+      Writes the wrapper, the work and its arguments, with this start's
+      $Nonce, to the task's private folder, registers the task and starts it. As SYSTEM, or with -UserName
       as that signed-in user under their normal (limited) token, or with
       -Elevated their full one. Returns the boot time, so the host can tell
       when the guest restarted.
@@ -1521,6 +1568,7 @@ function Start-GuestTask {
         [Parameter(Mandatory)][string]$TaskName,
         [Parameter(Mandatory)][string]$Work,
         [object[]]$ArgumentList = @(),
+        [Parameter(Mandatory)][string]$Nonce,
         [string]$UserName,
         [switch]$Elevated,
         [Parameter(Mandatory)][int]$TimeoutSeconds
@@ -1528,10 +1576,10 @@ function Start-GuestTask {
 
     $folder = Initialize-GuestTaskFolder -TaskName $TaskName -UserName $UserName -Elevated:$Elevated
     $base = Join-Path $folder $TaskName
-    Remove-Item -LiteralPath (Join-Path (Get-GuestTaskOutputFolder -TaskName $TaskName) "$TaskName.done") -Force -ErrorAction SilentlyContinue
+    $task = [ordered]@{ Nonce = $Nonce; Arguments = @($ArgumentList) }
     Set-Content -LiteralPath "$base.ps1" -Value $script:GuestTaskWrapper -Encoding UTF8
     Set-Content -LiteralPath "$base.work.ps1" -Value $Work -Encoding UTF8
-    Set-Content -LiteralPath "$base.args.json" -Value (ConvertTo-Json -InputObject @($ArgumentList) -Depth 5) -Encoding UTF8
+    Set-Content -LiteralPath "$base.args.json" -Value (ConvertTo-Json -InputObject $task -Depth 6) -Encoding UTF8
 
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$base.ps1`"" -WorkingDirectory $folder
@@ -1549,15 +1597,24 @@ function Start-GuestTask {
 
 function Get-GuestTaskStatus {
     <#
-      Done: what the wrapper wrote, or $null while it runs; the task's state;
-      the boot time. A task under a user's limited token can write its own
-      result, so its Done is only that user's word.
+      Done: what the wrapper wrote for the start with $Nonce, or $null while
+      it runs; the task's state; the boot time. A result for another start,
+      or read through a junction or link, counts as none. A task under a
+      user's limited token can write its own result, so its Done is only
+      that user's word.
     #>
-    param([Parameter(Mandatory)][string]$TaskName)
+    param(
+        [Parameter(Mandatory)][string]$TaskName,
+        [Parameter(Mandatory)][string]$Nonce
+    )
 
-    $done = Join-Path (Get-GuestTaskOutputFolder -TaskName $TaskName) "$TaskName.done"
+    $output = Get-GuestTaskOutputFolder -TaskName $TaskName
+    $done = Join-Path $output "$TaskName.done"
     $result = $null
-    if (Test-Path -LiteralPath $done) { $result = (Get-Content -LiteralPath $done -Raw).Trim() }
+    if (-not (Test-GuestReparsePoint -Path $output) -and -not (Test-GuestReparsePoint -Path $done) -and (Test-Path -LiteralPath $done)) {
+        $written = (Get-Content -LiteralPath $done -Raw).Trim()
+        if ($written.StartsWith("$Nonce ")) { $result = $written.Substring($Nonce.Length + 1) }
+    }
     return [pscustomobject]@{
         Done      = $result
         TaskState = "$((Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue).State)"

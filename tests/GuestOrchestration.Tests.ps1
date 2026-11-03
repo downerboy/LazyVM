@@ -262,7 +262,7 @@ Describe 'Invoke-GuestTask' {
         }
 
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
-            $sent = @($ArgumentList[2])
+            $sent = @($ArgumentList[3])
             $Activity -like 'starting *' -and
             $sent.Count -eq 2 -and
             $sent[0] -eq 'C:\winget.exe' -and -not $sent[0].PSObject.Properties['PSComputerName'] -and
@@ -283,14 +283,24 @@ Describe 'Guest task files (#302)' {
         }
     }
 
-    It 'leaves where the task''s result is to the guest, which reads it from the task''s own folder' {
+    It 'takes only a result written for this start, by its nonce, which the guest reads from the task''s own folder' {
+        $sent = @{ Start = $null; Check = $null }
+        Mock -ModuleName $module Invoke-GuestScript {
+            switch -Wildcard ($Activity) {
+                'starting *' { $sent.Start = $ArgumentList[1]; 'boot1' }
+                'checking on *' { $sent.Check = $ArgumentList[1]; New-TaskStatus -Done '0' -TaskState 'Ready' }
+            }
+        }
+
         InModuleScope $module -Parameters @{ Settings = $settings } {
             param($Settings)
             Invoke-GuestTask -VM ([VMContext]::new($Settings)) -TaskName 'LazyVM-test' -Work { 'OK' } -TimeoutMinutes 5 -Activity 'test'
         }
 
+        $sent.Start | Should -Match '^[0-9a-f]{32}$'
+        $sent.Check | Should -Be $sent.Start
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
-            $Activity -like 'checking on *' -and @($ArgumentList).Count -eq 1 -and $ArgumentList[0] -eq 'LazyVM-test'
+            $Activity -like 'checking on *' -and $ArgumentList[0] -eq 'LazyVM-test' -and "$ScriptBlock" -match 'Get-GuestTaskStatus -TaskName \$taskName -Nonce \$nonce'
         }
     }
 

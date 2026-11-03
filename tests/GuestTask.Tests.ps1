@@ -184,6 +184,14 @@ Describe 'New-GuestPrivateFolder' -Skip:(-not $IsWindows) {
     It 'refuses anything already there' {
         { New-GuestPrivateFolder -Path (New-TestFolder) } | Should -Throw '*already exists*'
     }
+
+    It 'makes a folder above the private ones owned by Administrators, whatever the token''s default owner, and inheriting the access above it (New-GuestAdminFolder)' {
+        $path = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $script = "New-GuestAdminFolder -Path '$path'; `$acl = Get-Acl -LiteralPath '$path'; " +
+        "'{0} {1}' -f `$acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value, `$acl.AreAccessRulesProtected"
+
+        Invoke-InGuestPowerShell -Script $script | Should -Be 'S-1-5-32-544 False'
+    }
 }
 
 Describe 'Initialize-GuestPrivateFolder' {
@@ -286,14 +294,24 @@ Describe 'Get-GuestAdminFolderProblem (#302 SEC-006)' {
 }
 
 Describe 'Initialize-GuestAdminFolder (#302 SEC-006)' {
-    It 'makes a missing folder, which inherits Program Files'' access, and checks it' {
+    It 'makes a missing folder owned by Administrators, and checks it' {
         $path = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        Mock New-GuestAdminFolder { $null = New-Item -ItemType Directory -Path $Path }
         Mock Get-GuestAdminFolderProblem { '' }
 
         Initialize-GuestAdminFolder -Path $path
 
-        $path | Should -Exist
+        Should -Invoke New-GuestAdminFolder -Times 1 -Exactly -ParameterFilter { $Path -eq $path }
         Should -Invoke Get-GuestAdminFolderProblem -Times 1 -Exactly -ParameterFilter { $Path -eq $path }
+    }
+
+    It 'makes nothing when the folder is there' {
+        Mock New-GuestAdminFolder { }
+        Mock Get-GuestAdminFolderProblem { '' }
+
+        Initialize-GuestAdminFolder -Path (New-TestFolder)
+
+        Should -Invoke New-GuestAdminFolder -Times 0 -Exactly
     }
 
     It 'stops, and changes nothing, when a folder others could change is there' {
@@ -320,6 +338,7 @@ Describe 'The guest''s LazyVM folders' {
 
     BeforeEach {
         $calls = [System.Collections.Generic.List[string]]::new()
+        Mock Get-GuestAdminFolderProblem { $calls.Add("check $Path"); '' }
         Mock Initialize-GuestAdminFolder { $calls.Add("admin $Path") }
         Mock Initialize-GuestPrivateFolder { $calls.Add("private $Path"); [pscustomobject]@{ Path = $Path; Replaced = $false; Reason = ''; MovedTo = '' } }
         Mock Get-GuestAccountSid { 'S-1-5-21-1-2-3-1001' }
@@ -334,7 +353,16 @@ Describe 'The guest''s LazyVM folders' {
         $folder = Initialize-GuestTaskFolder -TaskName 'LazyVM-windows-update'
 
         $folder | Should -Be (Get-GuestTaskFolder -TaskName 'LazyVM-windows-update')
-        $calls -join '|' | Should -Be ("admin $lazyVM|admin $([IO.Path]::Combine($lazyVM, 'Tasks'))|private $folder|private $([IO.Path]::Combine($folder, 'Output'))")
+        $calls -join '|' | Should -Be ("check $env:ProgramFiles|admin $lazyVM|admin $([IO.Path]::Combine($lazyVM, 'Tasks'))|private $folder|private $([IO.Path]::Combine($folder, 'Output'))")
+    }
+
+    It 'stop, and make nothing, when Program Files itself is not safe; it is only checked, never changed' {
+        Mock Get-GuestAdminFolderProblem { 'S-1-5-32-545 can change it' }
+
+        { Initialize-GuestTaskFolder -TaskName 'LazyVM-windows-update' } | Should -Throw "*$env:ProgramFiles*S-1-5-32-545 can change it*"
+
+        Should -Invoke Initialize-GuestAdminFolder -Times 0 -Exactly
+        Should -Invoke Initialize-GuestPrivateFolder -Times 0 -Exactly
     }
 
     It 'give no user access to the folder of a task that runs <Case>' -ForEach @(
@@ -359,7 +387,7 @@ Describe 'The guest''s LazyVM folders' {
         $staging = Initialize-GuestStagingFolder
 
         $staging.Path | Should -Be ([IO.Path]::Combine($lazyVM, 'Staging'))
-        $calls -join '|' | Should -Be "admin $lazyVM|private $($staging.Path)"
+        $calls -join '|' | Should -Be "check $env:ProgramFiles|admin $lazyVM|private $($staging.Path)"
         Should -Invoke Initialize-GuestPrivateFolder -Times 1 -Exactly -ParameterFilter { -not $ReadSid -and -not $ModifySid }
     }
 }
@@ -390,21 +418,33 @@ Describe 'Start-GuestTask' {
     }
 
     It 'writes the wrapper, the work and its arguments into the task''s folder, only once it is ready' {
-        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -TimeoutSeconds 60
+        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -Nonce 'n1' -TimeoutSeconds 60
 
         $calls[0] | Should -Be 'folder'
         @($calls | Where-Object { $_ -like 'write *' }).Count | Should -Be 3
         @($calls | Where-Object { $_ -like 'write *' -and $_ -notlike "write $taskFile.*" }) | Should -BeNullOrEmpty
     }
 
-    It 'clears the last result from the Output folder' {
-        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -TimeoutSeconds 60
+    It 'writes the start''s nonce beside the arguments, so a result from an earlier start is not taken for this one' {
+        $written = @{}
+        Mock Set-Content { $written["$LiteralPath"] = "$Value" }
 
-        @($calls | Where-Object { $_ -like 'remove C:?Program Files?LazyVM?Tasks?LazyVM-winget?Output?LazyVM-winget.done' }) | Should -HaveCount 1
+        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -ArgumentList @('a', @('b', 'c')) -Nonce 'n1' -TimeoutSeconds 60
+
+        $task = $written[@($written.Keys | Where-Object { $_ -like '*.args.json' })[0]] | ConvertFrom-Json
+        $task.Nonce | Should -Be 'n1'
+        $task.Arguments[0] | Should -Be 'a'
+        @($task.Arguments[1]) | Should -Be @('b', 'c')
+    }
+
+    It 'deletes nothing, so nothing in Output, which the task''s user may change, is deleted as an administrator (#302 SEC-008)' {
+        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -Nonce 'n1' -TimeoutSeconds 60
+
+        Should -Invoke Remove-Item -Times 0 -Exactly
     }
 
     It 'runs the wrapper from the task''s folder' {
-        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -TimeoutSeconds 60
+        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -Nonce 'n1' -TimeoutSeconds 60
 
         Should -Invoke Register-ScheduledTask -Times 1 -Exactly -ParameterFilter {
             $Action.Arguments -like "*-File `"$taskFile.ps1`"" -and $Action.WorkingDirectory -eq $taskFolder
@@ -412,7 +452,7 @@ Describe 'Start-GuestTask' {
     }
 
     It 'leaves the folder''s access to Initialize-GuestTaskFolder, giving it the user and token the task runs with' {
-        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -UserName 'devadmin' -Elevated -TimeoutSeconds 60
+        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -Nonce 'n1' -UserName 'devadmin' -Elevated -TimeoutSeconds 60
 
         Should -Invoke Initialize-GuestTaskFolder -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-winget' -and $UserName -eq 'devadmin' -and $Elevated }
     }
@@ -425,13 +465,13 @@ Describe 'The guest task wrapper' {
         $base = Join-Path $folder 'LazyVM-test'
         Set-Content -LiteralPath "$base.ps1" -Value $script:GuestTaskWrapper
         Set-Content -LiteralPath "$base.work.ps1" -Value 'param($value) "$value|$TaskFolder|$TaskOutput"'
-        Set-Content -LiteralPath "$base.args.json" -Value '["x"]'
+        Set-Content -LiteralPath "$base.args.json" -Value '{ "Nonce": "n1", "Arguments": ["x"] }'
         $pwsh = Join-Path $PSHOME 'pwsh'
         & $pwsh -NoProfile -NonInteractive -File "$base.ps1"
     }
 
-    It 'gives the work its arguments, its folder and its Output folder, and writes the result and transcript in Output' {
-        Get-Content -LiteralPath (Join-Path $output 'LazyVM-test.done') -Raw | Should -Be "x|$folder|$($output.FullName)$([Environment]::NewLine)"
+    It 'gives the work its arguments, its folder and its Output folder, and writes the result, after the start''s nonce, and the transcript in Output' {
+        Get-Content -LiteralPath (Join-Path $output 'LazyVM-test.done') -Raw | Should -Be "n1 x|$folder|$($output.FullName)$([Environment]::NewLine)"
         Join-Path $output 'LazyVM-test.log' | Should -Exist
         Join-Path $folder 'LazyVM-test.done' | Should -Not -Exist
     }
@@ -454,13 +494,66 @@ Describe 'Get-GuestTaskStatus' {
         $env:ProgramFiles = $programFiles
     }
 
-    It 'reads the result from the task''s Output folder' {
+    BeforeEach {
         Mock Get-ScheduledTask { [pscustomobject]@{ State = 'Ready' } }
         Mock Get-CimInstance { [pscustomobject]@{ LastBootUpTime = [datetime]'2026-10-31' } }
-        $output = New-Item -ItemType Directory -Path (Get-GuestTaskOutputFolder -TaskName 'LazyVM-winget') -Force
-        Set-Content -LiteralPath (Join-Path $output 'LazyVM-winget.done') -Value '3010'
+        $taskName = 'LazyVM-' + [guid]::NewGuid().ToString('N')
+        $output = Get-GuestTaskOutputFolder -TaskName $taskName
+        $done = Join-Path $output "$taskName.done"
+    }
 
-        (Get-GuestTaskStatus -TaskName 'LazyVM-winget').Done | Should -Be '3010'
+    It 'reads this start''s result from the task''s Output folder' {
+        $null = New-Item -ItemType Directory -Path $output -Force
+        Set-Content -LiteralPath $done -Value 'n1 3010'
+
+        (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -Be '3010'
+    }
+
+    It 'takes a result written for another start, or with no nonce, as no result yet' -ForEach @(
+        @{ Written = 'n0 0' }
+        @{ Written = '0' }
+    ) {
+        $null = New-Item -ItemType Directory -Path $output -Force
+        Set-Content -LiteralPath $done -Value $Written
+
+        (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeNullOrEmpty
+    }
+
+    It 'reads nothing through a link in <Case>, which the task''s user may have made (#302 SEC-008)' -ForEach @(
+        @{ Case = 'place of the Output folder'; LinkOutput = $true }
+        @{ Case = 'place of the result'; LinkOutput = $false }
+    ) {
+        $elsewhere = New-TestFolder
+        Set-Content -LiteralPath (Join-Path $elsewhere "$taskName.done") -Value 'n1 0'
+        if ($LinkOutput) {
+            $null = New-Item -ItemType Directory -Path (Split-Path -Path $output -Parent) -Force
+            $null = New-Item -ItemType SymbolicLink -Path $output -Target $elsewhere
+        }
+        else {
+            $null = New-Item -ItemType Directory -Path $output -Force
+            $null = New-Item -ItemType SymbolicLink -Path $done -Target (Join-Path $elsewhere "$taskName.done")
+        }
+        Mock Get-Content { 'n1 0' }
+
+        (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeNullOrEmpty
+        Should -Invoke Get-Content -Times 0 -Exactly
+    }
+}
+
+Describe 'What administrators do in a task''s Output folder (#302 SEC-008)' {
+    It 'is never a write, move or delete: <Function> only reads there' -ForEach @(
+        # Found at discovery, before BeforeAll has set the module's folder.
+        foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path (Split-Path -Path $PSScriptRoot -Parent) 'src/LazyVM') -Recurse -Filter '*.ps1')) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$null)
+            foreach ($function in $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
+                if ($function.Name -ne 'Get-GuestTaskOutputFolder' -and $function.Body.Extent.Text -match 'Get-GuestTaskOutputFolder') {
+                    @{ Function = $function.Name; Body = $function.Body.Extent.Text }
+                }
+            }
+        }
+    ) {
+        # Initialize-GuestTaskFolder may move the Output folder itself aside, never what is in it.
+        $Body | Should -Not -Match '(?i)\b(Remove-Item|Set-Content|Add-Content|Out-File|Move-Item|Copy-Item|New-Item|Rename-Item|Clear-Content)\b|::(Delete|Move|Write\w*|Create\w*)\('
     }
 }
 

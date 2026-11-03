@@ -144,10 +144,13 @@ function Invoke-GuestTask {
         foreach ($name in $InputFile.Keys) { Copy-ToGuest -VM $VM -HostPath $InputFile[$name] -GuestPath (Join-Path $folder $name) }
     }
 
-    $startArguments = @($TaskName, $Work.ToString(), (ConvertTo-GuestTaskArgument -ArgumentList $ArgumentList), $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
+    # One for this run of the task, restarts included: a result written for
+    # an earlier run is not taken for this one.
+    $nonce = [guid]::NewGuid().ToString('N')
+    $startArguments = @($TaskName, $nonce, $Work.ToString(), (ConvertTo-GuestTaskArgument -ArgumentList $ArgumentList), $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
     $start = {
-        param($taskName, $work, $argumentList, $userName, $elevated, $timeoutSeconds)
-        Start-GuestTask -TaskName $taskName -Work $work -ArgumentList $argumentList -UserName $userName -Elevated:$elevated -TimeoutSeconds $timeoutSeconds
+        param($taskName, $nonce, $work, $argumentList, $userName, $elevated, $timeoutSeconds)
+        Start-GuestTask -TaskName $taskName -Nonce $nonce -Work $work -ArgumentList $argumentList -UserName $userName -Elevated:$elevated -TimeoutSeconds $timeoutSeconds
     }
 
     $progress = @{
@@ -162,8 +165,8 @@ function Invoke-GuestTask {
         $done = Wait-Until -Activity $Activity -Timeout ([timespan]::FromMinutes($TimeoutMinutes)) -Interval ([timespan]::FromSeconds(30)) -State $progress -Condition {
             param($p)
             try {
-                $status = Invoke-GuestScript -VM $VM -Activity "checking on $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName) -ScriptBlock {
-                    param($taskName) Get-GuestTaskStatus -TaskName $taskName
+                $status = Invoke-GuestScript -VM $VM -Activity "checking on $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName, $nonce) -ScriptBlock {
+                    param($taskName, $nonce) Get-GuestTaskStatus -TaskName $taskName -Nonce $nonce
                 }
                 $p.Failures = 0
             }
@@ -216,12 +219,12 @@ function Get-GuestStagingFolder {
     <#
       Where LazyVM stages what it copies in and out of the guest:
       %ProgramFiles%\LazyVM\Staging, which only administrators and SYSTEM can
-      change or read (Initialize-GuestStagingFolder in Guest.Helpers.ps1).
-      Made ready in the guest the first time a run asks, then kept in
-      Runtime: the only way to the path. A staging folder that was not right
-      is moved aside and made again, and the log says so. The settings'
-      GuestSetupDir is no longer used, which the log says once when it names
-      another folder.
+      change or read. Not only a read: a run's first call makes the folder
+      ready in the guest (Initialize-GuestStagingFolder in Guest.Helpers.ps1)
+      and keeps its path in Runtime; later calls return that. The only way
+      to the path. A staging folder that was not right is moved aside and
+      made again, and the log says so. The settings' GuestSetupDir is no
+      longer used, which the log says once when it names another folder.
     #>
     [OutputType([string])]
     param([Parameter(Mandatory)][VMContext]$VM)

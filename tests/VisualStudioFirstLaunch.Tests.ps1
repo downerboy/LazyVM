@@ -152,8 +152,8 @@ Describe 'Stop-GuestVisualStudioFirstLaunch' {
 
         <# The guest work, from its text, with the process id file holding $Recorded and Get-Process finding $Process. #>
         $runWork = {
-            param($Recorded, $Process)
-            $guest = @{ Recorded = $Recorded; Process = $Process }
+            param($Recorded, $Process, [string]$Linked = '')
+            $guest = @{ Recorded = $Recorded; Process = $Process; Linked = $Linked }
             Mock Test-Path { $null -ne $guest.Recorded }
             Mock Get-Content { $guest.Recorded }
             Mock Get-Process { $guest.Process }
@@ -161,6 +161,8 @@ Describe 'Stop-GuestVisualStudioFirstLaunch' {
             Mock taskkill.exe { }
             # Where the guest helpers find the task's Output folder.
             function Get-GuestTaskOutputFolder { param($TaskName) "C:\Program Files\LazyVM\Tasks\$TaskName\Output" }
+            # Whether a path is a junction or link: the one named in $Linked.
+            function Test-GuestReparsePoint { param($Path) $guest.Linked -and $Path -like $guest.Linked }
             $work = [scriptblock]::Create($task.Work.ToString())
             & $work @($task.Arguments)
         }
@@ -173,7 +175,22 @@ Describe 'Stop-GuestVisualStudioFirstLaunch' {
         Should -Invoke Get-Content -Times 1 -Exactly -ParameterFilter { $LiteralPath -like 'C:?Program Files?LazyVM?Tasks?LazyVM-VSFirstLaunch?Output?VisualStudioFirstLaunch.pid' }
         Should -Invoke taskkill.exe -Times 1 -Exactly -ParameterFilter { "$args" -eq '/PID 4242 /T /F' }
         Should -Invoke Get-Process -Times 1 -Exactly -ParameterFilter { $Id -eq 4242 }
-        Should -Invoke Remove-Item -Times 1 -Exactly
+    }
+
+    It 'deletes nothing in the Output folder, which the user may change; the script removes the file itself (#302 SEC-008)' {
+        & $runWork '4242' ([pscustomobject]@{ Id = 4242; ProcessName = 'devenv' })
+
+        Should -Invoke Remove-Item -Times 0 -Exactly
+    }
+
+    It 'reads nothing, and stops nothing, through a link in place of <Case>' -ForEach @(
+        @{ Case = 'the Output folder'; Linked = '*Output' }
+        @{ Case = 'the process id file'; Linked = '*.pid' }
+    ) {
+        & $runWork '4242' ([pscustomobject]@{ Id = 4242; ProcessName = 'devenv' }) $Linked
+
+        Should -Invoke Get-Content -Times 0 -Exactly
+        Should -Invoke taskkill.exe -Times 0 -Exactly
     }
 
     It 'leaves a process alone that is not devenv, as when the id was reused' {

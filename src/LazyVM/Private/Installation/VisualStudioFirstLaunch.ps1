@@ -95,7 +95,9 @@ function Stop-GuestVisualStudioFirstLaunch {
       task $TaskName, for when the task did not finish and so could not stop
       it itself. By process id only, and only while that process is devenv,
       so a Visual Studio someone opened is never touched. The script removes
-      the file once it has stopped devenv itself.
+      the file once it has stopped devenv itself; the user can change the
+      Output folder, so nothing in it is deleted here, and nothing is read
+      through a junction or link (#302).
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -104,11 +106,12 @@ function Stop-GuestVisualStudioFirstLaunch {
 
     $null = Invoke-GuestScript -VM $VM -Activity 'stopping the Visual Studio of its first launch' -TimeoutMinutes 2 -ArgumentList @($TaskName) -ScriptBlock {
         param($taskName)
-        $processIdPath = Join-Path (Get-GuestTaskOutputFolder -TaskName $taskName) 'VisualStudioFirstLaunch.pid'
+        $output = Get-GuestTaskOutputFolder -TaskName $taskName
+        $processIdPath = Join-Path $output 'VisualStudioFirstLaunch.pid'
+        if ((Test-GuestReparsePoint -Path $output) -or (Test-GuestReparsePoint -Path $processIdPath)) { return }
         if (-not (Test-Path -LiteralPath $processIdPath)) { return }
         $processId = [int](@(Get-Content -LiteralPath $processIdPath)[0])
         $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
         if ($process -and $process.ProcessName -eq 'devenv') { $null = taskkill.exe /PID $processId /T /F }
-        Remove-Item -LiteralPath $processIdPath -Force -ErrorAction SilentlyContinue
     }
 }
