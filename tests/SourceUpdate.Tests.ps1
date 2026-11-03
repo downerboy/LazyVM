@@ -173,6 +173,21 @@ Describe 'Update-GuestDotnetTool and Update-GuestGalleryModule (#293)' {
             $Label -eq 'PowerShell Gallery updates' -and "$List" -match 'Get-GuestGalleryModule' -and "$Update" -match 'Invoke-GuestGalleryModuleUpdate'
         }
     }
+
+    It 'forgets, while listing, the removals recorded for modules no longer installed, in the editions listed only (#309)' {
+        Mock -ModuleName $module Update-GuestSource { $List }
+        $list = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestGalleryModule -VM $VM }
+        $listing = [pscustomobject]@{ Items = @((New-SourceItem -Label 'posh-git (PowerShell 7)' -Version '1.1.0')); Notes = @(); Editions = @('PowerShell 7') }
+        Mock Get-GuestGalleryModule { $listing }
+        Mock Remove-GuestModuleRemovalStale { }
+
+        # As the guest runs it: from its text, with the guest helpers loaded.
+        $result = & ([scriptblock]::Create("$list"))
+
+        $result | Should -Be $listing
+        Should -Invoke Remove-GuestModuleRemovalStale -Times 1 -Exactly
+        Should -Invoke Remove-GuestModuleRemovalStale -Times 1 -Exactly -ParameterFilter { $Edition -eq 'PowerShell 7' -and (@($Label) -join ',') -eq 'posh-git (PowerShell 7)' }
+    }
 }
 
 Describe 'ConvertFrom-GuestDotnetToolList (#293)' {
@@ -312,25 +327,15 @@ Describe 'Get-GuestGalleryModule (#293)' {
         }
         Mock Invoke-GuestPowerShellEdition { [pscustomobject]@{ Name = 'Pester'; Version = '5.7.1' } } -ParameterFilter { $Path -like '*powershell.exe' }
         Mock Invoke-GuestPowerShellEdition { [pscustomobject]@{ Name = 'Pester'; Version = '5.6.0' }; [pscustomobject]@{ Name = 'posh-git'; Version = '1.1.0' } } -ParameterFilter { $Path -like '*pwsh.exe' }
+    }
+
+    It 'names the editions it listed, and only reads (#309)' {
         Mock Remove-GuestModuleRemovalStale { }
-    }
 
-    It 'forgets the removals recorded for modules no longer installed, edition by edition, given every module still there (#309)' {
-        Mock Invoke-GuestPowerShellEdition { [pscustomobject]@{ Name = 'PowerShellGet'; Version = '2.2.5' }; [pscustomobject]@{ Name = 'Pester'; Version = '5.7.1' } } -ParameterFilter { $Path -like '*powershell.exe' }
+        $listing = Get-GuestGalleryModule
 
-        $null = Get-GuestGalleryModule
-
-        Should -Invoke Remove-GuestModuleRemovalStale -Times 2 -Exactly
-        Should -Invoke Remove-GuestModuleRemovalStale -Times 1 -Exactly -ParameterFilter { $Edition -eq 'Windows PowerShell' -and (@($Label) -join ',') -eq 'PowerShellGet (Windows PowerShell),Pester (Windows PowerShell)' }
-        Should -Invoke Remove-GuestModuleRemovalStale -Times 1 -Exactly -ParameterFilter { $Edition -eq 'PowerShell 7' -and (@($Label) -join ',') -eq 'Pester (PowerShell 7),posh-git (PowerShell 7)' }
-    }
-
-    It 'forgets nothing recorded for an edition that could not be asked (#309)' {
-        Mock Invoke-GuestPowerShellEdition { throw 'PowerShellGet is broken' } -ParameterFilter { $Path -like '*powershell.exe' }
-
-        $null = Get-GuestGalleryModule
-
-        Should -Invoke Remove-GuestModuleRemovalStale -Times 0 -ParameterFilter { $Edition -eq 'Windows PowerShell' }
+        ($listing.Editions -join ',') | Should -Be 'Windows PowerShell,PowerShell 7'
+        Should -Invoke Remove-GuestModuleRemovalStale -Times 0
     }
 
     It 'lists the Gallery modules of each PowerShell edition in the guest, each labelled with its edition and kept with the PowerShell it updates in' {
@@ -365,6 +370,7 @@ Describe 'Get-GuestGalleryModule (#293)' {
         $listing = Get-GuestGalleryModule
 
         ($listing.Items.Label -join ',') | Should -Be 'Pester (PowerShell 7),posh-git (PowerShell 7)'
+        ($listing.Editions -join ',') | Should -Be 'PowerShell 7'
         @($listing.Notes).Count | Should -Be 1
         $listing.Notes[0].Level | Should -Be 'WARN'
         $listing.Notes[0].Text | Should -Be 'could not list the modules of Windows PowerShell: PowerShellGet is broken'

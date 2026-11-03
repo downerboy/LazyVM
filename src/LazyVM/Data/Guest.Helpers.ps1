@@ -1434,13 +1434,12 @@ function Invoke-GuestPowerShellEdition {
 function Get-GuestGalleryModule {
     <#
       The modules installed from the PowerShell Gallery in each PowerShell
-      edition, as @{ Items; Notes }: each item @{ Name; Label; Version; Path },
-      Path being the edition's PowerShell, and a note for each edition that
-      could not be asked and each module left alone. PowerShellGet and
-      PackageManagement are left alone: they would be updating themselves,
-      which can leave an edition without a working PowerShellGet. Removals
-      recorded for an edition's modules that are no longer installed are
-      forgotten (Remove-GuestModuleRemovalStale).
+      edition, as @{ Items; Notes; Editions }: each item @{ Name; Label;
+      Version; Path }, Path being the edition's PowerShell, a note for each
+      edition that could not be asked and each module left alone, and the
+      editions that were listed. PowerShellGet and PackageManagement are
+      left alone: they would be updating themselves, which can leave an
+      edition without a working PowerShellGet.
     #>
     [OutputType([pscustomobject])]
     param()
@@ -1448,6 +1447,7 @@ function Get-GuestGalleryModule {
     $leftAlone = @('PowerShellGet', 'PackageManagement')
     $items = @()
     $notes = @()
+    $listed = @()
     foreach ($edition in @(Get-GuestPowerShellEdition)) {
         try {
             $modules = @(Invoke-GuestPowerShellEdition -Path $edition.Path -ScriptBlock {
@@ -1459,7 +1459,7 @@ function Get-GuestGalleryModule {
             $notes += New-GuestNote -Level WARN -Text "could not list the modules of $($edition.Edition): $($_.Exception.Message)"
             continue
         }
-        Remove-GuestModuleRemovalStale -Edition $edition.Edition -Label @($modules | ForEach-Object { "$($_.Name) ($($edition.Edition))" })
+        $listed += $edition.Edition
         foreach ($module in $modules) {
             $label = "$($module.Name) ($($edition.Edition))"
             if ($leftAlone -contains $module.Name) {
@@ -1469,7 +1469,7 @@ function Get-GuestGalleryModule {
             $items += [pscustomobject]@{ Name = $module.Name; Label = $label; Version = $module.Version; Path = $edition.Path }
         }
     }
-    return [pscustomobject]@{ Items = $items; Notes = $notes }
+    return [pscustomobject]@{ Items = $items; Notes = $notes; Editions = $listed }
 }
 
 # Old versions of Gallery modules that could not be removed yet, such as
