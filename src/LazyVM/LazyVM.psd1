@@ -19,6 +19,7 @@
         'Get-LazyVMCredential'
         'Get-LazyVMLicense'
         'Get-LazyVMRestorePoint'
+        'Get-LazyVMSecurityFinding'
         'Get-LazyVMSetting'
         'Get-LazyVMTooling'
         'Invoke-LazyVMMaintenance'
