@@ -74,10 +74,12 @@ BeforeAll {
         )
 
         $settings = @{
-            VMName               = 'Alpha'
-            Root                 = $Root
-            GuestSecurityScan    = -not $Off
-            SecurityFindingsFile = Join-Path -Path $Root -ChildPath 'Alpha/Logs/SecurityFindings.json'
+            VMName                         = 'Alpha'
+            Root                           = $Root
+            GuestSecurityScan              = -not $Off
+            GuestSecurityScanAlertSeverity = @('High', 'Medium', 'Low', 'Info')
+            SecurityFindingsFile           = Join-Path -Path $Root -ChildPath 'Alpha/Logs/SecurityFindings.json'
+            SecurityBaselineFile           = Join-Path -Path $Root -ChildPath 'Alpha/Config/SecurityBaseline.json'
         }
         return InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) [VMContext]::new($Settings) }
     }
@@ -350,7 +352,7 @@ Describe 'Compare-SecurityFinding' {
 }
 
 Describe 'Test-SecurityFindingAlert' {
-    It 'is <Expected> for a <Status> <Severity> finding' -ForEach @(
+    It 'is <Expected> for a <Status> <Severity> finding when High and Medium alert' -ForEach @(
         @{ Status = 'New'; Severity = 'High'; Expected = $true }
         @{ Status = 'New'; Severity = 'Medium'; Expected = $true }
         @{ Status = 'New'; Severity = 'Low'; Expected = $false }
@@ -360,7 +362,13 @@ Describe 'Test-SecurityFindingAlert' {
     ) {
         $finding = New-TestFinding -Status $Status -Severity $Severity
 
-        InModuleScope $module -Parameters @{ Finding = $finding } { param($Finding) Test-SecurityFindingAlert -Finding @($Finding) } | Should -Be $Expected
+        InModuleScope $module -Parameters @{ Finding = $finding } { param($Finding) Test-SecurityFindingAlert -Finding @($Finding) -Severity 'High', 'Medium' } | Should -Be $Expected
+    }
+
+    It 'is $false for anything when no severity alerts' {
+        $finding = New-TestFinding -Status 'New' -Severity 'High'
+
+        InModuleScope $module -Parameters @{ Finding = $finding } { param($Finding) Test-SecurityFindingAlert -Finding @($Finding) -Severity @() } | Should -BeFalse
     }
 }
 
@@ -411,15 +419,15 @@ Describe 'Get-SecurityFindingReminderMessage' {
             New-TestFinding -Severity 'Low' -Status 'New'
         )
 
-        $message = InModuleScope $module -Parameters @{ Finding = $findings } { param($Finding) Get-SecurityFindingReminderMessage -Finding $Finding -VMName 'Alpha' }
+        $message = InModuleScope $module -Parameters @{ Finding = $findings } { param($Finding) Get-SecurityFindingReminderMessage -Finding $Finding -VMName 'Alpha' -Severity 'High', 'Medium' }
 
         $message | Should -Be '2 security finding(s) on Alpha need attention (1 High, 1 Medium). See them with: Get-LazyVMSecurityFinding -Name Alpha'
     }
 
-    It 'says nothing when only Low, Info or resolved findings are left' {
+    It 'says nothing when only resolved findings, or those of severities that do not alert, are left' {
         $findings = @((New-TestFinding -Severity 'Low'), (New-TestFinding -Severity 'High' -Status 'Resolved'))
 
-        InModuleScope $module -Parameters @{ Finding = $findings } { param($Finding) Get-SecurityFindingReminderMessage -Finding $Finding -VMName 'Alpha' } | Should -BeNullOrEmpty
+        InModuleScope $module -Parameters @{ Finding = $findings } { param($Finding) Get-SecurityFindingReminderMessage -Finding $Finding -VMName 'Alpha' -Severity 'High', 'Medium' } | Should -BeNullOrEmpty
     }
 }
 
@@ -431,6 +439,7 @@ Describe 'Invoke-GuestSecurityScan' {
         $script:check = New-GoodCheck
         $script:collectedAt = '2026-11-02T10:40:00.0000000Z'
         Mock -ModuleName $module Get-GuestSecurityFact { [pscustomobject]@{ CollectedAt = $script:collectedAt; Checks = $script:check } }
+        Mock -ModuleName $module Get-GuestPersistenceFact { [pscustomobject]@{ Items = $null } }
     }
 
     It 'leaves the guest alone when GuestSecurityScan is off' {
@@ -586,7 +595,7 @@ Describe 'Write-SecurityFindingReminder' {
         Mock -ModuleName $module Test-Unattended { $false }
     }
 
-    It 'reminds once, in one line, of open High and Medium findings' {
+    It 'reminds once, in one line, of the open findings' {
         $vm = New-TestVM -Root (New-TestRoot)
         InModuleScope $module -Parameters @{ VM = $vm; Finding = @(New-TestFinding -Severity 'High') } {
             param($VM, $Finding)

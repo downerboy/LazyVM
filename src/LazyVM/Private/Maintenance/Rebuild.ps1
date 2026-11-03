@@ -2,7 +2,8 @@
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
 #   capture -> shut down -> retire the old OS disk by RENAME -> build phases
-#   3-8 -> restore -> check -> only then delete the retired disk.
+#   3-8 -> restore -> record the security baseline -> check -> only then
+#   delete the retired disk.
 #
 # The old OS disk is never deleted until every build phase has completed
 # without problems and the new guest has passed the check, so a failed
@@ -52,6 +53,8 @@ function Invoke-Rebuild {
         if ($manifest -and -not (Restore-GuestState -VM $VM)) {
             Write-LogEntry 'Some of the capture could not be restored; the log above says what' 'WARN'
         }
+        # The new VM, with what was restored, is what the nightly security scan compares with (#290).
+        $null = Save-GuestPersistenceBaseline -VM $VM
         $rebuildOk = $true
     }
     catch {
