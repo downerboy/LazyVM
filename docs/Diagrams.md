@@ -116,7 +116,7 @@ Once, after updating from LazyVM 5. Moves C:\LazyVM, its tasks, passwords and re
    - Writes D18, resume points: <new>\<VM>\Config\ (Resume.json)
 13. `Remove-LegacyInstallation` (Migration, called by Invoke-InstallationMigration): last: the old folder once empty, the Program Files copy when you have your own, then the HKLM key
    - Also runs `Test-MachineWideModuleRemovable`
-   - Writes D19, old install removed: Machine-wide (<old>  (if empty), Program Files\PowerShell\Modules\LazyVM, HKLM:\SOFTWARE\LazyVM)
+   - Writes D19, old install removed: Machine-wide (<old>  (if empty), Program Files\PowerShell\Modules\LazyVM, Program Files\LazyVM\Legacy\LazyVM, HKLM:\SOFTWARE\LazyVM)
 
 <a id="show"></a>
 

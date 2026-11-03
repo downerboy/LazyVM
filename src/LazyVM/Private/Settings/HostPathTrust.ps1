@@ -54,24 +54,78 @@ function Add-TrustedHostPath {
     Set-ItemProperty -LiteralPath $key -Name 'Paths' -Value ([string[]]$paths) -Type MultiString
 }
 
+function Get-RegistryText {
+    <# The value $Name under the registry key $Key as it is stored, environment variables not expanded; $null when there is none. #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if (-not (Test-Path -LiteralPath $Key)) { return $null }
+    $value = (Get-Item -LiteralPath $Key).GetValue($Name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    if ($null -eq $value) { return $null }
+    return [string]$value
+}
+
+function Get-WindowsFolder {
+    <# The Windows folder, asked of Windows, not read from the environment, which the user can change. #>
+    [OutputType([string])]
+    param()
+
+    return [Environment]::GetFolderPath('Windows')
+}
+
+function Get-UserProfileLocation {
+    <#
+      The profile of the account $Sid, and the folder that holds every
+      profile, as Windows records them under HKLM, which only an
+      administrator can change: never from USERPROFILE, which the user can
+      (#311). %SystemDrive% and %SystemRoot% are worked out from the Windows
+      folder; a value that names any other environment variable is refused.
+    #>
+    [OutputType([pscustomobject])]
+    param([Parameter(Mandatory)][string]$Sid)
+
+    $profileList = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'
+    $windows = Get-WindowsFolder
+    if (-not $windows) { throw "Windows did not say where the Windows folder is, so LazyVM cannot tell your profile from other users'." }
+    $expand = {
+        param($Value)
+        $text = $Value -ireplace '%SystemDrive%', ($windows -split '\\')[0] -ireplace '%SystemRoot%', $windows
+        if ($text -match '%[^%]+%') { throw "Windows records $Value for the profiles in $profileList, which names $($Matches[0]): LazyVM does not read that from the environment, which you can change." }
+        return $text
+    }
+    $image = Get-RegistryText -Key "$profileList\$Sid" -Name 'ProfileImagePath'
+    $directory = Get-RegistryText -Key $profileList -Name 'ProfilesDirectory'
+    if (-not $image -or -not $directory) {
+        throw "Windows records no profile for $Sid in $profileList, so LazyVM cannot tell your profile from other users'."
+    }
+    return [pscustomobject]@{ Profile = & $expand $image; ProfilesRoot = & $expand $directory }
+}
+
 function Get-ForbiddenHostPathReason {
     <#
       Why $Path cannot be allowed for the scheduled tasks, which act on it as
-      SYSTEM; $null when it can. A drive's root, the system folders and other
-      users' profiles are never allowed.
+      SYSTEM; $null when it can. A drive's root, the system folders and
+      profiles other than the owner $OwnerSid's are never allowed.
     #>
     [OutputType([string])]
-    param([Parameter(Mandatory)][string]$Path)
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$OwnerSid
+    )
 
     $full = ConvertTo-FullPath -Path $Path
     if ($full -eq (ConvertTo-FullPath -Path ([IO.Path]::GetPathRoot($full)))) { return 'it is a whole drive' }
-    $systemFolders = @($env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData) | Where-Object { $_ }
+    # Asked of Windows, not read from the environment, which the user can change (#311).
+    $systemFolders = @('Windows', 'ProgramFiles', 'ProgramFilesX86', 'CommonApplicationData') | ForEach-Object { [Environment]::GetFolderPath($_) } | Where-Object { $_ }
     foreach ($folder in $systemFolders) {
         if (Test-PathWithin -Path $full -Folder $folder) { return "it is in $folder" }
     }
-    $profiles = Split-Path -Path $env:USERPROFILE -Parent
-    if ((Test-PathWithin -Path $full -Folder $profiles) -and -not (Test-PathWithin -Path $full -Folder $env:USERPROFILE)) {
-        return "it is in $profiles but not in your own profile"
+    $location = Get-UserProfileLocation -Sid $OwnerSid
+    if ((Test-PathWithin -Path $full -Folder $location.ProfilesRoot) -and -not (Test-PathWithin -Path $full -Folder $location.Profile)) {
+        return "it is in $($location.ProfilesRoot) but not in your own profile"
     }
     return $null
 }
@@ -92,7 +146,7 @@ function Register-TrustedHostPath {
             -not ($allowed | Where-Object { Test-SamePath -Path $path -Other $_ })
         })
     foreach ($item in $new) {
-        $reason = Get-ForbiddenHostPathReason -Path $item.Path
+        $reason = Get-ForbiddenHostPathReason -Path $item.Path -OwnerSid $ownerSid
         if ($reason) {
             throw "$($item.Name) of '$($Settings.VMName)' is $($item.Path), which cannot be allowed for LazyVM's scheduled tasks because $reason. Choose a folder of your own, such as one on a data drive or in your profile, in its settings."
         }

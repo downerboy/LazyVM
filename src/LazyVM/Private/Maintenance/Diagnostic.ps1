@@ -89,6 +89,40 @@ function Get-CloudSyncCheck {
     return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status WARN -Detail "$($synced -join ' and ') in OneDrive: files there can be online-only while the tasks run, and are copied to the cloud. Install the module with Install.ps1, and move the LazyVM folder outside OneDrive."
 }
 
+function Get-ModuleShadowCheck {
+    <#
+      Whether Import-Module LazyVM loads this module (#311). PowerShell takes
+      the first folder on PSModulePath that has LazyVM, and the highest
+      version in it, so a copy shadows this one when its folder comes first,
+      or it is a higher version in the same folder. A module that is not on
+      PSModulePath at all, imported by its path, is reported on its own.
+    #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    $check = @{ Name = $Name; Area = 'Host'; Check = 'Module copies' }
+    $running = Get-LazyVMModuleBase
+    $copies = @(Get-Module -Name LazyVM -ListAvailable)
+    $self = $copies | Where-Object { Test-SamePath -Path $_.ModuleBase -Other $running } | Select-Object -First 1
+    if (-not $self) {
+        return New-DiagnosticCheck @check -Status WARN -Detail "$running is not on PSModulePath, so Import-Module LazyVM does not load it. Install LazyVM with Install.ps1, as administrator."
+    }
+
+    $folder = Get-ParentFolder -Path $self.ModuleBase
+    $shadowing = [Collections.Generic.List[string]]::new()
+    $reached = $false
+    foreach ($copy in $copies) {
+        if (Test-SamePath -Path (Get-ParentFolder -Path $copy.ModuleBase) -Other $folder) {
+            $reached = $true
+            if ($copy.Version -gt $self.Version) { $shadowing.Add($copy.ModuleBase) }
+        }
+        elseif (-not $reached) { $shadowing.Add($copy.ModuleBase) }
+    }
+    if ($shadowing.Count -eq 0) {
+        return New-DiagnosticCheck @check -Status OK -Detail "Import-Module LazyVM loads this one ($running)"
+    }
+    return New-DiagnosticCheck @check -Status WARN -Detail "Import-Module LazyVM loads $($shadowing -join ' and ') instead of $running, which comes later on PSModulePath or is an older version. Run Install.ps1 again, as administrator: it removes LazyVM's earlier copies and names any it cannot."
+}
+
 function Get-RecoveryKeyCheck {
     <# Whether every stored BitLocker recovery password of the VM's is exported (#286). Reads the store and the export record once each. #>
     param([Parameter(Mandatory)][VMContext]$VM)
@@ -137,6 +171,7 @@ function Get-LazyVMDiagnostic {
     Get-RootAccessCheck -Name $vmName -Root $root.Path
     Get-CloudSyncCheck -Name $vmName -Root $root.Path
     Get-TrustedCodeCheck -Name $vmName
+    Get-ModuleShadowCheck -Name $vmName
     Get-IsoCheck -Name $vmName -Check 'Windows ISO' -Path $settings.ISOPath
     Get-IsoCheck -Name $vmName -Check 'SQL Server ISO' -Path $settings.SQLIsoPath -Downloadable
     Get-RecoveryKeyCheck -VM ([VMContext]::new($settings))

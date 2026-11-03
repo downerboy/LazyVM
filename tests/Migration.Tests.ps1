@@ -535,20 +535,14 @@ Describe 'Assert-NoRunningTask (#284)' {
 }
 
 Describe 'Remove-LegacyInstallation (#284)' {
-    BeforeAll {
-        # A folder that is there on any runner, for the module copy's path.
-        $savedProgramFiles = $env:ProgramFiles
-        $env:ProgramFiles = $TestDrive
-    }
-
-    AfterAll {
-        $env:ProgramFiles = $savedProgramFiles
-    }
-
     BeforeEach {
         $script:removed = [System.Collections.Generic.List[string]]::new()
+        $machineWide = Join-Path -Path $TestDrive -ChildPath 'PowerShell\Modules\LazyVM'
+        $legacy = Join-Path -Path $TestDrive -ChildPath 'LazyVM\Legacy\LazyVM'
+        Mock -ModuleName $module Get-ProgramFilesFolder { $TestDrive }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Remove-Item { $script:removed.Add($LiteralPath) }
+        Mock -ModuleName $module Remove-LegacyModuleCopy { $script:removed.Add($Path) }
         Mock -ModuleName $module Test-Path { $true }
         Mock -ModuleName $module Get-ChildItem { }
         Mock -ModuleName $module Test-MachineWideModuleRemovable { $true }
@@ -556,11 +550,12 @@ Describe 'Remove-LegacyInstallation (#284)' {
         Mock -ModuleName $module Remove-LegacyRegistry { $script:removed.Add('legacy registry') }
     }
 
-    It 'removes the old folder once it is empty, LazyVM 5''s module copy, and LazyVM 5''s HKLM entries last' {
+    It 'removes the old folder once it is empty, LazyVM 5''s module copy where Install.ps1 left or moved it, and LazyVM 5''s HKLM entries last (#311)' {
         InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' }
 
         $script:removed[0] | Should -Be 'C:\LazyVM'
-        $script:removed | Should -Contain (Join-Path -Path $env:ProgramFiles -ChildPath 'PowerShell\Modules\LazyVM')
+        $script:removed | Should -Contain $machineWide
+        $script:removed | Should -Contain $legacy
         $script:removed[-1] | Should -Be 'legacy registry'
     }
 
@@ -584,9 +579,100 @@ Describe 'Remove-LegacyInstallation (#284)' {
 
         InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' }
 
-        $script:removed | Should -Not -Contain (Join-Path -Path $env:ProgramFiles -ChildPath 'PowerShell\Modules\LazyVM')
+        $script:removed | Should -Not -Contain $machineWide
+        $script:removed | Should -Not -Contain $legacy
         $script:removed[-1] | Should -Be 'legacy registry'
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Kept LazyVM 5''s copy of the module*' -and $Level -eq 'WARN' }
+    }
+
+    It 'says which copy it kept, and still finishes, when one cannot be removed (#311)' {
+        Mock -ModuleName $module Remove-LegacyModuleCopy { throw "$Path holds a junction, link or cloud placeholder." } -ParameterFilter { $Path -like '*Legacy*' }
+
+        InModuleScope $module { Remove-LegacyInstallation -OldRoot 'C:\LazyVM' }
+
+        $script:removed[-1] | Should -Be 'legacy registry'
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like "*Kept*$legacy*junction, link or cloud placeholder*" -and $Level -eq 'WARN' }
+    }
+}
+
+Describe 'Remove-LegacyModuleCopy (#311)' {
+    BeforeAll {
+        $linkType = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+    }
+
+    BeforeEach {
+        $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $copy = Join-Path -Path $folder -ChildPath 'LazyVM'
+        New-Item -ItemType Directory -Path (Join-Path -Path $copy -ChildPath '5.2.0') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $copy -ChildPath '5.2.0/LazyVM.psd1') -Value '@{}'
+        $outside = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $outside -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $outside -ChildPath 'keep.txt') -Value 'keep'
+    }
+
+    It 'deletes LazyVM 5''s module folder' {
+        InModuleScope $module -Parameters @{ Path = $copy } { param($Path) Remove-LegacyModuleCopy -Path $Path }
+
+        Test-Path -LiteralPath $copy | Should -BeFalse
+    }
+
+    It 'refuses a folder reached through a link above it, deleting nothing' {
+        $above = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType $linkType -Path $above -Target $folder | Out-Null
+
+        { InModuleScope $module -Parameters @{ Path = (Join-Path -Path $above -ChildPath 'LazyVM') } { param($Path) Remove-LegacyModuleCopy -Path $Path } } |
+            Should -Throw -ExpectedMessage '*junction, link or cloud placeholder*'
+        Test-Path -LiteralPath (Join-Path -Path $copy -ChildPath '5.2.0/LazyVM.psd1') | Should -BeTrue
+    }
+
+    It 'refuses a folder that holds a link, deleting nothing' {
+        New-Item -ItemType $linkType -Path (Join-Path -Path $copy -ChildPath '5.2.0/Data') -Target $outside | Out-Null
+
+        { InModuleScope $module -Parameters @{ Path = $copy } { param($Path) Remove-LegacyModuleCopy -Path $Path } } |
+            Should -Throw -ExpectedMessage '*junction, link or cloud placeholder*'
+        Test-Path -LiteralPath (Join-Path -Path $outside -ChildPath 'keep.txt') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path -Path $copy -ChildPath '5.2.0/LazyVM.psd1') | Should -BeTrue
+    }
+
+    It 'goes by Test-ModuleCopy for what a LazyVM module folder is (N-3)' {
+        Mock -ModuleName $module Test-ModuleCopy { $false }
+
+        { InModuleScope $module -Parameters @{ Path = $copy } { param($Path) Remove-LegacyModuleCopy -Path $Path } } |
+            Should -Throw -ExpectedMessage '*not a LazyVM module folder*'
+        Should -Invoke -ModuleName $module Test-ModuleCopy -ParameterFilter { $Path -eq $copy }
+        Test-Path -LiteralPath $copy | Should -BeTrue
+    }
+
+    It 'refuses a folder that holds anything but LazyVM version folders, deleting nothing' {
+        Set-Content -LiteralPath (Join-Path -Path $copy -ChildPath 'notes.txt') -Value 'mine'
+
+        { InModuleScope $module -Parameters @{ Path = $copy } { param($Path) Remove-LegacyModuleCopy -Path $Path } } |
+            Should -Throw -ExpectedMessage '*not a LazyVM module folder*'
+        Test-Path -LiteralPath (Join-Path -Path $copy -ChildPath '5.2.0/LazyVM.psd1') | Should -BeTrue
+    }
+}
+
+Describe 'Test-ModuleCopy (#311)' {
+    BeforeEach {
+        $copy = Join-Path -Path $TestDrive -ChildPath "$([guid]::NewGuid().ToString('N'))/LazyVM"
+        New-Item -ItemType Directory -Path (Join-Path -Path $copy -ChildPath '5.2.0') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $copy -ChildPath '5.2.0/LazyVM.psd1') -Value '@{}'
+    }
+
+    It 'is true for a LazyVM folder that holds only version folders with LazyVM.psd1' {
+        InModuleScope $module -Parameters @{ Path = $copy } { param($Path) Test-ModuleCopy -Path $Path } | Should -BeTrue
+    }
+
+    It 'is false when <Case>' -ForEach @(
+        @{ Case = 'it holds a file of its own'; Stray = 'notes.txt'; Leaf = $null }
+        @{ Case = 'a version folder has no LazyVM.psd1'; Stray = '6.0.0/other.txt'; Leaf = $null }
+        @{ Case = 'it holds a folder that is not a version'; Stray = 'Data/other.txt'; Leaf = $null }
+        @{ Case = 'it is not named LazyVM'; Stray = $null; Leaf = '..' }
+    ) {
+        if ($Stray) { New-Item -ItemType File -Path (Join-Path -Path $copy -ChildPath $Stray) -Force | Out-Null }
+        $path = if ($Leaf) { Split-Path -Path $copy -Parent } else { $copy }
+
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Test-ModuleCopy -Path $Path } | Should -BeFalse
     }
 }
 

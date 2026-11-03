@@ -57,6 +57,43 @@ function Test-ReparsePoint {
     return ([long](Get-Item -LiteralPath $Path -Force).Attributes -band [long][IO.FileAttributes]::ReparsePoint) -ne 0
 }
 
+function Test-ContainsReparsePoint {
+    <#
+      Whether a folder from the drive's root down to $Path, $Path itself, or
+      anything in it is a reparse point. The folders above are checked
+      first, and links inside are not followed. For a folder deleted outside
+      the LazyVM folder, such as LazyVM 5's module copy (#311). Kept in step
+      with Test-ContainsReparsePoint in src\Install.ps1.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    $full = [IO.Path]::GetFullPath($Path)
+    $current = [IO.Path]::GetPathRoot($full)
+    foreach ($name in @($full.Substring($current.Length) -split '[\\/]' | Where-Object { $_ })) {
+        $current = Join-Path -Path $current -ChildPath $name
+        if (Test-ReparsePoint -Path $current) { return $true }
+    }
+    return @(Get-ChildItem -LiteralPath $full -Recurse -Force | Where-Object { Test-ReparsePoint -Path $_.FullName }).Count -gt 0
+}
+
+function Test-ModuleCopy {
+    <#
+      Whether $Path looks like a LazyVM module folder: named LazyVM, and
+      holding only version folders, each with LazyVM.psd1. Nothing else is
+      deleted as an earlier copy (#311). Kept in step with Test-ModuleCopy
+      in src\Install.ps1.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    if ((Split-Path -Path $Path -Leaf) -ne 'LazyVM') { return $false }
+    $unexpected = Get-ChildItem -LiteralPath $Path -Force | Where-Object {
+        -not ($_.PSIsContainer -and $_.Name -as [version] -and (Test-Path -LiteralPath (Join-Path -Path $_.FullName -ChildPath 'LazyVM.psd1') -PathType Leaf))
+    }
+    return @($unexpected).Count -eq 0
+}
+
 function Assert-NoReparsePoint {
     <#
       Stops when the folder $Path is in (the LazyVM folder $Root, a place
