@@ -446,7 +446,15 @@ Describe 'Get-UserProfileLocation (#311)' {
         { InModuleScope $module { Get-UserProfileLocation -Sid 'S-1-5-21-111-222-333-1001' } } | Should -Throw -ExpectedMessage '*%USERPROFILE%*'
     }
 
+    It 'fails closed when Windows gives no Windows folder (N-2)' {
+        Mock -ModuleName $module Get-WindowsFolder { '' }
+        Mock -ModuleName $module Get-RegistryText { 'C:\Users\sean' }
+
+        { InModuleScope $module { Get-UserProfileLocation -Sid 'S-1-5-21-111-222-333-1001' } } | Should -Throw -ExpectedMessage '*Windows folder*'
+    }
+
     It 'refuses an account Windows has no profile for' {
+        Mock -ModuleName $module Get-WindowsFolder { 'C:\Windows' }
         Mock -ModuleName $module Get-RegistryText { $null }
 
         { InModuleScope $module { Get-UserProfileLocation -Sid 'S-1-5-21-111-222-333-1001' } } | Should -Throw -ExpectedMessage '*S-1-5-21-111-222-333-1001*'

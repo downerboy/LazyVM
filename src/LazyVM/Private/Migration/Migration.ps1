@@ -458,10 +458,7 @@ function Remove-LegacyModuleCopy {
     if (Test-ContainsReparsePoint -Path $Path) {
         throw "$Path, a folder above it, or something in it is a junction, link or cloud placeholder, which LazyVM does not follow."
     }
-    $unexpected = Get-ChildItem -LiteralPath $Path -Force | Where-Object {
-        -not ($_.PSIsContainer -and $_.Name -as [version] -and (Test-Path -LiteralPath (Join-Path -Path $_.FullName -ChildPath 'LazyVM.psd1') -PathType Leaf))
-    }
-    if ((Split-Path -Path $Path -Leaf) -ne 'LazyVM' -or @($unexpected).Count -gt 0) {
+    if (-not (Test-ModuleCopy -Path $Path)) {
         throw "$Path is not a LazyVM module folder, holding only version folders with LazyVM.psd1."
     }
     Remove-Item -LiteralPath $Path -Recurse -Force

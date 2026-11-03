@@ -89,6 +89,7 @@ function Get-UserProfileLocation {
 
     $profileList = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'
     $windows = Get-WindowsFolder
+    if (-not $windows) { throw "Windows did not say where the Windows folder is, so LazyVM cannot tell your profile from other users'." }
     $expand = {
         param($Value)
         $text = $Value -ireplace '%SystemDrive%', ($windows -split '\\')[0] -ireplace '%SystemRoot%', $windows

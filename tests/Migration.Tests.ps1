@@ -634,12 +634,45 @@ Describe 'Remove-LegacyModuleCopy (#311)' {
         Test-Path -LiteralPath (Join-Path -Path $copy -ChildPath '5.2.0/LazyVM.psd1') | Should -BeTrue
     }
 
+    It 'goes by Test-ModuleCopy for what a LazyVM module folder is (N-3)' {
+        Mock -ModuleName $module Test-ModuleCopy { $false }
+
+        { InModuleScope $module -Parameters @{ Path = $copy } { param($Path) Remove-LegacyModuleCopy -Path $Path } } |
+            Should -Throw -ExpectedMessage '*not a LazyVM module folder*'
+        Should -Invoke -ModuleName $module Test-ModuleCopy -ParameterFilter { $Path -eq $copy }
+        Test-Path -LiteralPath $copy | Should -BeTrue
+    }
+
     It 'refuses a folder that holds anything but LazyVM version folders, deleting nothing' {
         Set-Content -LiteralPath (Join-Path -Path $copy -ChildPath 'notes.txt') -Value 'mine'
 
         { InModuleScope $module -Parameters @{ Path = $copy } { param($Path) Remove-LegacyModuleCopy -Path $Path } } |
             Should -Throw -ExpectedMessage '*not a LazyVM module folder*'
         Test-Path -LiteralPath (Join-Path -Path $copy -ChildPath '5.2.0/LazyVM.psd1') | Should -BeTrue
+    }
+}
+
+Describe 'Test-ModuleCopy (#311)' {
+    BeforeEach {
+        $copy = Join-Path -Path $TestDrive -ChildPath "$([guid]::NewGuid().ToString('N'))/LazyVM"
+        New-Item -ItemType Directory -Path (Join-Path -Path $copy -ChildPath '5.2.0') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $copy -ChildPath '5.2.0/LazyVM.psd1') -Value '@{}'
+    }
+
+    It 'is true for a LazyVM folder that holds only version folders with LazyVM.psd1' {
+        InModuleScope $module -Parameters @{ Path = $copy } { param($Path) Test-ModuleCopy -Path $Path } | Should -BeTrue
+    }
+
+    It 'is false when <Case>' -ForEach @(
+        @{ Case = 'it holds a file of its own'; Stray = 'notes.txt'; Leaf = $null }
+        @{ Case = 'a version folder has no LazyVM.psd1'; Stray = '6.0.0/other.txt'; Leaf = $null }
+        @{ Case = 'it holds a folder that is not a version'; Stray = 'Data/other.txt'; Leaf = $null }
+        @{ Case = 'it is not named LazyVM'; Stray = $null; Leaf = '..' }
+    ) {
+        if ($Stray) { New-Item -ItemType File -Path (Join-Path -Path $copy -ChildPath $Stray) -Force | Out-Null }
+        $path = if ($Leaf) { Split-Path -Path $copy -Parent } else { $copy }
+
+        InModuleScope $module -Parameters @{ Path = $path } { param($Path) Test-ModuleCopy -Path $Path } | Should -BeFalse
     }
 }
 

@@ -70,7 +70,7 @@ Describe 'The user''s PSModulePath, in Install.ps1 (#284)' {
 Describe 'Earlier copies, in Install.ps1 (#311)' {
     BeforeAll {
         $ast = [System.Management.Automation.Language.Parser]::ParseFile($installScript, [ref]$null, [ref]$null)
-        foreach ($name in 'Test-ReparsePoint', 'Test-ContainsReparsePoint', 'Test-ModuleCopy', 'Get-EarlierCopyProblem', 'Remove-EarlierCopy', 'Move-EarlierCopy', 'Get-FirstModuleCopy', 'Write-ShadowingCopyWarning', 'Test-SameFolder') {
+        foreach ($name in 'Test-ReparsePoint', 'Test-ContainsReparsePoint', 'Test-ModuleCopy', 'Get-EarlierCopyProblem', 'Remove-EarlierCopy', 'Move-EarlierCopy', 'Reset-InheritedAccess', 'Get-FirstModuleCopy', 'Write-ShadowingCopyWarning', 'Test-SameFolder') {
             $definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }.GetNewClosure(), $true)
             . ([scriptblock]::Create($definition.Extent.Text))
         }
@@ -89,6 +89,8 @@ Describe 'Earlier copies, in Install.ps1 (#311)' {
     }
 
     BeforeEach {
+        # The moved copy's access is checked on its own, on Windows, below.
+        if (-not $IsWindows) { Mock Reset-InheritedAccess { } }
         $folder = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
         $copy = New-TestModuleCopy -Folder $folder -Version '5.2.0'
         $outside = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
@@ -187,6 +189,23 @@ Describe 'Earlier copies, in Install.ps1 (#311)' {
         "$said" | Should -BeLike "*Moved*$copy*$destination*"
     }
 
+    It 'gives the moved copy only the access the folder it is moved to passes on, not what it had where it was (N-1)' -Skip:(-not $IsWindows) {
+        # Program Files lets Users read and run what is in it; the locked LazyVM folder does not.
+        $users = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-545')
+        $acl = Get-Acl -LiteralPath $folder
+        $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($users, 'ReadAndExecute', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))
+        Set-Acl -LiteralPath $folder -AclObject $acl
+        $destination = Join-Path -Path $outside -ChildPath 'Legacy/LazyVM'
+
+        Move-EarlierCopy -Path $copy -Destination $destination 6>&1 | Out-Null
+
+        foreach ($item in @(Get-Item -LiteralPath $destination) + @(Get-ChildItem -LiteralPath $destination -Recurse -Force)) {
+            $rules = @((Get-Acl -LiteralPath $item.FullName).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+            @($rules | Where-Object { $_.IdentityReference -eq $users }).Count | Should -Be 0 -Because "$($item.FullName) must not let Users in"
+            @($rules | Where-Object { -not $_.IsInherited }).Count | Should -Be 0 -Because "$($item.FullName) must only inherit"
+        }
+    }
+
     It 'does not move a copy over one moved aside already, warning' {
         $destination = New-TestModuleCopy -Folder (Join-Path -Path $outside -ChildPath 'Legacy') -Version '5.1.0'
 
@@ -194,7 +213,7 @@ Describe 'Earlier copies, in Install.ps1 (#311)' {
 
         Test-Path -LiteralPath (Join-Path -Path $copy -ChildPath '5.2.0/LazyVM.psd1') | Should -BeTrue
         Test-Path -LiteralPath (Join-Path -Path $destination -ChildPath '5.2.0') | Should -BeFalse
-        "$warning" | Should -BeLike "*Kept*$copy*$destination*already*"
+        "$warning" | Should -BeLike "*$copy*still loads instead of the version installed*$destination*Convert-LazyVMInstallation*removes both*"
     }
 
     It 'does not move a copy that holds a link, warning' {

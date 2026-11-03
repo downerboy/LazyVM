@@ -166,7 +166,8 @@ function Test-ModuleCopy {
     <#
       Whether $Path looks like a LazyVM module folder: named LazyVM, and
       holding only version folders, each with LazyVM.psd1. Nothing else is
-      deleted or moved as an earlier copy.
+      deleted or moved as an earlier copy. Kept in step with Test-ModuleCopy
+      in src\LazyVM\Private\Common\PathSafety.ps1.
     #>
     [OutputType([bool])]
     param([Parameter(Mandatory)][string]$Path)
@@ -221,12 +222,32 @@ function Remove-EarlierCopy {
     }
 }
 
+function Reset-InheritedAccess {
+    <#
+      Gives $Path, and everything in it, only the access inherited from the
+      folder above. A moved folder keeps the access it had where it was:
+      LazyVM 5's copy, moved out of Program Files, would still let every
+      user read it (#311).
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    foreach ($item in @(Get-Item -LiteralPath $Path -Force) + @(Get-ChildItem -LiteralPath $Path -Recurse -Force)) {
+        $acl = Get-Acl -LiteralPath $item.FullName
+        $acl.SetAccessRuleProtection($false, $false)
+        foreach ($rule in @($acl.GetAccessRules($true, $false, [System.Security.Principal.SecurityIdentifier]))) {
+            $null = $acl.RemoveAccessRuleSpecific($rule)
+        }
+        Set-Acl -LiteralPath $item.FullName -AclObject $acl
+    }
+}
+
 function Move-EarlierCopy {
     <#
       Moves LazyVM 5's module folder $Path to $Destination, which is not on
       PSModulePath, so it no longer loads instead and Convert-LazyVMInstallation
-      still has it. When it must not, or the move fails, warns with the path
-      instead, so the install still finishes.
+      still has it, open only as the folder it is moved to allows. When it
+      must not, or the move fails, warns with the path instead, so the
+      install still finishes.
     #>
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -235,8 +256,11 @@ function Move-EarlierCopy {
 
     if (-not (Test-Path -LiteralPath $Path)) { return }
     try {
+        if (Test-Path -LiteralPath $Destination) {
+            Write-Warning "Kept LazyVM 5's copy in $Path, which still loads instead of the version installed: an earlier one is in $Destination already. Open a new PowerShell 7 window as administrator and run Convert-LazyVMInstallation: it removes both."
+            return
+        }
         $problem = Get-EarlierCopyProblem -Path $Path
-        if (-not $problem -and (Test-Path -LiteralPath $Destination)) { $problem = "$Destination is there already" }
         if ($problem) {
             Write-Warning "Kept the earlier copy in ${Path}: $problem. Look at it and delete it yourself, as administrator."
             return
@@ -245,6 +269,7 @@ function Move-EarlierCopy {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
         if (Test-ContainsReparsePoint -Path $parent) { throw "$parent, or a folder above it, is a junction, link or cloud placeholder." }
         Move-Item -LiteralPath $Path -Destination $Destination
+        Reset-InheritedAccess -Path $Destination
         Write-Information "Moved the earlier copy in $Path to $Destination, where PowerShell does not load it" -InformationAction Continue
     }
     catch {
