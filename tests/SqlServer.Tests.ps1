@@ -93,6 +93,7 @@ Describe 'Install-SqlServer' {
         Mock -ModuleName $module Set-VMDvdDrive { }
         Mock -ModuleName $module Invoke-GuestScript { 'E:\setup.exe' }
         Mock -ModuleName $module Copy-ToGuest { }
+        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         Mock -ModuleName $module Invoke-GuestInstaller { 0 }
     }
 
@@ -102,11 +103,13 @@ Describe 'Install-SqlServer' {
         Join-Path $stateDir 'sql\ConfigurationFile.ini' | Should -Exist
     }
 
-    It 'runs setup with the configuration file copied into the guest' {
+    It 'runs setup with the configuration file copied into the staging folder, which only administrators can change (#302)' {
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Install-SqlServer -VM $VM }
 
-        Should -Invoke -ModuleName $module Copy-ToGuest -Times 1 -ParameterFilter { $GuestPath -eq 'C:\LazyVM\Setup\ConfigurationFile.ini' }
-        Should -Invoke -ModuleName $module Invoke-GuestInstaller -Times 1 -ParameterFilter { $ArgumentList -contains '/CONFIGURATIONFILE="C:\LazyVM\Setup\ConfigurationFile.ini"' }
+        # ? for the path separators, which are / where the tests run on Linux.
+        $config = 'C:?Program Files?LazyVM?Staging?ConfigurationFile.ini'
+        Should -Invoke -ModuleName $module Copy-ToGuest -Times 1 -ParameterFilter { $GuestPath -like $config }
+        Should -Invoke -ModuleName $module Invoke-GuestInstaller -Times 1 -ParameterFilter { $Name -eq 'install-sqlserver' -and $ArgumentList -like "/CONFIGURATIONFILE=`"$config`"" }
     }
 }
 

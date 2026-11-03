@@ -114,12 +114,21 @@ function Invoke-GuestTask {
       session drops. When the task stops without a result, as it does if the
       guest restarts, it is started again up to $RestartAttempts times.
       Returns what the work returned, or 'OK'; throws when it failed.
+
+      The work runs in the task's own folder in the guest
+      (Initialize-GuestTaskFolder in Guest.Helpers.ps1), and finds it in
+      $TaskFolder: the files in $InputFile (name = host path) are copied
+      there first, where only administrators can change them. It may write
+      in $TaskOutput. A task under the guest account's limited token can
+      change what is in $TaskOutput, its result included, so what it reports
+      is only that account's word.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][string]$TaskName,
         [Parameter(Mandatory)][scriptblock]$Work,
         [object[]]$ArgumentList = @(),
+        [System.Collections.IDictionary]$InputFile = @{},
         [switch]$AsGuestUser,
         [switch]$Elevated,
         [Parameter(Mandatory)][int]$TimeoutMinutes,
@@ -127,12 +136,21 @@ function Invoke-GuestTask {
         [int]$RestartAttempts = 0
     )
 
-    $setupDir = $VM.Settings.GuestSetupDir
     $userName = if ($AsGuestUser) { $VM.Runtime.GuestAdminUser } else { '' }
-    $startArguments = @($TaskName, $setupDir, $Work.ToString(), (ConvertTo-GuestTaskArgument -ArgumentList $ArgumentList), $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
+    if ($InputFile.Count -gt 0) {
+        $folder = Invoke-GuestScript -VM $VM -Activity "preparing the files of $Activity" -TimeoutMinutes 5 -ArgumentList @($TaskName, $userName, [bool]$Elevated) -ScriptBlock {
+            param($taskName, $userName, $elevated) Initialize-GuestTaskFolder -TaskName $taskName -UserName $userName -Elevated:$elevated
+        }
+        foreach ($name in $InputFile.Keys) { Copy-ToGuest -VM $VM -HostPath $InputFile[$name] -GuestPath (Join-Path $folder $name) }
+    }
+
+    # One for this run of the task, restarts included: a result written for
+    # an earlier run is not taken for this one.
+    $nonce = [guid]::NewGuid().ToString('N')
+    $startArguments = @($TaskName, $nonce, $Work.ToString(), (ConvertTo-GuestTaskArgument -ArgumentList $ArgumentList), $userName, [bool]$Elevated, ($TimeoutMinutes * 60))
     $start = {
-        param($taskName, $setupDir, $work, $argumentList, $userName, $elevated, $timeoutSeconds)
-        Start-GuestTask -TaskName $taskName -SetupDir $setupDir -Work $work -ArgumentList $argumentList -UserName $userName -Elevated:$elevated -TimeoutSeconds $timeoutSeconds
+        param($taskName, $nonce, $work, $argumentList, $userName, $elevated, $timeoutSeconds)
+        Start-GuestTask -TaskName $taskName -Nonce $nonce -Work $work -ArgumentList $argumentList -UserName $userName -Elevated:$elevated -TimeoutSeconds $timeoutSeconds
     }
 
     $progress = @{
@@ -147,8 +165,8 @@ function Invoke-GuestTask {
         $done = Wait-Until -Activity $Activity -Timeout ([timespan]::FromMinutes($TimeoutMinutes)) -Interval ([timespan]::FromSeconds(30)) -State $progress -Condition {
             param($p)
             try {
-                $status = Invoke-GuestScript -VM $VM -Activity "checking on $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName, $setupDir) -ScriptBlock {
-                    param($taskName, $setupDir) Get-GuestTaskStatus -TaskName $taskName -SetupDir $setupDir
+                $status = Invoke-GuestScript -VM $VM -Activity "checking on $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName, $nonce) -ScriptBlock {
+                    param($taskName, $nonce) Get-GuestTaskStatus -TaskName $taskName -Nonce $nonce
                 }
                 $p.Failures = 0
             }
@@ -194,12 +212,44 @@ function Invoke-GuestTask {
     return $done
 }
 
+# The default of the setting GuestSetupDir, which LazyVM no longer uses (#302).
+$script:LegacyGuestSetupDir = 'C:\LazyVMSetup'
+
+function Get-GuestStagingFolder {
+    <#
+      Where LazyVM stages what it copies in and out of the guest:
+      %ProgramFiles%\LazyVM\Staging, which only administrators and SYSTEM can
+      change or read. Not only a read: a run's first call makes the folder
+      ready in the guest (Initialize-GuestStagingFolder in Guest.Helpers.ps1)
+      and keeps its path in Runtime; later calls return that. The only way
+      to the path. A staging folder that was not right is moved aside and
+      made again, and the log says so. The settings' GuestSetupDir is no
+      longer used, which the log says once when it names another folder.
+    #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    if ($VM.Runtime.GuestStagingFolder) { return $VM.Runtime.GuestStagingFolder }
+
+    if ($VM.Settings.ContainsKey('GuestSetupDir') -and "$($VM.Settings['GuestSetupDir'])" -ne $script:LegacyGuestSetupDir) {
+        Write-LogEntry "  GuestSetupDir ($($VM.Settings['GuestSetupDir'])) is no longer used: LazyVM stages files in %ProgramFiles%\LazyVM\Staging in the guest, so it can be taken out of the settings" 'INFO'
+    }
+    $staging = Invoke-GuestScript -VM $VM -Activity 'preparing the staging folder' -TimeoutMinutes 5 -ScriptBlock { Initialize-GuestStagingFolder }
+    if ($staging.Replaced) {
+        Write-LogEntry "  The guest's staging folder $($staging.Path) was not private ($($staging.Reason)), so it was moved aside to $($staging.MovedTo) and made again" 'INFO'
+    }
+    $VM.Runtime.GuestStagingFolder = "$($staging.Path)"
+    return $VM.Runtime.GuestStagingFolder
+}
+
 function Invoke-GuestInstaller {
     <#
       Runs a long installer in the guest without depending on the session
-      staying open (see Invoke-GuestTask). If the guest restarts before the
-      installer has finished, it is started again: Visual Studio and SQL
-      Server setup both carry on from where they were. Returns its exit code.
+      staying open (see Invoke-GuestTask), as the task LazyVM-$Name. Files
+      it is given go in the staging folder (Get-GuestStagingFolder). If the
+      guest restarts before the installer has finished, it is started again:
+      Visual Studio and SQL Server setup both carry on from where they were.
+      Returns its exit code.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -210,17 +260,18 @@ function Invoke-GuestInstaller {
         [string]$Activity = $Name
     )
 
+    # Started in the task's own folder, where the task runs.
     $work = {
-        param($filePath, $argumentList, $workingDirectory)
+        param($filePath, $argumentList)
         $process = if ($argumentList) {
-            Start-Process -FilePath $filePath -ArgumentList $argumentList -Wait -PassThru -WorkingDirectory $workingDirectory
+            Start-Process -FilePath $filePath -ArgumentList $argumentList -Wait -PassThru
         }
         else {
-            Start-Process -FilePath $filePath -Wait -PassThru -WorkingDirectory $workingDirectory
+            Start-Process -FilePath $filePath -Wait -PassThru
         }
         return $process.ExitCode
     }
-    $result = Invoke-GuestTask -VM $VM -TaskName "$script:TaskPrefix$Name" -Work $work -ArgumentList @($FilePath, ($ArgumentList -join ' '), $VM.Settings.GuestSetupDir) `
+    $result = Invoke-GuestTask -VM $VM -TaskName "$script:TaskPrefix$Name" -Work $work -ArgumentList @($FilePath, ($ArgumentList -join ' ')) `
         -TimeoutMinutes $TimeoutMinutes -Activity $Activity -RestartAttempts 3
     return [int]$result
 }
@@ -230,18 +281,20 @@ function Invoke-GuestScriptAsInteractiveUser {
       Runs $ScriptBlock in the signed-in guest user's desktop session, which
       a PowerShell Direct session is not. Visual Studio settings, for one, are
       per-user and need a real desktop. Autologon makes sure someone is
-      signed in. The script block's values come in through $ArgumentList.
+      signed in. The script block's values come in through $ArgumentList,
+      and the files in $InputFile in $TaskFolder (see Invoke-GuestTask).
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][scriptblock]$ScriptBlock,
         [object[]]$ArgumentList = @(),
+        [System.Collections.IDictionary]$InputFile = @{},
         [Parameter(Mandatory)][string]$TaskName,
         [int]$TimeoutMinutes = 20,
         [string]$Activity = 'interactive guest command'
     )
 
-    $null = Invoke-GuestTask -VM $VM -TaskName $TaskName -Work $ScriptBlock -ArgumentList $ArgumentList -AsGuestUser `
+    $null = Invoke-GuestTask -VM $VM -TaskName $TaskName -Work $ScriptBlock -ArgumentList $ArgumentList -InputFile $InputFile -AsGuestUser `
         -TimeoutMinutes $TimeoutMinutes -Activity $Activity
 }
 
@@ -260,17 +313,20 @@ function Copy-FromGuest {
 }
 
 function Copy-ToGuest {
-    <# Pushes one file into the guest, creating its folder there. #>
+    <#
+      Pushes one file into a folder the guest already has: the staging folder
+      (Get-GuestStagingFolder) or a task's own (Invoke-GuestTask -InputFile).
+      It makes no folder, so nothing lands in a place other users can change.
+    #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][string]$HostPath,
         [Parameter(Mandatory)][string]$GuestPath
     )
 
-    $null = Invoke-GuestScript -VM $VM -Activity 'preparing the destination' -TimeoutMinutes 5 -ArgumentList @((Split-Path -Path $GuestPath -Parent)) -ScriptBlock {
-        param($folder) New-GuestFolder -Path $folder
-    }
-    Copy-Item -Path $HostPath -Destination $GuestPath -ToSession $VM.Runtime.Session -Force -ErrorAction Stop
+    $session = Restore-GuestSession -VM $VM
+    if (-not $session) { throw 'No open guest session to copy to.' }
+    Copy-Item -Path $HostPath -Destination $GuestPath -ToSession $session -Force -ErrorAction Stop
 }
 
 function Test-InstallSucceeded {

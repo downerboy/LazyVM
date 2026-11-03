@@ -35,6 +35,9 @@ class VMRuntime {
     # Where guest-side SQL work connects: localhost, or localhost\<instance>.
     [string]$SqlServer = 'localhost'
 
+    # The guest's staging folder, once Get-GuestStagingFolder has made it ready.
+    [string]$GuestStagingFolder
+
     # The PowerShell Direct session, and the credential to reopen it with.
     [object]$Session
     [pscredential]$Credential

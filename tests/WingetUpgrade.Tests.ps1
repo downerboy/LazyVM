@@ -329,6 +329,7 @@ Describe 'Get-GuestWingetUpgrade (#235)' {
             '1 package(s) have pins that prevent upgrade. Use the ''winget pin'' command to view and edit pins. Using the --include-pinned argument may show more results.'
             '2 package(s) have version numbers that cannot be determined. Use --include-unknown to see all results.'
         )
+        $savedOutput = $script:upgradeOutput
         $script:exportJson = '{"Sources":[{"Packages":[{"PackageIdentifier":"Git.Git"},{"PackageIdentifier":"JetBrains.Toolbox"},{"PackageIdentifier":"Microsoft.VisualStudio.Community"}],"SourceDetails":{"Name":"winget"}}]}'
 
         # Stands in for winget.exe: 'upgrade' prints the table, 'export' writes the file.
@@ -341,7 +342,9 @@ Describe 'Get-GuestWingetUpgrade (#235)' {
 
     BeforeEach {
         Mock Get-ItemProperty { [pscustomobject]@{ DisplayName = 'Git'; InstallLocation = 'D:\Tools\Git'; DisplayIcon = '' } }
-        $listVM = InModuleScope $module -Parameters @{ SetupDir = "$TestDrive" } { param($SetupDir) [VMContext]::new(@{ VMName = 'Alpha'; GuestSetupDir = $SetupDir }) }
+        $listVM = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha' }) }
+        Mock -ModuleName $module Get-GuestStagingFolder { "$TestDrive" }
+        Mock -ModuleName $module Write-LogEntry { }
         # Runs the script block here, as it would run in the guest, where the guest helpers are.
         Mock -ModuleName $module Invoke-GuestScript { & ([scriptblock]::Create($ScriptBlock.ToString())) @ArgumentList }
     }
@@ -351,7 +354,30 @@ Describe 'Get-GuestWingetUpgrade (#235)' {
 
         ($result.Id -join ',') | Should -Be 'Git.Git,JetBrains.Toolbox,Microsoft.VisualStudio.Community'
         @($result[0].Folders) | Should -Be @('D:\Tools\Git')
+        Should -Invoke -ModuleName $module Get-GuestStagingFolder -Times 1 -Exactly
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { "$ScriptBlock" -match 'upgrade --source winget' }
+    }
+
+    It 'makes the staging folder ready only when an id was cut short, as only winget export needs it (#302)' {
+        $script:upgradeOutput = @($script:upgradeOutput | Where-Object { $_ -notmatch $ellipsis })
+        try {
+            $result = @(InModuleScope $module -Parameters @{ VM = $listVM; Winget = 'Invoke-FakeWinget' } { param($VM, $Winget) Get-GuestWingetUpgrade -VM $VM -Winget $Winget })
+        }
+        finally {
+            $script:upgradeOutput = $savedOutput
+        }
+
+        $result.Id | Should -Be 'Git.Git'
+        Should -Invoke -ModuleName $module Get-GuestStagingFolder -Times 0 -Exactly
+    }
+
+    It 'lists the packages, leaving ids it cannot complete empty, when the staging folder cannot be made ready' {
+        Mock -ModuleName $module Get-GuestStagingFolder { throw 'Program Files\LazyVM is not safe' }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $listVM; Winget = 'Invoke-FakeWinget' } { param($VM, $Winget) Get-GuestWingetUpgrade -VM $VM -Winget $Winget })
+
+        ($result.Id -join ',') | Should -Be 'Git.Git,,'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like '*not safe*' }
     }
 
     It 'reads winget''s output as UTF-8, so the ellipsis it cuts names short with survives' {

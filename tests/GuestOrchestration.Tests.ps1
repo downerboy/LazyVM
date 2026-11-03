@@ -271,6 +271,53 @@ Describe 'Invoke-GuestTask' {
     }
 }
 
+Describe 'Guest task files (#302)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Start-Sleep { }
+        Mock -ModuleName $module Invoke-GuestScript {
+            switch -Wildcard ($Activity) {
+                'starting *' { 'boot1' }
+                'checking on *' { New-TaskStatus -Done '0' -TaskState 'Ready' }
+            }
+        }
+    }
+
+    It 'takes only a result written for this start, by its nonce, which the guest reads from the task''s own folder' {
+        $sent = @{ Start = $null; Check = $null }
+        Mock -ModuleName $module Invoke-GuestScript {
+            switch -Wildcard ($Activity) {
+                'starting *' { $sent.Start = $ArgumentList[1]; 'boot1' }
+                'checking on *' { $sent.Check = $ArgumentList[1]; New-TaskStatus -Done '0' -TaskState 'Ready' }
+            }
+        }
+
+        InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            Invoke-GuestTask -VM ([VMContext]::new($Settings)) -TaskName 'LazyVM-test' -Work { 'OK' } -TimeoutMinutes 5 -Activity 'test'
+        }
+
+        $sent.Start | Should -Match '^[0-9a-f]{32}$'
+        $sent.Check | Should -Be $sent.Start
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $Activity -like 'checking on *' -and $ArgumentList[0] -eq 'LazyVM-test' -and "$ScriptBlock" -match 'Get-GuestTaskStatus -TaskName \$taskName -Nonce \$nonce'
+        }
+    }
+
+    It 'runs an installer as a task of its own, named after it' {
+        Mock -ModuleName $module Invoke-GuestTask { '0' }
+
+        $null = InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            Invoke-GuestInstaller -VM ([VMContext]::new($Settings)) -FilePath 'E:\setup.exe' -ArgumentList @('/Q') -Name 'install-sqlserver'
+        }
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
+            $TaskName -eq 'LazyVM-install-sqlserver' -and ($ArgumentList -join '|') -eq 'E:\setup.exe|/Q'
+        }
+    }
+}
+
 Describe 'Set-GuestCustomization' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }

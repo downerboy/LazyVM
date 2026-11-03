@@ -22,10 +22,9 @@ function Get-GuestToolingInventory {
     param([Parameter(Mandatory)][VMContext]$VM)
 
     return Invoke-GuestScript -VM $VM -Activity 'tooling inventory' -TimeoutMinutes 30 `
-        -ArgumentList @($VM.Settings.GuestSetupDir, @($VM.Settings.ToolingWingetCheck)) -ScriptBlock {
-        param($setupDir, $wingetCheck)
+        -ArgumentList @((Get-GuestStagingFolder -VM $VM), @($VM.Settings.ToolingWingetCheck)) -ScriptBlock {
+        param($stagingFolder, $wingetCheck)
         $ErrorActionPreference = 'Stop'
-        New-GuestFolder -Path $setupDir
 
         $notes = [System.Collections.Generic.List[string]]::new()
 
@@ -52,7 +51,7 @@ function Get-GuestToolingInventory {
             # Workloads, components and instance-wide marketplace extensions,
             # as the installer itself would reproduce them.
             if (Test-Path $vsInstaller) {
-                $configPath = Join-Path $setupDir "inventory-$($instance.instanceId).vsconfig"
+                $configPath = Join-Path $stagingFolder "inventory-$($instance.instanceId).vsconfig"
                 Remove-Item $configPath -Force -ErrorAction SilentlyContinue
                 $proc = Start-Process -FilePath $vsInstaller -Wait -PassThru -NoNewWindow -ArgumentList @(
                     'export', '--installPath', "`"$($instance.installationPath)`"", '--config', "`"$configPath`"", '--quiet'
@@ -102,7 +101,7 @@ function Get-GuestToolingInventory {
 
         $wingetPackages = @()
         if ($winget) {
-            $exportFile = Join-Path $setupDir 'inventory-winget.json'
+            $exportFile = Join-Path $stagingFolder 'inventory-winget.json'
             Remove-Item $exportFile -Force -ErrorAction SilentlyContinue
             & $winget export --output $exportFile --include-versions --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
             if (Test-Path $exportFile) {

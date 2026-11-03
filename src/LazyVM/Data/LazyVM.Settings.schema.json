@@ -760,7 +760,7 @@
     "GuestSetupDir": {
       "type": "string",
       "default": "C:\\LazyVMSetup",
-      "description": "A working folder inside the VM for installers and captured files.",
+      "description": "Deprecated and ignored: LazyVM stages files in %ProgramFiles%\\LazyVM\\Staging in the guest (#302). Still accepted, so existing settings files load.",
       "pattern": "^[A-Za-z]:\\\\"
     },
     "GuestDataDriveLetter": {
