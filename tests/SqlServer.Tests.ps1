@@ -168,3 +168,128 @@ Describe 'SQL Server only when VM.json says so (#36)' {
         ($labels -contains 'SQL data disk') | Should -Be $Install
     }
 }
+
+Describe 'Open-GuestSqlConnection waits for SQL Server (#318)' {
+    # After a restart the SQL Server service can still be starting when SQL
+    # work begins; a connection then fails with error 40. The guest helper
+    # starts a stopped service and retries until SQL Server accepts the
+    # connection, for a bounded time. A fake clock moves only when the helper
+    # sleeps, so the waits take no real time.
+    BeforeAll {
+        # The guest-side helpers, loaded here as they are into the guest.
+        . (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.Helpers.ps1')
+        Add-MissingCommandStub -Stub @{ 'Get-Service' = { param([string]$Name) throw "Get-Service is a test stub; mock it ($Name)." } }
+
+        function New-TestService {
+            <# A service as Get-Service returns it, whose Start() records the call and makes it start. #>
+            param([string]$Status, [string]$StartType = 'Automatic')
+
+            $service = [pscustomobject]@{ Name = 'MSSQLSERVER'; Status = $Status; StartType = $StartType }
+            $service | Add-Member -MemberType ScriptMethod -Name Start -Value { $script:started++; $script:statuses = @('StartPending', 'Running') }
+            return $service
+        }
+    }
+
+    BeforeEach {
+        $script:now = [datetime]'2026-11-02T21:40:40'
+        $script:started = 0
+        $script:connectionFailures = 0
+        Mock Get-Date { $script:now }
+        Mock Start-Sleep { $script:now = $script:now.AddSeconds($Seconds) }
+        # Each call reports the next status; the last one stays.
+        Mock Get-Service {
+            $status = $script:statuses[0]
+            if ($script:statuses.Count -gt 1) { $script:statuses = @($script:statuses | Select-Object -Skip 1) }
+            New-TestService -Status $status -StartType $script:startType
+        }
+        $script:startType = 'Automatic'
+        Mock New-GuestSqlConnection {
+            if ($script:connectionFailures -gt 0) {
+                $script:connectionFailures--
+                throw 'A network-related or instance-specific error occurred (provider: Named Pipes Provider, error: 40 - Could not open a connection to SQL Server)'
+            }
+            [pscustomobject]@{ Server = $Server }
+        }
+    }
+
+    It 'starts a stopped service and returns the connection once it runs' {
+        $script:statuses = @('Stopped')
+
+        $connection = Open-GuestSqlConnection -Server 'localhost'
+
+        $connection.Server | Should -Be 'localhost'
+        $script:started | Should -Be 1
+    }
+
+    It 'waits while the service is StartPending, without starting it again' {
+        $script:statuses = @('StartPending', 'StartPending', 'Running')
+
+        $connection = Open-GuestSqlConnection -Server 'localhost'
+
+        $connection.Server | Should -Be 'localhost'
+        $script:started | Should -Be 0
+        Should -Invoke Start-Sleep
+    }
+
+    It 'retries a running service until it accepts the connection' {
+        $script:statuses = @('Running')
+        $script:connectionFailures = 2
+
+        $connection = Open-GuestSqlConnection -Server 'localhost'
+
+        $connection.Server | Should -Be 'localhost'
+        Should -Invoke New-GuestSqlConnection -Times 3 -Exactly
+    }
+
+    It 'fails at once, without starting it, when the service is disabled' {
+        $script:statuses = @('Stopped')
+        $script:startType = 'Disabled'
+
+        { Open-GuestSqlConnection -Server 'localhost' } | Should -Throw '*MSSQLSERVER*disabled*'
+
+        $script:started | Should -Be 0
+        Should -Invoke New-GuestSqlConnection -Times 0 -Exactly
+        Should -Invoke Start-Sleep -Times 0 -Exactly
+    }
+
+    It 'gives up after the time limit, naming the service state and the ERRORLOG' {
+        $script:statuses = @('StartPending')
+        $began = $script:now
+
+        { Open-GuestSqlConnection -Server 'localhost' } | Should -Throw '*MSSQLSERVER*StartPending*ERRORLOG*'
+
+        ($script:now - $began) | Should -Be $script:GuestSqlStartLimit
+    }
+
+    It 'names the last connection error when the service runs but refuses connections' {
+        $script:statuses = @('Running')
+        $script:connectionFailures = [int]::MaxValue
+
+        { Open-GuestSqlConnection -Server 'localhost' } | Should -Throw '*Running*error: 40*ERRORLOG*'
+    }
+
+    It 'waits for the service of a named instance' {
+        $script:statuses = @('Running')
+
+        $null = Open-GuestSqlConnection -Server 'localhost\DEV'
+
+        Should -Invoke Get-Service -ParameterFilter { $Name -eq 'MSSQL$DEV' }
+    }
+
+    It 'is called only from guest scripts given longer than the wait to finish' {
+        # Otherwise the host gives up first, with a message that hides why.
+        $sourceDir = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Private'
+        $short = foreach ($file in Get-ChildItem -LiteralPath $sourceDir -Filter '*.ps1' -Recurse) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$null)
+            $calls = $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Invoke-GuestScript' }, $true)
+            foreach ($call in $calls) {
+                if ($call.Extent.Text -notmatch 'Open-GuestSqlConnection') { continue }
+                $elements = $call.CommandElements
+                $index = [array]::FindIndex([object[]]$elements, [Predicate[object]] { param($e) $e -is [System.Management.Automation.Language.CommandParameterAst] -and $e.ParameterName -eq 'TimeoutMinutes' })
+                if ([int]$elements[$index + 1].Extent.Text -le $script:GuestSqlStartLimit.TotalMinutes) { "$($file.Name):$($call.Extent.StartLineNumber)" }
+            }
+        }
+
+        @($short) | Should -BeNullOrEmpty
+    }
+}

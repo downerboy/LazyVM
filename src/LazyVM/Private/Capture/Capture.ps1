@@ -364,7 +364,7 @@ function Backup-GuestUserDatabase {
         Write-LogEntry '  SQL Server is not installed - no databases to back up' 'INFO'
         return
     }
-    $names = @(Invoke-GuestScript -VM $VM -Activity 'SQL user database list' -TimeoutMinutes 5 -ArgumentList @($VM.Runtime.SqlServer) -ScriptBlock {
+    $names = @(Invoke-GuestScript -VM $VM -Activity 'SQL user database list' -TimeoutMinutes 10 -ArgumentList @($VM.Runtime.SqlServer) -ScriptBlock {
             param($server)
             $ErrorActionPreference = 'Stop'
             $connection = Open-GuestSqlConnection -Server $server
