@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.5.1](https://github.com/downerboy/LazyVM/compare/v6.5.0...v6.5.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* remove older LazyVM copies that shadow the installed version ([#312](https://github.com/downerboy/LazyVM/issues/312)) ([ecb7cc1](https://github.com/downerboy/LazyVM/commit/ecb7cc10251b99528016296d7e1772ce488ed3f8))
+
 ## [6.5.0](https://github.com/downerboy/LazyVM/compare/v6.4.1...v6.5.0) (2026-11-03)
 
 
