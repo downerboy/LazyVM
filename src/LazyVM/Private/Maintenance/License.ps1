@@ -122,7 +122,7 @@ function Get-MaintenancePreview {
 
     if (Test-BuildInProgress -VM $VM) { return 'Nothing: the build still in progress is left to finish' }
     $machine = Get-VM -Name $VM.Name -ErrorAction SilentlyContinue
-    $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups, winget, Visual Studio Installer product, PowerShell Gallery and dotnet tool updates, Windows updates)'
+    $daily = 'Run the daily checks (C: size, User disk, BitLocker, tooling and settings records, database backups, winget, Visual Studio Installer product, PowerShell Gallery and dotnet tool updates, Windows updates, security scan)'
     if ("$($machine.State)" -ne 'Running') {
         return "Start the VM, which is $($machine.State), then $($daily.Substring(0, 1).ToLower())$($daily.Substring(1)) and act on its evaluation, which was not read while the VM is not running"
     }
@@ -218,7 +218,8 @@ function Invoke-DailyMaintenance {
       the databases, asks the Store to update its apps, sets up Sysmon and the event logging,
       keeps automatic sign-in on, applies the Visual Studio settings when a build could not, upgrades
       the winget packages, updates the Visual Studio Installer products, the
-      PowerShell Gallery modules and the dotnet global tools, installs Windows updates, then does
+      PowerShell Gallery modules and the dotnet global tools, installs Windows updates,
+      scans the guest for security problems, then does
       nothing more until the evaluation is close to expiry, when it captures
       state and rearms. -StartedByLazyVM: the run
       started the VM, so nobody is at work in it.
@@ -312,6 +313,10 @@ function Invoke-DailyMaintenance {
     # license check. The guest is restarted for them only when nobody can be disturbed by it (#234).
     try { $null = Update-GuestWindows -VM $VM -StartedByLazyVM:$StartedByLazyVM -RestartNeededBy $restartNeededBy }
     catch { Write-LogError 'Windows updates failed (non-fatal)' $_ }
+
+    # The security scan last, after the updates, so it reports on the VM as tonight leaves it. It only reports (#290).
+    try { $null = Invoke-GuestSecurityScan -VM $VM }
+    catch { Write-LogError 'Security scan failed (non-fatal)' $_ }
 
     $license = Get-GuestLicenseStatus -VM $VM
     Write-LogEntry "License: $($license.Status); $($license.DaysLeft) day(s) left; $($license.RearmsLeft) rearm(s) remaining" 'INFO'

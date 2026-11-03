@@ -6,6 +6,7 @@
     "InstallSqlServer": false,
     "UseDevDrive": false,
     "GuestDeveloperMode": false,
+    "GuestSecurityScan": true,
     "Tooling": {
       "Version": 1,
       "Description": "PlainWindows template: Windows with no developer tools. Install and set up the apps you want by hand.",

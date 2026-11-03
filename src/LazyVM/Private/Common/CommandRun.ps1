@@ -98,11 +98,16 @@ function Initialize-CommandRun {
 }
 
 function Write-RunReminder {
-    <# What a command run by hand reminds you of first: maintenance that is not scheduled, and recovery passwords not exported yet. #>
+    <#
+      What a command run by hand reminds you of first: maintenance that is
+      not scheduled, recovery passwords not exported yet, and open High or
+      Medium security findings.
+    #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     Write-MaintenanceTaskWarning -VM $VM
     Write-RecoveryKeyReminder -VM $VM
+    Write-SecurityFindingReminder -VM $VM
 }
 
 function Complete-CommandRun {

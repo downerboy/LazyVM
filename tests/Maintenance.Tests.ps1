@@ -44,6 +44,7 @@ Describe 'Invoke-Maintenance' {
         Mock -ModuleName $module Update-GuestGalleryModule { 'stray' }
         Mock -ModuleName $module Update-GuestDotnetTool { 'stray' }
         Mock -ModuleName $module Update-GuestWindows { 'stray' }
+        Mock -ModuleName $module Invoke-GuestSecurityScan { 'stray' }
         Mock -ModuleName $module Stop-GuestGracefully { 'stray' }
         Mock -ModuleName $module Save-GuestState { 'stray' }
         Mock -ModuleName $module Test-GuestStateChanged { $false }
@@ -168,6 +169,19 @@ Describe 'Invoke-Maintenance' {
         $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM }
 
         $script:order -join ',' | Should -Be 'backup,updates,license'
+    }
+
+    It 'scans the guest for security problems last, after Windows updates, and carries on when that fails (#290)' {
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Update-GuestWindows { $script:order.Add('updates') }
+        Mock -ModuleName $module Invoke-GuestSecurityScan { $script:order.Add('scan'); throw 'the guest stopped answering' }
+        Mock -ModuleName $module Get-GuestLicenseStatus { $script:order.Add('license'); [pscustomobject]@{ Status = 'Licensed'; DaysLeft = 50; RearmsLeft = 3 } }
+
+        $result = @(InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Maintenance -VM $VM })
+
+        "$($result[0])" | Should -Be 'None'
+        $script:order -join ',' | Should -Be 'updates,scan,license'
+        Should -Invoke -ModuleName $module Write-LogError -ParameterFilter { $Context -eq 'Security scan failed (non-fatal)' }
     }
 
     It 'upgrades the winget packages every day, and carries on when that fails (#235)' {

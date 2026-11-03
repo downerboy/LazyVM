@@ -752,6 +752,11 @@
       "default": true,
       "description": "Keep the event logs, the audit policy and PowerShell logging in the VM at the Microsoft security baseline for Windows 11: bigger Application, System, Security and PowerShell logs that overwrite their oldest events, the baseline's advanced audit policy, command lines in process creation events (4688) and PowerShell script block logging. Checked at every build and every night: only what is missing is added, so a bigger log or extra auditing you set is kept. Set to false to leave them as they are."
     },
+    "GuestSecurityScan": {
+      "type": "boolean",
+      "default": true,
+      "description": "Scan the VM every night, as the last step of maintenance: a Microsoft Defender quick scan, Defender's own protection, and security settings measured against the Microsoft security baseline (firewall, User Account Control, BitLocker, SMB 1, Remote Desktop, the Guest account, LSA protection, Secure Boot, virtualization-based security, AutoRun, paused Windows updates). It only reports: findings go to the VM's log, to Logs\\SecurityFindings.json, to LazyVM Findings.txt on the VM's desktop, which opens at the next sign-in, connect or unlock when something new is High or Medium, and to Get-LazyVMSecurityFinding. Set to false to leave the VM unscanned; the findings file and the task that opens it stay in the VM as they are."
+    },
     "GuestHideTaskbarSearch": {
       "type": "boolean",
       "default": true,
