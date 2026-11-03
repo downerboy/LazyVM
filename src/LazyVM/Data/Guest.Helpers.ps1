@@ -51,13 +51,66 @@ function Expand-GuestZip {
 
 # ── SQL Server ───────────────────────────────────────────────────────────────
 
-function Open-GuestSqlConnection {
-    <# An open connection to master on $Server, with Windows authentication. #>
+# How long SQL work waits for SQL Server to accept a connection, and how long
+# it pauses between tries. After a restart the service can still be starting
+# when SQL work begins (#318).
+$script:GuestSqlStartLimit = [timespan]::FromMinutes(5)
+$script:GuestSqlRetrySeconds = 5
+
+function Get-GuestSqlServiceName {
+    <# The Windows service of the instance $Server names: localhost is MSSQLSERVER, localhost\DEV is MSSQL$DEV. #>
+    param([Parameter(Mandatory)][string]$Server)
+
+    if ($Server -match '\\(.+)$') { return "MSSQL`$$($Matches[1])" }
+    return 'MSSQLSERVER'
+}
+
+function Start-GuestSqlService {
+    <# Starts the service $Name when it is stopped, without waiting; throws when it is disabled. #>
+    param([Parameter(Mandatory)][string]$Name)
+
+    $service = Get-Service -Name $Name -ErrorAction Stop
+    if ($service.Status -ne 'Stopped') { return }
+    if ($service.StartType -eq 'Disabled') {
+        throw "SQL Server cannot start: its service $Name is disabled. Set the service's startup type to Automatic in Services (services.msc), then run this again."
+    }
+    # Start() returns at once; Start-Service would wait, with no limit, for
+    # the service to run.
+    $service.Start()
+}
+
+function New-GuestSqlConnection {
+    <# One try: an open connection to master on $Server, with Windows authentication. #>
     param([Parameter(Mandatory)][string]$Server)
 
     $connection = New-Object System.Data.SqlClient.SqlConnection("Server=$Server;Database=master;Integrated Security=True;TrustServerCertificate=True;Connect Timeout=30")
     $connection.Open()
     return $connection
+}
+
+function Open-GuestSqlConnection {
+    <#
+      An open connection to master on $Server, with Windows authentication.
+      A stopped SQL Server service is started, and SQL Server is given up to
+      $script:GuestSqlStartLimit to run and accept the connection.
+    #>
+    param([Parameter(Mandatory)][string]$Server)
+
+    $serviceName = Get-GuestSqlServiceName -Server $Server
+    Start-GuestSqlService -Name $serviceName
+    $deadline = (Get-Date) + $script:GuestSqlStartLimit
+    $lastError = 'none, as the service never ran'
+    while ($true) {
+        $status = (Get-Service -Name $serviceName -ErrorAction Stop).Status
+        if ($status -eq 'Running') {
+            try { return New-GuestSqlConnection -Server $Server }
+            catch { $lastError = $_.Exception.Message }
+        }
+        if ((Get-Date) -ge $deadline) {
+            throw "SQL Server did not accept a connection within $($script:GuestSqlStartLimit.TotalMinutes) minutes. Its service $serviceName is $status; the last connection error was: $lastError. The SQL Server ERRORLOG, in the MSSQL\Log folder of the instance under C:\Program Files\Microsoft SQL Server, says why it did not start."
+        }
+        Start-Sleep -Seconds $script:GuestSqlRetrySeconds
+    }
 }
 
 function Invoke-GuestSql {

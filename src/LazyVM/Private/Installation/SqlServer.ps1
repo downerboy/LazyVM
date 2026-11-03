@@ -199,7 +199,7 @@ function Move-GuestSqlDataFile {
     $letter = $runtime.GuestDataDriveLetter
     Write-LogEntry "Moving SQL data files for instance '$($instance.Instance)' onto $($letter):..." 'INFO'
 
-    $files = @(Invoke-GuestScript -VM $VM -Activity 'SQL data file list' -TimeoutMinutes 5 -RetryOnDisconnect -ArgumentList @($runtime.SqlServer) -ScriptBlock {
+    $files = @(Invoke-GuestScript -VM $VM -Activity 'SQL data file list' -TimeoutMinutes 10 -RetryOnDisconnect -ArgumentList @($runtime.SqlServer) -ScriptBlock {
             param($server)
             $connection = Open-GuestSqlConnection -Server $server
             # database_id 1-4 are master, tempdb, model and msdb: user
