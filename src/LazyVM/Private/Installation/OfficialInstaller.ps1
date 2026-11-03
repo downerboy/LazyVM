@@ -125,10 +125,9 @@ function Install-OfficialInstallerItem {
         return
     }
 
-    # The download folder is in the guest's Windows\Temp, where other users
-    # can neither rename nor replace it (unlike GuestSetupDir, which inherits
-    # C:\'s Modify for Authenticated Users), so the file the task runs is
-    # always in the folder that was checked.
+    # The download goes in a new private folder of its own in the guest's
+    # Windows\Temp, so the file the task runs is always the one that was
+    # checked, and the folder is deleted afterwards.
     $folderName = 'LazyVM-{0}' -f [guid]::NewGuid().ToString('N')
     try {
         $prepared = Invoke-GuestScript -VM $VM -Activity "$label download" -TimeoutMinutes 45 `

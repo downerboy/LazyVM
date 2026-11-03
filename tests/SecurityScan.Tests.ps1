@@ -77,7 +77,6 @@ BeforeAll {
             VMName               = 'Alpha'
             Root                 = $Root
             GuestSecurityScan    = -not $Off
-            GuestSetupDir        = 'C:\LazyVMSetup'
             SecurityFindingsFile = Join-Path -Path $Root -ChildPath 'Alpha/Logs/SecurityFindings.json'
         }
         return InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) [VMContext]::new($Settings) }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.4.1](https://github.com/downerboy/LazyVM/compare/v6.4.0...v6.4.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* run guest SYSTEM tasks from a folder only administrators can write ([#307](https://github.com/downerboy/LazyVM/issues/307)) ([db40306](https://github.com/downerboy/LazyVM/commit/db40306f466501e300d561c168885584fb2789a2))
+
 ## [6.4.0](https://github.com/downerboy/LazyVM/compare/v6.3.0...v6.4.0) (2026-11-02)
 
 

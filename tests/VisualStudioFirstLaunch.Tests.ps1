@@ -26,8 +26,6 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
         $states.Enqueue([pscustomobject]@{ Marker = 'Pending'; OpenedOnce = $false; DevenvRunning = $false })
         $states.Enqueue([pscustomobject]@{ Marker = 'Pending'; OpenedOnce = $true; DevenvRunning = $false })
         Mock -ModuleName $module Get-GuestVisualStudioSettingState { $states.Dequeue() }
-        $copied = @{ Text = $null; GuestPath = $null }
-        Mock -ModuleName $module Copy-ToGuest { $copied.Text = Get-Content -LiteralPath $HostPath -Raw; $copied.GuestPath = $GuestPath }
         Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { }
         Mock -ModuleName $module Stop-GuestVisualStudioFirstLaunch { }
         $vs = [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' }
@@ -43,17 +41,25 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 0 -Exactly
     }
 
-    It 'puts the UI Automation script in the guest, where it can also be run by hand, and runs it in the signed-in user''s session' {
+    It 'gives its task the UI Automation script, which can also be run by hand, and runs it in the signed-in user''s session' {
         & $complete | Should -BeTrue
 
-        # ? for the path separators, which are / where the tests run on Linux.
-        $copied.GuestPath | Should -BeLike 'C:?LazyVMSetup?VisualStudioFirstLaunch.ps1'
-        $copied.Text | Should -Be (Get-Content -LiteralPath $guestScript -Raw)
+        # In the task's own folder, which the guest account can read but not change (#302).
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter {
-            $ArgumentList[0] -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.ps1' -and
-            $ArgumentList[1] -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.txt' -and
-            $ArgumentList[2] -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.pid' -and
-            $ArgumentList[3] -eq 'C:\VS\devenv.exe'
+            $TaskName -eq 'LazyVM-VSFirstLaunch' -and
+            @($InputFile.Keys) -join ',' -eq 'VisualStudioFirstLaunch.ps1' -and
+            (Get-Content -LiteralPath $InputFile['VisualStudioFirstLaunch.ps1'] -Raw) -eq (Get-Content -LiteralPath $guestScript -Raw) -and
+            $ArgumentList[0] -eq 'C:\VS\devenv.exe'
+        }
+    }
+
+    It 'has the script write what it records only in the task''s Output folder' {
+        & $complete
+
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter {
+            "$ScriptBlock" -match "Join-Path \`$TaskFolder 'VisualStudioFirstLaunch\.ps1'" -and
+            "$ScriptBlock" -match "Join-Path \`$TaskOutput 'VisualStudioFirstLaunch\.txt'" -and
+            "$ScriptBlock" -match "Join-Path \`$TaskOutput 'VisualStudioFirstLaunch\.pid'"
         }
     }
 
@@ -63,14 +69,14 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
         & $complete
 
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter {
-            (@($ArgumentList[4] | ForEach-Object { $_.AutomationId }) -join ',') -eq (@($table | ForEach-Object { $_.AutomationId }) -join ',')
+            (@($ArgumentList[1] | ForEach-Object { $_.AutomationId }) -join ',') -eq (@($table | ForEach-Object { $_.AutomationId }) -join ',')
         }
     }
 
     It 'gives the guest task longer than the script gets, so the guest stops Visual Studio and says why' {
         & $complete
 
-        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $TimeoutMinutes -gt $ArgumentList[5] }
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $TimeoutMinutes -gt $ArgumentList[2] }
     }
 
     It 'returns false and logs the guest''s reason, without throwing, when the first launch cannot be automated' {
@@ -95,7 +101,7 @@ Describe 'Complete-GuestVisualStudioFirstLaunch' {
 
         & $complete
 
-        Should -Invoke -ModuleName $module Stop-GuestVisualStudioFirstLaunch -Times 1 -Exactly -ParameterFilter { $ProcessIdPath -like 'C:?LazyVMSetup?VisualStudioFirstLaunch.pid' }
+        Should -Invoke -ModuleName $module Stop-GuestVisualStudioFirstLaunch -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-VSFirstLaunch' }
     }
 
     It 'stops nothing when the guest task finished' {
@@ -142,17 +148,21 @@ Describe 'Stop-GuestVisualStudioFirstLaunch' {
     BeforeEach {
         $task = @{ Work = $null; Arguments = $null }
         Mock -ModuleName $module Invoke-GuestScript { $task.Work = $ScriptBlock; $task.Arguments = $ArgumentList }
-        InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Stop-GuestVisualStudioFirstLaunch -VM ([VMContext]::new($Settings)) -ProcessIdPath 'C:\LazyVMSetup\VisualStudioFirstLaunch.pid' }
+        InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Stop-GuestVisualStudioFirstLaunch -VM ([VMContext]::new($Settings)) -TaskName 'LazyVM-VSFirstLaunch' }
 
         <# The guest work, from its text, with the process id file holding $Recorded and Get-Process finding $Process. #>
         $runWork = {
-            param($Recorded, $Process)
-            $guest = @{ Recorded = $Recorded; Process = $Process }
+            param($Recorded, $Process, [string]$Linked = '')
+            $guest = @{ Recorded = $Recorded; Process = $Process; Linked = $Linked }
             Mock Test-Path { $null -ne $guest.Recorded }
             Mock Get-Content { $guest.Recorded }
             Mock Get-Process { $guest.Process }
             Mock Remove-Item { }
             Mock taskkill.exe { }
+            # Where the guest helpers find the task's Output folder.
+            function Get-GuestTaskOutputFolder { param($TaskName) "C:\Program Files\LazyVM\Tasks\$TaskName\Output" }
+            # Whether a path is a junction or link: the one named in $Linked.
+            function Test-GuestReparsePoint { param($Path) $guest.Linked -and $Path -like $guest.Linked }
             $work = [scriptblock]::Create($task.Work.ToString())
             & $work @($task.Arguments)
         }
@@ -161,9 +171,26 @@ Describe 'Stop-GuestVisualStudioFirstLaunch' {
     It 'stops the process tree of the devenv whose id the script recorded, by id' {
         & $runWork '4242' ([pscustomobject]@{ Id = 4242; ProcessName = 'devenv' })
 
+        # The file the script writes in its task's Output folder.
+        Should -Invoke Get-Content -Times 1 -Exactly -ParameterFilter { $LiteralPath -like 'C:?Program Files?LazyVM?Tasks?LazyVM-VSFirstLaunch?Output?VisualStudioFirstLaunch.pid' }
         Should -Invoke taskkill.exe -Times 1 -Exactly -ParameterFilter { "$args" -eq '/PID 4242 /T /F' }
         Should -Invoke Get-Process -Times 1 -Exactly -ParameterFilter { $Id -eq 4242 }
-        Should -Invoke Remove-Item -Times 1 -Exactly
+    }
+
+    It 'deletes nothing in the Output folder, which the user may change; the script removes the file itself (#302 SEC-008)' {
+        & $runWork '4242' ([pscustomobject]@{ Id = 4242; ProcessName = 'devenv' })
+
+        Should -Invoke Remove-Item -Times 0 -Exactly
+    }
+
+    It 'reads nothing, and stops nothing, through a link in place of <Case>' -ForEach @(
+        @{ Case = 'the Output folder'; Linked = '*Output' }
+        @{ Case = 'the process id file'; Linked = '*.pid' }
+    ) {
+        & $runWork '4242' ([pscustomobject]@{ Id = 4242; ProcessName = 'devenv' }) $Linked
+
+        Should -Invoke Get-Content -Times 0 -Exactly
+        Should -Invoke taskkill.exe -Times 0 -Exactly
     }
 
     It 'leaves a process alone that is not devenv, as when the id was reused' {

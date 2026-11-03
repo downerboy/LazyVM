@@ -37,8 +37,24 @@ Describe 'Install-ToolingProduct' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Write-LogError { }
-        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ FilePath = 'C:\LazyVMSetup\bootstrap-community.exe'; Arguments = @('--quiet') } }
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ FilePath = 'C:\Program Files\LazyVM\Staging\bootstrap-community.exe'; Arguments = @('--quiet') } }
+        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         Mock -ModuleName $module Add-ProductExtension { @() }
+    }
+
+    It 'downloads the bootstrapper into the staging folder, which only administrators can change (#302)' {
+        Mock -ModuleName $module Invoke-GuestInstaller { 1 }
+        Mock -ModuleName $module Get-GuestInstallerProduct { }
+
+        InModuleScope $module -Parameters @{ Product = $product; Settings = $settings } {
+            param($Product, $Settings)
+            Install-ToolingProduct -VM ([VMContext]::new($Settings)) -Tooling ([ToolingRecord]::FromObject(@{ Products = @($Product) }))
+        }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $Activity -like '*download' -and $ArgumentList[2] -eq 'C:\Program Files\LazyVM\Staging'
+        }
+        Should -Invoke -ModuleName $module Invoke-GuestInstaller -Times 1 -Exactly -ParameterFilter { $Name -eq 'install-community' }
     }
 
     It 'installs the product with its components only, then adds its extensions' {
@@ -166,6 +182,7 @@ Describe 'Add-ProductExtension' {
         # The guest's installer exits 1 for any batch holding an unsigned theme.
         Mock -ModuleName $module Write-LogError { }
         $guest = @{ Config = '' }
+        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         Mock -ModuleName $module Invoke-GuestScript { $guest.Config = $ArgumentList[1]; [pscustomobject]@{ FilePath = 'C:\Installer\setup.exe'; Arguments = @('modify') } }
         Mock -ModuleName $module Invoke-GuestInstaller { if ($guest.Config -like '*Theme*') { 1 } else { 0 } }
 
@@ -253,10 +270,14 @@ Describe 'Restore-GuestVisualStudioSetting' {
         Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; DevEnvPath = 'C:\VS\devenv.exe'; InstanceId = 'a1b2c3d4' } }
         $markers = [System.Collections.Generic.List[string]]::new()
         Mock -ModuleName $module Write-VisualStudioSettingMarker { $markers.Add("$InstanceId=$(if (Get-Variable -Name Pending -ValueOnly -ErrorAction SilentlyContinue) { 'Pending' } else { Get-Variable -Name AppliedHash -ValueOnly })") }
-        $copied = @{ Settings = $null }
-        Mock -ModuleName $module Copy-ToGuest { $copied.Settings = Get-Content -LiteralPath $HostPath -Raw }
+        # What the task is given, read while the host's copy is still there.
+        $copied = @{ Settings = $null; Names = @() }
         $task = @{ Work = $null; Devenv = $null }
-        Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser { $task.Work = $ScriptBlock }
+        Mock -ModuleName $module Invoke-GuestScriptAsInteractiveUser {
+            $task.Work = $ScriptBlock
+            $copied.Names = @($InputFile.Keys)
+            $copied.Settings = Get-Content -LiteralPath $InputFile['VisualStudio.vssettings'] -Raw
+        }
         Mock -ModuleName $module Wait-GuestSignedIn { $true }
         Mock -ModuleName $module Complete-GuestVisualStudioFirstLaunch { $true }
         $devDrive = $settings.Clone()
@@ -277,7 +298,9 @@ Describe 'Restore-GuestVisualStudioSetting' {
             Mock Start-Process { $task.Devenv }
             Mock taskkill.exe { }
             $work = [scriptblock]::Create($task.Work.ToString())
-            & $work 'C:\VS\devenv.exe' 'C:\LazyVMSetup\VisualStudio.vssettings' $null 10
+            # The task's folder, as the guest's task wrapper gives it.
+            $TaskFolder = 'C:\Program Files\LazyVM\Tasks\LazyVM-VSSettings'
+            & $work 'C:\VS\devenv.exe' $null 10
         }
         $newDevenv = {
             param([bool]$Exits, [int]$ExitCode = 0)
@@ -358,6 +381,14 @@ Describe 'Restore-GuestVisualStudioSetting' {
 
         $copied.Settings | Should -BeLike '*X:\source\repos*'
         Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $ArgumentList -contains 'X:\source\repos' }
+    }
+
+    It 'gives the settings to the task as a file in its own folder, which the guest account can read but not change (#302)' {
+        InModuleScope $module -Parameters @{ Settings = $devDrive } { param($Settings) Restore-GuestVisualStudioSetting -VM ([VMContext]::new($Settings)) }
+
+        $copied.Names | Should -Be @('VisualStudio.vssettings')
+        Should -Invoke -ModuleName $module Invoke-GuestScriptAsInteractiveUser -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-VSSettings' }
+        "$($task.Work)" | Should -Match "Join-Path \`$TaskFolder 'VisualStudio\.vssettings'"
     }
 
     It 'carries the settings backup with the projects location changed' {
@@ -667,6 +698,7 @@ Describe 'Save-GuestVisualStudioState and the settings still to be applied (#266
         Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Settings = 'C:\Users\devadmin\CurrentSettings.vssettings'; NuGetConfig = $null; GitConfig = $null; UserItems = $null; SettingsMarker = $guest.Marker; Notes = @() } }
         Mock -ModuleName $module Copy-FromGuest { $null = New-Item -ItemType Directory -Path (Split-Path -Path $HostPath -Parent) -Force; Set-Content -LiteralPath $HostPath -Value '<UserSettings><Category name="Defaults"/></UserSettings>' }
         Mock -ModuleName $module Write-VisualStudioSettingMarker { }
+        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         $vmSettings = $settings.Clone()
         $vmSettings.UseDevDrive = $false
         $vmSettings.VSSettingsBackup = Join-Path $TestDrive 'VisualStudio.vssettings'
