@@ -13,8 +13,12 @@
 # restored under (-ProfileRoot, or -Documents for the snippets and
 # templates), every folder below it on the way, and the file itself, are
 # checked, and a junction, link or mount point refuses that file. A OneDrive
-# folder kept in the cloud looks the same and is refused too. A refused or
-# failed file is a WARN note and the rest carry on.
+# folder kept in the cloud looks the same and is refused too. The folders
+# above the root are not walked: when Documents is redirected, as LazyVM
+# puts it on the User disk, the walk for the snippets and templates starts
+# at the Documents folder itself. An archive entry whose name could lead
+# out of the Visual Studio folder is refused. A refused or failed file is a
+# WARN note and the rest carry on.
 #
 # Returns the notes, each @{ Level; Text } (New-GuestNote in Guest.Helpers.ps1,
 # which a task does not have).
@@ -34,7 +38,10 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 
 function New-Note {
-    param([string]$Level, [string]$Text)
+    param(
+        [Parameter(Mandatory)][ValidateSet('INFO', 'OK', 'WARN', 'ERROR')][string]$Level,
+        [Parameter(Mandatory)][string]$Text
+    )
 
     return [pscustomobject]@{ Level = $Level; Text = $Text }
 }
@@ -113,11 +120,28 @@ function Restore-ProfileFile {
     return New-Note -Level OK -Text "restored $What"
 }
 
+function Get-EntryNameProblem {
+    <#
+      Why the archive entry named $Name must not be extracted, or '' when it
+      may: a part that is . or .., or holds a : or a character a file name
+      cannot have, could lead out of the folder it is extracted into.
+    #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Name)
+
+    $invalid = [char[]](@([IO.Path]::GetInvalidFileNameChars()) + ':')
+    foreach ($part in $Name.Split([char[]]@('\', '/'), [StringSplitOptions]::RemoveEmptyEntries)) {
+        if ($part -eq '.' -or $part -eq '..' -or $part.IndexOfAny($invalid) -ge 0) { return "its name has the part '$part', which could lead out of the folder" }
+    }
+    return ''
+}
+
 function Restore-ProfileArchive {
     <#
       Extracts each file in the zip archive $Archive into $Destination,
       under $Root (Write-ProfileFile), and returns a WARN note for each file
-      that was not, then one saying how many were.
+      that was not, then one saying how many were. An archive that cannot be
+      opened is one WARN note.
     #>
     param(
         [Parameter(Mandatory)][string]$Archive,
@@ -125,13 +149,20 @@ function Restore-ProfileArchive {
         [Parameter(Mandatory)][string]$Destination
     )
 
+    try { $zip = [IO.Compression.ZipFile]::OpenRead($Archive) }
+    catch { return New-Note -Level WARN -Text "did not restore the snippets and templates: $($_.Exception.Message)" }
     $restored = 0
-    $zip = [IO.Compression.ZipFile]::OpenRead($Archive)
     try {
         # An entry with no name is a folder; the folders a file needs are made for it.
         foreach ($entry in @($zip.Entries | Where-Object { $_.Name })) {
-            $target = [IO.Path]::Combine([string[]](@($Destination) + $entry.FullName.Split([char[]]@('\', '/'), [StringSplitOptions]::RemoveEmptyEntries)))
-            $problem = Write-ProfileFile -Root $Root -Destination $target -Entry $entry
+            try {
+                $problem = Get-EntryNameProblem -Name $entry.FullName
+                if (-not $problem) {
+                    $target = [IO.Path]::Combine([string[]](@($Destination) + $entry.FullName.Split([char[]]@('\', '/'), [StringSplitOptions]::RemoveEmptyEntries)))
+                    $problem = Write-ProfileFile -Root $Root -Destination $target -Entry $entry
+                }
+            }
+            catch { $problem = $_.Exception.Message }
             if ($problem) { New-Note -Level WARN -Text "did not restore $($entry.FullName): $problem" }
             else { $restored++ }
         }

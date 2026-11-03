@@ -332,7 +332,9 @@ function Restore-GuestVisualStudioState {
       the administrator: a junction or link planted there cannot lead an
       administrator's write anywhere (#310). The script refuses, as a WARN,
       any file whose way there goes through one, and copies the rest. The
-      task needs the account signed in, as the settings import does.
+      task needs the account signed in, so it waits for automatic sign-in
+      as the settings import does, and skips the files with a WARN when no
+      one signs in.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -354,19 +356,25 @@ function Restore-GuestVisualStudioState {
     }
 
     # Each captured file goes in the task's own folder, which the guest
-    # account can read but not change, under its name on the host.
+    # account can read but not change, under a fixed name.
     $files = [RecordReader]::Field($Manifest.VisualStudio, 'Files')
     $inputFile = @{ 'VisualStudioUserFiles.ps1' = (Join-Path -Path $script:DataDir -ChildPath 'Guest.VisualStudioUserFiles.ps1') }
     $sent = @{}
-    foreach ($key in 'NuGetConfig', 'GitConfig', 'UserItems') {
-        $hostPath = [RecordReader]::Text($files, $key)
+    foreach ($file in @(
+            @{ Key = 'NuGetConfig'; Name = 'NuGet.Config' }
+            @{ Key = 'GitConfig'; Name = 'gitconfig' }
+            @{ Key = 'UserItems'; Name = 'UserItems.zip' })) {
+        $hostPath = [RecordReader]::Text($files, $file.Key)
         if (-not $hostPath -or -not (Test-Path -LiteralPath $hostPath)) { continue }
-        $name = [IO.Path]::GetFileName($hostPath)
-        $inputFile[$name] = $hostPath
-        $sent[$key] = $name
+        $inputFile[$file.Name] = $hostPath
+        $sent[$file.Key] = $file.Name
     }
     if ($sent.Count -eq 0) {
         Write-LogEntry '  no Visual Studio files captured - skipping' 'INFO'
+        return
+    }
+    if (-not (Wait-GuestSignedIn -VM $VM -TimeoutMinutes $script:VisualStudioSignInWaitMinutes)) {
+        Write-LogEntry "  '$($VM.Runtime.GuestAdminUser)' is not signed in - Visual Studio files not restored" 'WARN'
         return
     }
 
@@ -381,7 +389,13 @@ function Restore-GuestVisualStudioState {
         # The task's result is one line of text, so the notes go back as JSON.
         return (ConvertTo-Json -InputObject @($notes) -Compress)
     }
-    Write-GuestNote -Notes @(ConvertFrom-Json -InputObject $report)
+    # What a task under the limited token reports is only that account's word.
+    try { $notes = @(ConvertFrom-Json -InputObject $report) }
+    catch {
+        Write-LogEntry "  could not read what the Visual Studio files restore reported: $($_.Exception.Message)" 'WARN'
+        return
+    }
+    Write-GuestNote -Notes $notes
 }
 
 # ── SQL Server ───────────────────────────────────────────────────────────────
