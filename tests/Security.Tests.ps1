@@ -180,6 +180,7 @@ Describe 'The paths a VM''s settings name (#284)' {
 
     It 'allows the outside paths for the owner when the owner, elevated, schedules or builds the VM' {
         Mock -ModuleName $module Get-CurrentUserSid { [pscustomobject]@{ Value = 'S-1-5-21-111-222-333-1001' } }
+        Mock -ModuleName $module Get-UserProfileLocation { [pscustomobject]@{ Profile = 'C:\Users\sean'; ProfilesRoot = 'C:\Users' } }
         Mock -ModuleName $module Add-TrustedHostPath { }
 
         $ownSettings = $settings.Clone()
@@ -344,6 +345,7 @@ Describe 'A task name that is not a VM''s (#284)' {
 Describe 'Allowing a place outside the LazyVM folder (#284)' {
     BeforeEach {
         Mock -ModuleName $module Get-CurrentUserSid { [pscustomobject]@{ Value = 'S-1-5-21-111-222-333-1001' } }
+        Mock -ModuleName $module Get-UserProfileLocation { [pscustomobject]@{ Profile = 'C:\Users\sean'; ProfilesRoot = 'C:\Users' } } -ParameterFilter { $Sid -eq 'S-1-5-21-111-222-333-1001' }
         Mock -ModuleName $module Get-TrustedHostPath { @() }
         Mock -ModuleName $module Add-TrustedHostPath { }
         Mock -ModuleName $module Write-LogEntry { }
@@ -382,7 +384,7 @@ Describe 'Allowing a place outside the LazyVM folder (#284)' {
         @{ Case = 'the Windows folder'; Path = (Join-Path -Path $env:SystemRoot -ChildPath 'Temp') }
         @{ Case = 'Program Files'; Path = (Join-Path -Path $env:ProgramFiles -ChildPath 'Contoso') }
         @{ Case = 'ProgramData'; Path = (Join-Path -Path $env:ProgramData -ChildPath 'Contoso') }
-        @{ Case = 'another user''s profile'; Path = (Join-Path -Path (Split-Path -Path $env:USERPROFILE -Parent) -ChildPath 'kim\Backups') }
+        @{ Case = 'another user''s profile'; Path = 'C:\Users\kim\Backups' }
     ) {
         $settings = @{ VMName = 'Alpha'; Root = 'D:\DevVM'; BackupDir = $Path }
 
@@ -399,10 +401,65 @@ Describe 'Allowing a place outside the LazyVM folder (#284)' {
         $saved = [Environment]::GetEnvironmentVariable($Variable)
         [Environment]::SetEnvironmentVariable($Variable, 'Q:\Elsewhere')
         try {
-            $reason = InModuleScope $module -Parameters @{ Path = (Join-Path -Path ([Environment]::GetFolderPath($Folder)) -ChildPath 'Contoso') } { param($Path) Get-ForbiddenHostPathReason -Path $Path }
+            $reason = InModuleScope $module -Parameters @{ Path = (Join-Path -Path ([Environment]::GetFolderPath($Folder)) -ChildPath 'Contoso') } { param($Path) Get-ForbiddenHostPathReason -Path $Path -OwnerSid 'S-1-5-21-111-222-333-1001' }
             $reason | Should -Not -BeNullOrEmpty
         }
         finally { [Environment]::SetEnvironmentVariable($Variable, $saved) }
+    }
+
+    It 'allows a place in the owner''s own profile, which Windows records for their security identifier' {
+        $reason = InModuleScope $module { Get-ForbiddenHostPathReason -Path 'C:\Users\sean\Backups' -OwnerSid 'S-1-5-21-111-222-333-1001' }
+
+        $reason | Should -BeNullOrEmpty
+    }
+
+    It 'refuses another user''s profile even when USERPROFILE names it (#311)' {
+        $saved = $env:USERPROFILE
+        $env:USERPROFILE = 'C:\Users\kim'
+        try { $reason = InModuleScope $module { Get-ForbiddenHostPathReason -Path 'C:\Users\kim\Backups' -OwnerSid 'S-1-5-21-111-222-333-1001' } }
+        finally { $env:USERPROFILE = $saved }
+
+        $reason | Should -BeLike '*C:\Users*not in your own profile*'
+    }
+}
+
+Describe 'Get-UserProfileLocation (#311)' {
+    It 'reads <Case> from ProfileList, working out <Variable> from the Windows folder' -ForEach @(
+        @{ Case = 'the profile'; Variable = '%SystemDrive%'; Image = '%SystemDrive%\Users\sean'; Directory = 'C:\Users'; Profile = 'C:\Users\sean'; Root = 'C:\Users' }
+        @{ Case = 'the profiles folder'; Variable = '%SystemRoot%'; Image = 'D:\Profiles\sean'; Directory = '%SystemRoot%\..\Profiles'; Profile = 'D:\Profiles\sean'; Root = 'C:\Windows\..\Profiles' }
+    ) {
+        Mock -ModuleName $module Get-WindowsFolder { 'C:\Windows' }
+        Mock -ModuleName $module Get-RegistryText { $Image } -ParameterFilter { $Key -like '*\ProfileList\S-1-5-21-111-222-333-1001' -and $Name -eq 'ProfileImagePath' }
+        Mock -ModuleName $module Get-RegistryText { $Directory } -ParameterFilter { $Key -like '*\ProfileList' -and $Name -eq 'ProfilesDirectory' }
+
+        $location = InModuleScope $module { Get-UserProfileLocation -Sid 'S-1-5-21-111-222-333-1001' }
+
+        $location.Profile | Should -Be $Profile
+        $location.ProfilesRoot | Should -Be $Root
+    }
+
+    It 'refuses a value that names any other environment variable, which the user could change' {
+        Mock -ModuleName $module Get-WindowsFolder { 'C:\Windows' }
+        Mock -ModuleName $module Get-RegistryText { '%USERPROFILE%' } -ParameterFilter { $Name -eq 'ProfileImagePath' }
+        Mock -ModuleName $module Get-RegistryText { 'C:\Users' } -ParameterFilter { $Name -eq 'ProfilesDirectory' }
+
+        { InModuleScope $module { Get-UserProfileLocation -Sid 'S-1-5-21-111-222-333-1001' } } | Should -Throw -ExpectedMessage '*%USERPROFILE%*'
+    }
+
+    It 'refuses an account Windows has no profile for' {
+        Mock -ModuleName $module Get-RegistryText { $null }
+
+        { InModuleScope $module { Get-UserProfileLocation -Sid 'S-1-5-21-111-222-333-1001' } } | Should -Throw -ExpectedMessage '*S-1-5-21-111-222-333-1001*'
+    }
+
+    It 'finds the signed-in user''s own profile whatever USERPROFILE says' -Skip:(-not $IsWindows) {
+        $expected = [Environment]::GetFolderPath('UserProfile')
+        $saved = $env:USERPROFILE
+        $env:USERPROFILE = 'Q:\Elsewhere'
+        try { $location = InModuleScope $module { Get-UserProfileLocation -Sid ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) } }
+        finally { $env:USERPROFILE = $saved }
+
+        $location.Profile | Should -Be $expected
     }
 }
 
