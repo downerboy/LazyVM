@@ -57,12 +57,38 @@ function Expand-GuestZip {
 $script:GuestSqlStartLimit = [timespan]::FromMinutes(5)
 $script:GuestSqlRetrySeconds = 5
 
-function Get-GuestSqlServiceName {
-    <# The Windows service of the instance $Server names: localhost is MSSQLSERVER, localhost\DEV is MSSQL$DEV. #>
+function Get-GuestSqlInstanceName {
+    <# The instance $Server names: localhost is MSSQLSERVER, localhost\DEV is DEV. #>
     param([Parameter(Mandatory)][string]$Server)
 
-    if ($Server -match '\\(.+)$') { return "MSSQL`$$($Matches[1])" }
+    if ($Server -match '\\(.+)$') { return $Matches[1] }
     return 'MSSQLSERVER'
+}
+
+function Get-GuestSqlServiceName {
+    <# The Windows service of an instance: MSSQLSERVER for the default one, MSSQL$DEV for DEV. #>
+    param([Parameter(Mandatory)][string]$Instance)
+
+    if ($Instance -eq 'MSSQLSERVER') { return $Instance }
+    return "MSSQL`$$Instance"
+}
+
+function Get-GuestSqlErrorLogPath {
+    <#
+      The ERRORLOG file of an instance, from the -e startup parameter SQL
+      Server setup records; $null when the registry does not say.
+    #>
+    param([Parameter(Mandatory)][string]$Instance)
+
+    $sqlKey = 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server'
+    $names = Get-ItemProperty -Path "$sqlKey\Instance Names\SQL" -ErrorAction SilentlyContinue
+    if (-not $names -or -not $names.PSObject.Properties[$Instance]) { return $null }
+
+    $parameters = Get-ItemProperty -Path "$sqlKey\$($names.$Instance)\MSSQLServer\Parameters" -ErrorAction SilentlyContinue
+    if (-not $parameters) { return $null }
+    $errorLog = @($parameters.PSObject.Properties | Where-Object { $_.Name -like 'SQLArg*' -and "$($_.Value)" -like '-e*' })
+    if ($errorLog.Count -eq 0) { return $null }
+    return "$($errorLog[0].Value)".Substring(2)
 }
 
 function Start-GuestSqlService {
@@ -96,7 +122,8 @@ function Open-GuestSqlConnection {
     #>
     param([Parameter(Mandatory)][string]$Server)
 
-    $serviceName = Get-GuestSqlServiceName -Server $Server
+    $instance = Get-GuestSqlInstanceName -Server $Server
+    $serviceName = Get-GuestSqlServiceName -Instance $instance
     Start-GuestSqlService -Name $serviceName
     $deadline = (Get-Date) + $script:GuestSqlStartLimit
     $lastError = 'none, as the service never ran'
@@ -107,7 +134,9 @@ function Open-GuestSqlConnection {
             catch { $lastError = $_.Exception.Message }
         }
         if ((Get-Date) -ge $deadline) {
-            throw "SQL Server did not accept a connection within $($script:GuestSqlStartLimit.TotalMinutes) minutes. Its service $serviceName is $status; the last connection error was: $lastError. The SQL Server ERRORLOG, in the MSSQL\Log folder of the instance under C:\Program Files\Microsoft SQL Server, says why it did not start."
+            $errorLog = Get-GuestSqlErrorLogPath -Instance $instance
+            $where = if ($errorLog) { " at $errorLog" } else { ', in the MSSQL\Log folder of the instance under C:\Program Files\Microsoft SQL Server' }
+            throw "SQL Server did not accept a connection within $($script:GuestSqlStartLimit.TotalMinutes) minutes. Its service $serviceName is $status; the last connection error was: $lastError. The SQL Server ERRORLOG$where, says why it did not start."
         }
         Start-Sleep -Seconds $script:GuestSqlRetrySeconds
     }

@@ -203,6 +203,9 @@ Describe 'Open-GuestSqlConnection waits for SQL Server (#318)' {
             New-TestService -Status $status -StartType $script:startType
         }
         $script:startType = 'Automatic'
+        # The registry keys each test sets up (path -> values); none by default.
+        $script:registry = @{}
+        Mock Get-ItemProperty { if ($script:registry.ContainsKey($Path[0])) { $script:registry[$Path[0]] } }
         Mock New-GuestSqlConnection {
             if ($script:connectionFailures -gt 0) {
                 $script:connectionFailures--
@@ -266,6 +269,30 @@ Describe 'Open-GuestSqlConnection waits for SQL Server (#318)' {
         $script:connectionFailures = [int]::MaxValue
 
         { Open-GuestSqlConnection -Server 'localhost' } | Should -Throw '*Running*error: 40*ERRORLOG*'
+    }
+
+    It 'gives the exact ERRORLOG path from the startup parameters of <Server>' -ForEach @(
+        @{ Server = 'localhost'; Instance = 'MSSQLSERVER'; InstanceId = 'MSSQL17.MSSQLSERVER' }
+        @{ Server = 'localhost\DEV'; Instance = 'DEV'; InstanceId = 'MSSQL17.DEV' }
+    ) {
+        $script:statuses = @('StartPending')
+        $log = "C:\Program Files\Microsoft SQL Server\$InstanceId\MSSQL\Log\ERRORLOG"
+        $script:registry = @{
+            'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL'            = [pscustomobject]@{ $Instance = $InstanceId }
+            "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\$InstanceId\MSSQLServer\Parameters" = [pscustomobject]@{
+                SQLArg0 = "-dC:\Program Files\Microsoft SQL Server\$InstanceId\MSSQL\DATA\master.mdf"
+                SQLArg1 = "-e$log"
+                SQLArg2 = "-lC:\Program Files\Microsoft SQL Server\$InstanceId\MSSQL\DATA\mastlog.ldf"
+            }
+        }
+
+        { Open-GuestSqlConnection -Server $Server } | Should -Throw "*ERRORLOG at $log,*"
+    }
+
+    It 'falls back to the general ERRORLOG location when the startup parameters cannot be read' {
+        $script:statuses = @('StartPending')
+
+        { Open-GuestSqlConnection -Server 'localhost' } | Should -Throw '*ERRORLOG, in the MSSQL\Log folder of the instance*'
     }
 
     It 'waits for the service of a named instance' {
