@@ -55,46 +55,65 @@ function Read-LegacyCredentialKey {
     return , $key
 }
 
-function Convert-LegacyCredentialFile {
+function Read-LegacyCredentialFile {
     <#
-      Re-encrypts one credential file from the old key to DPAPI for the
-      current user. The new content is read back and compared before it
-      replaces the file, so the file is never left unreadable. Returns
-      whether it changed anything: a file already re-encrypted is left alone.
+      The credential in one file LazyVM 5 encrypted with the key at
+      $KeyPath, or nothing when the file is already re-encrypted. Throws,
+      changing nothing, when it cannot be decrypted. The old format has no
+      integrity check, so about one wrong key in 65,536 passes the padding
+      check (#314); what it gives is then rejected as not text about a
+      third of the time.
     #>
-    [OutputType([bool])]
+    [OutputType([pscredential])]
     param(
         [Parameter(Mandatory)][string]$KeyPath,
         [Parameter(Mandatory)][string]$Path
     )
 
     $blob = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
-    if (Test-ProtectedCredentialBlob -Blob $blob) { return $false }
+    if (Test-ProtectedCredentialBlob -Blob $blob) { return }
 
     $key = Read-LegacyCredentialKey -Path $KeyPath
-    try { $password = ConvertTo-SecureString -String $blob.Password -Key $key }
+    try {
+        $password = ConvertTo-SecureString -String $blob.Password -Key $key
+        # Strict UTF-16: throws on an unpaired surrogate, which no text has.
+        $null = [Text.UnicodeEncoding]::new($false, $false, $true).GetByteCount((ConvertTo-PlainText -Secure $password))
+    }
     catch { throw "The old credential $Path cannot be decrypted with $KeyPath ($($_.Exception.Message)). It is left as it was." }
+    return [pscredential]::new($blob.UserName, $password)
+}
 
-    $text = ConvertTo-StoredCredentialText -UserName $blob.UserName -Password $password
+function Save-ConvertedCredential {
+    <#
+      Writes $Credential to $Path encrypted with DPAPI for the current user.
+      The new content is read back and compared before it replaces the file,
+      so the file is never left unreadable.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][pscredential]$Credential
+    )
+
+    $text = ConvertTo-StoredCredentialText -UserName $Credential.UserName -Password $Credential.Password
     $check = ConvertFrom-StoredCredentialText -Text $text -Path $Path
-    if ($check.UserName -ne $blob.UserName -or (ConvertTo-PlainText -Secure $check.Password) -cne (ConvertTo-PlainText -Secure $password)) {
+    if ($check.UserName -ne $Credential.UserName -or (ConvertTo-PlainText -Secure $check.Password) -cne (ConvertTo-PlainText -Secure $Credential.Password)) {
         throw "The re-encrypted credential $Path did not read back the same. It is left as it was."
     }
     Write-TextFileAtomic -Path $Path -Text $text
-    return $true
 }
 
 function Convert-LegacyCredential {
     <#
       Re-encrypts every VM's credential files under $Root for the current
       user, then deletes the old key files, which nothing needs any more.
-      Stops at the first file that cannot be re-encrypted, keeping the keys.
+      Every file is decrypted before any is written, so a wrong or damaged
+      key stops it with nothing changed and the keys kept.
     #>
     param([Parameter(Mandatory)][string]$Root)
 
     $keyPaths = [System.Collections.Generic.List[string]]::new()
     $keyPaths.Add((Get-LegacyCredentialKeyPath -Root $Root))
-    $converted = 0
+    $decrypted = [System.Collections.Generic.List[object]]::new()
     foreach ($vmFolder in @(Get-ChildItem -LiteralPath $Root -Directory -Force -ErrorAction SilentlyContinue)) {
         $credentialFolder = Join-Path -Path $vmFolder.FullName -ChildPath 'Credentials'
         $files = @(Get-ChildItem -LiteralPath $credentialFolder -Filter '*.cred' -File -Force -ErrorAction SilentlyContinue)
@@ -102,10 +121,13 @@ function Convert-LegacyCredential {
         $keyPath = Get-LegacyCredentialKeyPath -Root $Root -VMName $vmFolder.Name
         if (-not $keyPaths.Contains($keyPath)) { $keyPaths.Add($keyPath) }
         foreach ($file in $files) {
-            if (Convert-LegacyCredentialFile -KeyPath $keyPath -Path $file.FullName) { $converted++ }
+            $credential = Read-LegacyCredentialFile -KeyPath $keyPath -Path $file.FullName
+            if ($credential) { $decrypted.Add([pscustomobject]@{ Path = $file.FullName; Credential = $credential }) }
         }
     }
-    Write-LogEntry "$converted credential file(s) re-encrypted for this computer" 'OK'
+
+    foreach ($item in $decrypted) { Save-ConvertedCredential -Path $item.Path -Credential $item.Credential }
+    Write-LogEntry "$($decrypted.Count) credential file(s) re-encrypted for this computer" 'OK'
 
     foreach ($keyPath in $keyPaths) {
         if (Test-Path -LiteralPath $keyPath -PathType Leaf) {

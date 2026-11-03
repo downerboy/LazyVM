@@ -75,49 +75,49 @@ Describe 'Get-LegacyCredentialKeyPath (#284)' {
     }
 }
 
-Describe 'Convert-LegacyCredentialFile (#284)' {
-    It 're-encrypts a credential for this computer, keeping the account and password' {
+Describe 'Read-LegacyCredentialFile (#284, #314)' {
+    It 'decrypts a credential with the old key, keeping the account and password, and writes nothing' {
         $root = New-TestFolder
         $key = New-LegacyKey -Root $root
         $cred = Join-Path -Path $root -ChildPath 'Alpha/Credentials/guest.cred'
         New-LegacyCredential -Path $cred -Key $key
-
-        $converted = InModuleScope $module -Parameters @{ Root = $root; File = $cred } {
-            param($Root, $File)
-            Convert-LegacyCredentialFile -KeyPath "$Root/Shared/Credentials/.lazyvm.key" -Path $File
-        }
-
-        $converted | Should -BeTrue
-        $stored = InModuleScope $module -Parameters @{ File = $cred } { param($File) Get-StoredCredential -Path $File }
-        $stored.UserName | Should -Be 'devadmin'
-        $stored.GetNetworkCredential().Password | Should -Be 'Old-Secret-1'
-    }
-
-    It 'leaves a credential that is already re-encrypted alone' {
-        $root = New-TestFolder
-        $cred = Join-Path -Path $root -ChildPath 'Alpha/Credentials/guest.cred'
-        InModuleScope $module -Parameters @{ File = $cred } {
-            param($File)
-            Save-StoredCredential -Path $File -UserName 'devadmin' -Password ([Net.NetworkCredential]::new('', 'New-Secret-2').SecurePassword)
-        }
         $before = Get-Content -LiteralPath $cred -Raw
 
-        $converted = InModuleScope $module -Parameters @{ Root = $root; File = $cred } {
+        $credential = InModuleScope $module -Parameters @{ Root = $root; File = $cred } {
             param($Root, $File)
-            Convert-LegacyCredentialFile -KeyPath "$Root/Shared/Credentials/.lazyvm.key" -Path $File
+            Read-LegacyCredentialFile -KeyPath "$Root/Shared/Credentials/.lazyvm.key" -Path $File
         }
 
-        $converted | Should -BeFalse
+        $credential.UserName | Should -Be 'devadmin'
+        $credential.GetNetworkCredential().Password | Should -Be 'Old-Secret-1'
         Get-Content -LiteralPath $cred -Raw | Should -Be $before
     }
 
+    It 'returns nothing for a credential that is already re-encrypted' {
+        $root = New-TestFolder
+        $cred = Join-Path -Path $root -ChildPath 'Alpha/Credentials/guest.cred'
+        New-Item -ItemType Directory -Path (Split-Path -Path $cred -Parent) -Force | Out-Null
+        $protection = InModuleScope $module { $script:CredentialProtection }
+        Set-Content -LiteralPath $cred -Value (ConvertTo-Json -InputObject @{ UserName = 'devadmin'; Password = 'AAAA'; Protection = $protection })
+
+        $credential = InModuleScope $module -Parameters @{ Root = $root; File = $cred } {
+            param($Root, $File)
+            Read-LegacyCredentialFile -KeyPath "$Root/Shared/Credentials/.lazyvm.key" -Path $File
+        }
+
+        $credential | Should -BeNullOrEmpty
+    }
+
     It 'stops, leaving the file as it was, when <Case>' -ForEach @(
-        @{ Case = 'the key is missing'; KeyBytes = 0; Message = '*key*is missing*' }
-        @{ Case = 'the key is damaged'; KeyBytes = 5; Message = '*damaged*' }
+        @{ Case = 'the key is missing'; KeyBytes = 0; Secret = 'Old-Secret-1'; Message = '*key*is missing*' }
+        @{ Case = 'the key is damaged'; KeyBytes = 5; Secret = 'Old-Secret-1'; Message = '*damaged*' }
+        # What a wrong key gives when the padding happens to check out (#314):
+        # text that is not UTF-16, which LazyVM 5 never encrypted.
+        @{ Case = 'what it decrypts to is not text'; KeyBytes = 32; Secret = "Old-$([char]0xD800)-1"; Message = '*cannot be decrypted*' }
     ) {
         $root = New-TestFolder
         $cred = Join-Path -Path $root -ChildPath 'Alpha/Credentials/guest.cred'
-        New-LegacyCredential -Path $cred -Key ([byte[]]::new(32))
+        New-LegacyCredential -Path $cred -Key ([byte[]]::new(32)) -Secret $Secret
         if ($KeyBytes) {
             New-Item -ItemType Directory -Path "$root/Shared/Credentials" -Force | Out-Null
             [IO.File]::WriteAllBytes("$root/Shared/Credentials/.lazyvm.key", [byte[]]::new($KeyBytes))
@@ -127,10 +127,28 @@ Describe 'Convert-LegacyCredentialFile (#284)' {
         {
             InModuleScope $module -Parameters @{ Root = $root; File = $cred } {
                 param($Root, $File)
-                Convert-LegacyCredentialFile -KeyPath "$Root/Shared/Credentials/.lazyvm.key" -Path $File
+                Read-LegacyCredentialFile -KeyPath "$Root/Shared/Credentials/.lazyvm.key" -Path $File
             }
         } | Should -Throw -ExpectedMessage $Message
         Get-Content -LiteralPath $cred -Raw | Should -Be $before
+    }
+}
+
+Describe 'Save-ConvertedCredential (#284)' {
+    It 're-encrypts a credential for this computer, keeping the account and password' {
+        $root = New-TestFolder
+        $cred = Join-Path -Path $root -ChildPath 'Alpha/Credentials/guest.cred'
+        New-LegacyCredential -Path $cred -Key ([byte[]]::new(32))
+        $credential = [pscredential]::new('devadmin', [Net.NetworkCredential]::new('', 'Old-Secret-1').SecurePassword)
+
+        InModuleScope $module -Parameters @{ File = $cred; Credential = $credential } {
+            param($File, [pscredential]$Credential)
+            Save-ConvertedCredential -Path $File -Credential $Credential
+        }
+
+        $stored = InModuleScope $module -Parameters @{ File = $cred } { param($File) Get-StoredCredential -Path $File }
+        $stored.UserName | Should -Be 'devadmin'
+        $stored.GetNetworkCredential().Password | Should -Be 'Old-Secret-1'
     }
 }
 
@@ -154,7 +172,7 @@ Describe 'Convert-LegacyCredential (#284)' {
         "$root/Shared/Credentials/.lazyvm.key" | Should -Not -Exist
     }
 
-    It 'keeps the key, and every file it still opens, when one credential cannot be re-encrypted' {
+    It 'writes nothing, and keeps the key, when one credential cannot be decrypted' {
         $root = New-TestFolder
         $key = New-LegacyKey -Root $root
         New-LegacyCredential -Path "$root/Alpha/Credentials/guest.cred" -Key $key
@@ -162,12 +180,17 @@ Describe 'Convert-LegacyCredential (#284)' {
         # another random key decrypts by chance about once in 65,536 runs (#314).
         New-Item -ItemType Directory -Path "$root/Beta/Credentials" -Force | Out-Null
         Set-Content -LiteralPath "$root/Beta/Credentials/guest.cred" -Value '{ "UserName": "devadmin", "Password": "not encrypted with the old key" }'
+        $before = @{
+            Alpha = Get-Content -LiteralPath "$root/Alpha/Credentials/guest.cred" -Raw
+            Beta  = Get-Content -LiteralPath "$root/Beta/Credentials/guest.cred" -Raw
+        }
 
         { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Convert-LegacyCredential -Root $Root } } |
             Should -Throw -ExpectedMessage '*Beta*guest.cred cannot be decrypted*'
 
         "$root/Shared/Credentials/.lazyvm.key" | Should -Exist
-        (Get-Content -LiteralPath "$root/Beta/Credentials/guest.cred" -Raw | ConvertFrom-Json).PSObject.Properties['Protection'] | Should -BeNullOrEmpty
+        Get-Content -LiteralPath "$root/Alpha/Credentials/guest.cred" -Raw | Should -Be $before.Alpha
+        Get-Content -LiteralPath "$root/Beta/Credentials/guest.cred" -Raw | Should -Be $before.Beta
     }
 
     It 'does nothing the second time' {

@@ -92,8 +92,8 @@ Once, after updating from LazyVM 5. Moves C:\LazyVM, its tasks, passwords and re
    - Also runs `Get-HostTaskCommand`, `New-LazyVMTaskAction`, `Register-LazyVMHostTask`
    - Reads D5, tasks run as SYSTEM: Task Scheduler (LazyVM-Maintain-<VM>, LazyVM-ResumeAfterReboot-<VM>)
    - Writes D6, same tasks, as you: Task Scheduler (elevated, signed in or not)
-6. `Convert-LegacyCredential` (Migration, called by Invoke-InstallationMigration): re-encrypts each credential, reads it back, then replaces the file; deletes the key once all are done
-   - Also runs `Get-LegacyCredentialKeyPath`, `Convert-LegacyCredentialFile`
+6. `Convert-LegacyCredential` (Migration, called by Invoke-InstallationMigration): decrypts every credential first, so a wrong key changes nothing; then re-encrypts each, reads it back and replaces the file; deletes the key once all are done
+   - Also runs `Get-LegacyCredentialKeyPath`, `Read-LegacyCredentialFile`, `Save-ConvertedCredential`
    - Reads D7, old key and credentials: <old> (Shared\Credentials\.lazyvm.key, <VM>\Credentials\*.cred)
    - Writes D8, credentials for you only: <old>\<VM>\Credentials\ (*.cred  (DPAPI), key deleted)
 7. `Move-LegacyVMStorage` (Migration, called by Invoke-InstallationMigration): unless the folder stays, or is gone already: Hyper-V storage migration, each location to its own place, the VM keeps running; checks free space for the disks and Hyper-V's folders first
