@@ -81,3 +81,208 @@ Describe 'Mount-GuestSqlDatabase (#132)' {
         $script:statements | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Restore-GuestVisualStudioState (#310)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-GuestNote { }
+        Mock -ModuleName $module Invoke-GuestScript { }
+        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ ProductLine = '18'; InstanceId = 'a1b2c3d4' } }
+        Mock -ModuleName $module Invoke-GuestTask { '[{"Level":"OK","Text":"restored NuGet.Config"}]' }
+
+        $captured = Join-Path $TestDrive 'vs'
+        $null = New-Item -ItemType Directory -Path $captured -Force
+        foreach ($name in 'NuGet.Config', 'gitconfig', 'vs-useritems.zip') { Set-Content -LiteralPath (Join-Path $captured $name) -Value $name }
+        $files = [ordered]@{
+            NuGetConfig = (Join-Path $captured 'NuGet.Config')
+            GitConfig   = (Join-Path $captured 'gitconfig')
+            UserItems   = (Join-Path $captured 'vs-useritems.zip')
+        }
+        $guestScript = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.VisualStudioUserFiles.ps1'
+        $restore = {
+            param([System.Collections.IDictionary]$Files)
+            InModuleScope $module -Parameters @{ Files = $Files } {
+                param($Files)
+                $manifest = [CaptureManifest]::new()
+                $manifest.VisualStudio = [pscustomobject]@{ Files = [pscustomobject]$Files }
+                Restore-GuestVisualStudioState -VM ([VMContext]::new(@{ VMName = 'Alpha'; InstallVisualStudio = $true })) -Manifest $manifest
+            }
+        }
+    }
+
+    It 'copies the files as the guest account under its limited token, never as the administrator' {
+        & $restore -Files $files
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
+            $TaskName -eq 'LazyVM-VSUserFiles' -and $AsGuestUser -and -not $Elevated
+        }
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 0 -Exactly
+    }
+
+    It 'gives the task the captured files and the script that copies them, in its own folder' {
+        & $restore -Files $files
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
+            (@($InputFile.Keys | Sort-Object) -join ',') -eq 'gitconfig,NuGet.Config,VisualStudioUserFiles.ps1,vs-useritems.zip' -and
+            $InputFile['VisualStudioUserFiles.ps1'] -eq $guestScript -and
+            $InputFile['NuGet.Config'] -eq $files.NuGetConfig -and
+            "$Work" -match "Join-Path \`$TaskFolder 'VisualStudioUserFiles\.ps1'" -and
+            $ArgumentList[0] -eq '18' -and $ArgumentList[1] -eq 'NuGet.Config' -and $ArgumentList[2] -eq 'gitconfig' -and $ArgumentList[3] -eq 'vs-useritems.zip'
+        }
+    }
+
+    It 'leaves out a file the capture does not have' {
+        $files.Remove('GitConfig')
+
+        & $restore -Files $files
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
+            -not $InputFile.Contains('gitconfig') -and $ArgumentList[2] -eq ''
+        }
+    }
+
+    It 'logs what the task reported' {
+        & $restore -Files $files
+
+        Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter { @($Notes).Text -contains 'restored NuGet.Config' }
+    }
+
+    It 'starts no task when the capture has none of the files' {
+        & $restore -Files ([ordered]@{})
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 0 -Exactly
+    }
+}
+
+Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
+    BeforeAll {
+        $userFiles = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.VisualStudioUserFiles.ps1'
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+    }
+
+    BeforeEach {
+        # TestDrive lasts for the whole Describe, so each test has a folder of its own.
+        $base = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $profileRoot = Join-Path $base 'Users\dev'
+        $appData = Join-Path $profileRoot 'AppData\Roaming'
+        $documents = Join-Path $base 'U\Documents'
+        $elsewhere = Join-Path $base 'Elsewhere'
+        foreach ($made in $appData, $documents, $elsewhere) { $null = New-Item -ItemType Directory -Path $made -Force }
+
+        $task = Join-Path $base 'Task'
+        $items = Join-Path $base 'items'
+        foreach ($name in 'Code Snippets', 'Templates') { $null = New-Item -ItemType Directory -Path (Join-Path $items $name) -Force }
+        Set-Content -LiteralPath (Join-Path $items 'Code Snippets\loop.snippet') -Value 'snippet'
+        Set-Content -LiteralPath (Join-Path $items 'Templates\class.zip') -Value 'template'
+        $null = New-Item -ItemType Directory -Path $task -Force
+        $zip = Join-Path $task 'vs-useritems.zip'
+        Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        [IO.Compression.ZipFile]::CreateFromDirectory($items, $zip)
+        Set-Content -LiteralPath (Join-Path $task 'NuGet.Config') -Value 'nuget'
+        Set-Content -LiteralPath (Join-Path $task 'gitconfig') -Value 'git'
+
+        $run = @{
+            ProfileRoot = $profileRoot; AppData = $appData; Documents = $documents; ProductLine = '18'
+            NuGetConfig = (Join-Path $task 'NuGet.Config'); GitConfig = (Join-Path $task 'gitconfig'); UserItems = $zip
+        }
+        $vsFolder = Join-Path $documents 'Visual Studio 18'
+
+        # Replaces what is at $Path with a link to $Target.
+        $makeLink = {
+            param([string]$Path, [string]$Target)
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+            $null = New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force
+            $null = New-Item -ItemType SymbolicLink -Path $Path -Value $Target
+        }
+        $nothingElsewhere = { @(Get-ChildItem -LiteralPath $elsewhere -Recurse -Force -File).Count | Should -Be 0 }
+    }
+
+    It 'puts NuGet.Config, .gitconfig and the snippets and templates in the profile' {
+        $notes = @(& $userFiles @run)
+
+        Get-Content -LiteralPath (Join-Path $appData 'NuGet\NuGet.Config') | Should -Be 'nuget'
+        Get-Content -LiteralPath (Join-Path $profileRoot '.gitconfig') | Should -Be 'git'
+        Get-Content -LiteralPath (Join-Path $vsFolder 'Code Snippets\loop.snippet') | Should -Be 'snippet'
+        Get-Content -LiteralPath (Join-Path $vsFolder 'Templates\class.zip') | Should -Be 'template'
+        @($notes | Where-Object { $_.Level -ne 'OK' }) | Should -BeNullOrEmpty
+        $notes.Text | Should -Contain 'restored NuGet.Config'
+        $notes.Text | Should -Contain 'restored .gitconfig'
+        $notes.Text | Should -Contain 'restored 2 snippet and template file(s)'
+    }
+
+    It 'replaces files already there' {
+        $null = New-Item -ItemType Directory -Path (Join-Path $appData 'NuGet') -Force
+        Set-Content -LiteralPath (Join-Path $appData 'NuGet\NuGet.Config') -Value 'old'
+
+        $null = & $userFiles @run
+
+        Get-Content -LiteralPath (Join-Path $appData 'NuGet\NuGet.Config') | Should -Be 'nuget'
+    }
+
+    It 'refuses NuGet.Config, naming the link, when <Folder> on its way is a link, and restores the rest' -ForEach @(
+        @{ Folder = 'AppData' }
+        @{ Folder = 'AppData\Roaming' }
+        @{ Folder = 'AppData\Roaming\NuGet' }
+    ) {
+        $link = Join-Path $profileRoot $Folder
+        & $makeLink -Path $link -Target $elsewhere
+
+        $notes = @(& $userFiles @run)
+
+        & $nothingElsewhere
+        @($notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*NuGet.Config*$link*"
+        Get-Content -LiteralPath (Join-Path $profileRoot '.gitconfig') | Should -Be 'git'
+    }
+
+    It 'refuses a destination that is itself a link, even one that leads nowhere yet' {
+        $link = Join-Path $profileRoot '.gitconfig'
+        & $makeLink -Path $link -Target (Join-Path $elsewhere 'planted')
+
+        $notes = @(& $userFiles @run)
+
+        & $nothingElsewhere
+        @($notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*.gitconfig*$link*"
+    }
+
+    It 'refuses the profile itself when it is a link' {
+        $real = Join-Path $base 'RealProfile'
+        $null = New-Item -ItemType Directory -Path $real -Force
+        & $makeLink -Path $profileRoot -Target $real
+
+        $notes = @(& $userFiles @run)
+
+        @(Get-ChildItem -LiteralPath $real -Recurse -Force -File).Count | Should -Be 0
+        @($notes | Where-Object { $_.Level -eq 'WARN' }).Count | Should -Be 2
+    }
+
+    It 'refuses a snippet or template whose folder is a link, and restores the others' {
+        $link = Join-Path $vsFolder 'Code Snippets'
+        & $makeLink -Path $link -Target $elsewhere
+
+        $notes = @(& $userFiles @run)
+
+        & $nothingElsewhere
+        Get-Content -LiteralPath (Join-Path $vsFolder 'Templates\class.zip') | Should -Be 'template'
+        @($notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*loop.snippet*$link*"
+        $notes.Text | Should -Contain 'restored 1 snippet and template file(s)'
+    }
+
+    It 'says a refused link may be a OneDrive cloud folder' {
+        & $makeLink -Path (Join-Path $appData 'NuGet') -Target $elsewhere
+
+        $notes = @(& $userFiles @run)
+
+        @($notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*OneDrive*'
+    }
+
+    It 'does only what it is given' {
+        $run.Remove('NuGetConfig')
+        $run.Remove('UserItems')
+
+        $notes = @(& $userFiles @run)
+
+        Test-Path -LiteralPath (Join-Path $appData 'NuGet') | Should -BeFalse
+        Test-Path -LiteralPath $vsFolder | Should -BeFalse
+        $notes.Text | Should -Be @('restored .gitconfig')
+    }
+}
