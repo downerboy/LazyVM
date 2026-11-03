@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.5.2](https://github.com/downerboy/LazyVM/compare/v6.5.1...v6.5.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* wait for SQL Server to accept connections before SQL work in the guest ([#319](https://github.com/downerboy/LazyVM/issues/319)) ([f973a36](https://github.com/downerboy/LazyVM/commit/f973a362daabb3a02fb71afc4d672d4d24608af3))
+
 ## [6.5.1](https://github.com/downerboy/LazyVM/compare/v6.5.0...v6.5.1) (2026-11-03)
 
 
