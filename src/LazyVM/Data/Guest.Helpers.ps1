@@ -61,8 +61,7 @@ function Get-GuestSqlServiceName {
     <# The Windows service of the instance $Server names: localhost is MSSQLSERVER, localhost\DEV is MSSQL$DEV. #>
     param([Parameter(Mandatory)][string]$Server)
 
-    $instance = ($Server -split '\\', 2)[1]
-    if ($instance) { return "MSSQL`$$instance" }
+    if ($Server -match '\\(.+)$') { return "MSSQL`$$($Matches[1])" }
     return 'MSSQLSERVER'
 }
 
