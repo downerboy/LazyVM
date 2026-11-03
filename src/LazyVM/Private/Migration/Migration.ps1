@@ -446,6 +446,27 @@ function Test-MachineWideModuleRemovable {
     return (-not (Test-PathWithin -Path $moduleBase -Folder $Path)) -and (Test-PathWithin -Path $moduleBase -Folder (Get-InstalledModuleFolder))
 }
 
+function Remove-LegacyModuleCopy {
+    <#
+      Deletes LazyVM 5's module folder $Path (#311). Refuses, as Install.ps1
+      does, when a folder from the drive's root down to it, or anything in
+      it, is a reparse point, or when it holds anything but LazyVM version
+      folders with LazyVM.psd1.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (Test-ContainsReparsePoint -Path $Path) {
+        throw "$Path, a folder above it, or something in it is a junction, link or cloud placeholder, which LazyVM does not follow."
+    }
+    $unexpected = Get-ChildItem -LiteralPath $Path -Force | Where-Object {
+        -not ($_.PSIsContainer -and $_.Name -as [version] -and (Test-Path -LiteralPath (Join-Path -Path $_.FullName -ChildPath 'LazyVM.psd1') -PathType Leaf))
+    }
+    if ((Split-Path -Path $Path -Leaf) -ne 'LazyVM' -or @($unexpected).Count -gt 0) {
+        throw "$Path is not a LazyVM module folder, holding only version folders with LazyVM.psd1."
+    }
+    Remove-Item -LiteralPath $Path -Recurse -Force
+}
+
 function Remove-LegacyRegistry {
     <#
       Removes what LazyVM 5 kept under HKLM: its Root value and its VMs'
@@ -466,7 +487,11 @@ function Remove-LegacyInstallation {
       Removes what is left of the old install, once everything has moved:
       the old folder when it is empty (unless the data stayed in it),
       LazyVM 5's module copy when this LazyVM runs from its own install in
-      Program Files and, last, LazyVM 5's entries under HKLM.
+      Program Files and, last, LazyVM 5's entries under HKLM. The module
+      copy is where LazyVM 5 put it, or where Install.ps1 moved it aside,
+      %ProgramFiles%\LazyVM\Legacy (#311); this is the only place either is
+      deleted once Install.ps1 has moved it. A copy that cannot be deleted
+      is kept, and said so.
     #>
     param(
         [Parameter(Mandatory)][string]$OldRoot,
@@ -484,15 +509,18 @@ function Remove-LegacyInstallation {
         }
     }
 
-    $machineWide = Join-Path -Path $env:ProgramFiles -ChildPath 'PowerShell\Modules\LazyVM'
-    if (Test-Path -LiteralPath $machineWide) {
-        if (Test-MachineWideModuleRemovable -Path $machineWide) {
-            Remove-Item -LiteralPath $machineWide -Recurse -Force
-            Write-LogEntry "Removed the copy of LazyVM installed for every user, $machineWide" 'OK'
+    $programFiles = Get-ProgramFilesFolder
+    foreach ($copy in (Join-Path -Path $programFiles -ChildPath 'PowerShell\Modules\LazyVM'), (Join-Path -Path $programFiles -ChildPath 'LazyVM\Legacy\LazyVM')) {
+        if (-not (Test-Path -LiteralPath $copy)) { continue }
+        if (-not (Test-MachineWideModuleRemovable -Path $copy)) {
+            Write-LogEntry "Kept LazyVM 5's copy of the module, ${copy}: LazyVM is not running from $(Get-InstalledModuleFolder), where Install.ps1 puts it. Install LazyVM with Install.ps1, then delete that copy as administrator." 'WARN'
+            continue
         }
-        else {
-            Write-LogEntry "Kept LazyVM 5's copy of the module, ${machineWide}: LazyVM is not running from $(Get-InstalledModuleFolder), where Install.ps1 puts it. Install LazyVM with Install.ps1, then delete that copy as administrator." 'WARN'
+        try {
+            Remove-LegacyModuleCopy -Path $copy
+            Write-LogEntry "Removed LazyVM 5's copy of the module, $copy" 'OK'
         }
+        catch { Write-LogEntry "Kept LazyVM 5's copy of the module, ${copy}: $($_.Exception.Message) Look at it and delete it yourself, as administrator." 'WARN' }
     }
 
     Remove-LegacyRegistry

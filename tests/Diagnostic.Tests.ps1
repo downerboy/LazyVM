@@ -109,14 +109,23 @@ Describe 'Get-LazyVMDiagnostic' {
 }
 
 Describe 'Get-ModuleShadowCheck (#311)' {
+    BeforeAll {
+        function New-TestCopy {
+            <# What Get-Module -ListAvailable gives for LazyVM $Version in the module folder $Folder. #>
+            param([string]$Folder, [string]$Version)
+            [pscustomobject]@{ ModuleBase = "$Folder\LazyVM\$Version"; Version = [version]$Version }
+        }
+    }
+
     BeforeEach {
         Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Program Files\LazyVM\Modules\LazyVM\6.4.0' }
     }
 
     It 'is OK when Import-Module LazyVM loads the running module' {
         Mock -ModuleName $module Get-Module {
-            [pscustomobject]@{ ModuleBase = 'C:\Program Files\LazyVM\Modules\LazyVM\6.4.0' }
-            [pscustomobject]@{ ModuleBase = 'D:\Modules\LazyVM\5.2.0' }
+            New-TestCopy 'C:\Program Files\LazyVM\Modules' '6.4.0'
+            New-TestCopy 'C:\Program Files\LazyVM\Modules' '6.3.1'
+            New-TestCopy 'D:\Modules' '7.0.0'
         } -ParameterFilter { $ListAvailable }
 
         (InModuleScope $module { Get-ModuleShadowCheck -Name 'Alpha' }).Status | Should -Be 'OK'
@@ -124,10 +133,10 @@ Describe 'Get-ModuleShadowCheck (#311)' {
 
     It 'warns with every copy that comes before the running module on PSModulePath, and only those' {
         Mock -ModuleName $module Get-Module {
-            [pscustomobject]@{ ModuleBase = 'C:\Program Files\PowerShell\Modules\LazyVM\5.2.0' }
-            [pscustomobject]@{ ModuleBase = 'C:\Program Files\PowerShell\Modules\LazyVM\5.1.0' }
-            [pscustomobject]@{ ModuleBase = 'C:\Program Files\LazyVM\Modules\LazyVM\6.4.0' }
-            [pscustomobject]@{ ModuleBase = 'D:\Modules\LazyVM\4.0.0' }
+            New-TestCopy 'C:\Program Files\PowerShell\Modules' '5.2.0'
+            New-TestCopy 'C:\Program Files\PowerShell\Modules' '5.1.0'
+            New-TestCopy 'C:\Program Files\LazyVM\Modules' '6.4.0'
+            New-TestCopy 'D:\Modules' '4.0.0'
         } -ParameterFilter { $ListAvailable }
 
         $check = InModuleScope $module { Get-ModuleShadowCheck -Name 'Alpha' }
@@ -135,6 +144,34 @@ Describe 'Get-ModuleShadowCheck (#311)' {
         $check.Status | Should -Be 'WARN'
         $check.Detail | Should -BeLike '*PowerShell\Modules\LazyVM\5.2.0*PowerShell\Modules\LazyVM\5.1.0*Install.ps1*'
         $check.Detail | Should -Not -BeLike '*4.0.0*'
+    }
+
+    It 'warns with a higher version in the running module''s own folder, which Import-Module loads instead, whatever order it is listed in' {
+        Mock -ModuleName $module Get-Module {
+            New-TestCopy 'C:\Program Files\LazyVM\Modules' '6.3.1'
+            New-TestCopy 'C:\Program Files\LazyVM\Modules' '6.4.0'
+            New-TestCopy 'C:\Program Files\LazyVM\Modules' '6.5.0'
+        } -ParameterFilter { $ListAvailable }
+
+        $check = InModuleScope $module { Get-ModuleShadowCheck -Name 'Alpha' }
+
+        $check.Status | Should -Be 'WARN'
+        $check.Detail | Should -BeLike '*LazyVM\6.5.0*'
+        $check.Detail | Should -Not -BeLike '*6.3.1*'
+    }
+
+    It 'warns, separately, when the running module is not on PSModulePath (<Case>)' -ForEach @(
+        @{ Case = 'another copy is'; Listed = $true }
+        @{ Case = 'no copy is'; Listed = $false }
+    ) {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'S:\Source\LazyVM\out\LazyVM\6.5.0' }
+        $copies = @(if ($Listed) { New-TestCopy 'C:\Program Files\LazyVM\Modules' '6.4.0' })
+        Mock -ModuleName $module Get-Module { $copies }.GetNewClosure() -ParameterFilter { $ListAvailable }
+
+        $check = InModuleScope $module { Get-ModuleShadowCheck -Name 'Alpha' }
+
+        $check.Status | Should -Be 'WARN'
+        $check.Detail | Should -BeLike '*S:\Source\LazyVM\out\LazyVM\6.5.0 is not on PSModulePath*'
     }
 }
 

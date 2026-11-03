@@ -116,7 +116,7 @@
             Caller   = 'Invoke-InstallationMigration'
             Note     = 'last: the old folder once empty, the Program Files copy when you have your own, then the HKLM key'
             Includes = @('Test-MachineWideModuleRemovable')
-            Writes   = @(@{ Label = 'old install removed'; Kind = 'registry'; Store = 'Machine-wide'; Items = @('<old>  (if empty)', 'Program Files\PowerShell\Modules\LazyVM', 'HKLM:\SOFTWARE\LazyVM') })
+            Writes   = @(@{ Label = 'old install removed'; Kind = 'registry'; Store = 'Machine-wide'; Items = @('<old>  (if empty)', 'Program Files\PowerShell\Modules\LazyVM', 'Program Files\LazyVM\Legacy\LazyVM', 'HKLM:\SOFTWARE\LazyVM') })
         }
     )
 }

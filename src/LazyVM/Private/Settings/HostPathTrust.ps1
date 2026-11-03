@@ -65,7 +65,8 @@ function Get-ForbiddenHostPathReason {
 
     $full = ConvertTo-FullPath -Path $Path
     if ($full -eq (ConvertTo-FullPath -Path ([IO.Path]::GetPathRoot($full)))) { return 'it is a whole drive' }
-    $systemFolders = @($env:SystemRoot, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData) | Where-Object { $_ }
+    # Asked of Windows, not read from the environment, which the user can change (#311).
+    $systemFolders = @('Windows', 'ProgramFiles', 'ProgramFilesX86', 'CommonApplicationData') | ForEach-Object { [Environment]::GetFolderPath($_) } | Where-Object { $_ }
     foreach ($folder in $systemFolders) {
         if (Test-PathWithin -Path $full -Folder $folder) { return "it is in $folder" }
     }

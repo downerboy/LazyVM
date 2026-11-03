@@ -269,7 +269,16 @@ Describe 'The code the tasks run (#284)' {
     }
 
     It 'is installed in Program Files, where only administrators can change it' {
-        InModuleScope $module { Get-InstalledModuleFolder } | Should -Be (Join-Path -Path $env:ProgramFiles -ChildPath 'LazyVM/Modules')
+        Mock -ModuleName $module Get-ProgramFilesFolder { $TestDrive }
+
+        InModuleScope $module { Get-InstalledModuleFolder } | Should -Be (Join-Path -Path $TestDrive -ChildPath 'LazyVM/Modules')
+    }
+
+    It 'asks Windows where Program Files is, not the environment, which the user can change' -Skip:(-not $IsWindows) {
+        $saved = $env:ProgramFiles
+        $env:ProgramFiles = $TestDrive
+        try { InModuleScope $module { Get-ProgramFilesFolder } | Should -Be ([Environment]::GetFolderPath('ProgramFiles')) }
+        finally { $env:ProgramFiles = $saved }
     }
 }
 
@@ -380,6 +389,20 @@ Describe 'Allowing a place outside the LazyVM folder (#284)' {
         { InModuleScope $module -Parameters @{ Settings = $settings } { param($Settings) Register-TrustedHostPath -Settings $Settings -Confirm:$false } } |
             Should -Throw -ExpectedMessage '*cannot be allowed*'
         Should -Invoke -ModuleName $module Add-TrustedHostPath -Times 0
+    }
+
+    It 'refuses <Case> even when the environment names another folder for it' -Skip:(-not $IsWindows) -ForEach @(
+        @{ Case = 'the Windows folder'; Variable = 'SystemRoot'; Folder = 'Windows' }
+        @{ Case = 'Program Files'; Variable = 'ProgramFiles'; Folder = 'ProgramFiles' }
+        @{ Case = 'ProgramData'; Variable = 'ProgramData'; Folder = 'CommonApplicationData' }
+    ) {
+        $saved = [Environment]::GetEnvironmentVariable($Variable)
+        [Environment]::SetEnvironmentVariable($Variable, 'Q:\Elsewhere')
+        try {
+            $reason = InModuleScope $module -Parameters @{ Path = (Join-Path -Path ([Environment]::GetFolderPath($Folder)) -ChildPath 'Contoso') } { param($Path) Get-ForbiddenHostPathReason -Path $Path }
+            $reason | Should -Not -BeNullOrEmpty
+        }
+        finally { [Environment]::SetEnvironmentVariable($Variable, $saved) }
     }
 }
 

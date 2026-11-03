@@ -17,12 +17,24 @@ $script:TrustedCodeWriters = @('S-1-5-32-544', 'S-1-5-18', 'S-1-5-80-956008885-3
 # it), change permissions, take ownership, and generic write or all.
 $script:WriteRights = [long]0x500D0156
 
+function Get-ProgramFilesFolder {
+    <#
+      Where Program Files is, asked of Windows: $env:ProgramFiles comes from
+      the user's environment, which they can change, so it never decides
+      what is trusted or deleted (#311).
+    #>
+    [OutputType([string])]
+    param()
+
+    return [Environment]::GetFolderPath('ProgramFiles')
+}
+
 function Get-InstalledModuleFolder {
     <# Where Install.ps1 puts LazyVM: %ProgramFiles%\LazyVM\Modules. Install.ps1 names the same folder. #>
     [OutputType([string])]
     param()
 
-    return Join-Path -Path $env:ProgramFiles -ChildPath 'LazyVM/Modules'
+    return Join-Path -Path (Get-ProgramFilesFolder) -ChildPath 'LazyVM/Modules'
 }
 
 function Get-ModuleImportPath {
