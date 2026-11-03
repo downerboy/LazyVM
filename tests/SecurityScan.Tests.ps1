@@ -702,7 +702,7 @@ Describe 'The sign-in opener' {
         $argument | Should -Not -Match ' -File '
         $command | Should -Not -BeNullOrEmpty
         $command | Should -Not -Match "[`"`r`n]"
-        $command | Should -BeLike '*\System32\notepad.exe*'
+        $command | Should -BeLike "*GetFolderPath('System')*'notepad.exe'*"
     }
 
     It 'opens the file in Notepad, by its full path, and records it, when a scan asked for it and it was not opened for that scan' {
@@ -711,7 +711,7 @@ Describe 'The sign-in opener' {
         & ([scriptblock]::Create($command))
 
         Should -Invoke Set-ItemProperty -Times 1 -Exactly -ParameterFilter { $Name -eq 'SecurityFindingsOpened' -and $Value -eq '20261102-024000' }
-        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $FilePath -like '*\System32\notepad.exe' -and "$ArgumentList" -like '"*LazyVM Findings.txt"' }
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $FilePath -eq [IO.Path]::Combine([Environment]::GetFolderPath('System'), 'notepad.exe') -and "$ArgumentList" -like '"*LazyVM Findings.txt"' }
     }
 
     It 'leaves it closed when <Case>' -ForEach @(

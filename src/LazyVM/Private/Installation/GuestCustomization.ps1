@@ -64,10 +64,13 @@ function Set-GuestCustomization {
 
             if ($removeOneDrive) {
                 Get-Process -Name OneDrive -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-                $perMachine = @(Get-ChildItem "$env:ProgramFiles\Microsoft OneDrive\*\OneDriveSetup.exe", "${env:ProgramFiles(x86)}\Microsoft OneDrive\*\OneDriveSetup.exe" -ErrorAction SilentlyContinue | ForEach-Object FullName)
-                $setups = @("$env:SystemRoot\System32\OneDriveSetup.exe", "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") + $perMachine
+                $perMachine = @(foreach ($programFiles in (Get-GuestSystemFolder -Name ProgramFiles), (Get-GuestSystemFolder -Name ProgramFilesX86)) {
+                        Get-ChildItem ([IO.Path]::Combine($programFiles, 'Microsoft OneDrive', '*', 'OneDriveSetup.exe')) -ErrorAction SilentlyContinue | ForEach-Object FullName
+                    })
+                $windows = Get-GuestSystemFolder -Name Windows
+                $setups = @([IO.Path]::Combine((Get-GuestSystemFolder -Name System), 'OneDriveSetup.exe'), [IO.Path]::Combine((Get-GuestSystemFolder -Name SystemX86), 'OneDriveSetup.exe')) + $perMachine
                 foreach ($setup in $setups | Where-Object { Test-Path $_ }) {
-                    $arguments = if ($setup -like "$env:SystemRoot*") { '/uninstall' } else { '/uninstall /allusers' }
+                    $arguments = if ($setup -like "$windows\*") { '/uninstall' } else { '/uninstall /allusers' }
                     $p = Start-Process -FilePath $setup -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
                     $notes += New-GuestNote -Level OK -Text "OneDrive uninstalled ($setup, exit $($p.ExitCode))"
                 }
@@ -97,7 +100,7 @@ function Set-GuestCustomization {
             # Every profile, and the default profile new users are copied from.
             # A profile in use has its hive loaded already; the rest are
             # loaded for the moment and unloaded again.
-            $hives = @([pscustomobject]@{ Name = 'Default'; Sid = $null; Path = "$env:SystemDrive\Users\Default\NTUSER.DAT" })
+            $hives = @([pscustomobject]@{ Name = 'Default'; Sid = $null; Path = "$(Get-GuestSystemDrive)\Users\Default\NTUSER.DAT" })
             $hives += @(Get-CimInstance Win32_UserProfile | Where-Object { -not $_.Special -and $_.LocalPath } |
                     ForEach-Object { [pscustomobject]@{ Name = (Split-Path $_.LocalPath -Leaf); Sid = $_.SID; Path = Join-Path $_.LocalPath 'NTUSER.DAT' } })
 

@@ -34,6 +34,32 @@ Describe 'Restore-GuestState' {
     }
 }
 
+Describe 'Restore-GuestVisualStudioState (#317)' {
+    BeforeEach {
+        $userItems = New-Item -ItemType File -Path (Join-Path $TestDrive 'vs-useritems.zip') -Force
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-GuestNote { }
+        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ ProductLine = '2026' } }
+        $staging = Join-Path $TestDrive 'Staging'
+        Mock -ModuleName $module Get-GuestStagingFolder { $staging }
+        Mock -ModuleName $module Copy-ToGuest { }
+        Mock -ModuleName $module Invoke-GuestScript { @() }
+    }
+
+    It 'unpacks the snippets and templates in the staging folder, which only administrators can change, not in the admin''s TEMP' {
+        InModuleScope $module -Parameters @{ UserItems = $userItems.FullName } {
+            param($UserItems)
+            $manifest = [CaptureManifest]::new()
+            $manifest.VisualStudio = [pscustomobject]@{ Files = [pscustomobject]@{ UserItems = $UserItems } }
+            Restore-GuestVisualStudioState -VM ([VMContext]::new(@{ VMName = 'Alpha'; InstallVisualStudio = $true })) -Manifest $manifest
+        }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $Activity -eq 'Visual Studio restore' -and $ArgumentList[-1] -eq $staging
+        }
+    }
+}
+
 Describe 'Mount-GuestSqlDatabase (#132)' {
     BeforeEach {
         $dataDir = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'SQLData') -Force

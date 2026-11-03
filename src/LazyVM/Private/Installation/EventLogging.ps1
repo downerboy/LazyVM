@@ -167,11 +167,11 @@ function Set-GuestEventLogging {
     }
 
     try {
-        $readArguments = @(@($script:GuestEventLogMinimumSize.Keys), @($script:GuestLoggingPolicyValues | ForEach-Object { @{ Path = $_.Path; Name = $_.Name } }))
+        $readArguments = @(@($script:GuestEventLogMinimumSize.Keys), @($script:GuestLoggingPolicyValues | ForEach-Object { @{ Path = $_.Path; Name = $_.Name } }), (Get-GuestStagingFolder -VM $VM))
         $state = Invoke-GuestScript -VM $VM -Activity 'event logging check' -TimeoutMinutes 5 -ArgumentList $readArguments -ScriptBlock {
-            param($logNames, $policyValues)
+            param($logNames, $policyValues, $stagingFolder)
             $ErrorActionPreference = 'Stop'
-            Get-GuestLoggingState -LogName $logNames -PolicyValue $policyValues
+            Get-GuestLoggingState -LogName $logNames -PolicyValue $policyValues -Folder $stagingFolder
         }
 
         $logFixes = @(Get-EventLogSizeFix -Log @($state.Logs))

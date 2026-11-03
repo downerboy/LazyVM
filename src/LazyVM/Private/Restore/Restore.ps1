@@ -245,7 +245,7 @@ function Restore-GuestEnvironment {
             }
         }
 
-        $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
+        $hostsFile = Get-GuestHostsFile
         $present = @(Get-Content $hostsFile -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim() })
         $missing = @($record.Hosts | Where-Object { $_ -and $present -notcontains $_ })
         if ($missing.Count -gt 0) {
@@ -311,7 +311,7 @@ function Restore-GuestEnvironmentFromArchive {
 
         $hostsSource = Join-Path $work 'hosts'
         if (Test-Path $hostsSource) {
-            $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
+            $hostsFile = Get-GuestHostsFile
             Copy-Item $hostsFile "$hostsFile.lazyvm-original" -Force -ErrorAction SilentlyContinue
             Copy-Item $hostsSource $hostsFile -Force
             $notes += New-GuestNote -Level OK -Text 'restored the hosts file (the new one kept as hosts.lazyvm-original)'
@@ -358,9 +358,9 @@ function Restore-GuestVisualStudioState {
     }
 
     $notes = Invoke-GuestScript -VM $VM -Activity 'Visual Studio restore' -TimeoutMinutes 30 -ArgumentList @(
-        $pushed['NuGetConfig'], $pushed['GitConfig'], $pushed['UserItems'], "$($vs.ProductLine)"
+        $pushed['NuGetConfig'], $pushed['GitConfig'], $pushed['UserItems'], "$($vs.ProductLine)", $stagingFolder
     ) -ScriptBlock {
-        param($nuget, $gitconfig, $userItems, $productLine)
+        param($nuget, $gitconfig, $userItems, $productLine, $stagingFolder)
         $notes = @()
         if ($nuget) {
             $destination = Join-Path $env:APPDATA 'NuGet\NuGet.Config'
@@ -375,8 +375,7 @@ function Restore-GuestVisualStudioState {
         if ($userItems) {
             $destination = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "Visual Studio $productLine"
             New-GuestFolder -Path $destination
-            $temp = Join-Path $env:TEMP 'vs-useritems'
-            Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
+            $temp = Join-Path $stagingFolder "vs-useritems-$([guid]::NewGuid().ToString('N'))"
             Expand-GuestZip -Archive $userItems -Destination $temp
             Copy-Item (Join-Path $temp '*') $destination -Recurse -Force
             Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue

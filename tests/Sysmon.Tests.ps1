@@ -41,6 +41,7 @@ Describe 'The Sysmon configuration LazyVM ships' {
 
 Describe 'Set-GuestSysmon' {
     BeforeEach {
+        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Write-LogError { }
         Mock -ModuleName $module Write-GuestNote { }
@@ -66,6 +67,14 @@ Describe 'Set-GuestSysmon' {
             $ArgumentList[0] -ceq $expectedText -and $ArgumentList[1] -eq $expectedHash -and $ArgumentList[2] -eq 256MB
         }
         Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter { $Notes[0].Text -eq 'Sysmon installed' }
+    }
+
+    It 'writes the configuration for sysmon in the staging folder, which only administrators can change, not in the admin''s TEMP (#317)' {
+        Mock -ModuleName $module Invoke-GuestScript { }
+
+        InModuleScope $module { Set-GuestSysmon -VM ([VMContext]::new(@{ VMName = 'Alpha'; GuestSysmon = $true })) }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { $ArgumentList[-1] -eq 'C:\Program Files\LazyVM\Staging' }
     }
 
     It 'sizes its event log from the constant PowerShell''s Operational log uses too (#291)' {

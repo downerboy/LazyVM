@@ -57,7 +57,7 @@ function Expand-GuestSystemDrive {
         }
 
         $notes = Invoke-GuestScript -VM $VM -Activity 'C: drive expansion' -TimeoutMinutes 20 `
-            -ArgumentList @($script:RecoveryPartitionMB) -ScriptBlock (Get-OSDiskExpandScript)
+            -ArgumentList @($script:RecoveryPartitionMB, (Get-GuestStagingFolder -VM $VM)) -ScriptBlock (Get-OSDiskExpandScript)
         Write-GuestNote -Notes $notes
 
         if (Test-GuestNoteFailed -Notes $notes) {
@@ -123,7 +123,7 @@ function Get-OSDiskPlanScript {
         }
         if ($after.Count -eq 0) {
             $enabled = (& reagentc.exe /info 2>&1 | Out-String) -match 'Windows RE status:\s+Enabled'
-            if ($enabled -or (Test-Path -LiteralPath "$env:SystemRoot\System32\Recovery\Winre.wim")) {
+            if ($enabled -or (Test-Path -LiteralPath ([IO.Path]::Combine((Get-GuestSystemFolder -Name System), 'Recovery', 'Winre.wim')))) {
                 return [pscustomobject]@{ Action = 'Expand'; Reason = 'there is no recovery partition after C:' }
             }
         }
@@ -136,13 +136,14 @@ function Get-OSDiskExpandScript {
       Guest script that moves the recovery partition to the end of the disk
       and extends C: up to it. Returns notes (New-GuestNote); a WARN note
       means the work did not finish. Whatever happens, it ends with recovery
-      turned on if it can be.
+      turned on if it can be. diskpart's scripts go in $stagingFolder.
     #>
     return {
-        param([int]$recoveryMB)
+        param([int]$recoveryMB, [string]$stagingFolder)
 
         $recoveryType = '{de94bba4-06d1-4d40-a16a-bfd50179d6ac}'
-        $wim = "$env:SystemRoot\System32\Recovery\Winre.wim"
+        $windows = Get-GuestSystemFolder -Name Windows
+        $wim = [IO.Path]::Combine((Get-GuestSystemFolder -Name System), 'Recovery', 'Winre.wim')
         $notes = [System.Collections.Generic.List[object]]::new()
 
         # Native tools report failure through their exit code and write to
@@ -152,8 +153,8 @@ function Get-OSDiskExpandScript {
             $output = (& $FilePath @ArgumentList 2>&1 | Out-String).Trim()
             return [pscustomobject]@{ Code = $LASTEXITCODE; Output = $output }
         }
-        function Invoke-DiskPart([string[]]$Commands) {
-            $file = Join-Path -Path $env:TEMP -ChildPath "lazyvm-diskpart-$([guid]::NewGuid().ToString('N')).txt"
+        function Invoke-DiskPart([string[]]$Commands, [string]$Folder) {
+            $file = Join-Path -Path $Folder -ChildPath "lazyvm-diskpart-$([guid]::NewGuid().ToString('N')).txt"
             Set-Content -LiteralPath $file -Value $Commands -Encoding ascii
             try { return Invoke-Tool -FilePath diskpart.exe -ArgumentList @('/s', $file) }
             finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
@@ -162,7 +163,7 @@ function Get-OSDiskExpandScript {
             return (Invoke-Tool -FilePath reagentc.exe -ArgumentList @('/info')).Output -match 'Windows RE status:\s+Enabled'
         }
 
-        function Move-RecoveryPartition([int]$SizeMB) {
+        function Move-RecoveryPartition([int]$SizeMB, [string]$ScriptFolder) {
             $ErrorActionPreference = 'Stop'
             Update-HostStorageCache
             $os = Get-Partition -DriveLetter C
@@ -201,7 +202,7 @@ function Get-OSDiskExpandScript {
                 $notes.Add((New-GuestNote -Level WARN -Text 'no free drive letter between R: and Z: to set up the recovery partition'))
                 return
             }
-            $result = Invoke-DiskPart -Commands @(
+            $result = Invoke-DiskPart -Folder $ScriptFolder -Commands @(
                 "select disk $diskNumber", "select partition $($recovery.PartitionNumber)",
                 "set id=$($recoveryType.Trim('{}')) override", 'gpt attributes=0x8000000000000001', "assign letter=$letter")
             if ($result.Code -ne 0) {
@@ -214,7 +215,7 @@ function Get-OSDiskExpandScript {
                 $folder = "${letter}:\Recovery\WindowsRE"
                 New-Item -ItemType Directory -Path $folder -Force | Out-Null
                 Copy-Item -LiteralPath $wim -Destination $folder -Force
-                $result = Invoke-Tool -FilePath reagentc.exe -ArgumentList @('/setreimage', '/path', $folder, '/target', "$env:SystemRoot")
+                $result = Invoke-Tool -FilePath reagentc.exe -ArgumentList @('/setreimage', '/path', $folder, '/target', $windows)
                 if ($result.Code -ne 0) {
                     $notes.Add((New-GuestNote -Level WARN -Text "reagentc /setreimage failed (exit $($result.Code)): $($result.Output)"))
                     return
@@ -226,12 +227,12 @@ function Get-OSDiskExpandScript {
                 }
             }
             finally {
-                $null = Invoke-DiskPart -Commands @("select disk $diskNumber", "select partition $($recovery.PartitionNumber)", "remove letter=$letter")
+                $null = Invoke-DiskPart -Folder $ScriptFolder -Commands @("select disk $diskNumber", "select partition $($recovery.PartitionNumber)", "remove letter=$letter")
             }
             $notes.Add((New-GuestNote -Level OK -Text "recovery partition moved to the end of the disk ($SizeMB MB) and recovery turned on"))
         }
 
-        try { Move-RecoveryPartition -SizeMB $recoveryMB }
+        try { Move-RecoveryPartition -SizeMB $recoveryMB -ScriptFolder $stagingFolder }
         catch {
             $notes.Add((New-GuestNote -Level WARN -Text "stopped part way: $($_.Exception.Message)"))
         }

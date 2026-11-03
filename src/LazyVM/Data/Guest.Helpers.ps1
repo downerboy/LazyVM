@@ -593,7 +593,7 @@ function Protect-GuestVolume {
     if ($status -eq 'DecryptionInProgress') {
         return New-GuestNote -Level WARN -Text "$MountPoint is being decrypted; left as it is"
     }
-    if (-not $System -and "$((Get-BitLockerVolume -MountPoint $env:SystemDrive).VolumeStatus)" -eq 'FullyDecrypted') {
+    if (-not $System -and "$((Get-BitLockerVolume -MountPoint (Get-GuestSystemDrive)).VolumeStatus)" -eq 'FullyDecrypted') {
         throw "C: is not encrypted, so $MountPoint could not unlock itself; left as it was"
     }
     $hasPassword = [bool](Find-GuestRecoveryProtector -Volume $volume -RecoveryPassword $RecoveryPassword)
@@ -837,7 +837,7 @@ function Find-GuestWinget {
     if ($command) { return $command.Source }
     $alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe'
     if (Test-Path $alias) { return $alias }
-    $found = @(Get-ChildItem -Path "$env:ProgramFiles\WindowsApps" -Filter 'winget.exe' -Recurse -ErrorAction SilentlyContinue |
+    $found = @(Get-ChildItem -Path ([IO.Path]::Combine((Get-GuestSystemFolder -Name ProgramFiles), 'WindowsApps')) -Filter 'winget.exe' -Recurse -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending)
     if ($found.Count -gt 0) { return $found[0].FullName }
     return $null
@@ -944,10 +944,11 @@ function Test-GuestProgramFolderUsable {
     param([AllowEmptyString()][string]$Path)
 
     if (-not $Path -or $Path -match '^[A-Za-z]:\\?$') { return $false }
-    $tooBroad = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:APPDATA, $env:LOCALAPPDATA, "$env:LOCALAPPDATA\Programs") |
+    $tooBroad = @((Get-GuestSystemFolder -Name ProgramFiles), (Get-GuestSystemFolder -Name ProgramFilesX86), $env:APPDATA, $env:LOCALAPPDATA, "$env:LOCALAPPDATA\Programs") |
         Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') }
     if ($tooBroad -contains $Path.TrimEnd('\')) { return $false }
-    foreach ($installersOnly in @($env:windir, "$env:ProgramData\Package Cache")) {
+    $installerFolders = @((Get-GuestSystemFolder -Name Windows), "$(Get-GuestSystemFolder -Name CommonApplicationData)\Package Cache")
+    foreach ($installersOnly in $installerFolders) {
         if ("$Path\".StartsWith("$installersOnly\", [StringComparison]::OrdinalIgnoreCase)) { return $false }
     }
     return $true
@@ -1042,6 +1043,56 @@ function Get-GuestInstallerProblem {
     $signer = $signature.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
     if ("$signer".Trim() -ne $Publisher.Trim()) { return "it is signed by '$signer', not '$Publisher'" }
     return ''
+}
+
+# ── System folders ───────────────────────────────────────────────────────────
+#
+# Where Windows, Program Files and the other system folders are, asked of
+# Windows. Never from $env:ProgramFiles, $env:SystemRoot and the like: the
+# guest admin's sessions also take variables from its HKCU\Environment, which
+# that account can change without elevating, so they could lead what LazyVM
+# trusts, writes or deletes elsewhere (#317). For the same reason a temporary
+# file goes in the staging folder (Get-GuestStagingFolder on the host), never
+# in $env:TEMP.
+
+function Get-GuestSystemFolder {
+    <# The system folder $Name (ProgramFiles, Windows, System...), as Windows has it. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][Environment+SpecialFolder]$Name)
+
+    return [Environment]::GetFolderPath($Name)
+}
+
+function Get-GuestSystemDrive {
+    <# The drive Windows is on, as 'C:'. #>
+    [OutputType([string])]
+    param()
+
+    return Split-Path -Path (Get-GuestSystemFolder -Name Windows) -Qualifier
+}
+
+function Get-GuestWindowsPowerShell {
+    <# Windows PowerShell's powershell.exe, in the system folder. #>
+    [OutputType([string])]
+    param()
+
+    return [IO.Path]::Combine((Get-GuestSystemFolder -Name System), 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+}
+
+function Get-GuestHostsFile {
+    <# The guest's hosts file. #>
+    [OutputType([string])]
+    param()
+
+    return [IO.Path]::Combine((Get-GuestSystemFolder -Name System), 'drivers', 'etc', 'hosts')
+}
+
+function Get-GuestVisualStudioInstallerFolder {
+    <# The Visual Studio Installer's folder, which holds vswhere.exe, setup.exe and vs_installer.exe. #>
+    [OutputType([string])]
+    param()
+
+    return [IO.Path]::Combine((Get-GuestSystemFolder -Name ProgramFilesX86), 'Microsoft Visual Studio', 'Installer')
 }
 
 # ── Private folders ──────────────────────────────────────────────────────────
@@ -1258,7 +1309,7 @@ function Get-GuestLazyVMFolder {
     [OutputType([string])]
     param()
 
-    return [IO.Path]::Combine($env:ProgramFiles, 'LazyVM')
+    return [IO.Path]::Combine((Get-GuestSystemFolder -Name ProgramFiles), 'LazyVM')
 }
 
 function Initialize-GuestLazyVMFolder {
@@ -1270,7 +1321,7 @@ function Initialize-GuestLazyVMFolder {
     [OutputType([string])]
     param()
 
-    Assert-GuestAdminFolder -Path $env:ProgramFiles
+    Assert-GuestAdminFolder -Path (Get-GuestSystemFolder -Name ProgramFiles)
     $lazyVM = Get-GuestLazyVMFolder
     Initialize-GuestAdminFolder -Path $lazyVM
     return $lazyVM
@@ -1312,7 +1363,7 @@ function Get-GuestInstallerInstance {
       Build Tools), as vswhere reports it; nothing when the installer is absent.
       Callers wrap the call in @().
     #>
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    $vswhere = Join-Path (Get-GuestVisualStudioInstallerFolder) 'vswhere.exe'
     if (-not (Test-Path $vswhere)) { return }
     $raw = & $vswhere -all -prerelease -products * -format json -utf8 2>$null
     if (-not $raw) { return }
@@ -1324,7 +1375,7 @@ function Get-GuestInstallerInstance {
 
 function Get-GuestVisualStudioInstaller {
     <# The Visual Studio Installer's setup.exe. Throws when the guest has no installer. #>
-    $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'
+    $installer = Join-Path (Get-GuestVisualStudioInstallerFolder) 'setup.exe'
     if (-not (Test-Path $installer)) { throw 'the Visual Studio Installer is not in the guest' }
     return $installer
 }
@@ -1406,7 +1457,7 @@ function Get-GuestPowerShellEdition {
     [OutputType([pscustomobject])]
     param()
 
-    [pscustomobject]@{ Edition = 'Windows PowerShell'; Path = "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" }
+    [pscustomobject]@{ Edition = 'Windows PowerShell'; Path = (Get-GuestWindowsPowerShell) }
     $pwsh = Get-Command -Name pwsh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($pwsh) { [pscustomobject]@{ Edition = 'PowerShell 7'; Path = $pwsh.Source } }
 }
@@ -1515,8 +1566,8 @@ function Invoke-GuestGalleryModuleUpdate {
     param([Parameter(Mandatory)][object]$Module)
 
     $pending = @(Get-GuestModuleRemovalPending -Label $Module.Label)
-    $report = Invoke-GuestPowerShellEdition -Path $Module.Path -ArgumentList @($Module.Name, $pending) -ScriptBlock {
-        param($name, $pending)
+    $report = Invoke-GuestPowerShellEdition -Path $Module.Path -ArgumentList @($Module.Name, $pending, (Get-GuestSystemFolder -Name ProgramFiles)) -ScriptBlock {
+        param($name, $pending, $programFiles)
         $ErrorActionPreference = 'Stop'
         # Windows PowerShell may offer only TLS 1.0, which the Gallery refuses (https://devblogs.microsoft.com/powershell/powershell-gallery-tls-support/).
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -1530,7 +1581,7 @@ function Invoke-GuestGalleryModuleUpdate {
         $latest = Find-Module -Name $name -Repository PSGallery
         $toRemove = @($pending)
         if ((& $numeric $latest.Version) -gt (& $numeric $newest.Version)) {
-            $scope = if ("$($newest.InstalledLocation)".StartsWith("$env:ProgramFiles\", [StringComparison]::OrdinalIgnoreCase)) { 'AllUsers' } else { 'CurrentUser' }
+            $scope = if ("$($newest.InstalledLocation)".StartsWith("$programFiles\", [StringComparison]::OrdinalIgnoreCase)) { 'AllUsers' } else { 'CurrentUser' }
             # -Force lets the new version in beside the old one; it reinstalls nothing, as this version is not installed.
             Install-Module -Name $name -RequiredVersion $latest.Version -Repository PSGallery -Scope $scope -Force
             if ($versions.Count -ge 2) { $toRemove += "$($versions[1].Version)" }
@@ -1668,7 +1719,7 @@ function Start-GuestTask {
     Set-Content -LiteralPath "$base.args.json" -Value (ConvertTo-Json -InputObject $task -Depth 6) -Encoding UTF8
 
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$base.ps1`"" -WorkingDirectory $folder
+    $action = New-ScheduledTaskAction -Execute (Get-GuestWindowsPowerShell) -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$base.ps1`"" -WorkingDirectory $folder
     $principal = if ($UserName) {
         New-ScheduledTaskPrincipal -UserId $UserName -LogonType Interactive -RunLevel $(if ($Elevated) { 'Highest' } else { 'Limited' })
     }
@@ -1842,7 +1893,7 @@ function Enable-GuestAutoLogon {
     Save-GuestAutoLogonSecret -Password $Credential.Password
 
     Set-ItemProperty -Path $script:GuestWinlogonKey -Name 'DefaultUserName' -Value $Credential.UserName
-    Set-ItemProperty -Path $script:GuestWinlogonKey -Name 'DefaultDomainName' -Value $env:COMPUTERNAME
+    Set-ItemProperty -Path $script:GuestWinlogonKey -Name 'DefaultDomainName' -Value ([Environment]::MachineName)
     Set-ItemProperty -Path $script:GuestWinlogonKey -Name 'AutoAdminLogon' -Value '1'
 
     $winlogon = Get-ItemProperty -Path $script:GuestWinlogonKey
@@ -1886,11 +1937,14 @@ function Get-GuestLoggingState {
     <#
       The size and mode of each log in $LogName, the audit policy (by
       subcategory GUID) and the value of each registry value in
-      $PolicyValue (Path, Name), $null when it is missing.
+      $PolicyValue (Path, Name), $null when it is missing. auditpol backs
+      the policy up to a file of its own in $Folder, the staging folder,
+      which is removed again.
     #>
     param(
         [Parameter(Mandatory)][string[]]$LogName,
-        [Parameter(Mandatory)][object[]]$PolicyValue
+        [Parameter(Mandatory)][object[]]$PolicyValue,
+        [Parameter(Mandatory)][string]$Folder
     )
 
     $logs = foreach ($name in $LogName) {
@@ -1898,7 +1952,7 @@ function Get-GuestLoggingState {
         [pscustomobject]@{ Name = $name; MaximumSizeInBytes = $log.MaximumSizeInBytes; LogMode = "$($log.LogMode)" }
     }
 
-    $backup = Join-Path -Path $env:TEMP -ChildPath "LazyVM-auditpol-$([guid]::NewGuid().ToString('N')).csv"
+    $backup = Join-Path -Path $Folder -ChildPath "LazyVM-auditpol-$([guid]::NewGuid().ToString('N')).csv"
     try {
         Invoke-GuestAuditPol -Argument @('/backup', "/file:$backup")
         $audit = ConvertFrom-AuditPolicyBackup -Path $backup

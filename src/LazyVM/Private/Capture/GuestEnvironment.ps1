@@ -32,8 +32,7 @@ function Get-GuestEnvironmentSnapshot {
             }
             $out["${scope}Path"] = @(([Environment]::GetEnvironmentVariable('Path', $scope) -split ';') | Where-Object { $_ })
         }
-        $hosts = "$env:SystemRoot\System32\drivers\etc\hosts"
-        $out.Hosts = @(Get-Content $hosts -ErrorAction SilentlyContinue | Where-Object { $_ -match '^\s*[^#\s]' } | ForEach-Object { $_.Trim() })
+        $out.Hosts = @(Get-Content (Get-GuestHostsFile) -ErrorAction SilentlyContinue | Where-Object { $_ -match '^\s*[^#\s]' } | ForEach-Object { $_.Trim() })
         # Persistent mappings, which Windows reconnects at sign-in.
         foreach ($drive in @(Get-ChildItem 'HKCU:\Network' -ErrorAction SilentlyContinue)) {
             $out.MappedDrives += [pscustomobject]@{ Letter = "$($drive.PSChildName.ToUpperInvariant()):"; Path = "$((Get-ItemProperty $drive.PSPath).RemotePath)" }
