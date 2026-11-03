@@ -158,9 +158,13 @@ Describe 'Convert-LegacyCredential (#284)' {
         $root = New-TestFolder
         $key = New-LegacyKey -Root $root
         New-LegacyCredential -Path "$root/Alpha/Credentials/guest.cred" -Key $key
-        New-LegacyCredential -Path "$root/Beta/Credentials/guest.cred" -Key ([byte[]]::new(32))
+        # Not text the old key made: it can never decrypt. A credential made with
+        # another random key decrypts by chance about once in 65,536 runs (#314).
+        New-Item -ItemType Directory -Path "$root/Beta/Credentials" -Force | Out-Null
+        Set-Content -LiteralPath "$root/Beta/Credentials/guest.cred" -Value '{ "UserName": "devadmin", "Password": "not encrypted with the old key" }'
 
-        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Convert-LegacyCredential -Root $Root } } | Should -Throw
+        { InModuleScope $module -Parameters @{ Root = $root } { param($Root) Convert-LegacyCredential -Root $Root } } |
+            Should -Throw -ExpectedMessage '*Beta*guest.cred cannot be decrypted*'
 
         "$root/Shared/Credentials/.lazyvm.key" | Should -Exist
         (Get-Content -LiteralPath "$root/Beta/Credentials/guest.cred" -Raw | ConvertFrom-Json).PSObject.Properties['Protection'] | Should -BeNullOrEmpty
