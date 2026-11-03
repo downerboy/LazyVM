@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.5.0](https://github.com/downerboy/LazyVM/compare/v6.4.1...v6.5.0) (2026-11-03)
+
+
+### Features
+
+* nightly security scan of each guest (Defender and misconfigurations) ([#301](https://github.com/downerboy/LazyVM/issues/301)) ([231b071](https://github.com/downerboy/LazyVM/commit/231b071baa7e3540a98e7e02920cc35529a49302))
+
 ## [6.4.1](https://github.com/downerboy/LazyVM/compare/v6.4.0...v6.4.1) (2026-11-03)
 
 
