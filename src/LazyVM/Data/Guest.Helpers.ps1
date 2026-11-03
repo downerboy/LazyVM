@@ -1438,7 +1438,9 @@ function Get-GuestGalleryModule {
       Path being the edition's PowerShell, and a note for each edition that
       could not be asked and each module left alone. PowerShellGet and
       PackageManagement are left alone: they would be updating themselves,
-      which can leave an edition without a working PowerShellGet.
+      which can leave an edition without a working PowerShellGet. Removals
+      recorded for an edition's modules that are no longer installed are
+      forgotten (Remove-GuestModuleRemovalStale).
     #>
     [OutputType([pscustomobject])]
     param()
@@ -1457,6 +1459,7 @@ function Get-GuestGalleryModule {
             $notes += New-GuestNote -Level WARN -Text "could not list the modules of $($edition.Edition): $($_.Exception.Message)"
             continue
         }
+        Remove-GuestModuleRemovalStale -Edition $edition.Edition -Label @($modules | ForEach-Object { "$($_.Name) ($($edition.Edition))" })
         foreach ($module in $modules) {
             $label = "$($module.Name) ($($edition.Edition))"
             if ($leftAlone -contains $module.Name) {
@@ -1498,6 +1501,20 @@ function Set-GuestModuleRemovalPending {
     $null = New-ItemProperty -Path $script:GuestModuleRemovalKey -Name $Label -Value ($Version -join ';') -PropertyType String -Force
 }
 
+function Remove-GuestModuleRemovalStale {
+    <# Forgets the removals recorded for $Edition's modules that are no longer installed there: those whose label is not one of $Label (#309). #>
+    param(
+        [Parameter(Mandatory)][string]$Edition,
+        [AllowEmptyCollection()][string[]]$Label = @()
+    )
+
+    $recorded = Get-Item -Path $script:GuestModuleRemovalKey -ErrorAction SilentlyContinue
+    if (-not $recorded) { return }
+    foreach ($name in @($recorded.Property | Where-Object { $_.EndsWith(" ($Edition)") -and $Label -notcontains $_ })) {
+        Set-GuestModuleRemovalPending -Label $name
+    }
+}
+
 function Invoke-GuestGalleryModuleUpdate {
     <#
       Updates the PowerShell Gallery module $Module (Get-GuestGalleryModule)
@@ -1533,7 +1550,9 @@ function Invoke-GuestGalleryModuleUpdate {
             $scope = if ("$($newest.InstalledLocation)".StartsWith("$env:ProgramFiles\", [StringComparison]::OrdinalIgnoreCase)) { 'AllUsers' } else { 'CurrentUser' }
             # -Force lets the new version in beside the old one; it reinstalls nothing, as this version is not installed.
             Install-Module -Name $name -RequiredVersion $latest.Version -Repository PSGallery -Scope $scope -Force
-            if ($versions.Count -ge 2) { $toRemove += "$($versions[1].Version)" }
+            # A version in both scopes counts once, so the one before the newest is really older (#309).
+            $distinct = @($versions | ForEach-Object { "$($_.Version)" } | Select-Object -Unique)
+            if ($distinct.Count -ge 2) { $toRemove += $distinct[1] }
         }
 
         $present = @(& $byVersion | ForEach-Object { "$($_.Version)" })
