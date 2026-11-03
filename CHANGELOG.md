@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.5.3](https://github.com/downerboy/LazyVM/compare/v6.5.2...v6.5.3) (2026-11-03)
+
+
+### Bug Fixes
+
+* name the exact SQL Server error log when SQL Server will not start ([#323](https://github.com/downerboy/LazyVM/issues/323)) ([2981972](https://github.com/downerboy/LazyVM/commit/29819720294edc7d8616a0d296033772a7e98073))
+
 ## [6.5.2](https://github.com/downerboy/LazyVM/compare/v6.5.1...v6.5.2) (2026-11-03)
 
 
