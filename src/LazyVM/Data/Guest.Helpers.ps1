@@ -1137,13 +1137,17 @@ function New-GuestAdminFolder {
     <#
       A new folder at $Path, above LazyVM's private folders, owned by
       Administrators whatever the token's default owner is, and inheriting
-      the access of the folder above it.
+      the access of the folder above it. Only the owner is set: a security
+      descriptor given when the folder is made would replace what it
+      inherits with an empty list. The folder above, which only
+      administrators can change, keeps anyone else out meanwhile.
     #>
     param([Parameter(Mandatory)][string]$Path)
 
-    $acl = New-Object System.Security.AccessControl.DirectorySecurity
-    $acl.SetOwner((New-Object System.Security.Principal.SecurityIdentifier($script:GuestAdministratorsSid)))
-    $null = [IO.Directory]::CreateDirectory($Path, $acl)
+    $null = [IO.Directory]::CreateDirectory($Path)
+    $owner = New-Object System.Security.AccessControl.DirectorySecurity
+    $owner.SetOwner((New-Object System.Security.Principal.SecurityIdentifier($script:GuestAdministratorsSid)))
+    [IO.Directory]::SetAccessControl($Path, $owner)
 }
 
 function Assert-GuestAdminFolder {

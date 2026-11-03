@@ -112,13 +112,13 @@ Describe 'Start-GuestTask' {
     }
 
     It 'runs as the user with their full token when told to run elevated' {
-        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -UserName 'devadmin' -Elevated -TimeoutSeconds 60
+        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -Nonce 'n1' -UserName 'devadmin' -Elevated -TimeoutSeconds 60
 
         Should -Invoke Register-ScheduledTask -Times 1 -Exactly -ParameterFilter { $Principal.UserId -eq 'devadmin' -and "$($Principal.RunLevel)" -eq 'Highest' }
     }
 
     It 'runs as the user with their limited token otherwise' {
-        Start-GuestTask -TaskName 'LazyVM-settings' -Work 'return 1' -UserName 'devadmin' -TimeoutSeconds 60
+        Start-GuestTask -TaskName 'LazyVM-settings' -Work 'return 1' -Nonce 'n1' -UserName 'devadmin' -TimeoutSeconds 60
 
         Should -Invoke Register-ScheduledTask -Times 1 -Exactly -ParameterFilter { $Principal.UserId -eq 'devadmin' -and "$($Principal.RunLevel)" -eq 'Limited' }
     }
