@@ -1,5 +1,6 @@
 # LazyVM
 
+> **Notice.** When this project hits beta, frequency of updates will drastically drop to, hopefully, weekly at most and the code release will not be releasing code breakage e.g. something moves some cheese, deletes some cheese, renames some cheeze and similar cheesy behavior.
 > **Alpha.** LazyVM works, and I use it myself, but much of its behaviour is still being worked on.
 
 LazyVM is a PowerShell module that builds, looks after and disposes of Hyper-V virtual machines on a Windows host, unattended. Today it makes development VMs: Windows 11 Enterprise Evaluation with Visual Studio, SQL Server Standard Developer and whatever other tools you install, with the 90-day evaluation handled for you. Windows lets an evaluation be rearmed a limited number of times, each for another 90 days. LazyVM uses every rearm Windows allows, then rebuilds the VM and puts your work back.
