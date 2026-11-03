@@ -27,7 +27,8 @@ function Complete-GuestVisualStudioFirstLaunch {
       signed-in guest user's desktop session, presses the controls in
       $script:VisualStudioFirstLaunchControl, and lets it close itself.
       The script gets $timeoutMinutes; on any mismatch it describes Visual
-      Studio's windows in <GuestSetupDir>\VisualStudioFirstLaunch.txt and
+      Studio's windows in VisualStudioFirstLaunch.txt, in its task's Output
+      folder (Get-GuestTaskOutputFolder in Guest.Helpers.ps1), and
       stops Visual Studio with everything it started. When the guest task
       does not finish, the Visual Studio it started is stopped by its process
       id (Stop-GuestVisualStudioFirstLaunch). Whether Visual Studio has been
@@ -42,10 +43,7 @@ function Complete-GuestVisualStudioFirstLaunch {
         [Parameter(Mandatory)][object]$VisualStudio
     )
 
-    $setupDir = $VM.Settings.GuestSetupDir
-    $guestScript = Join-Path -Path $setupDir -ChildPath 'VisualStudioFirstLaunch.ps1'
-    $treePath = Join-Path -Path $setupDir -ChildPath 'VisualStudioFirstLaunch.txt'
-    $processIdPath = Join-Path -Path $setupDir -ChildPath 'VisualStudioFirstLaunch.pid'
+    $taskName = "${script:TaskPrefix}VSFirstLaunch"
     # The guest task gets a few minutes more than the script, so it is the
     # guest that stops Visual Studio and says why, not the host giving up.
     $timeoutMinutes = 10
@@ -58,18 +56,21 @@ function Complete-GuestVisualStudioFirstLaunch {
         }
 
         Write-LogEntry "Opening Visual Studio once to answer its first-launch window (up to $timeoutMinutes minutes)..." 'INFO'
-        Copy-ToGuest -VM $VM -HostPath (Join-Path -Path $script:DataDir -ChildPath 'Guest.VisualStudioFirstLaunch.ps1') -GuestPath $guestScript
+        # The script goes in the task's own folder, which the guest account
+        # can read but not change, and writes only in its Output (#302).
         $guestError = $null
         try {
-            Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName "${script:TaskPrefix}VSFirstLaunch" -Activity "Visual Studio's first launch" -TimeoutMinutes ($timeoutMinutes + 3) `
-                -ArgumentList @($guestScript, $treePath, $processIdPath, $VisualStudio.DevEnvPath, $script:VisualStudioFirstLaunchControl, $timeoutMinutes) -ScriptBlock {
-                param($scriptPath, $treePath, $processIdPath, $devenv, $control, $timeoutMinutes)
-                & $scriptPath -TreePath $treePath -ProcessIdPath $processIdPath -DevenvPath $devenv -Control $control -TimeoutMinutes $timeoutMinutes
+            Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName $taskName -Activity "Visual Studio's first launch" -TimeoutMinutes ($timeoutMinutes + 3) `
+                -InputFile @{ 'VisualStudioFirstLaunch.ps1' = (Join-Path -Path $script:DataDir -ChildPath 'Guest.VisualStudioFirstLaunch.ps1') } `
+                -ArgumentList @($VisualStudio.DevEnvPath, $script:VisualStudioFirstLaunchControl, $timeoutMinutes) -ScriptBlock {
+                param($devenv, $control, $timeoutMinutes)
+                & (Join-Path $TaskFolder 'VisualStudioFirstLaunch.ps1') -TreePath (Join-Path $TaskOutput 'VisualStudioFirstLaunch.txt') `
+                    -ProcessIdPath (Join-Path $TaskOutput 'VisualStudioFirstLaunch.pid') -DevenvPath $devenv -Control $control -TimeoutMinutes $timeoutMinutes
             }
         }
         catch {
             $guestError = $_.Exception.Message
-            try { Stop-GuestVisualStudioFirstLaunch -VM $VM -ProcessIdPath $processIdPath }
+            try { Stop-GuestVisualStudioFirstLaunch -VM $VM -TaskName $taskName }
             catch { Write-LogEntry "  Could not stop the Visual Studio its first launch started: $($_.Exception.Message)" 'WARN' }
         }
 
@@ -90,22 +91,27 @@ function Complete-GuestVisualStudioFirstLaunch {
 function Stop-GuestVisualStudioFirstLaunch {
     <#
       Stops, with everything it started, the devenv the first-launch script
-      recorded in $ProcessIdPath, for when its guest task did not finish and
-      so could not stop it itself. By process id only, and only while that
-      process is devenv, so a Visual Studio someone opened is never touched.
-      The script removes the file once it has stopped devenv itself.
+      recorded in VisualStudioFirstLaunch.pid in the Output folder of its
+      task $TaskName, for when the task did not finish and so could not stop
+      it itself. By process id only, and only while that process is devenv,
+      so a Visual Studio someone opened is never touched. The script removes
+      the file once it has stopped devenv itself; the user can change the
+      Output folder, so nothing in it is deleted here, and nothing is read
+      through a junction or link (#302).
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][string]$ProcessIdPath
+        [Parameter(Mandatory)][string]$TaskName
     )
 
-    $null = Invoke-GuestScript -VM $VM -Activity 'stopping the Visual Studio of its first launch' -TimeoutMinutes 2 -ArgumentList @($ProcessIdPath) -ScriptBlock {
-        param($processIdPath)
+    $null = Invoke-GuestScript -VM $VM -Activity 'stopping the Visual Studio of its first launch' -TimeoutMinutes 2 -ArgumentList @($TaskName) -ScriptBlock {
+        param($taskName)
+        $output = Get-GuestTaskOutputFolder -TaskName $taskName
+        $processIdPath = Join-Path $output 'VisualStudioFirstLaunch.pid'
+        if ((Test-GuestReparsePoint -Path $output) -or (Test-GuestReparsePoint -Path $processIdPath)) { return }
         if (-not (Test-Path -LiteralPath $processIdPath)) { return }
         $processId = [int](@(Get-Content -LiteralPath $processIdPath)[0])
         $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
         if ($process -and $process.ProcessName -eq 'devenv') { $null = taskkill.exe /PID $processId /T /F }
-        Remove-Item -LiteralPath $processIdPath -Force -ErrorAction SilentlyContinue
     }
 }

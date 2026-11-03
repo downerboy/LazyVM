@@ -122,18 +122,14 @@ function Install-SqlServer {
     Write-LogEntry "SQL Server configuration file saved to $hostConfigPath" 'OK'
     foreach ($line in $configuration -split "`r`n") { Write-LogEntry "  $line" 'INFO' }
 
-    $guestConfigPath = Join-Path $VM.Settings.GuestSetupDir 'ConfigurationFile.ini'
-    $setupArguments = @(
-        '/Q'
-        '/IACCEPTSQLSERVERLICENSETERMS'
-        "/CONFIGURATIONFILE=`"$guestConfigPath`""
-    )
-
     Set-VMDvdDrive -VMName $VM.Name -ControllerNumber $dvd.ControllerNumber -ControllerLocation $dvd.ControllerLocation -Path $VM.Settings.SQLIsoPath
     Write-LogEntry 'SQL Server ISO placed in the VM DVD drive' 'OK'
     Write-LogEntry "Installing $script:SqlEditionName (up to $($VM.Settings.SQLInstallMinutes) minutes)..." 'INFO'
 
     try {
+        # In the staging folder, which no other guest user can change, as
+        # setup runs as SYSTEM (#302).
+        $guestConfigPath = Join-Path (Get-GuestStagingFolder -VM $VM) 'ConfigurationFile.ini'
         Copy-ToGuest -VM $VM -HostPath $hostConfigPath -GuestPath $guestConfigPath
         $setupExe = Invoke-GuestScript -VM $VM -Activity 'SQL Server media check' -TimeoutMinutes 5 -ScriptBlock {
             $ErrorActionPreference = 'Stop'
@@ -151,6 +147,11 @@ function Install-SqlServer {
             }
             throw 'the SQL Server media did not appear on any DVD drive in the guest'
         }
+        $setupArguments = @(
+            '/Q'
+            '/IACCEPTSQLSERVERLICENSETERMS'
+            "/CONFIGURATIONFILE=`"$guestConfigPath`""
+        )
         $exitCode = Invoke-GuestInstaller -VM $VM -FilePath $setupExe -ArgumentList $setupArguments `
             -Name 'install-sqlserver' -TimeoutMinutes $VM.Settings.SQLInstallMinutes -Activity 'the SQL Server install'
     }

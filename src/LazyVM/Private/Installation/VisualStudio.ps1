@@ -180,18 +180,21 @@ function Install-ToolingProduct {
         $edition = $product.Edition()
         Write-LogEntry "Installing $label from $url ($(@($product.Components).Count) workload/component id(s); up to $($VM.Settings.VSInstallMinutes) minutes)..." 'INFO'
         try {
+            # The bootstrapper and its .vsconfig go in the staging folder,
+            # which no other guest user can change, as the install task runs
+            # them as SYSTEM (#302).
+            $folder = Get-GuestStagingFolder -VM $VM
             $prepared = Invoke-GuestScript -VM $VM -Activity "$label download" -TimeoutMinutes 15 `
-                -ArgumentList @($url, "bootstrap-$edition.exe", $VM.Settings.GuestSetupDir, (ConvertTo-VsConfig -Product $product), $product.IncludeRecommended) -ScriptBlock {
-                param($url, $bootstrapperName, $setupDir, $configJson, $includeRecommended)
+                -ArgumentList @($url, "bootstrap-$edition.exe", $folder, (ConvertTo-VsConfig -Product $product), $product.IncludeRecommended) -ScriptBlock {
+                param($url, $bootstrapperName, $folder, $configJson, $includeRecommended)
                 $ErrorActionPreference = 'Stop'
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                New-GuestFolder -Path $setupDir
 
-                $bootstrapper = Join-Path $setupDir $bootstrapperName
+                $bootstrapper = Join-Path $folder $bootstrapperName
                 Invoke-WebRequest -Uri $url -OutFile $bootstrapper -UseBasicParsing -TimeoutSec 600
 
                 # Without a byte-order mark: the installer reads it as JSON.
-                $configPath = Join-Path $setupDir "$bootstrapperName.vsconfig"
+                $configPath = Join-Path $folder "$bootstrapperName.vsconfig"
                 [IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
 
                 $arguments = @('--quiet', '--wait', '--norestart', '--config', "`"$configPath`"")
@@ -338,12 +341,13 @@ function Invoke-ProductModify {
 
     $label = $Product.DisplayName
     try {
+        # In the staging folder, as the modify task runs it as SYSTEM (#302).
+        $folder = Get-GuestStagingFolder -VM $VM
         $prepared = Invoke-GuestScript -VM $VM -Activity "$label extension list" -TimeoutMinutes 5 `
-            -ArgumentList @($VM.Settings.GuestSetupDir, (ConvertTo-VsConfig -Product $Product -Links $Links), $InstallPath, [bool]$AllowUnsigned) -ScriptBlock {
-            param($setupDir, $configJson, $installPath, $allowUnsigned)
+            -ArgumentList @($folder, (ConvertTo-VsConfig -Product $Product -Links $Links), $InstallPath, [bool]$AllowUnsigned) -ScriptBlock {
+            param($folder, $configJson, $installPath, $allowUnsigned)
             $ErrorActionPreference = 'Stop'
-            New-GuestFolder -Path $setupDir
-            $configPath = Join-Path $setupDir 'extensions.vsconfig'
+            $configPath = Join-Path $folder 'extensions.vsconfig'
             [IO.File]::WriteAllText($configPath, $configJson, (New-Object System.Text.UTF8Encoding($false)))
             $installer = Get-GuestVisualStudioInstaller
             $arguments = @('modify', '--installPath', "`"$installPath`"", '--config', "`"$configPath`"", '--quiet', '--norestart')
@@ -551,33 +555,33 @@ function Import-GuestVisualStudioSetting {
         [Parameter(Mandatory)][object]$Settings
     )
 
-    $guestPath = Join-Path $VM.Settings.GuestSetupDir 'VisualStudio.vssettings'
+    # The guest task gets a few minutes more than devenv, so it is the guest
+    # that stops devenv and says why, not the host giving up on the task.
+    $devenvMinutes = 10
+    $projects = $Settings.ProjectsLocation
     $staging = Join-Path -Path ([IO.Path]::GetTempPath()) -ChildPath ("LazyVM-" + [guid]::NewGuid().ToString('N'))
     try {
         New-Folder -Path $staging
         $staged = Join-Path -Path $staging -ChildPath 'VisualStudio.vssettings'
         [IO.File]::WriteAllText($staged, $Settings.Text, [Text.UTF8Encoding]::new($false))
-        Copy-ToGuest -VM $VM -HostPath $staged -GuestPath $guestPath
+        # The file goes in the task's own folder, which the guest account
+        # can read but not change (#302).
+        Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName "${script:TaskPrefix}VSSettings" -Activity 'Visual Studio settings restore' -TimeoutMinutes ($devenvMinutes + 3) `
+            -InputFile @{ 'VisualStudio.vssettings' = $staged } -ArgumentList @($VisualStudio.DevEnvPath, $projects, $devenvMinutes) -ScriptBlock {
+            param($devenv, $projects, $devenvMinutes)
+            $settingsPath = Join-Path $TaskFolder 'VisualStudio.vssettings'
+            if (-not (Test-Path $devenv)) { throw "devenv.exe not found at $devenv" }
+            if ($projects) { $null = New-Item -ItemType Directory -Path $projects -Force }
+            $process = Start-Process -FilePath $devenv -ArgumentList '/NoSplash', '/ResetSettings', "`"$settingsPath`"", '/Command', 'Exit' -PassThru
+            if (-not $process.WaitForExit($devenvMinutes * 60000)) {
+                $null = taskkill.exe /PID $process.Id /T /F
+                throw "devenv did not exit within $devenvMinutes minute(s) and was stopped - it was most likely waiting on a dialog, such as the sign-in and theme choice of its first launch. The settings import is retried automatically: nightly maintenance applies them once Visual Studio has been opened and closed in the VM"
+            }
+            if ($process.ExitCode -ne 0) { throw "devenv exited with $($process.ExitCode)" }
+        }
     }
     finally {
         Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
-    }
-
-    # The guest task gets a few minutes more than devenv, so it is the guest
-    # that stops devenv and says why, not the host giving up on the task.
-    $devenvMinutes = 10
-    $projects = $Settings.ProjectsLocation
-    Invoke-GuestScriptAsInteractiveUser -VM $VM -TaskName "${script:TaskPrefix}VSSettings" -Activity 'Visual Studio settings restore' -TimeoutMinutes ($devenvMinutes + 3) `
-        -ArgumentList @($VisualStudio.DevEnvPath, $guestPath, $projects, $devenvMinutes) -ScriptBlock {
-        param($devenv, $settingsPath, $projects, $devenvMinutes)
-        if (-not (Test-Path $devenv)) { throw "devenv.exe not found at $devenv" }
-        if ($projects) { $null = New-Item -ItemType Directory -Path $projects -Force }
-        $process = Start-Process -FilePath $devenv -ArgumentList '/NoSplash', '/ResetSettings', "`"$settingsPath`"", '/Command', 'Exit' -PassThru
-        if (-not $process.WaitForExit($devenvMinutes * 60000)) {
-            $null = taskkill.exe /PID $process.Id /T /F
-            throw "devenv did not exit within $devenvMinutes minute(s) and was stopped - it was most likely waiting on a dialog, such as the sign-in and theme choice of its first launch. The settings import is retried automatically: nightly maintenance applies them once Visual Studio has been opened and closed in the VM"
-        }
-        if ($process.ExitCode -ne 0) { throw "devenv exited with $($process.ExitCode)" }
     }
     Write-VisualStudioSettingMarker -VM $VM -InstanceId $VisualStudio.InstanceId -AppliedHash $Settings.BackupHash
     if ($Settings.HasBackup) { Write-LogEntry 'Visual Studio settings restored' 'OK' }

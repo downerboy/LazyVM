@@ -470,7 +470,12 @@ The module itself is installed in `%ProgramFiles%\LazyVM\Modules\LazyVM`. Nothin
 | `D:` | The SQL data disk: `SQLData`, `SQLLog` and `SQLBackup`. `tempdb` stays on C:, since SQL Server recreates it at every start. |
 | `W:` | The Dev Drive: working repositories, package caches, build output. |
 | `U:` | The User disk: `Documents`, `Desktop` and `Downloads` are redirected here, and `%USERPROFILE%\.ssh` and `%USERPROFILE%\source\repos` are links to folders here. |
-| `C:\LazyVMSetup` | The folder LazyVM uses for installers and staging. |
+| `C:\Program Files\LazyVM\Staging` | Where LazyVM stages the files it copies in and out of the VM: installers, setup files, capture and restore archives. Only administrators and SYSTEM can change or read it. |
+| `C:\Program Files\LazyVM\Tasks` | A folder for each of LazyVM's scheduled tasks, with the script it runs and the files it is given, and an `Output` folder with its result and transcript (`<task>.log`). Only administrators and SYSTEM can change them. A task that runs as the guest account, not elevated, lets that account read its folder and change only its `Output`. |
+
+LazyVM checks that `C:\Program Files\LazyVM` and its `Tasks` folder can be changed only by administrators, SYSTEM and TrustedInstaller, and stops, changing nothing, when they can be changed by anyone else. A staging or task folder that is not as LazyVM made it is moved aside, never deleted, and made again; the log says so.
+
+Earlier versions used `C:\LazyVMSetup` (the `GuestSetupDir` setting), which any user of the VM could change. LazyVM no longer uses it or the setting, and leaves the folder alone. You can delete it in the VM.
 
 ### Credential storage
 
@@ -564,12 +569,12 @@ The build finds the dialog's buttons by their UI Automation id (`AutomationId`),
 2. Open **Windows PowerShell** (not PowerShell 7) and run:
 
    ```powershell
-   powershell.exe -ExecutionPolicy Bypass -File C:\LazyVMSetup\VisualStudioFirstLaunch.ps1 -TreePath "$env:USERPROFILE\Desktop\VSFirstLaunch.txt"
+   powershell.exe -ExecutionPolicy Bypass -File "C:\Program Files\LazyVM\Tasks\LazyVM-VSFirstLaunch\VisualStudioFirstLaunch.ps1" -TreePath "$env:USERPROFILE\Desktop\VSFirstLaunch.txt"
    ```
 
 3. Answer that screen, and run the same command again on each later screen.
 
-Each run adds every Visual Studio window's tree to the file, one line per element with its control type, name, `AutomationId` and class name, and changes nothing. The build copies the script to `GuestSetupDir` (`C:\LazyVMSetup` by default) when it first tries the first launch. When the build's own attempt does not match, it writes the same description of the windows Visual Studio had open to `C:\LazyVMSetup\VisualStudioFirstLaunch.txt`.
+Each run adds every Visual Studio window's tree to the file, one line per element with its control type, name, `AutomationId` and class name, and changes nothing. The build copies the script to its task's folder, `C:\Program Files\LazyVM\Tasks\LazyVM-VSFirstLaunch`, when it first tries the first launch. When the build's own attempt does not match, it writes the same description of the windows Visual Studio had open to `Output\VisualStudioFirstLaunch.txt` in that folder.
 
 ## 8. Settings
 
