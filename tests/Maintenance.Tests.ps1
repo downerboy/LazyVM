@@ -501,6 +501,7 @@ Describe 'Invoke-Rebuild' {
         Mock -ModuleName $module Restore-GuestState { $true }
         Mock -ModuleName $module Test-RebuiltVM { [pscustomobject]@{ Passed = $true; Failures = @() } }
         Mock -ModuleName $module Remove-RetiredVM { 'stray' }
+        Mock -ModuleName $module Save-GuestPersistenceBaseline { 'stray' }
     }
 
     It 'returns only $true when the rebuild passes its check' {
@@ -508,6 +509,17 @@ Describe 'Invoke-Rebuild' {
 
         $result.Count | Should -Be 1
         $result[0] | Should -BeTrue
+    }
+
+    It 'records the security baseline of the new VM after the restore, before the check (#290)' {
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Restore-GuestState { $script:order.Add('restore'); $true }
+        Mock -ModuleName $module Save-GuestPersistenceBaseline { $script:order.Add('baseline') }
+        Mock -ModuleName $module Test-RebuiltVM { $script:order.Add('check'); [pscustomobject]@{ Passed = $true; Failures = @() } }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Rebuild -VM $VM }
+
+        $script:order | Should -Be @('restore', 'baseline', 'check')
     }
 
     It 'retires nothing when the personal files cannot be put on the User disk (#137)' {
@@ -556,6 +568,7 @@ Describe 'Invoke-Rebuild verification' {
         Mock -ModuleName $module Invoke-BuildPhase { $buildComplete }
         Mock -ModuleName $module Restore-GuestState { $true }
         Mock -ModuleName $module Remove-RetiredVM { }
+        Mock -ModuleName $module Save-GuestPersistenceBaseline { }
         Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('admin', [securestring]::new()) }
         Mock -ModuleName $module Connect-Guest { }
         Mock -ModuleName $module Get-GuestInstallerProduct { }

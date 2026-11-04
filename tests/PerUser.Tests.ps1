@@ -299,6 +299,7 @@ Describe 'Build-LazyVM schedules the maintenance first (#284)' {
         Mock -ModuleName $module Register-TrustedHostPath { }
         Mock -ModuleName $module Test-Unattended { $false }
         Mock -ModuleName $module Invoke-VMBuild { $script:calls.Add('build'); $script:complete }
+        Mock -ModuleName $module Save-GuestPersistenceBaseline { }
     }
 
     It 'schedules the maintenance before building, so a restart part-way loses nothing' {

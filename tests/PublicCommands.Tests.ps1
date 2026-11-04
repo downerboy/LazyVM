@@ -159,6 +159,7 @@ Describe 'Build-LazyVM' {
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Sync-VMProfile { }
         Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Save-GuestPersistenceBaseline { 'stray' }
     }
 
     It 'stops quietly, without an error, when the host is restarting to turn on Hyper-V' {
@@ -191,6 +192,16 @@ Describe 'Build-LazyVM' {
         Build-LazyVM -Name Alpha -FromPhase 7 -NoUnattend
 
         Should -Invoke -ModuleName $module Invoke-VMBuild -ParameterFilter { $FromPhase -eq 7 -and $NoUnattend }
+    }
+
+    It 'records the security baseline once the phases are done, but not while the host restarts (#290)' {
+        Mock -ModuleName $module Invoke-VMBuild { 'CompleteWithProblems' }
+        Build-LazyVM -Name Alpha
+        Should -Invoke -ModuleName $module Save-GuestPersistenceBaseline -Times 1 -Exactly
+
+        Mock -ModuleName $module Invoke-VMBuild { 'RestartPending' }
+        Build-LazyVM -Name Alpha
+        Should -Invoke -ModuleName $module Save-GuestPersistenceBaseline -Times 1 -Exactly
     }
 
     It 'schedules the daily maintenance for a successful build' {

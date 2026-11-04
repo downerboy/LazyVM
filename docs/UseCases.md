@@ -76,6 +76,7 @@ Run daily maintenance includes, every day:
 - Check and back up the databases.
 - Keep the guest up to date: Store apps, Sysmon, winget packages and Windows updates.
 - Check the evaluation license.
+- Scan the guest's security, last: Defender, the security settings, and the places a program can start itself again against the baseline recorded after the build. It only reports, and leaves out the findings the owner approved.
 
 It is extended by:
 
@@ -104,6 +105,7 @@ Rebuild the VM includes:
 - Install the tooling list, which includes **Extend C: to the whole disk**.
 - Configure the guest.
 - Restore state.
+- Record the security baseline of the new VM, which the nightly scan compares with.
 - Verify the rebuilt VM: running and reachable, tooling-list products and SQL Server installed, captured databases online, D: and W: mounted. Extended by **Delete the retired disk** when the build had no problems, verification passed and `DeleteRetiredDiskOnSuccess` is on. If it failed, the retired disk is kept and the log gives the rollback commands.
 
 It is extended by **Capture state** unless `-SkipCapture` is given. Maintenance passes `-SkipCapture` because it has just captured.
@@ -150,6 +152,8 @@ Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Window
 - List VMs (`Get-LazyVM`) and View settings (`Get-LazyVMSetting`), by any Host user. List VMs reads VM state from Hyper-V and the task from Task Scheduler.
 - View the guest account (`Get-LazyVMCredential`).
 - Check the license (`Get-LazyVMLicense`) reads the license inside the guest. Extended by **Start the VM** when the VM is off.
+- See the security findings (`Get-LazyVMSecurityFinding`), or the approved ones (`-Approved`). Read-only.
+- Approve a security finding you expect (`Approve-LazyVMSecurityFinding`), and revoke an approval (`Revoke-LazyVMSecurityFinding`). Both change only `Config\SecurityBaseline.json` and support `-WhatIf`.
 - Check a VM end to end (`Test-LazyVM`) checks the folder, the ISOs, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only: a VM that is off is not started.
 - Remove a VM (`Remove-LazyVM`) includes **List what will be deleted and kept**, then deletes the VM, its tasks, its disks (Dev Drive and User disk included), checkpoints, state, profile and log. Anything another VM also uses is kept. It asks first unless `-Force`; `-WhatIf` only lists.
 

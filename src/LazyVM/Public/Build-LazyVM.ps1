@@ -131,6 +131,8 @@
                 Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
                 return
             }
+            # The VM as the build leaves it is what the nightly security scan compares with (#290).
+            $null = Save-GuestPersistenceBaseline -VM $VM
 
             Write-LogEntry '' 'INFO'
             Write-LogEntry '========================================================' 'INFO'

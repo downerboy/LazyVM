@@ -447,7 +447,12 @@ class SecurityFinding {
 
     # Its area: the part of the Id before the first colon, the name of the check that found it.
     [string] Area() {
-        return ($this.Id -split ':', 2)[0]
+        return [SecurityFinding]::AreaOf($this.Id)
+    }
+
+    # The area of a finding's Id.
+    static [string] AreaOf([string]$id) {
+        return ($id -split ':', 2)[0]
     }
 
     # A copy, compared with the scan before: its status and when it was first seen.
@@ -480,5 +485,46 @@ class SecurityFinding {
         $record.Where = @($this.Where)
         $record.FirstSeen = if ($null -ne $this.FirstSeen) { ([datetimeoffset]$this.FirstSeen).ToString('o', [cultureinfo]::InvariantCulture) } else { $null }
         return $record
+    }
+}
+
+# One finding the VM's owner approved with Approve-LazyVMSecurityFinding
+# (#290): its Id, severity and title, when it was approved and why. Kept in
+# <VM>\Config\SecurityBaseline.json (ToRecord, FromObject); never what was
+# found, which can name files. Get-LazyVMSecurityFinding -Approved shows
+# them as LazyVM.SecurityApproval, with the VM's name added.
+class SecurityApproval {
+    [string]$Id
+    [string]$Severity
+    [string]$Title
+    [datetimeoffset]$ApprovedOn
+    [string]$Reason
+
+    SecurityApproval([string]$id, [string]$severity, [string]$title, [datetimeoffset]$approvedOn, [string]$reason) {
+        if (-not $id) { throw 'An approved security finding has an Id.' }
+        $this.Id = $id
+        $this.Severity = $severity
+        $this.Title = $title
+        $this.ApprovedOn = $approvedOn
+        $this.Reason = $reason
+    }
+
+    static [SecurityApproval] FromObject([object]$item) {
+        $findingId = [RecordReader]::Text($item, 'Id')
+        $when = [RecordReader]::Text($item, 'ApprovedOn')
+        if (-not $when) { throw "The approval of the security finding '$findingId' has no ApprovedOn." }
+        return [SecurityApproval]::new($findingId, [RecordReader]::Text($item, 'Severity'), [RecordReader]::Text($item, 'Title'),
+            [datetimeoffset]::Parse($when, [cultureinfo]::InvariantCulture), [RecordReader]::Text($item, 'Reason'))
+    }
+
+    # As SecurityBaseline.json keeps it: ApprovedOn in ISO 8601 ('o').
+    [System.Collections.Specialized.OrderedDictionary] ToRecord() {
+        return [ordered]@{
+            Id         = $this.Id
+            Severity   = $this.Severity
+            Title      = $this.Title
+            ApprovedOn = $this.ApprovedOn.ToString('o', [cultureinfo]::InvariantCulture)
+            Reason     = $this.Reason
+        }
     }
 }

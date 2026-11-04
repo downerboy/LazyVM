@@ -40,6 +40,9 @@ $script:ProfileFileName = 'VM.json'
 $script:RecoveryKeyExportFileName = 'RecoveryKeyExport.json'
 # The last nightly security scan's findings, in <Name>\Logs (SecurityScan.ps1).
 $script:SecurityFindingsFileName = 'SecurityFindings.json'
+# The security scan's known-good persistence baseline and the findings the
+# VM's owner approved, in <Name>\Config (SecurityBaseline.ps1).
+$script:SecurityBaselineFileName = 'SecurityBaseline.json'
 # The VM.json a VM was first built from, kept beside it to diff against it.
 $script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'

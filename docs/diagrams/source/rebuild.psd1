@@ -75,6 +75,15 @@
             Writes   = @(@{ Label = 'restored state'; Kind = 'guest'; Store = 'New guest'; Items = @('state put back') })
         }
         @{
+            Function = 'Save-GuestPersistenceBaseline'
+            Area     = 'Security'
+            Caller   = 'Invoke-Rebuild'
+            Note     = 'unless GuestSecurityScan is off: the new VM, with what was restored, in place of the old VMs baseline; a failure is logged and the next scan records it'
+            Includes = @('Install-GuestSecurityFindingOpener', 'Get-GuestPersistenceFact', 'New-PersistenceBaseline', 'Read-SecurityBaseline', 'Save-SecurityBaseline')
+            Reads    = @(@{ Label = 'places programs start from'; Kind = 'guest'; Store = 'Running guest'; Items = @('scheduled tasks, services, Run keys,', 'startup folders, WMI subscriptions,', 'local users, Administrators') })
+            Writes   = @(@{ Label = 'known-good baseline, approvals kept'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('SecurityBaseline.json') })
+        }
+        @{
             Function = 'Test-RebuiltVM'
             Area     = 'Maintenance'
             Caller   = 'Invoke-Rebuild'

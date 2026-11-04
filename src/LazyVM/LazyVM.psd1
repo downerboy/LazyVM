@@ -11,6 +11,7 @@
     CompatiblePSEditions = @('Core')
 
     FunctionsToExport    = @(
+        'Approve-LazyVMSecurityFinding'
         'Build-LazyVM'
         'Convert-LazyVMInstallation'
         'Export-LazyVMRecoveryKey'
@@ -30,6 +31,7 @@
         'Remove-LazyVM'
         'Restore-LazyVMState'
         'Restore-LazyVMTooling'
+        'Revoke-LazyVMSecurityFinding'
         'Save-LazyVMState'
         'Save-LazyVMTooling'
         'Set-LazyVMCredential'

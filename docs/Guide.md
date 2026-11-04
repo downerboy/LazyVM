@@ -193,7 +193,9 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Set-LazyVMCredential` | Stores the administrator account LazyVM uses inside the VM. |
 | `Get-LazyVMCredential` | Gets it. `-AsPlainText` shows the password, and `-ToClipboard` puts it on the clipboard for VMConnect's sign-in box. `-RecoveryPassword` shows the BitLocker recovery password of each disk. |
 | `Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt` | Writes every VM's BitLocker recovery passwords (or those of the VMs `-Name` matches; wildcards work) to a file you keep offline. Never writes over a file without `-Force`, which replaces it. See [Keeping the recovery passwords offline](#keeping-the-recovery-passwords-offline). |
-| `Get-LazyVMSecurityFinding` | What the last nightly security scan of the VM found: each finding with its severity, what was found, why it matters, how to fix it, and whether it is new, still open or resolved. Read-only. See [The nightly security scan](#the-nightly-security-scan). |
+| `Get-LazyVMSecurityFinding` | What the last nightly security scan of the VM found: each finding with its severity, what was found, why it matters, how to fix it, and whether it is new, still open or resolved. `-Approved` lists the approved findings instead. Read-only. See [The nightly security scan](#the-nightly-security-scan). |
+| `Approve-LazyVMSecurityFinding -Id <Id>` | Accepts a finding you expect, with an optional `-Reason`, so the nightly scan stops reporting it until it changes. Takes findings from the pipeline. See [Approving a finding](#approving-a-finding). |
+| `Revoke-LazyVMSecurityFinding -Id <Id>` | Undoes an approval, so the next scan reports the finding again if it still finds it. |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
 | `Test-LazyVM` | Checks what a build or maintenance run depends on: the LazyVM folder, the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only. `-ReportPath` also writes a text report. |
@@ -379,8 +381,9 @@ What it checks:
 - **Microsoft Defender:** a quick scan every night, then whether Defender Antivirus, real-time protection and tamper protection are on, whether its virus definitions are more than 7 days old, and every threat it detected since the last scan.
 - **Settings, measured against the Microsoft security baseline:** the firewall profiles, User Account Control, BitLocker on each disk, the old SMB 1 protocol, Network Level Authentication for Remote Desktop, the Guest account, LSA protection, Secure Boot, virtualization-based security (VBS), AutoRun, and whether Windows updates are paused.
 - **Automatic sign-in** is on by design ([section 5](#5-the-90-day-cycle), step 12), so it is listed as Info.
+- **The places a program can start itself again**, compared with the known-good baseline recorded after the build: scheduled tasks, services, the Run and RunOnce keys (for all users and for the guest account), the startup folders (All users and the guest account's), WMI event subscriptions, local users and the members of Administrators. See [The persistence baseline](#the-persistence-baseline).
 
-The scan runs in the VM as SYSTEM, with up to 20 minutes for the whole scan and 15 of them for the quick scan; a quick scan that takes longer is stopped and runs again the next night. A check that cannot be read is logged and the others still run; its findings from the night before stay open rather than being taken as resolved. When the findings cannot be written to the VM, the scan is not kept, so its new findings are still new the next night.
+The scan runs in the VM as SYSTEM, with up to 20 minutes for the Defender and settings checks and 15 of them for the quick scan, and up to 10 more for the places programs start from; a quick scan that takes longer is stopped and runs again the next night. A check that cannot be read is logged and the others still run; its findings from the night before stay open rather than being taken as resolved. When the findings cannot be written to the VM, the scan is not kept, so its new findings are still new the next night.
 
 Each finding has these fields, one to a line, so a screen reader reads one at a time:
 
@@ -402,8 +405,8 @@ Status: New
 
 Where you see the findings:
 
-- **On the host:** every finding is in the VM's log, and kept in `Logs\SecurityFindings.json` in the VM's folder. `Get-LazyVMSecurityFinding -Name DevBox` lists them. While High or Medium findings are open, the first command you run on the VM reminds you in one line.
-- **In the VM:** `LazyVM Findings.txt` on the desktop, replaced after every scan. When a scan finds something **new** that is High or Medium, the file opens in Notepad the next time you sign in, connect (at the console, in VMConnect or by Remote Desktop) or unlock the VM, once for that scan; it does not open again until a later scan finds something new, and a scan that finds nothing new does not stop it opening. A scheduled task in the VM, `LazyVM-SecurityFindings`, does this, in your own session with your normal rights; what it runs is in the task itself, not in a file anyone could change. There is no notification.
+- **On the host:** every finding is in the VM's log, and kept in `Logs\SecurityFindings.json` in the VM's folder. `Get-LazyVMSecurityFinding -Name DevBox` lists them. While findings of a severity that alerts are open, the first command you run on the VM reminds you in one line, with how many of each severity: `3 security finding(s) on DevBox need attention (1 High, 1 Low, 1 Info).`
+- **In the VM:** `LazyVM Findings.txt` on the desktop, replaced after every scan. When a scan finds something **new** of a severity that alerts (every severity, unless `GuestSecurityScanAlertSeverity` says otherwise), the file opens in Notepad the next time you sign in, connect (at the console, in VMConnect or by Remote Desktop) or unlock the VM, once for that scan; it does not open again until a later scan finds something new, and a scan that finds nothing new does not stop it opening. A scheduled task in the VM, `LazyVM-SecurityFindings`, does this, in your own session with your normal rights; what it runs is in the task itself, not in a file anyone could change. There is no notification.
 
 ```powershell
 Get-LazyVMSecurityFinding -Name DevBox
@@ -411,6 +414,61 @@ Get-LazyVMSecurityFinding -Name DevBox | Where-Object Status -ne 'Resolved'
 ```
 
 `GuestSecurityScan = false` in the VM's `VM.json` turns the scan off. The findings file and the task that opens it stay in the VM as they are.
+
+#### Which severities alert you
+
+`GuestSecurityScanAlertSeverity` in the VM's `VM.json` lists the severities that alert you: a new finding of one of them opens the findings file in the VM, and an open one is in the host reminder. By default it is every severity:
+
+```json
+"GuestSecurityScanAlertSeverity": ["High", "Medium", "Low", "Info"]
+```
+
+`["High", "Medium"]` alerts only for those, and `[]` never alerts. Whatever it says, every finding is still in the log, in `Get-LazyVMSecurityFinding` and in the findings file. The config templates do not set it, so a new VM alerts for everything until you change it; `Export-LazyVMTemplate` carries your choice into a template of your own.
+
+Automatic sign-in is always found, as Info, so with the default the reminder shows it until you approve it: `Approve-LazyVMSecurityFinding -Name DevBox -Id 'AutoLogon:Winlogon:On' -Reason 'on by design'`.
+
+#### The persistence baseline
+
+Malware that gets in usually makes sure it starts again: it adds a scheduled task or a service, an entry in a Run key or the startup folder, a WMI event subscription, or an account of its own. LazyVM records all of these as the **known-good baseline** at the end of `Build-LazyVM` and of every rebuild, after the restore, and keeps it in `Config\SecurityBaseline.json` in the VM's folder. Running `Build-LazyVM` again on a built VM records it again. A VM built before LazyVM had a baseline gets one at its next scan, which reports nothing for it that night; so does an area the guest could not read when the baseline was recorded.
+
+Every night the scan compares them with the baseline and reports each one that is **new** or **changed**:
+
+```
+Id: ScheduledTask:\Updater:3f9a1c2b7d4e
+Severity: Medium
+Title: New scheduled task: \Updater
+What we found: The scheduled task \Updater was not there when LazyVM recorded the baseline on 2026-11-02 02:40. It starts the program under Where.
+Where: C:\Tools\updater.exe
+Why it matters: Malware often adds or changes a scheduled task, so it starts again after a restart.
+How to fix: In the VM, open Task Scheduler, find the task by its path, and look at what it runs. If you do not know it, disable it, and run a full Defender scan. If you know it and expect it, approve it on the host with Approve-LazyVMSecurityFinding and this Id. LazyVM then stops reporting it until it changes.
+First seen: 2026-11-03 02:40
+Status: New
+```
+
+- **The Id** is the area, the item's name, and a fingerprint of what it runs: its command line and the account it runs as, a service's program and DLL, a startup item's contents, a subscription's query and command. When any of that changes, such as a service's program path, the Id changes, and the change is reported. A version number in a folder name is left out of the fingerprint, so an update that moves a program to its new version's folder, as Defender and Edge do, is not a change. Only the fingerprint leaves the VM, never the command line, which could hold a password.
+- **Severity:** a new member of Administrators and a WMI event subscription are High; so is anything whose program is in a folder users can write to, such as a user profile or the Windows temporary folder. Everything else is Medium.
+- What was **removed** is not reported: it can no longer start anything.
+- LazyVM's own tasks are part of the baseline, `LazyVM-SecurityFindings` included, except the one the scan runs as.
+
+Installing software adds services and tasks, so expect findings after you install something. Approve the ones you expect.
+
+#### Approving a finding
+
+`Approve-LazyVMSecurityFinding` accepts a finding you expect. It records the Id, the severity, the title, the date and your reason in `Config\SecurityBaseline.json`, and nothing of what was found. Do not put a password in the reason. It asks first only with `-Confirm`, and `-WhatIf` shows what it would do. Only an open finding of the last scan can be approved.
+
+```powershell
+Approve-LazyVMSecurityFinding -Name DevBox -Id 'Service:MySvc:3f9a1c2b7d4e' -Reason 'my own service'
+Get-LazyVMSecurityFinding -Name DevBox | Where-Object Severity -eq 'Info' | Approve-LazyVMSecurityFinding
+Get-LazyVMSecurityFinding -Name DevBox -Approved
+Revoke-LazyVMSecurityFinding -Name DevBox -Id 'Service:MySvc:3f9a1c2b7d4e'
+```
+
+- An approved **setting or persistence item** is not reported while the scan finds it with the same Id. When it changes, its Id changes, so the change is reported, and the approval ends.
+- An approved **event**, such as a Defender detection, covers that one occurrence. Another one has an Id of its own and is reported.
+- Once a scan no longer finds an approved finding, because it changed, was fixed or is over, its approval ends; the log says so. An approval of an area the guest could not read that night is kept.
+- The finding leaves `Get-LazyVMSecurityFinding` and the reminder at once. `LazyVM Findings.txt` in the VM still lists it until the next scan replaces the file. The log of each scan says how many approved findings it left out.
+- A rebuild keeps the approvals, but records a new baseline, so approvals of persistence items it now holds end at the next scan.
+- `Revoke-LazyVMSecurityFinding` undoes an approval. The next scan reports the finding again, as new, if it still finds it.
 
 ### Why rearm first
 
@@ -476,7 +534,7 @@ D:\DevVM\
     Installers\     the SQL Server ISO
     Templates\      your config templates, and DevBox-latest.json
   DevBox\
-    Config\         VM.json, VM.Template.json, History\
+    Config\         VM.json, VM.Template.json, History\, SecurityBaseline.json
     Virtual Machines\
     Checkpoints\
     Disks\          DevBox-OS.vhdx, DevBox-SQL.vhdx, DevBox-DevDrive.vhdx, DevBox-User.vhdx, DevBox-Seed.iso
@@ -493,7 +551,7 @@ D:\DevVM\
 | `D:\DevVM\Shared\Installers` | The SQL Server ISO. |
 | `D:\DevVM\Shared\Templates` | Your own config templates, and the one LazyVM keeps for each VM, `<VM>-latest.json` ([The template that follows each VM](#the-template-that-follows-each-vm)). |
 | `D:\DevVM\DevBox` | Everything that belongs to the VM DevBox. Removing the VM deletes this folder. |
-| `D:\DevVM\DevBox\Config` | The VM's configuration (`VM.json`), which includes its tooling list, the one it was first built from (`VM.Template.json`), and `History`: the three latest versions of `VM.json`, plus any older one a tooling restore point still needs. |
+| `D:\DevVM\DevBox\Config` | The VM's configuration (`VM.json`), which includes its tooling list, the one it was first built from (`VM.Template.json`), and `History`: the three latest versions of `VM.json`, plus any older one a tooling restore point still needs. `SecurityBaseline.json`: the security scan's known-good baseline and the findings you approved ([The persistence baseline](#the-persistence-baseline)). |
 | `D:\DevVM\DevBox\Virtual Machines` | The VM's Hyper-V configuration. |
 | `D:\DevVM\DevBox\Checkpoints` | The VM's checkpoints: the tooling restore points and any you take by hand. Automatic checkpoints are off. |
 | `D:\DevVM\DevBox\Disks` | The Windows disk, the 100 GB SQL data disk, the Dev Drive, the 20 GB User disk and the answer-file disc, with the checkpoint disks (`.avhdx`) Hyper-V keeps beside them. The SQL data disk, the Dev Drive and the User disk persist across rebuilds: they carry the databases and their backups, your working source, and your personal folders. |
@@ -728,6 +786,7 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `GuestDarkMode`, `GuestShowFileExtensions`, `GuestTaskbarLeft`, `GuestHideWidgets`, `GuestHideTaskbarSearch` | true | Windows appearance in the VM, applied for every user at every build. |
 | `GuestDeveloperMode` | true | Turns on Developer Mode in the VM at every build. Visual Studio needs it to build and run WinUI and other packaged apps. |
 | `GuestSecurityScan` | true | Scans the VM every night and reports what it finds. See [The nightly security scan](#the-nightly-security-scan). `false` leaves the VM unscanned. |
+| `GuestSecurityScanAlertSeverity` | every severity | The severities of security finding that open the findings file in the VM and are in the host reminder. Every finding is logged and in the file anyway. See [Which severities alert you](#which-severities-alert-you). |
 | `GuestSysmon` | true | Turns on the Sysmon built into Windows 11 with LazyVM's configuration, checked at every build and every night. See [Sysmon](#sysmon). `false` leaves Sysmon as it is. |
 | `GuestEventLogging` | true | Keeps the event log sizes, the audit policy, command-line auditing and PowerShell script block logging at the Microsoft security baseline, checked at every build and every night. See [Event logging](#event-logging). `false` leaves them as they are. |
 
@@ -1074,7 +1133,7 @@ Get-Service MSSQLSERVER | Select-Object Name, Status
 - **Check `Get-LazyVMLicense` occasionally**, so the rearm count is never a surprise.
 - **Export the recovery passwords when LazyVM reminds you**, to a USB drive kept offline: `Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt -Force`. Without them, a lost credential store means lost disks.
 - **Install tools inside the VM, the normal way.** The daily run records them, so they come back after a rebuild. `Save-LazyVMTooling` records them at once.
-- **Read the security findings when LazyVM reminds you**, with `Get-LazyVMSecurityFinding`, or in `LazyVM Findings.txt` on the VM's desktop. Each one says how to fix it.
+- **Read the security findings when LazyVM reminds you**, with `Get-LazyVMSecurityFinding`, or in `LazyVM Findings.txt` on the VM's desktop. Each one says how to fix it. Approve the ones you expect, such as a service you installed, with `Approve-LazyVMSecurityFinding`, so the next real change stands out.
 - **Push before you revert.** A revert takes every disk back, the Dev Drive included.
 - **Take a checkpoint before risky work.** Tooling changes get one automatically; take your own before anything else risky.
 
