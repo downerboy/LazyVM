@@ -53,8 +53,8 @@
             Function = 'Convert-LegacyCredential'
             Area     = 'Migration'
             Caller   = 'Invoke-InstallationMigration'
-            Note     = 're-encrypts each credential, reads it back, then replaces the file; deletes the key once all are done'
-            Includes = @('Get-LegacyCredentialKeyPath', 'Convert-LegacyCredentialFile')
+            Note     = 'decrypts every credential first, so a wrong key changes nothing; then re-encrypts each, reads it back and replaces the file; deletes the key once all are done'
+            Includes = @('Get-LegacyCredentialKeyPath', 'Read-LegacyCredentialFile', 'Save-ConvertedCredential')
             Reads    = @(@{ Label = 'old key and credentials'; Kind = 'file'; Store = '<old>'; Items = @('Shared\Credentials\.lazyvm.key', '<VM>\Credentials\*.cred') })
             Writes   = @(@{ Label = 'credentials for you only'; Kind = 'file'; Store = '<old>\<VM>\Credentials\'; Items = @('*.cred  (DPAPI)', 'key deleted') })
         }
