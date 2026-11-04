@@ -209,7 +209,7 @@ $script:SecurityFindingOpener = {
     if ((Get-ItemPropertyValue -Path $userKey -Name 'SecurityFindingsOpened' -ErrorAction SilentlyContinue) -eq $alert) { return }
     if (-not (Test-Path -LiteralPath $userKey)) { New-Item -Path $userKey -Force | Out-Null }
     Set-ItemProperty -Path $userKey -Name 'SecurityFindingsOpened' -Value $alert
-    Start-Process -FilePath ($env:SystemRoot + '\System32\notepad.exe') -ArgumentList ([string][char]34 + $file + [char]34)
+    Start-Process -FilePath ([System.IO.Path]::Combine([Environment]::GetFolderPath('System'), 'notepad.exe')) -ArgumentList ([string][char]34 + $file + [char]34)
 }
 
 function Get-SecurityFindingOpenerArgument {

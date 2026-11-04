@@ -13,9 +13,8 @@ BeforeAll {
     # The guest-side helpers, loaded here as they are into the guest.
     . (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.Helpers.ps1')
 
-    # What Windows sets, for a test runner that is not Windows.
-    if (-not $env:windir) { $env:windir = 'C:\Windows' }
-    if (-not $env:ProgramFiles) { $env:ProgramFiles = 'C:\Program Files' }
+    # The system folders as Windows reports them (Get-GuestSystemFolder), for a test runner that is not Windows.
+    $systemFolders = @{ System = 'C:\Windows\System32'; ProgramFiles = 'C:\Program Files' }
 
     $testVM = InModuleScope $module {
         $vm = [VMContext]::new(@{ VMName = 'Alpha'; GuestSetupDir = 'C:\LazyVM\Setup'; VSInstallMinutes = 90 })
@@ -279,12 +278,13 @@ Describe 'Invoke-GuestDotnetToolUpdate (#293)' {
 
 Describe 'Get-GuestPowerShellEdition (#293)' {
     It 'always has Windows PowerShell, and PowerShell 7 when it is installed' {
+        Mock Get-GuestSystemFolder { $systemFolders["$Name"] }
         Mock Get-Command { [pscustomobject]@{ Source = 'C:\Program Files\PowerShell\7\pwsh.exe' } } -ParameterFilter { $Name -eq 'pwsh' }
 
         $editions = @(Get-GuestPowerShellEdition)
 
         ($editions.Edition -join ',') | Should -Be 'Windows PowerShell,PowerShell 7'
-        $editions[0].Path | Should -BeLike '*\System32\WindowsPowerShell\v1.0\powershell.exe'
+        $editions[0].Path | Should -BeLike 'C:\Windows\System32?WindowsPowerShell?v1.0?powershell.exe'
         $editions[1].Path | Should -Be 'C:\Program Files\PowerShell\7\pwsh.exe'
     }
 
@@ -405,6 +405,7 @@ Describe 'Invoke-GuestGalleryModuleUpdate (#293)' {
         Mock Uninstall-Module { $script:installed = @($script:installed | Where-Object { $_.Version -ne "$RequiredVersion" }) }
         Mock Get-GuestModuleRemovalPending { }
         Mock Set-GuestModuleRemovalPending { }
+        Mock Get-GuestSystemFolder { $systemFolders["$Name"] }
     }
 
     It 'installs the newer version from the Gallery beside the old one, in the scope it was installed in, in its own PowerShell' {

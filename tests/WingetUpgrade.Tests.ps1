@@ -5,18 +5,14 @@
 # here touches a VM.
 
 BeforeDiscovery {
-    # What Windows sets, for a test runner that is not Windows. Set before
-    # discovery, as the test cases below are built from them.
-    $windowsFolders = @{
-        'windir'            = 'C:\Windows'
-        'ProgramData'       = 'C:\ProgramData'
-        'ProgramFiles'      = 'C:\Program Files'
-        'ProgramFiles(x86)' = 'C:\Program Files (x86)'
-        'LOCALAPPDATA'      = 'C:\Users\lazy\AppData\Local'
-        'APPDATA'           = 'C:\Users\lazy\AppData\Roaming'
+    # What Windows sets for a user, for a test runner that is not Windows.
+    # Set before discovery, as the test cases below are built from them.
+    $profileFolders = @{
+        'LOCALAPPDATA' = 'C:\Users\lazy\AppData\Local'
+        'APPDATA'      = 'C:\Users\lazy\AppData\Roaming'
     }
-    foreach ($name in $windowsFolders.Keys) {
-        if (-not [Environment]::GetEnvironmentVariable($name)) { [Environment]::SetEnvironmentVariable($name, $windowsFolders[$name]) }
+    foreach ($name in $profileFolders.Keys) {
+        if (-not [Environment]::GetEnvironmentVariable($name)) { [Environment]::SetEnvironmentVariable($name, $profileFolders[$name]) }
     }
 }
 
@@ -28,6 +24,14 @@ BeforeAll {
 
     # The guest-side helpers, loaded here as they are into the guest.
     . (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.Helpers.ps1')
+
+    # The system folders as Windows reports them (Get-GuestSystemFolder), for a test runner that is not Windows.
+    $systemFolders = @{
+        Windows               = 'C:\Windows'
+        CommonApplicationData = 'C:\ProgramData'
+        ProgramFiles          = 'C:\Program Files'
+        ProgramFilesX86       = 'C:\Program Files (x86)'
+    }
 
     $testVM = InModuleScope $module {
         $vm = [VMContext]::new(@{ VMName = 'Alpha'; GuestSetupDir = 'C:\LazyVM\Setup' })
@@ -108,8 +112,12 @@ Describe 'Test-GuestWingetId (#235)' {
 }
 
 Describe 'Test-GuestProgramFolderUsable (#235)' {
+    BeforeEach {
+        Mock Get-GuestSystemFolder { $systemFolders["$Name"] }
+    }
+
     It 'accepts a program''s own folder: <Path>' -ForEach @(
-        @{ Path = "$env:ProgramFiles\Git" }
+        @{ Path = 'C:\Program Files\Git' }
         @{ Path = "$env:LOCALAPPDATA\Programs\Microsoft VS Code" }
         @{ Path = 'D:\Tools\Git' }
     ) {
@@ -118,16 +126,26 @@ Describe 'Test-GuestProgramFolderUsable (#235)' {
 
     It 'rejects a folder that would match more than the program: <Path>' -ForEach @(
         @{ Path = 'C:' }
-        @{ Path = "$env:ProgramFiles" }
-        @{ Path = "${env:ProgramFiles(x86)}" }
+        @{ Path = 'C:\Program Files' }
+        @{ Path = 'C:\Program Files (x86)' }
         @{ Path = "$env:LOCALAPPDATA" }
         @{ Path = "$env:LOCALAPPDATA\Programs" }
         @{ Path = "$env:APPDATA" }
-        @{ Path = "$env:windir\Installer\{1234}" }
-        @{ Path = "$env:ProgramData\Package Cache\{5678}" }
+        @{ Path = 'C:\Windows\Installer\{1234}' }
+        @{ Path = 'C:\ProgramData\Package Cache\{5678}' }
         @{ Path = '' }
     ) {
         Test-GuestProgramFolderUsable -Path $Path | Should -BeFalse
+    }
+
+    It 'rejects the Program Files Windows reports, whatever $env:ProgramFiles says (#317)' {
+        $saved = $env:ProgramFiles
+        $env:ProgramFiles = 'D:\Elsewhere'
+        try {
+            Test-GuestProgramFolderUsable -Path 'C:\Program Files' | Should -BeFalse
+            Test-GuestProgramFolderUsable -Path 'D:\Elsewhere' | Should -BeTrue
+        }
+        finally { $env:ProgramFiles = $saved }
     }
 }
 
@@ -137,6 +155,7 @@ Describe 'Get-GuestProgramFolder (#235)' {
     }
 
     BeforeEach {
+        Mock Get-GuestSystemFolder { $systemFolders["$Name"] }
         Mock Get-ItemProperty {
             @(
                 [pscustomobject]@{ DisplayName = 'Git'; InstallLocation = 'C:\Program Files\Git\'; DisplayIcon = '' }

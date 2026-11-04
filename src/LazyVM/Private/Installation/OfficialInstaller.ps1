@@ -135,7 +135,7 @@ function Install-OfficialInstallerItem {
             param($url, $publisher, $sha256, $folderName)
             $ErrorActionPreference = 'Stop'
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $folder = Join-Path (Join-Path $env:SystemRoot 'Temp') $folderName
+            $folder = [IO.Path]::Combine((Get-GuestSystemFolder -Name Windows), 'Temp', $folderName)
             New-GuestPrivateFolder -Path $folder
             try {
                 $download = Join-Path $folder 'download'
@@ -194,7 +194,7 @@ function Install-OfficialInstallerItem {
     finally {
         try {
             $null = Invoke-GuestScript -VM $VM -Activity "tidying up after $label" -TimeoutMinutes 2 -ArgumentList @($folderName) -ScriptBlock {
-                param($folderName) Remove-Item -LiteralPath (Join-Path (Join-Path $env:SystemRoot 'Temp') $folderName) -Recurse -Force -ErrorAction SilentlyContinue
+                param($folderName) Remove-Item -LiteralPath ([IO.Path]::Combine((Get-GuestSystemFolder -Name Windows), 'Temp', $folderName)) -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
         catch { Write-LogEntry "  could not remove Windows\Temp\$folderName in the guest: $($_.Exception.Message)" 'INFO' }

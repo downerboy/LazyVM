@@ -245,7 +245,7 @@ function Restore-GuestEnvironment {
             }
         }
 
-        $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
+        $hostsFile = Get-GuestHostsFile
         $present = @(Get-Content $hostsFile -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim() })
         $missing = @($record.Hosts | Where-Object { $_ -and $present -notcontains $_ })
         if ($missing.Count -gt 0) {
@@ -311,7 +311,7 @@ function Restore-GuestEnvironmentFromArchive {
 
         $hostsSource = Join-Path $work 'hosts'
         if (Test-Path $hostsSource) {
-            $hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
+            $hostsFile = Get-GuestHostsFile
             Copy-Item $hostsFile "$hostsFile.lazyvm-original" -Force -ErrorAction SilentlyContinue
             Copy-Item $hostsSource $hostsFile -Force
             $notes += New-GuestNote -Level OK -Text 'restored the hosts file (the new one kept as hosts.lazyvm-original)'
