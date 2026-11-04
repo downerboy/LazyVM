@@ -113,12 +113,18 @@ function Update-GuestGalleryModule {
       in, and only when the Gallery has a newer version, which goes in beside
       the old one; the version it made old is removed, so the two newest are
       kept (Invoke-GuestGalleryModuleUpdate). PowerShellGet and PackageManagement
-      are left alone (Get-GuestGalleryModule).
+      are left alone (Get-GuestGalleryModule). Removals recorded for modules
+      no longer installed are forgotten, in the editions listed only, so an
+      edition that could not be asked keeps its own (#309).
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     Update-GuestSource -VM $VM -Label 'PowerShell Gallery updates' -EmptyMessage 'no modules from the PowerShell Gallery in the guest' `
-        -List { Get-GuestGalleryModule } `
+        -List {
+        $listing = Get-GuestGalleryModule
+        foreach ($edition in @($listing.Editions)) { Remove-GuestModuleRemovalStale -Edition $edition -Label @($listing.Items.Label) }
+        $listing
+    } `
         -Update { param($module) Invoke-GuestGalleryModuleUpdate -Module $module }
 }
 
