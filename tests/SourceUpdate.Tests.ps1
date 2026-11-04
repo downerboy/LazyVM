@@ -173,6 +173,21 @@ Describe 'Update-GuestDotnetTool and Update-GuestGalleryModule (#293)' {
             $Label -eq 'PowerShell Gallery updates' -and "$List" -match 'Get-GuestGalleryModule' -and "$Update" -match 'Invoke-GuestGalleryModuleUpdate'
         }
     }
+
+    It 'forgets, while listing, the removals recorded for modules no longer installed, in the editions listed only (#309)' {
+        Mock -ModuleName $module Update-GuestSource { $List }
+        $list = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Update-GuestGalleryModule -VM $VM }
+        $listing = [pscustomobject]@{ Items = @((New-SourceItem -Label 'posh-git (PowerShell 7)' -Version '1.1.0')); Notes = @(); Editions = @('PowerShell 7') }
+        Mock Get-GuestGalleryModule { $listing }
+        Mock Remove-GuestModuleRemovalStale { }
+
+        # As the guest runs it: from its text, with the guest helpers loaded.
+        $result = & ([scriptblock]::Create("$list"))
+
+        $result | Should -Be $listing
+        Should -Invoke Remove-GuestModuleRemovalStale -Times 1 -Exactly
+        Should -Invoke Remove-GuestModuleRemovalStale -Times 1 -Exactly -ParameterFilter { $Edition -eq 'PowerShell 7' -and (@($Label) -join ',') -eq 'posh-git (PowerShell 7)' }
+    }
 }
 
 Describe 'ConvertFrom-GuestDotnetToolList (#293)' {
@@ -314,6 +329,15 @@ Describe 'Get-GuestGalleryModule (#293)' {
         Mock Invoke-GuestPowerShellEdition { [pscustomobject]@{ Name = 'Pester'; Version = '5.6.0' }; [pscustomobject]@{ Name = 'posh-git'; Version = '1.1.0' } } -ParameterFilter { $Path -like '*pwsh.exe' }
     }
 
+    It 'names the editions it listed, and only reads (#309)' {
+        Mock Remove-GuestModuleRemovalStale { }
+
+        $listing = Get-GuestGalleryModule
+
+        ($listing.Editions -join ',') | Should -Be 'Windows PowerShell,PowerShell 7'
+        Should -Invoke Remove-GuestModuleRemovalStale -Times 0
+    }
+
     It 'lists the Gallery modules of each PowerShell edition in the guest, each labelled with its edition and kept with the PowerShell it updates in' {
         $listing = Get-GuestGalleryModule
 
@@ -346,6 +370,7 @@ Describe 'Get-GuestGalleryModule (#293)' {
         $listing = Get-GuestGalleryModule
 
         ($listing.Items.Label -join ',') | Should -Be 'Pester (PowerShell 7),posh-git (PowerShell 7)'
+        ($listing.Editions -join ',') | Should -Be 'PowerShell 7'
         @($listing.Notes).Count | Should -Be 1
         $listing.Notes[0].Level | Should -Be 'WARN'
         $listing.Notes[0].Text | Should -Be 'could not list the modules of Windows PowerShell: PowerShellGet is broken'
@@ -406,6 +431,15 @@ Describe 'Invoke-GuestGalleryModuleUpdate (#293)' {
 
         $outcome.Version | Should -Be '1.1.0'
         Should -Invoke Install-Module -Times 0
+    }
+
+    It 'removes the version made old, not the newest one''s second copy, when the newest is installed both for all users and for the current user (#309)' {
+        $script:installed = @((New-InstalledModule -Version '1.1.0'), (New-InstalledModule -Version '1.1.0' -Location 'U:\Documents\PowerShell\Modules\posh-git'), (New-InstalledModule -Version '1.0.0'))
+
+        $null = Invoke-GuestGalleryModuleUpdate -Module $posh
+
+        Should -Invoke Uninstall-Module -Times 1 -Exactly
+        Should -Invoke Uninstall-Module -Times 1 -Exactly -ParameterFilter { "$RequiredVersion" -eq '1.0.0' }
     }
 
     It 'installs nothing, and removes nothing, when the Gallery has no newer version' {
@@ -478,6 +512,34 @@ Describe 'Get-GuestModuleRemovalPending and Set-GuestModuleRemovalPending (#293)
         Set-GuestModuleRemovalPending -Label $label -Version @()
 
         Should -Invoke Remove-ItemProperty -Times 1 -Exactly -ParameterFilter { $Name -eq $label }
+    }
+}
+
+Describe 'Remove-GuestModuleRemovalStale (#309)' {
+    BeforeEach {
+        Mock Get-Item { [pscustomobject]@{ Property = @('posh-git (PowerShell 7)', 'gone (PowerShell 7)', 'gone (Windows PowerShell)') } }
+        Mock Set-GuestModuleRemovalPending { }
+    }
+
+    It 'forgets the removals recorded for the edition''s modules that are no longer installed, and only those' {
+        Remove-GuestModuleRemovalStale -Edition 'PowerShell 7' -Label @('posh-git (PowerShell 7)', 'Pester (PowerShell 7)')
+
+        Should -Invoke Set-GuestModuleRemovalPending -Times 1 -Exactly
+        Should -Invoke Set-GuestModuleRemovalPending -Times 1 -Exactly -ParameterFilter { $Label -eq 'gone (PowerShell 7)' }
+    }
+
+    It 'forgets every removal recorded for an edition with no Gallery modules left' {
+        Remove-GuestModuleRemovalStale -Edition 'Windows PowerShell' -Label @()
+
+        Should -Invoke Set-GuestModuleRemovalPending -Times 1 -Exactly -ParameterFilter { $Label -eq 'gone (Windows PowerShell)' }
+    }
+
+    It 'does nothing when no removal is recorded' {
+        Mock Get-Item { }
+
+        Remove-GuestModuleRemovalStale -Edition 'PowerShell 7' -Label @()
+
+        Should -Invoke Set-GuestModuleRemovalPending -Times 0
     }
 }
 
