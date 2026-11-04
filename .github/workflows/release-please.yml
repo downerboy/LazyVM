@@ -72,6 +72,8 @@ jobs:
     permissions:
       # To edit, upload to and publish the draft release.
       contents: write
+      # To open an issue when the release is left as a draft.
+      issues: write
     defaults:
       run:
         shell: pwsh
@@ -147,3 +149,15 @@ jobs:
 
           # Publishing tags the commit and makes the release immutable.
           gh release edit $env:TAG --draft=false
+
+      # A failed run only shows as a red cross in Actions, and the release
+      # stays a draft that nobody sees (#314), so it gets an issue.
+      - name: Open an issue when the release is left as a draft
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $body = "The release workflow failed, so $env:TAG is still a draft: $env:RUN_URL`n`nFix the cause, then run the Release Please workflow by hand with the tag $env:TAG to build, attach and publish it."
+          gh issue create --repo $env:GITHUB_REPOSITORY --title "$env:TAG was not published" --body $body
