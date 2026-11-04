@@ -323,7 +323,19 @@ function Restore-GuestEnvironmentFromArchive {
 # ── Visual Studio ────────────────────────────────────────────────────────────
 
 function Restore-GuestVisualStudioState {
-    <# NuGet.Config, .gitconfig and the snippets and templates; the settings themselves come from Restore-GuestVisualStudioSetting. #>
+    <#
+      NuGet.Config, .gitconfig and the snippets and templates; the settings
+      themselves come from Restore-GuestVisualStudioSetting. They go in the
+      guest account's own profile and Documents, which that account's
+      limited processes can change, so they are copied by a guest task under
+      that limited token (Data\Guest.VisualStudioUserFiles.ps1), never by
+      the administrator: a junction or link planted there cannot lead an
+      administrator's write anywhere (#310). The script refuses, as a WARN,
+      any file whose way there goes through one, and copies the rest. The
+      task needs the account signed in, so it waits for automatic sign-in
+      as the settings import does, and skips the files with a WARN when no
+      one signs in.
+    #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][CaptureManifest]$Manifest
@@ -343,45 +355,45 @@ function Restore-GuestVisualStudioState {
         return
     }
 
+    # Each captured file goes in the task's own folder, which the guest
+    # account can read but not change, under a fixed name.
     $files = [RecordReader]::Field($Manifest.VisualStudio, 'Files')
-    $stagingFolder = Get-GuestStagingFolder -VM $VM
-    $pushed = @{}
-    foreach ($key in 'NuGetConfig', 'GitConfig', 'UserItems') {
-        $hostPath = [RecordReader]::Text($files, $key)
+    $inputFile = @{ 'VisualStudioUserFiles.ps1' = (Join-Path -Path $script:DataDir -ChildPath 'Guest.VisualStudioUserFiles.ps1') }
+    $sent = @{}
+    foreach ($file in @(
+            @{ Key = 'NuGetConfig'; Name = 'NuGet.Config' }
+            @{ Key = 'GitConfig'; Name = 'gitconfig' }
+            @{ Key = 'UserItems'; Name = 'UserItems.zip' })) {
+        $hostPath = [RecordReader]::Text($files, $file.Key)
         if (-not $hostPath -or -not (Test-Path -LiteralPath $hostPath)) { continue }
-        $guestPath = Join-Path $stagingFolder ([IO.Path]::GetFileName($hostPath))
-        try {
-            Copy-ToGuest -VM $VM -HostPath $hostPath -GuestPath $guestPath
-            $pushed[$key] = $guestPath
-        }
-        catch { Write-LogEntry "  could not send $key to the guest: $($_.Exception.Message)" 'WARN' }
+        $inputFile[$file.Name] = $hostPath
+        $sent[$file.Key] = $file.Name
+    }
+    if ($sent.Count -eq 0) {
+        Write-LogEntry '  no Visual Studio files captured - skipping' 'INFO'
+        return
+    }
+    if (-not (Wait-GuestSignedIn -VM $VM -TimeoutMinutes $script:VisualStudioSignInWaitMinutes)) {
+        Write-LogEntry "  '$($VM.Runtime.GuestAdminUser)' is not signed in - Visual Studio files not restored" 'WARN'
+        return
     }
 
-    $notes = Invoke-GuestScript -VM $VM -Activity 'Visual Studio restore' -TimeoutMinutes 30 -ArgumentList @(
-        $pushed['NuGetConfig'], $pushed['GitConfig'], $pushed['UserItems'], "$($vs.ProductLine)", $stagingFolder
-    ) -ScriptBlock {
-        param($nuget, $gitconfig, $userItems, $productLine, $stagingFolder)
-        $notes = @()
-        if ($nuget) {
-            $destination = Join-Path $env:APPDATA 'NuGet\NuGet.Config'
-            New-GuestFolder -Path (Split-Path $destination -Parent)
-            Copy-Item $nuget $destination -Force
-            $notes += New-GuestNote -Level OK -Text 'restored NuGet.Config'
-        }
-        if ($gitconfig) {
-            Copy-Item $gitconfig (Join-Path $env:USERPROFILE '.gitconfig') -Force
-            $notes += New-GuestNote -Level OK -Text 'restored .gitconfig'
-        }
-        if ($userItems) {
-            $destination = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "Visual Studio $productLine"
-            New-GuestFolder -Path $destination
-            $temp = Join-Path $stagingFolder "vs-useritems-$([guid]::NewGuid().ToString('N'))"
-            Expand-GuestZip -Archive $userItems -Destination $temp
-            Copy-Item (Join-Path $temp '*') $destination -Recurse -Force
-            Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
-            $notes += New-GuestNote -Level OK -Text 'restored snippets and templates'
-        }
-        return $notes
+    $report = Invoke-GuestTask -VM $VM -TaskName "${script:TaskPrefix}VSUserFiles" -Activity 'Visual Studio files restore' -TimeoutMinutes 15 -AsGuestUser `
+        -InputFile $inputFile -ArgumentList @("$($vs.ProductLine)", "$($sent['NuGetConfig'])", "$($sent['GitConfig'])", "$($sent['UserItems'])") -Work {
+        param($productLine, $nuget, $gitconfig, $userItems)
+        $given = @{ ProductLine = $productLine }
+        if ($nuget) { $given.NuGetConfig = Join-Path $TaskFolder $nuget }
+        if ($gitconfig) { $given.GitConfig = Join-Path $TaskFolder $gitconfig }
+        if ($userItems) { $given.UserItems = Join-Path $TaskFolder $userItems }
+        $notes = & (Join-Path $TaskFolder 'VisualStudioUserFiles.ps1') -ProfileRoot $env:USERPROFILE -AppData $env:APPDATA -Documents ([Environment]::GetFolderPath('MyDocuments')) @given
+        # The task's result is one line of text, so the notes go back as JSON.
+        return (ConvertTo-Json -InputObject @($notes) -Compress)
+    }
+    # What a task under the limited token reports is only that account's word.
+    try { $notes = @(ConvertFrom-Json -InputObject $report) }
+    catch {
+        Write-LogEntry "  could not read what the Visual Studio files restore reported: $($_.Exception.Message)" 'WARN'
+        return
     }
     Write-GuestNote -Notes $notes
 }

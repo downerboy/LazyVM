@@ -1,15 +1,18 @@
 # SecurityScan.ps1 - The nightly security scan of each guest, and where its findings go (#290).
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# The last step of the nightly maintenance. The collector runs in the guest
-# as SYSTEM ($script:GuestSecurityScanWork): a Defender quick scan, then the
-# facts each check needs, as JSON. The host turns them into findings
-# (SecurityFinding.ps1), logs each one, writes them to LazyVM Findings.txt on
-# the guest's desktop, and keeps them in <VM>\Logs\SecurityFindings.json.
-# When the scan found something new that is High or Medium, the file opens
-# in Notepad the next time someone signs in, connects or unlocks, once for
-# that scan for each user. The scan only reports: it changes nothing in the
-# guest but that file and what opens it.
+# The last step of the nightly maintenance. Two collectors run in the guest
+# as SYSTEM: $script:GuestSecurityScanWork, a Defender quick scan, then the
+# facts each settings check needs, and $script:GuestPersistenceWork, the
+# places a program can start itself again. The host turns them into findings
+# (SecurityFinding.ps1, Persistence.ps1), leaves out the approved ones
+# (SecurityBaseline.ps1), logs each one, writes them to LazyVM Findings.txt
+# on the guest's desktop, and keeps them in <VM>\Logs\SecurityFindings.json.
+# When the scan found something new of a severity that alerts
+# (GuestSecurityScanAlertSeverity, every one by default), the file opens in
+# Notepad the next time someone signs in, connects or unlocks, once for that
+# scan for each user. The scan only reports: it changes nothing in the guest
+# but that file and what opens it.
 
 # The collector's time budget: the quick scan gets most of it.
 $script:SecurityScanTimeoutMinutes = 20
@@ -30,9 +33,11 @@ $script:GuestSecurityFindingsSessionStates = @(1, 3, 8)
 
 function Invoke-GuestSecurityScan {
     <#
-      The nightly scan: collects the guest's facts, turns them into findings,
-      marks each New, Still open or Resolved against the last scan, logs
-      them, puts them on the guest's desktop, and only then keeps them, so a
+      The nightly scan: collects the guest's facts, turns them into findings
+      (the persistence ones against the baseline, which it records for any
+      area that has none yet), leaves out the approved ones, marks each New,
+      Still open or Resolved against the last scan, logs them, puts them on
+      the guest's desktop, and only then keeps them and the baseline, so a
       scan whose findings did not reach the guest counts as not done and its
       new findings are still new the next night. Skipped when
       GuestSecurityScan is off.
@@ -44,8 +49,11 @@ function Invoke-GuestSecurityScan {
         return
     }
 
-    Write-LogEntry 'Security scan: Defender quick scan, then the security settings...' 'INFO'
+    Write-LogEntry 'Security scan: Defender quick scan, then the security settings and the places programs start from...' 'INFO'
     $facts = Get-GuestSecurityFact -VM $VM
+    # Registered before the persistence is read, so the opener's task is as LazyVM leaves it.
+    Install-GuestSecurityFindingOpener -VM $VM
+    $persistence = Get-GuestPersistenceItem -VM $VM
     $scannedAt = [datetimeoffset]::Parse([string]$facts.CollectedAt, [cultureinfo]::InvariantCulture).ToLocalTime()
     $previous = Read-SecurityFindingRecord -VM $VM
     $since = $null
@@ -54,14 +62,41 @@ function Invoke-GuestSecurityScan {
         $since = $previous.ScannedAt
         $previousFindings = $previous.Findings
     }
-    $current = @(ConvertTo-SecurityFinding -Check $facts.Checks -Since $since -ScannedAt $scannedAt)
-    $findings = @(Compare-SecurityFinding -Current $current -Previous $previousFindings -ScannedAt $scannedAt -Unchecked (Get-UncheckedSecurityArea -Check $facts.Checks))
+    $baseline = Read-SecurityBaseline -VM $VM
+    Add-MissingPersistenceBaseline -Baseline $baseline.Persistence -Item $persistence -RecordedAt $scannedAt
 
-    Write-SecurityFindingLog -Finding $findings
-    Install-GuestSecurityFindingOpener -VM $VM
-    $alertScanId = if (Test-SecurityFindingAlert -Finding $findings) { $scannedAt.ToString($script:StampFormat) } else { '' }
+    $found = @(ConvertTo-SecurityFinding -Check $facts.Checks -Since $since -ScannedAt $scannedAt) + @(ConvertTo-PersistenceFinding -Item $persistence -Baseline $baseline.Persistence)
+    $unchecked = @(Get-UncheckedSecurityArea -Check $facts.Checks) + @(Get-UncheckedSecurityArea -Check $persistence -Area @($script:PersistenceCheck.Keys))
+    $reported = @(Select-UnapprovedSecurityFinding -Finding $found -Approval $baseline.Approvals)
+    $earlier = @(Select-UnapprovedSecurityFinding -Finding $previousFindings -Approval $baseline.Approvals)
+    $findings = @(Compare-SecurityFinding -Current $reported -Previous $earlier -ScannedAt $scannedAt -Unchecked $unchecked)
+
+    $alertSeverity = @($VM.Settings.GuestSecurityScanAlertSeverity)
+    Write-SecurityFindingLog -Finding $findings -AlertSeverity $alertSeverity
+    $approvedCount = $found.Count - $reported.Count
+    if ($approvedCount -gt 0) {
+        Write-LogEntry "Security scan: $approvedCount approved finding(s) not reported. List them with: Get-LazyVMSecurityFinding -Name $($VM.Name) -Approved" 'INFO'
+    }
+    $alertScanId = if (Test-SecurityFindingAlert -Finding $findings -Severity $alertSeverity) { $scannedAt.ToString($script:StampFormat) } else { '' }
     Publish-GuestSecurityFinding -VM $VM -Text (Format-SecurityFindingReport -Finding $findings -VMName $VM.Name -ScannedAt $scannedAt) -AlertScanId $alertScanId
     Save-SecurityFindingRecord -VM $VM -ScannedAt $scannedAt -Finding $findings
+    Save-ScannedSecurityBaseline -VM $VM -Persistence $baseline.Persistence -FoundId @($found | ForEach-Object { $_.Id }) -Unchecked $unchecked
+}
+
+function Get-GuestPersistenceItem {
+    <#
+      Tonight's persistence items by area, or $null when the collector could
+      not run, which is logged and leaves every persistence finding open, as
+      for an area the guest could not read.
+    #>
+    [OutputType([pscustomobject])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    try { return (Get-GuestPersistenceFact -VM $VM).Items }
+    catch {
+        Write-LogError 'Security scan: the places programs start from could not be read (non-fatal); their findings stay as they were' $_
+        return $null
+    }
 }
 
 function Get-GuestSecurityFact {
@@ -122,13 +157,20 @@ function Save-SecurityFindingRecord {
 }
 
 function Write-SecurityFindingLog {
-    <# Logs how many findings the scan has, then each finding one field to a line: new High and Medium ones as warnings, resolved ones as done. #>
-    param([AllowEmptyCollection()][SecurityFinding[]]$Finding = @())
+    <#
+      Logs how many findings the scan has, then each finding one field to a
+      line: new ones of a severity in $AlertSeverity as warnings, resolved
+      ones as done, every one whatever its severity.
+    #>
+    param(
+        [AllowEmptyCollection()][SecurityFinding[]]$Finding = @(),
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$AlertSeverity
+    )
 
     $summary = if ($Finding.Count -eq 0) { 'no findings' } else { Format-SecurityFindingCount -Finding $Finding }
-    Write-LogEntry "Security scan: $summary" $(if (Test-SecurityFindingAlert -Finding $Finding) { 'WARN' } else { 'OK' })
+    Write-LogEntry "Security scan: $summary" $(if (Test-SecurityFindingAlert -Finding $Finding -Severity $AlertSeverity) { 'WARN' } else { 'OK' })
     for ($i = 0; $i -lt $Finding.Count; $i++) {
-        $level = if ($Finding[$i].Status -eq 'Resolved') { 'OK' } elseif (Test-SecurityFindingAlert -Finding @($Finding[$i])) { 'WARN' } else { 'INFO' }
+        $level = if ($Finding[$i].Status -eq 'Resolved') { 'OK' } elseif (Test-SecurityFindingAlert -Finding @($Finding[$i]) -Severity $AlertSeverity) { 'WARN' } else { 'INFO' }
         Write-LogList -Heading "  Security finding $($i + 1) of $($Finding.Count)" -Items (Format-SecurityFinding -Finding $Finding[$i]) -Level $level
     }
 }
@@ -193,15 +235,17 @@ function Publish-GuestSecurityFinding {
 function Write-SecurityFindingReminder {
     <#
       Reminds, in one line with the command to see them, when the VM's last
-      scan has open High or Medium findings. Never throws: a reminder must
-      not stop the command it runs in.
+      scan has open findings, not approved since, of a severity that alerts
+      (GuestSecurityScanAlertSeverity). Never throws: a reminder must not
+      stop the command it runs in.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     try {
         $record = Read-SecurityFindingRecord -VM $VM
         if (-not $record) { return }
-        $message = Get-SecurityFindingReminderMessage -Finding $record.Findings -VMName $VM.Name
+        $open = @(Select-UnapprovedSecurityFinding -Finding $record.Findings -Approval (Read-SecurityBaseline -VM $VM).Approvals)
+        $message = Get-SecurityFindingReminderMessage -Finding $open -VMName $VM.Name -Severity @($VM.Settings.GuestSecurityScanAlertSeverity)
     }
     catch {
         Write-LogError "Could not check the security findings of $($VM.Name) (non-fatal)" $_
@@ -211,7 +255,7 @@ function Write-SecurityFindingReminder {
 }
 
 function Get-SecurityFindingList {
-    <# Get-LazyVMSecurityFinding: the last scan's findings, each with the VM's name first. Says so when no scan has run yet. #>
+    <# Get-LazyVMSecurityFinding: the last scan's findings, but those approved since, each with the VM's name first. Says so when no scan has run yet. #>
     [OutputType('LazyVM.SecurityFinding')]
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -220,7 +264,7 @@ function Get-SecurityFindingList {
         Write-LogWarning "No security scan has run on $($VM.Name) yet. The nightly maintenance runs one (GuestSecurityScan)."
         return
     }
-    foreach ($finding in $record.Findings) {
+    foreach ($finding in @(Select-UnapprovedSecurityFinding -Finding $record.Findings -Approval (Read-SecurityBaseline -VM $VM).Approvals)) {
         $shown = [ordered]@{ PSTypeName = 'LazyVM.SecurityFinding'; Name = $VM.Name }
         foreach ($property in $finding.PSObject.Properties) { $shown[$property.Name] = $property.Value }
         [pscustomobject]$shown

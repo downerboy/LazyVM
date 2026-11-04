@@ -96,11 +96,14 @@ function ConvertTo-SecurityFinding {
 }
 
 function Get-UncheckedSecurityArea {
-    <# The areas the guest could not read tonight: those the facts $Check have no facts for. #>
+    <# The areas $Area (the settings checks, by default) the guest could not read tonight: those the facts $Check have no facts for. #>
     [OutputType([string[]])]
-    param([Parameter(Mandatory)][object]$Check)
+    param(
+        [Parameter(Mandatory)][AllowNull()][object]$Check,
+        [string[]]$Area = @($script:SecurityCheck.Keys)
+    )
 
-    return @($script:SecurityCheck.Keys | Where-Object { $null -eq [RecordReader]::Field($Check, $_) })
+    return @($Area | Where-Object { $null -eq [RecordReader]::Field($Check, $_) })
 }
 
 function Get-DefenderStatusFinding {
@@ -413,11 +416,18 @@ function Compare-SecurityFinding {
 }
 
 function Test-SecurityFindingAlert {
-    <# Whether the scan found something new that is High or Medium: what opens the findings file at the next sign-in. #>
+    <#
+      Whether the scan found something new of a severity that alerts
+      ($Severity, the setting GuestSecurityScanAlertSeverity): what opens
+      the findings file at the next sign-in.
+    #>
     [OutputType([bool])]
-    param([AllowEmptyCollection()][object[]]$Finding = @())
+    param(
+        [AllowEmptyCollection()][object[]]$Finding = @(),
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Severity
+    )
 
-    return @($Finding | Where-Object { $_.Status -eq 'New' -and $_.Severity -in 'High', 'Medium' }).Count -gt 0
+    return @($Finding | Where-Object { $_.Status -eq 'New' -and $_.Severity -in $Severity }).Count -gt 0
 }
 
 function Format-SecurityFinding {
@@ -489,6 +499,7 @@ function Format-SecurityFindingReport {
     else {
         $lines.Add((Format-SecurityFindingCount -Finding $Finding))
         $lines.Add("On the host, see them with: Get-LazyVMSecurityFinding -Name $VMName")
+        $lines.Add("To stop reporting one you expect, approve it on the host: Approve-LazyVMSecurityFinding -Name $VMName -Id <its Id>")
         for ($i = 0; $i -lt $Finding.Count; $i++) {
             $lines.Add('')
             $lines.Add("Finding $($i + 1) of $($Finding.Count)")
@@ -499,16 +510,23 @@ function Format-SecurityFindingReport {
 }
 
 function Get-SecurityFindingReminderMessage {
-    <# The one-line reminder of the VM's open High and Medium findings, or $null when it has none. #>
+    <#
+      The one-line reminder of the VM's open findings of a severity that
+      alerts ($Severity, the setting GuestSecurityScanAlertSeverity), with
+      how many of each, or $null when it has none.
+    #>
     [OutputType([string])]
     param(
         [AllowEmptyCollection()][object[]]$Finding = @(),
-        [Parameter(Mandatory)][string]$VMName
+        [Parameter(Mandatory)][string]$VMName,
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Severity
     )
 
-    $open = @($Finding | Where-Object { $_.Status -ne 'Resolved' })
-    $high = @($open | Where-Object { $_.Severity -eq 'High' }).Count
-    $medium = @($open | Where-Object { $_.Severity -eq 'Medium' }).Count
-    if ($high + $medium -eq 0) { return $null }
-    return "$($high + $medium) security finding(s) on $VMName need attention ($high High, $medium Medium). See them with: Get-LazyVMSecurityFinding -Name $VMName"
+    $open = @($Finding | Where-Object { $_.Status -ne 'Resolved' -and $_.Severity -in $Severity })
+    if ($open.Count -eq 0) { return $null }
+    $counts = foreach ($level in [SecurityFinding]::Severities) {
+        $count = @($open | Where-Object { $_.Severity -eq $level }).Count
+        if ($count -gt 0) { "$count $level" }
+    }
+    return "$($open.Count) security finding(s) on $VMName need attention ($(@($counts) -join ', ')). See them with: Get-LazyVMSecurityFinding -Name $VMName"
 }

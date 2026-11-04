@@ -755,7 +755,17 @@
     "GuestSecurityScan": {
       "type": "boolean",
       "default": true,
-      "description": "Scan the VM every night, as the last step of maintenance: a Microsoft Defender quick scan, Defender's own protection, and security settings measured against the Microsoft security baseline (firewall, User Account Control, BitLocker, SMB 1, Remote Desktop, the Guest account, LSA protection, Secure Boot, virtualization-based security, AutoRun, paused Windows updates). It only reports: findings go to the VM's log, to Logs\\SecurityFindings.json, to LazyVM Findings.txt on the VM's desktop, which opens at the next sign-in, connect or unlock when something new is High or Medium, and to Get-LazyVMSecurityFinding. Set to false to leave the VM unscanned; the findings file and the task that opens it stay in the VM as they are."
+      "description": "Scan the VM every night, as the last step of maintenance: a Microsoft Defender quick scan, Defender's own protection, security settings measured against the Microsoft security baseline (firewall, User Account Control, BitLocker, SMB 1, Remote Desktop, the Guest account, LSA protection, Secure Boot, virtualization-based security, AutoRun, paused Windows updates), and the places a program can start itself again (scheduled tasks, services, Run keys, startup folders, WMI event subscriptions, local users and Administrators) compared with the baseline recorded after the build, kept in Config\\SecurityBaseline.json. It only reports: findings go to the VM's log, to Logs\\SecurityFindings.json, to LazyVM Findings.txt on the VM's desktop, which opens at the next sign-in, connect or unlock when something new is of a severity in GuestSecurityScanAlertSeverity, and to Get-LazyVMSecurityFinding. Approve-LazyVMSecurityFinding stops one you expect being reported. Set to false to leave the VM unscanned; the findings file and the task that opens it stay in the VM as they are."
+    },
+    "GuestSecurityScanAlertSeverity": {
+      "type": "array",
+      "default": ["High", "Medium", "Low", "Info"],
+      "description": "The severities of security finding that alert you: a new one opens LazyVM Findings.txt in the VM at the next sign-in, connect or unlock, and an open one is in the one-line reminder of the first command you run on the VM. Every finding is still logged and written to the file, whatever this says. Every severity by default; for example [\"High\", \"Medium\"] alerts only for those, and [] never alerts.",
+      "items": {
+        "type": "string",
+        "enum": ["High", "Medium", "Low", "Info"]
+      },
+      "uniqueItems": true
     },
     "GuestHideTaskbarSearch": {
       "type": "boolean",

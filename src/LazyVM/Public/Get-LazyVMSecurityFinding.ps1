@@ -16,12 +16,21 @@ function Get-LazyVMSecurityFinding {
     before: New, Still open or Resolved. A resolved finding is listed once,
     by the scan that no longer found it.
 
+    The scan also compares the places a program can start itself again
+    (scheduled tasks, services, Run keys, startup folders, WMI event
+    subscriptions, local users and Administrators) with the known-good
+    baseline recorded after the build, and reports each change.
+
     The same findings are in the VM's log and in LazyVM Findings.txt on the
-    VM's desktop. Reads only what the last scan kept; it does not start or
-    scan the VM.
+    VM's desktop. A finding approved with Approve-LazyVMSecurityFinding is
+    left out; -Approved lists the approvals instead. Reads only what the
+    last scan and the approvals kept; it does not start or scan the VM.
 
     .PARAMETER Name
     The VM. May be left out while there is only one.
+
+    .PARAMETER Approved
+    List the approved findings, with when and why each was approved, instead.
 
     .EXAMPLE
     Get-LazyVMSecurityFinding -Name DevBox
@@ -31,20 +40,28 @@ function Get-LazyVMSecurityFinding {
 
     Only the findings that are still open.
 
+    .EXAMPLE
+    Get-LazyVMSecurityFinding -Name DevBox -Approved
+
+    The approved findings.
+
     .OUTPUTS
-    LazyVM.SecurityFinding
+    LazyVM.SecurityFinding, or with -Approved LazyVM.SecurityApproval
     #>
     [CmdletBinding()]
-    [OutputType('LazyVM.SecurityFinding')]
+    [OutputType('LazyVM.SecurityFinding', 'LazyVM.SecurityApproval')]
     param(
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [string]$Name
+        [string]$Name,
+
+        [switch]$Approved
     )
 
     process {
         Invoke-CommandRun -Title 'Security findings' -Name $Name -FailureMessage 'Listing the security findings failed' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
-            Get-SecurityFindingList -VM $VM
+            if ($Approved) { Get-SecurityApprovalList -VM $VM }
+            else { Get-SecurityFindingList -VM $VM }
         }
     }
 }

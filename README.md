@@ -25,7 +25,7 @@ Still needed: a code-signing certificate, and a good deal more.
 - **Keeps the VM's tooling list current.** Every day it records what you have added or removed in the VM, taking a Hyper-V checkpoint first, so any recorded version can be returned to.
 - **Makes the 90-day evaluation a non-event.** It watches the license and rearms Windows while it can. When it can't, it captures your state, rebuilds the VM and puts everything back: databases, logins, Visual Studio settings, certificates, environment and application settings.
 - **Keeps the VM up to date.** Every night it installs Windows updates, upgrades winget packages, asks the Store to update its apps and keeps Sysmon set up, restarting the VM only when nobody is using it.
-- **Checks each VM's security every night.** A Defender quick scan, Defender's own protection, and security settings measured against the Microsoft security baseline. It only reports: each finding says what was found, why it matters and how to fix it, in the log, in `Get-LazyVMSecurityFinding`, and in a file on the VM's desktop that opens at sign-in when something new is serious.
+- **Checks each VM's security every night.** A Defender quick scan, Defender's own protection, security settings measured against the Microsoft security baseline, and the places a program can start itself again, compared with the VM as it was built. It only reports: each finding says what was found, why it matters and how to fix it, in the log, in `Get-LazyVMSecurityFinding`, and in a file on the VM's desktop that opens at sign-in when something new is serious.
 - **Records what you change.** Your environment, firewall rules, scheduled tasks, SQL logins and application settings are recorded in the VM's configuration whenever they change, and the databases are checked and backed up every night.
 - **Keeps your source and files safe across rebuilds.** Source lives on a Dev Drive, and Documents, Desktop, Downloads and `.ssh` on a User disk, whose disks a rebuild never touches.
 - **Runs several VMs on one host**, each with its own tools, disks, schedule and restore points.
@@ -100,7 +100,8 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | `Get-LazyVMSetting`                                         | Every setting as a VM uses it, where the value came from, and what it does.                            |
 | `Set-LazyVMCredential` / `Get-LazyVMCredential`           | The administrator account LazyVM uses inside the VM.                                                   |
 | `Export-LazyVMRecoveryKey`                                  | Writes the VMs' BitLocker recovery passwords to a file you keep offline, such as on a USB drive.       |
-| `Get-LazyVMSecurityFinding`                                 | What the last nightly security scan of the VM found, with how to fix each finding.                     |
+| `Get-LazyVMSecurityFinding`                                 | What the last nightly security scan of the VM found, with how to fix each finding. `-Approved` lists the approved ones. |
+| `Approve-LazyVMSecurityFinding` / `Revoke-LazyVMSecurityFinding` | Stops the nightly scan reporting a finding you expect until it changes, and undoes that.         |
 | `Get-LazyVMLicense`                                         | Evaluation days and rearms left, and what maintenance will do.                                         |
 | `Get-LazyVMTooling`                                         | What is installed in the VM, and what the next maintenance run would record.                           |
 | `Save-LazyVMTooling`                                        | Records tooling changes now, with a checkpoint.                                                        |
