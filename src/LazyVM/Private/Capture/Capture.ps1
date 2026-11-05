@@ -177,7 +177,9 @@ function Save-GuestVisualStudioState {
     <#
       Visual Studio's settings, NuGet.Config, .gitconfig and the snippets and
       templates under Documents. Workloads and extensions are recorded in the
-      tooling list, and reinstalled from it.
+      tooling list, and reinstalled from it. The files are read as the guest
+      account (Save-GuestVisualStudioUserFile); the administrator only
+      finds which .vssettings file is the newest.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -194,63 +196,21 @@ function Save-GuestVisualStudioState {
         return $null
     }
 
-    $info = Invoke-GuestScript -VM $VM -Activity 'Visual Studio capture' -TimeoutMinutes 20 -ArgumentList @(
-        (Get-GuestStagingFolder -VM $VM), $vs.InstanceId, "$($vs.ProductLine)"
-    ) -ScriptBlock {
-        param($stagingFolder, $instanceId, $productLine)
+    $info = Invoke-GuestScript -VM $VM -Activity 'Visual Studio capture' -TimeoutMinutes 5 -ArgumentList @($vs.InstanceId) -ScriptBlock {
+        param($instanceId)
         $ErrorActionPreference = 'Stop'
-        $out = [ordered]@{ Settings = $null; SettingsMarker = $null; NuGetConfig = $null; GitConfig = $null; UserItems = $null; Notes = @() }
-
-        $out.Settings = Get-GuestVisualStudioSettingsFile -InstanceId $instanceId
-        $out.SettingsMarker = Get-GuestVisualStudioSettingMarker -InstanceId $instanceId
-        if (-not $out.Settings) { $out.Notes += New-GuestNote -Level WARN -Text 'no .vssettings backup found (open and close Visual Studio once to create one)' }
-
-        $nuget = Join-Path $env:APPDATA 'NuGet\NuGet.Config'
-        if (Test-Path $nuget) { $out.NuGetConfig = $nuget }
-        $gitconfig = Join-Path $env:USERPROFILE '.gitconfig'
-        if (Test-Path $gitconfig) { $out.GitConfig = $gitconfig }
-
-        $userItems = Join-Path ([Environment]::GetFolderPath('MyDocuments')) "Visual Studio $productLine"
-        if (Test-Path $userItems) {
-            $staging = Join-Path $stagingFolder 'vs-useritems'
-            Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
-            New-GuestFolder -Path $staging
-            foreach ($name in 'Code Snippets', 'Templates', 'Settings') {
-                $source = Join-Path $userItems $name
-                if (Test-Path $source) { Copy-Item -Path $source -Destination $staging -Recurse -Force -ErrorAction SilentlyContinue }
-            }
-            if (@(Get-ChildItem $staging -Recurse -File -ErrorAction SilentlyContinue).Count -gt 0) {
-                $out.UserItems = Join-Path $stagingFolder 'vs-useritems.zip'
-                New-GuestZip -Source $staging -Destination $out.UserItems
-            }
-            Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+        [pscustomobject]@{
+            SettingsFile   = Get-GuestVisualStudioSettingsFile -InstanceId $instanceId
+            SettingsMarker = Get-GuestVisualStudioSettingMarker -InstanceId $instanceId
         }
-        return [pscustomobject]$out
     }
+    if (-not $info.SettingsFile) { Write-LogEntry '  no .vssettings backup found (open and close Visual Studio once to create one)' 'WARN' }
 
     $captured = [ordered]@{
         DisplayName = $vs.DisplayName
         Version     = $vs.Version
         ProductLine = "$($vs.ProductLine)"
-        Files       = [ordered]@{}
-    }
-    $vsDir = Join-Path $CaptureDir 'vs'
-    $pulls = @(
-        [pscustomobject]@{ Guest = $info.Settings; Name = 'VisualStudio.vssettings'; Key = 'Settings' }
-        [pscustomobject]@{ Guest = $info.NuGetConfig; Name = 'NuGet.Config'; Key = 'NuGetConfig' }
-        [pscustomobject]@{ Guest = $info.GitConfig; Name = 'gitconfig'; Key = 'GitConfig' }
-        [pscustomobject]@{ Guest = $info.UserItems; Name = 'vs-useritems.zip'; Key = 'UserItems' }
-    )
-    foreach ($pull in @($pulls | Where-Object { $_.Guest })) {
-        $destination = Join-Path $vsDir $pull.Name
-        try {
-            Copy-FromGuest -VM $VM -GuestPath $pull.Guest -HostPath $destination
-            $captured.Files[$pull.Key] = $destination
-            Write-LogEntry "  $($pull.Name)" 'OK'
-        }
-        catch {
-            Write-LogEntry "  could not retrieve $($pull.Name): $($_.Exception.Message)" 'WARN'
-        }
+        Files       = Save-GuestVisualStudioUserFile -VM $VM -ProductLine "$($vs.ProductLine)" -SettingsFile "$($info.SettingsFile)" -Folder (Join-Path $CaptureDir 'vs')
     }
 
     # The build's settings step applies VSSettingsBackup, so the captured
@@ -277,8 +237,88 @@ function Save-GuestVisualStudioState {
     }
 
     Write-LogEntry "  Visual Studio: $($vs.DisplayName)" 'OK'
-    Write-GuestNote -Notes $info.Notes
     return [pscustomobject]$captured
+}
+
+# What Save-GuestVisualStudioUserFile copies back, by the name the guest
+# script (Data\Guest.VisualStudioUserFiles.ps1) gives each in its Output
+# folder, which is also its name in the capture.
+$script:VisualStudioUserFile = @(
+    [pscustomobject]@{ Key = 'Settings'; Name = 'VisualStudio.vssettings' }
+    [pscustomobject]@{ Key = 'NuGetConfig'; Name = 'NuGet.Config' }
+    [pscustomobject]@{ Key = 'GitConfig'; Name = 'gitconfig' }
+    [pscustomobject]@{ Key = 'UserItems'; Name = 'vs-useritems.zip' }
+)
+
+function Save-GuestVisualStudioUserFile {
+    <#
+      Copies the Visual Studio files in the guest account's profile into
+      $Folder, and returns where each went, by key
+      ($script:VisualStudioUserFile). The account's limited processes can
+      change those places, and the administrator's rights would follow a
+      junction or link planted there to files only an administrator may
+      read, which the next restore would put in the profile (#330). So a
+      guest task under that limited token reads them
+      (Data\Guest.VisualStudioUserFiles.ps1), never through a link, and
+      writes them in its Output folder; the administrator reads one there
+      only once neither the folder nor the file is a link
+      (Get-GuestTaskOutputFile), and only the files it knows of that the
+      task said it wrote. The task needs the account signed in, so it waits
+      for automatic sign-in as the restore does. Forgiving: no one signed
+      in, the task failing, and each file not copied are a WARN, and the
+      rest carry on.
+    #>
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$ProductLine,
+        [AllowEmptyString()][string]$SettingsFile,
+        [Parameter(Mandatory)][string]$Folder
+    )
+
+    $copied = [ordered]@{}
+    if (-not (Wait-GuestSignedIn -VM $VM -TimeoutMinutes $script:VisualStudioSignInWaitMinutes)) {
+        Write-LogEntry "  '$($VM.Runtime.GuestAdminUser)' is not signed in - Visual Studio files not captured" 'WARN'
+        return $copied
+    }
+
+    $taskName = "${script:TaskPrefix}VSUserFilesCapture"
+    try {
+        $report = Invoke-GuestTask -VM $VM -TaskName $taskName -Activity 'Visual Studio files capture' -TimeoutMinutes 15 -AsGuestUser `
+            -InputFile @{ 'VisualStudioUserFiles.ps1' = (Join-Path -Path $script:DataDir -ChildPath 'Guest.VisualStudioUserFiles.ps1') } `
+            -ArgumentList @($ProductLine, $SettingsFile) -Work {
+            param($productLine, $settingsFile)
+            $result = & (Join-Path $TaskFolder 'VisualStudioUserFiles.ps1') -ProfileRoot $env:USERPROFILE -AppData $env:APPDATA `
+                -Documents ([Environment]::GetFolderPath('MyDocuments')) -ProductLine $productLine -SettingsFile $settingsFile -OutputFolder $TaskOutput
+            # The task's result is one line of text, so it goes back as JSON.
+            return (ConvertTo-Json -InputObject $result -Compress -Depth 4)
+        }
+        # What a task under the limited token reports is only that account's word.
+        $reported = ConvertFrom-Json -InputObject $report
+        $notes = @([RecordReader]::Field($reported, 'Notes'))
+        $written = [RecordReader]::Strings($reported, 'Files')
+    }
+    catch {
+        Write-LogEntry "  could not capture the Visual Studio files: $($_.Exception.Message)" 'WARN'
+        return $copied
+    }
+    Write-GuestNote -Notes $notes
+
+    foreach ($file in @($script:VisualStudioUserFile | Where-Object { $written -contains $_.Name })) {
+        $destination = Join-Path $Folder $file.Name
+        try {
+            $guestPath = Invoke-GuestScript -VM $VM -Activity "checking $($file.Name)" -TimeoutMinutes 2 -ArgumentList @($taskName, $file.Name) -ScriptBlock {
+                param($taskName, $name) Get-GuestTaskOutputFile -TaskName $taskName -Name $name
+            }
+            Copy-FromGuest -VM $VM -GuestPath $guestPath -HostPath $destination
+            $copied[$file.Key] = $destination
+            Write-LogEntry "  $($file.Name)" 'OK'
+        }
+        catch {
+            Write-LogEntry "  could not retrieve $($file.Name): $($_.Exception.Message)" 'WARN'
+        }
+    }
+    return $copied
 }
 
 # ── SQL Server ───────────────────────────────────────────────────────────────

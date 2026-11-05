@@ -182,3 +182,331 @@ Describe 'Save-GuestSqlState (#180)' {
         @($result.Databases).Count | Should -Be 0
     }
 }
+Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)' {
+    BeforeEach {
+        $logged = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Write-LogEntry { $logged.Add("$($Level): $Message") }
+        Mock -ModuleName $module Write-GuestNote { }
+        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
+        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; Version = '18.0'; ProductLine = '18'; InstanceId = 'a1b2c3d4' } }
+        $guest = @{ SettingsFile = 'C:\Users\devadmin\AppData\Local\Microsoft\VisualStudio\18.0_a1b2c3d4\Settings\CurrentSettings.vssettings' }
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ SettingsFile = $guest.SettingsFile; SettingsMarker = 'Pending' } }
+        Mock -ModuleName $module Invoke-GuestScript { "C:\Program Files\LazyVM\Tasks\$($ArgumentList[0])\Output\$($ArgumentList[1])" } -ParameterFilter { "$ScriptBlock" -match 'Get-GuestTaskOutputFile' }
+        Mock -ModuleName $module Wait-GuestSignedIn { $true }
+        $report = @{
+            Notes = @(@{ Level = 'WARN'; Text = 'did not capture .gitconfig: planted' })
+            Files = @('VisualStudio.vssettings', 'NuGet.Config', 'gitconfig', 'vs-useritems.zip')
+        }
+        Mock -ModuleName $module Invoke-GuestTask { ConvertTo-Json -InputObject $report -Compress -Depth 4 }
+        Mock -ModuleName $module Copy-FromGuest { }
+
+        $guestScript = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.VisualStudioUserFiles.ps1'
+        $output = 'C:\Program Files\LazyVM\Tasks\LazyVM-VSUserFilesCapture\Output'
+        $captureDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $vmSettings = @{ VMName = 'Alpha'; GuestAdminUser = 'devadmin'; InstallVisualStudio = $true; VSSettingsBackup = (Join-Path $TestDrive 'VisualStudio.vssettings') }
+        $capture = {
+            InModuleScope $module -Parameters @{ Settings = $vmSettings; CaptureDir = $captureDir } {
+                param($Settings, $CaptureDir) Save-GuestVisualStudioState -VM ([VMContext]::new($Settings)) -CaptureDir $CaptureDir
+            }
+        }
+    }
+
+    It 'reads the files with a task under the guest account''s limited token, given only its script and the settings file''s place' {
+        $null = & $capture
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
+            $TaskName -eq 'LazyVM-VSUserFilesCapture' -and $AsGuestUser -and -not $Elevated -and
+            (@($InputFile.Keys) -join ',') -eq 'VisualStudioUserFiles.ps1' -and $InputFile['VisualStudioUserFiles.ps1'] -eq $guestScript -and
+            "$Work" -match "Join-Path \`$TaskFolder 'VisualStudioUserFiles\.ps1'" -and "$Work" -match '-OutputFolder \$TaskOutput' -and
+            $ArgumentList[0] -eq '18' -and $ArgumentList[1] -eq $guest.SettingsFile
+        }
+    }
+
+    It 'reads nothing in the profile as the administrator, and stages nothing' {
+        $null = & $capture
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 0 -Exactly -ParameterFilter { "$ScriptBlock" -match '(?i)Copy-Item|NuGet|gitconfig|MyDocuments|Zip|Get-Content|ReadAll' }
+        Should -Invoke -ModuleName $module Get-GuestStagingFolder -Times 0 -Exactly
+    }
+
+    It 'copies each file the task wrote from its Output folder, once the folder and the file are checked, into the capture' {
+        $result = & $capture
+
+        foreach ($name in $report.Files) {
+            Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+                "$ScriptBlock" -match 'Get-GuestTaskOutputFile' -and $ArgumentList[0] -eq 'LazyVM-VSUserFilesCapture' -and $ArgumentList[1] -eq $name
+            }
+            Should -Invoke -ModuleName $module Copy-FromGuest -Times 1 -Exactly -ParameterFilter {
+                $GuestPath -eq "$output\$name" -and $HostPath -eq (Join-Path (Join-Path $captureDir 'vs') $name)
+            }
+        }
+        @($result.Files.Keys) | Should -Be @('Settings', 'NuGetConfig', 'GitConfig', 'UserItems')
+    }
+
+    It 'copies only the files it knows of that the task says it wrote' {
+        $report.Files = @('NuGet.Config', '..\..\Windows\System32\config\SAM', 'other.txt')
+
+        $result = & $capture
+
+        Should -Invoke -ModuleName $module Copy-FromGuest -Times 1 -Exactly
+        Should -Invoke -ModuleName $module Copy-FromGuest -Times 1 -Exactly -ParameterFilter { $GuestPath -eq "$output\NuGet.Config" }
+        @($result.Files.Keys) | Should -Be @('NuGetConfig')
+    }
+
+    It 'leaves out, with a WARN, a file the check refuses, and copies the rest' {
+        Mock -ModuleName $module Invoke-GuestScript { throw "$output\gitconfig is a junction or link" } -ParameterFilter { "$ScriptBlock" -match 'Get-GuestTaskOutputFile' -and $ArgumentList[1] -eq 'gitconfig' }
+
+        $result = & $capture
+
+        @($logged | Where-Object { $_ -like 'WARN:*gitconfig*junction or link*' }).Count | Should -Be 1
+        Should -Invoke -ModuleName $module Copy-FromGuest -Times 3 -Exactly
+        $result.Files.Contains('GitConfig') | Should -BeFalse
+    }
+
+    It 'logs what the task reported' {
+        $null = & $capture
+
+        Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter { @($Notes).Text -contains 'did not capture .gitconfig: planted' }
+    }
+
+    It 'starts no task, and says why, when the account is not signed in, and still records Visual Studio' {
+        Mock -ModuleName $module Wait-GuestSignedIn { $false }
+
+        $result = & $capture
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 0 -Exactly
+        $logged | Should -Contain "WARN:   'devadmin' is not signed in - Visual Studio files not captured"
+        $result.DisplayName | Should -Be 'Visual Studio Community 2026'
+        $result.Files.Count | Should -Be 0
+    }
+
+    It 'logs one WARN, copies nothing and carries on, when <Case>' -ForEach @(
+        @{ Case = 'what the task reported cannot be read'; Fails = $false }
+        @{ Case = 'the task fails'; Fails = $true }
+    ) {
+        if ($Fails) { Mock -ModuleName $module Invoke-GuestTask { throw 'Visual Studio files capture failed in the guest: no' } }
+        else { Mock -ModuleName $module Invoke-GuestTask { 'not { json' } }
+
+        $result = & $capture
+
+        @($logged | Where-Object { $_ -like 'WARN:*Visual Studio files*' }).Count | Should -Be 1
+        Should -Invoke -ModuleName $module Copy-FromGuest -Times 0 -Exactly
+        $result.DisplayName | Should -Be 'Visual Studio Community 2026'
+    }
+
+    It 'says when Visual Studio has saved no settings yet, and still reads the other files' {
+        $guest.SettingsFile = $null
+
+        $null = & $capture
+
+        @($logged | Where-Object { $_ -like 'WARN:*no .vssettings backup found*' }).Count | Should -Be 1
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter { $ArgumentList[1] -eq '' }
+    }
+}
+
+Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)' {
+    BeforeAll {
+        $userFiles = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.VisualStudioUserFiles.ps1'
+        Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+    }
+
+    BeforeEach {
+        # TestDrive lasts for the whole Describe, so each test has a folder of its own.
+        $base = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $profileRoot = Join-Path $base 'Users\dev'
+        $appData = Join-Path $profileRoot 'AppData\Roaming'
+        $documents = Join-Path $base 'U\Documents'
+        $vsFolder = Join-Path $documents 'Visual Studio 18'
+        # Stands for what only an administrator may read.
+        $elsewhere = Join-Path $base 'Elsewhere'
+        $output = Join-Path $base 'Task\Output'
+        foreach ($made in $appData, $documents, $elsewhere, $output) { $null = New-Item -ItemType Directory -Path $made -Force }
+
+        $settingsFile = Join-Path $profileRoot 'AppData\Local\Microsoft\VisualStudio\18.0_a1b2c3d4\Settings\CurrentSettings.vssettings'
+        $writeFile = {
+            param([string]$Path, [string]$Text)
+            $null = New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force
+            Set-Content -LiteralPath $Path -Value $Text
+        }
+        & $writeFile -Path (Join-Path $appData 'NuGet\NuGet.Config') -Text 'nuget'
+        & $writeFile -Path (Join-Path $profileRoot '.gitconfig') -Text 'git'
+        & $writeFile -Path $settingsFile -Text 'settings'
+        & $writeFile -Path (Join-Path $vsFolder 'Code Snippets\Visual C#\loop.snippet') -Text 'snippet'
+        & $writeFile -Path (Join-Path $vsFolder 'Templates\class.zip') -Text 'template'
+        & $writeFile -Path (Join-Path $vsFolder 'Settings\CurrentSettings.vssettings') -Text 'documents settings'
+        & $writeFile -Path (Join-Path $elsewhere 'secret.txt') -Text 'secret'
+
+        $run = @{ ProfileRoot = $profileRoot; AppData = $appData; Documents = $documents; ProductLine = '18'; OutputFolder = $output; SettingsFile = $settingsFile }
+        $zip = Join-Path $output 'vs-useritems.zip'
+
+        # Replaces what is at $Path with a link of $Type to $Target.
+        $makeLink = {
+            param([string]$Path, [string]$Target, [string]$Type = 'SymbolicLink')
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+            $null = New-Item -ItemType Directory -Path (Split-Path $Path -Parent) -Force
+            $null = New-Item -ItemType $Type -Path $Path -Value $Target
+        }
+        $skipJunctionOffWindows = { param([string]$Type) if ($Type -eq 'Junction' -and -not $IsWindows) { Set-ItResult -Skipped -Because 'junctions exist only on Windows' } }
+        # The names in the archive the script wrote, with / between folders.
+        $entries = {
+            $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+            try { @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') } | Sort-Object) }
+            finally { $archive.Dispose() }
+        }
+        # Nothing the administrator could read and the user could not ends up in Output.
+        $nothingSecret = {
+            foreach ($file in @(Get-ChildItem -LiteralPath $output -Recurse -Force -File)) {
+                Get-Content -LiteralPath $file.FullName -Raw | Should -Not -BeLike '*secret*'
+            }
+            if (Test-Path -LiteralPath $zip) { & $entries | Should -Not -Contain 'secret.txt' }
+        }
+    }
+
+    It 'copies NuGet.Config, .gitconfig and the settings, and zips the snippets, templates and settings folders, into Output' {
+        $result = & $userFiles @run
+
+        @($result.Notes) | Should -BeNullOrEmpty
+        @($result.Files) | Should -Be @('NuGet.Config', 'gitconfig', 'VisualStudio.vssettings', 'vs-useritems.zip')
+        Get-Content -LiteralPath (Join-Path $output 'NuGet.Config') | Should -Be 'nuget'
+        Get-Content -LiteralPath (Join-Path $output 'gitconfig') | Should -Be 'git'
+        Get-Content -LiteralPath (Join-Path $output 'VisualStudio.vssettings') | Should -Be 'settings'
+        & $entries | Should -Be @('Code Snippets/Visual C#/loop.snippet', 'Settings/CurrentSettings.vssettings', 'Templates/class.zip')
+    }
+
+    It 'makes an archive the restore puts back where it was' {
+        $null = & $userFiles @run
+        $newDocuments = Join-Path $base 'New\Documents'
+        $null = New-Item -ItemType Directory -Path $newDocuments -Force
+
+        $null = & $userFiles -ProfileRoot $profileRoot -AppData $appData -Documents $newDocuments -ProductLine '18' -UserItems $zip
+
+        Get-Content -LiteralPath (Join-Path $newDocuments 'Visual Studio 18\Code Snippets\Visual C#\loop.snippet') | Should -Be 'snippet'
+        Get-Content -LiteralPath (Join-Path $newDocuments 'Visual Studio 18\Templates\class.zip') | Should -Be 'template'
+    }
+
+    It 'refuses NuGet.Config, naming the link, when <Folder> on its way is a <LinkType>, and captures the rest' -ForEach @(
+        foreach ($folder in 'AppData', 'AppData\Roaming', 'AppData\Roaming\NuGet') {
+            foreach ($type in 'SymbolicLink', 'Junction') { @{ Folder = $folder; LinkType = $type } }
+        }
+    ) {
+        & $skipJunctionOffWindows -Type $LinkType
+        # What the link leads to holds a NuGet.Config where the profile's would be.
+        $rest = [IO.Path]::GetRelativePath((Join-Path $profileRoot $Folder), (Join-Path $appData 'NuGet\NuGet.Config'))
+        & $writeFile -Path (Join-Path $elsewhere $rest) -Text 'secret'
+        $link = Join-Path $profileRoot $Folder
+        & $makeLink -Path $link -Target $elsewhere -Type $LinkType
+        $run.SettingsFile = ''
+
+        $result = & $userFiles @run
+
+        & $nothingSecret
+        @($result.Files) | Should -Not -Contain 'NuGet.Config'
+        @($result.Files) | Should -Contain 'gitconfig'
+        $warnings = @($result.Notes | Where-Object { $_.Level -eq 'WARN' })
+        $warnings.Count | Should -Be 1
+        $warnings[0].Text | Should -BeLike "*NuGet.Config*$link*"
+    }
+
+    It 'refuses <What> when it is itself a link, and captures the rest' -ForEach @(
+        @{ What = '.gitconfig'; Name = 'gitconfig' }
+        @{ What = 'the Visual Studio settings'; Name = 'VisualStudio.vssettings' }
+    ) {
+        $link = if ($Name -eq 'gitconfig') { Join-Path $profileRoot '.gitconfig' } else { $settingsFile }
+        & $makeLink -Path $link -Target (Join-Path $elsewhere 'secret.txt')
+
+        $result = & $userFiles @run
+
+        & $nothingSecret
+        @($result.Files) | Should -Not -Contain $Name
+        @($result.Files) | Should -Contain 'NuGet.Config'
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*$What*$link*"
+    }
+
+    It 'refuses a settings file outside the profile' {
+        $run.SettingsFile = Join-Path $elsewhere 'secret.txt'
+
+        $result = & $userFiles @run
+
+        & $nothingSecret
+        @($result.Files) | Should -Not -Contain 'VisualStudio.vssettings'
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*the Visual Studio settings*not inside*'
+    }
+
+    It 'leaves out, naming it, a <LinkType> to a folder inside the snippets, and zips the rest' -ForEach @(@{ LinkType = 'SymbolicLink' }, @{ LinkType = 'Junction' }) {
+        & $skipJunctionOffWindows -Type $LinkType
+        $link = Join-Path $vsFolder 'Code Snippets\Visual C#\Planted'
+        & $makeLink -Path $link -Target $elsewhere -Type $LinkType
+
+        $result = & $userFiles @run
+
+        & $nothingSecret
+        & $entries | Should -Be @('Code Snippets/Visual C#/loop.snippet', 'Settings/CurrentSettings.vssettings', 'Templates/class.zip')
+        $warnings = @($result.Notes | Where-Object { $_.Level -eq 'WARN' })
+        $warnings.Count | Should -Be 1
+        $warnings[0].Text | Should -BeLike "*$link*"
+    }
+
+    It 'leaves out, naming it, a link to a file inside the templates' {
+        $link = Join-Path $vsFolder 'Templates\planted.zip'
+        & $makeLink -Path $link -Target (Join-Path $elsewhere 'secret.txt')
+
+        $result = & $userFiles @run
+
+        & $nothingSecret
+        & $entries | Should -Not -Contain 'Templates/planted.zip'
+        & $entries | Should -Contain 'Templates/class.zip'
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*$link*"
+    }
+
+    It 'leaves out the <Folder> folder when it is a <LinkType>, and zips the others' -ForEach @(
+        foreach ($type in 'SymbolicLink', 'Junction') { @{ Folder = 'Code Snippets'; LinkType = $type } }
+    ) {
+        & $skipJunctionOffWindows -Type $LinkType
+        $link = Join-Path $vsFolder $Folder
+        & $makeLink -Path $link -Target $elsewhere -Type $LinkType
+
+        $result = & $userFiles @run
+
+        & $nothingSecret
+        & $entries | Should -Be @('Settings/CurrentSettings.vssettings', 'Templates/class.zip')
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*$link*"
+    }
+
+    It 'zips nothing when the Visual Studio folder itself is a <LinkType>' -ForEach @(@{ LinkType = 'SymbolicLink' }, @{ LinkType = 'Junction' }) {
+        & $skipJunctionOffWindows -Type $LinkType
+        $real = Join-Path $base 'RealVisualStudio'
+        Move-Item -LiteralPath $vsFolder -Destination $real
+        & $makeLink -Path $vsFolder -Target $real -Type $LinkType
+
+        $result = & $userFiles @run
+
+        Test-Path -LiteralPath $zip | Should -BeFalse
+        @($result.Files) | Should -Not -Contain 'vs-useritems.zip'
+        $warnings = @($result.Notes | Where-Object { $_.Level -eq 'WARN' })
+        $warnings | Should -Not -BeNullOrEmpty
+        $warnings.Text | ForEach-Object { $_ | Should -BeLike "*$vsFolder*" }
+    }
+
+    It 'does not write through a link someone planted in Output' {
+        $planted = Join-Path $elsewhere 'planted'
+        & $makeLink -Path (Join-Path $output 'gitconfig') -Target $planted
+
+        $result = & $userFiles @run
+
+        Test-Path -LiteralPath $planted | Should -BeFalse
+        @($result.Files) | Should -Not -Contain 'gitconfig'
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*.gitconfig*gitconfig*'
+    }
+
+    It 'captures nothing, and says nothing, of files that are not there' {
+        Remove-Item -LiteralPath $profileRoot, $vsFolder -Recurse -Force
+        $null = New-Item -ItemType Directory -Path $profileRoot -Force
+        $run.SettingsFile = ''
+
+        $result = & $userFiles @run
+
+        @($result.Notes) | Should -BeNullOrEmpty
+        @($result.Files) | Should -BeNullOrEmpty
+        @(Get-ChildItem -LiteralPath $output -Force) | Should -BeNullOrEmpty
+    }
+}

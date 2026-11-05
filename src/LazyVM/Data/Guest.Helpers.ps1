@@ -1727,6 +1727,29 @@ function Get-GuestTaskStatus {
     }
 }
 
+function Get-GuestTaskOutputFile {
+    <#
+      The place of the file $Name that task $TaskName wrote in its Output
+      folder, for an administrator to read, once neither the folder nor the
+      file is a junction or link; throws why not, or that it is not there.
+      The task's user can change the file, so what it holds is only that
+      user's word.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$TaskName,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    $output = Get-GuestTaskOutputFolder -TaskName $TaskName
+    $path = Join-Path $output $Name
+    foreach ($checked in $output, $path) {
+        if (Test-GuestReparsePoint -Path $checked) { throw "$checked is a junction or link, and LazyVM never reads through one" }
+    }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "$path is not there" }
+    return $path
+}
+
 function Remove-GuestTask {
     <#
       Stops the task, then removes it. Removing a running task leaves its

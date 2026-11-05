@@ -540,13 +540,52 @@ Describe 'Get-GuestTaskStatus' {
     }
 }
 
+Describe 'Get-GuestTaskOutputFile (#330)' {
+    BeforeEach {
+        $output = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        Mock Get-GuestTaskOutputFolder { $output }
+        $null = New-Item -ItemType Directory -Path $output -Force
+        $file = Join-Path $output 'NuGet.Config'
+        $elsewhere = New-TestFolder
+        Set-Content -LiteralPath (Join-Path $elsewhere 'NuGet.Config') -Value 'secret'
+    }
+
+    It 'gives the place of a file the task wrote in its Output folder' {
+        Set-Content -LiteralPath $file -Value 'nuget'
+
+        Get-GuestTaskOutputFile -TaskName 'LazyVM-VSUserFilesCapture' -Name 'NuGet.Config' | Should -Be $file
+        Should -Invoke Get-GuestTaskOutputFolder -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-VSUserFilesCapture' }
+    }
+
+    It 'refuses, naming it, a link in the place of <Case>, which the task''s user may have made' -ForEach @(
+        @{ Case = 'the Output folder'; LinkOutput = $true }
+        @{ Case = 'the file'; LinkOutput = $false }
+    ) {
+        if ($LinkOutput) {
+            Remove-Item -LiteralPath $output
+            $null = New-Item -ItemType SymbolicLink -Path $output -Target $elsewhere
+            $link = $output
+        }
+        else {
+            $null = New-Item -ItemType SymbolicLink -Path $file -Target (Join-Path $elsewhere 'NuGet.Config')
+            $link = $file
+        }
+
+        { Get-GuestTaskOutputFile -TaskName 'LazyVM-VSUserFilesCapture' -Name 'NuGet.Config' } | Should -Throw "*$link*junction or link*"
+    }
+
+    It 'says so when the file is not there' {
+        { Get-GuestTaskOutputFile -TaskName 'LazyVM-VSUserFilesCapture' -Name 'NuGet.Config' } | Should -Throw "*$file*not there*"
+    }
+}
+
 Describe 'What administrators do in a task''s Output folder (#302 SEC-008)' {
     It 'is never a write, move or delete: <Function> only reads there' -ForEach @(
         # Found at discovery, before BeforeAll has set the module's folder.
         foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path (Split-Path -Path $PSScriptRoot -Parent) 'src/LazyVM') -Recurse -Filter '*.ps1')) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$null)
             foreach ($function in $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
-                if ($function.Name -ne 'Get-GuestTaskOutputFolder' -and $function.Body.Extent.Text -match 'Get-GuestTaskOutputFolder') {
+                if ($function.Name -ne 'Get-GuestTaskOutputFolder' -and $function.Body.Extent.Text -match 'Get-GuestTaskOutput(Folder|File)\b') {
                     @{ Function = $function.Name; Body = $function.Body.Extent.Text }
                 }
             }
@@ -642,17 +681,6 @@ Describe 'What LazyVM stages in the guest (#302)' {
         $null = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-GuestToolingInventory -VM $VM }
 
         ($calls -join ',') | Should -Be 'staging,inventory C:\Program Files\LazyVM\Staging'
-    }
-
-    It 'stages the Visual Studio capture in the staging folder' {
-        $vmWithVs = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; InstallVisualStudio = $true }) }
-        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ InstanceId = 'a1'; ProductLine = '2026'; DisplayName = 'VS'; Version = '18' } }
-        Mock -ModuleName $module Invoke-GuestScript { $calls.Add("capture $($ArgumentList[0])"); [pscustomobject]@{ Settings = $null; SettingsMarker = $null; NuGetConfig = $null; GitConfig = $null; UserItems = $null; Notes = @() } }
-        Mock -ModuleName $module Copy-FromGuest { }
-
-        $null = InModuleScope $module -Parameters @{ VM = $vmWithVs; Dir = $TestDrive } { param($VM, $Dir) Save-GuestVisualStudioState -VM $VM -CaptureDir $Dir }
-
-        ($calls -join ',') | Should -Be 'staging,capture C:\Program Files\LazyVM\Staging'
     }
 }
 
