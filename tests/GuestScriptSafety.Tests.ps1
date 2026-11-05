@@ -48,6 +48,31 @@ BeforeAll {
         }
     }
 
+    function Get-SystemFolderVariableUse {
+        <#
+          Each $env: variable in $Ast that names a system folder, the system
+          drive or the temporary folder, as "<function>: <variable>". The
+          guest admin's environment includes HKCU\Environment, which that
+          account can change without elevating, so none of these can say
+          where LazyVM trusts, writes or deletes (#317). Profile folders
+          (APPDATA, LOCALAPPDATA, USERPROFILE) are the user's own (#310).
+        #>
+        param([Parameter(Mandatory)][System.Management.Automation.Language.Ast]$Ast)
+
+        $systemFolders = @('ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'CommonProgramFiles', 'CommonProgramFiles(x86)', 'CommonProgramW6432',
+            'ProgramData', 'ALLUSERSPROFILE', 'PUBLIC', 'SystemRoot', 'windir', 'SystemDrive', 'TEMP', 'TMP')
+        $uses = $Ast.FindAll({
+                param($node)
+                $node -is [System.Management.Automation.Language.VariableExpressionAst] -and $node.VariablePath.DriveName -eq 'env' -and
+                $systemFolders -contains ($node.VariablePath.UserPath -replace '^env:', '')
+            }, $true)
+        foreach ($use in $uses) {
+            $function = $use.Parent
+            while ($function -and $function -isnot [System.Management.Automation.Language.FunctionDefinitionAst]) { $function = $function.Parent }
+            "$(if ($function) { $function.Name } else { '<script>' }): $($use.Extent.Text)"
+        }
+    }
+
     function ConvertTo-TestAst {
         param([Parameter(Mandatory)][string]$Code)
 
@@ -109,5 +134,44 @@ Describe 'Secrets reach the guest only through -ArgumentList (#291)' {
             })
 
         $found | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'The check for system folders taken from the environment' {
+    It 'finds <Code>' -ForEach @(
+        @{ Code = 'function Get-Thing { Join-Path $env:ProgramFiles ''LazyVM'' }' }
+        @{ Code = 'function Get-Thing { "${env:ProgramFiles(x86)}\Microsoft" }' }
+        @{ Code = 'function Get-Thing { "$env:SystemRoot\System32" }' }
+        @{ Code = 'function Get-Thing { Join-Path $env:TEMP ''x'' }' }
+    ) {
+        @(Get-SystemFolderVariableUse -Ast (ConvertTo-TestAst -Code $Code)).Count | Should -Be 1
+    }
+
+    It 'lets a profile folder and a folder Windows reports through' {
+        $ast = ConvertTo-TestAst -Code 'function Get-Thing { Join-Path $env:APPDATA ''NuGet''; [Environment]::GetFolderPath(''ProgramFiles'') }'
+
+        @(Get-SystemFolderVariableUse -Ast $ast).Count | Should -Be 0
+    }
+}
+
+Describe 'System folders come from Windows, not from the environment (#317)' {
+    It 'takes no system folder, system drive or temporary folder from an environment variable' {
+        $found = @(foreach ($file in $moduleAsts) {
+                foreach ($use in @(Get-SystemFolderVariableUse -Ast $file.Ast)) { "$($file.File) $use" }
+            })
+
+        $found | Should -BeNullOrEmpty
+    }
+
+    It 'takes none in the guest task wrapper, which runs without the guest helpers' {
+        # The wrapper is a here-string in Guest.Helpers.ps1, so its own text is parsed.
+        $helpers = @($moduleAsts | Where-Object { $_.File -eq 'Data\Guest.Helpers.ps1' })[0].Ast
+        $assignment = $helpers.Find({
+                param($node)
+                $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and "$($node.Left)" -eq '$script:GuestTaskWrapper'
+            }, $true)
+        $wrapper = ConvertTo-TestAst -Code $assignment.Right.Expression.Value
+
+        @(Get-SystemFolderVariableUse -Ast $wrapper) | Should -BeNullOrEmpty
     }
 }

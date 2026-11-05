@@ -17,6 +17,7 @@ BeforeAll {
 
 Describe 'Expand-GuestSystemDrive' {
     BeforeEach {
+        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Write-LogError { }
         Mock -ModuleName $module Get-ExpansionCheckpoint { @() }
@@ -43,6 +44,17 @@ Describe 'Expand-GuestSystemDrive' {
         Should -Invoke -ModuleName $module New-ToolingCheckpoint -Times 1 -Exactly -ParameterFilter { $Name -like 'C: expansion *' -and $SkipPrune }
         Should -Invoke -ModuleName $module Remove-ExpansionCheckpoint -Times 1 -Exactly
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -like '*resized from 120 GB to 139 GB' -and $Level -eq 'OK' }
+    }
+
+    It 'has the guest write its diskpart scripts in the staging folder, which only administrators can change, not in the admin''s TEMP (#317)' {
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Action = 'Expand'; Reason = 'x' } } -ParameterFilter { $Activity -eq 'OS disk check' }
+        Mock -ModuleName $module Invoke-GuestScript { @() } -ParameterFilter { $Activity -eq 'C: drive expansion' }
+
+        InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Expand-GuestSystemDrive -VM $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $Activity -eq 'C: drive expansion' -and $ArgumentList[-1] -eq 'C:\Program Files\LazyVM\Staging'
+        }
     }
 
     It 'keeps the checkpoint and says how to go back when something failed' {

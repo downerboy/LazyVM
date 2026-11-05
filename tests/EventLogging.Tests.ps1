@@ -208,6 +208,7 @@ Describe 'Set-GuestEventLogging' {
     }
 
     BeforeEach {
+        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         Mock -ModuleName $module Write-LogEntry { }
         Mock -ModuleName $module Write-LogError { }
     }
@@ -231,6 +232,16 @@ Describe 'Set-GuestEventLogging' {
             $Activity -eq 'event logging' -and @($ArgumentList[0]).Count -eq $state.Logs.Count -and @($ArgumentList[1]).Count -eq 0 -and @($ArgumentList[2]).Count -eq 0
         }
         Should -Invoke -ModuleName $module Write-LogEntry -Times $state.Logs.Count -Exactly -ParameterFilter { $Message -like 'Event logging: *' -and $Level -eq 'OK' }
+    }
+
+    It 'has the guest back up its audit policy in the staging folder, which only administrators can change, not in the admin''s TEMP (#317)' {
+        Mock -ModuleName $module Invoke-GuestScript { $clean } -ParameterFilter { $Activity -eq 'event logging check' }
+
+        InModuleScope $module { Set-GuestEventLogging -VM ([VMContext]::new(@{ VMName = 'Alpha'; GuestEventLogging = $true })) }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            $Activity -eq 'event logging check' -and $ArgumentList[-1] -eq 'C:\Program Files\LazyVM\Staging'
+        }
     }
 
     It 'changes nothing when the guest is already at LazyVM''s settings' {
@@ -258,6 +269,24 @@ Describe 'Set-GuestEventLogging' {
         $result = @(InModuleScope $module { Set-GuestEventLogging -VM ([VMContext]::new(@{ VMName = 'Alpha'; GuestEventLogging = $true })) })
 
         $result.Count | Should -Be 0
+    }
+}
+
+Describe 'Get-GuestLoggingState' {
+    It 'backs the audit policy up to a file of its own in $Folder, and removes it (#317)' {
+        $folder = Join-Path $TestDrive 'Staging'
+        $backups = [System.Collections.Generic.List[string]]::new()
+        Mock Invoke-GuestAuditPol { $backups.Add(("$($Argument[1])" -replace '^/file:', '')) }
+        Mock ConvertFrom-AuditPolicyBackup { @{} }
+        Mock Remove-Item { }
+        Mock New-Object { [pscustomobject]@{ MaximumSizeInBytes = 1MB; LogMode = 'Circular' } }
+        Mock Get-ItemProperty { }
+
+        $null = Get-GuestLoggingState -LogName @('Security') -PolicyValue @([pscustomobject]@{ Path = 'HKLM:\SOFTWARE\Test'; Name = 'Value' }) -Folder $folder
+
+        $backups.Count | Should -Be 1
+        Split-Path -Path $backups[0] -Parent | Should -Be $folder
+        Should -Invoke Remove-Item -Times 1 -Exactly -ParameterFilter { $LiteralPath -eq $backups[0] }
     }
 }
 

@@ -42,13 +42,16 @@ $script:GuestPersistenceWork = {
         }
     }
 
+    # Windows reports its own folder; the environment could be changed.
+    $windowsFolder = [Environment]::GetFolderPath('Windows')
+
     function Get-ProgramPath {
         <# The program a command line starts, with its environment variables expanded: the part in quotes, or up to the first .exe or the like, or its first word. #>
         param([string]$CommandLine)
         $line = [Environment]::ExpandEnvironmentVariables("$CommandLine".Trim())
         if ($line.StartsWith('\??\')) { $line = $line.Substring(4) }
-        if ($line -match '^\\SystemRoot\\') { $line = "$env:SystemRoot" + $line.Substring(11) }
-        if ($line -match '^system32\\') { $line = "$env:SystemRoot\" + $line }
+        if ($line -match '^\\SystemRoot\\') { $line = $windowsFolder + $line.Substring(11) }
+        if ($line -match '^system32\\') { $line = "$windowsFolder\" + $line }
         if (-not $line) { return '' }
         if ($line.StartsWith('"')) { return $line.Substring(1).Split('"')[0] }
         $program = [regex]::Match($line, '^(.+?\.(exe|com|bat|cmd|dll|ps1|vbs|js))(\s|,|$)', 'IgnoreCase')
@@ -75,7 +78,7 @@ $script:GuestPersistenceWork = {
 
     # The guest account's security identifier and profile folder, for its
     # Run keys and startup folder, and the folder every profile is in.
-    $userFolders = @([System.IO.Path]::Combine("$env:SystemRoot", 'Temp'))
+    $userFolders = @([System.IO.Path]::Combine($windowsFolder, 'Temp'))
     $user = @{ Sid = ''; Profile = ''; Problem = '' }
     try {
         $profileList = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'

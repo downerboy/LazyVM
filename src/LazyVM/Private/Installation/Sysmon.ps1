@@ -35,8 +35,8 @@ function Set-GuestSysmon {
         $configText = Get-Content -LiteralPath $configPath -Raw
         $configHash = (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash
         $notes = Invoke-GuestScript -VM $VM -Activity 'Sysmon' -TimeoutMinutes 15 `
-            -ArgumentList @($configText, $configHash, $script:GuestBusyEventLogSize, $script:GuestMarkerKey) -ScriptBlock {
-            param($configText, $configHash, $eventLogSizeBytes, $markerKey)
+            -ArgumentList @($configText, $configHash, $script:GuestBusyEventLogSize, $script:GuestMarkerKey, (Get-GuestStagingFolder -VM $VM)) -ScriptBlock {
+            param($configText, $configHash, $eventLogSizeBytes, $markerKey, $stagingFolder)
             $ErrorActionPreference = 'Stop'
             $notes = @()
 
@@ -70,7 +70,7 @@ function Set-GuestSysmon {
             $installed = $services.Count -gt 0
             if (-not $installed -or $applied -ne $configHash) {
                 $switch = if ($installed) { '-c' } else { '-i' }
-                $configFile = Join-Path -Path $env:TEMP -ChildPath 'LazyVM-sysmonconfig.xml'
+                $configFile = Join-Path -Path $stagingFolder -ChildPath 'LazyVM-sysmonconfig.xml'
                 [System.IO.File]::WriteAllText($configFile, $configText)
                 try {
                     # Windows PowerShell turns a native program's error output into

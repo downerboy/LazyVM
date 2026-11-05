@@ -30,7 +30,7 @@ function Get-GuestToolingInventory {
 
         # ── products managed by the Visual Studio Installer ────────────────
         $products = @()
-        $vsInstaller = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vs_installer.exe'
+        $vsInstaller = Join-Path (Get-GuestVisualStudioInstallerFolder) 'vs_installer.exe'
         $instances = @(Get-GuestInstallerInstance)
         if ($instances.Count -eq 0) { $notes.Add('no Visual Studio Installer products are installed') }
         foreach ($instance in $instances) {

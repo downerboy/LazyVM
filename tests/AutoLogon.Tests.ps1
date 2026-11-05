@@ -183,6 +183,15 @@ Describe 'Enable-GuestAutoLogon (guest helper)' {
         Should -Invoke Set-ItemProperty -Times 1 -Exactly -ParameterFilter { $Path -eq $winlogonKey -and $Name -eq 'DefaultUserName' -and $Value -eq 'devadmin' }
     }
 
+    It 'names the computer as Windows has it, whatever $env:COMPUTERNAME says (#317)' {
+        $saved = $env:COMPUTERNAME
+        $env:COMPUTERNAME = 'ELSEWHERE'
+        try { Enable-GuestAutoLogon -Credential $guestCredential }
+        finally { $env:COMPUTERNAME = $saved }
+
+        Should -Invoke Set-ItemProperty -Times 1 -Exactly -ParameterFilter { $Path -eq $winlogonKey -and $Name -eq 'DefaultDomainName' -and $Value -eq [Environment]::MachineName }
+    }
+
     It 'removes the logon count, so it never runs out, and any clear-text password' {
         Enable-GuestAutoLogon -Credential $guestCredential
 

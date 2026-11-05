@@ -116,7 +116,8 @@ Describe 'New-BitLockerRecoveryPassword' {
 
 Describe 'Protect-GuestVolume' {
     BeforeEach {
-        Mock Get-BitLockerVolume { New-TestVolume -Status 'FullyEncrypted' } -ParameterFilter { $MountPoint -eq $env:SystemDrive }
+        Mock Get-GuestSystemDrive { 'C:' }
+        Mock Get-BitLockerVolume { New-TestVolume -Status 'FullyEncrypted' } -ParameterFilter { $MountPoint -eq 'C:' }
         Mock Enable-BitLocker { }
         Mock Add-BitLockerKeyProtector { }
         Mock Enable-BitLockerAutoUnlock { }
@@ -177,7 +178,7 @@ Describe 'Protect-GuestVolume' {
     }
 
     It 'leaves a data volume as it was when C: is not encrypted, since it could not unlock itself' {
-        Mock Get-BitLockerVolume { New-TestVolume } -ParameterFilter { $MountPoint -eq $env:SystemDrive }
+        Mock Get-BitLockerVolume { New-TestVolume } -ParameterFilter { $MountPoint -eq 'C:' }
         Mock Get-BitLockerVolume { New-TestVolume } -ParameterFilter { $MountPoint -eq 'D:' }
 
         { Protect-GuestVolume -MountPoint 'D:' -RecoveryPassword $password } | Should -Throw -ExpectedMessage '*C: is not encrypted*left as it was*'

@@ -325,18 +325,67 @@ Describe 'Initialize-GuestAdminFolder (#302 SEC-006)' {
     }
 }
 
-Describe 'The guest''s LazyVM folders' {
+Describe 'Get-GuestSystemFolder (#317)' {
     BeforeAll {
-        $programFiles = $env:ProgramFiles
-        $env:ProgramFiles = Join-Path $TestDrive 'Program Files'
-        $lazyVM = [IO.Path]::Combine($env:ProgramFiles, 'LazyVM')
+        $saved = @{ ProgramFiles = $env:ProgramFiles; SystemRoot = $env:SystemRoot }
     }
 
-    AfterAll {
-        $env:ProgramFiles = $programFiles
+    AfterEach {
+        $env:ProgramFiles = $saved.ProgramFiles
+        $env:SystemRoot = $saved.SystemRoot
+    }
+
+    It 'asks Windows where <Name> is, whatever $env:<Variable> says' -ForEach @(
+        @{ Name = 'ProgramFiles'; Variable = 'ProgramFiles' }
+        @{ Name = 'Windows'; Variable = 'SystemRoot' }
+    ) {
+        # The guest admin's HKCU\Environment, which that account can change
+        # without elevating, can set any of these in its sessions.
+        Set-Item -Path "env:$Variable" -Value (Join-Path $TestDrive 'Elsewhere')
+
+        Get-GuestSystemFolder -Name $Name | Should -Be ([Environment]::GetFolderPath($Name))
+    }
+
+    It 'keeps LazyVM''s guest folder in the Program Files Windows reports, not one $env:ProgramFiles names' {
+        $env:ProgramFiles = Join-Path $TestDrive 'Elsewhere'
+
+        Get-GuestLazyVMFolder | Should -Be ([IO.Path]::Combine([Environment]::GetFolderPath('ProgramFiles'), 'LazyVM'))
+    }
+
+    It 'gives the drive Windows is on as <Drive>' -ForEach @(
+        @{ Windows = 'C:\Windows'; Drive = 'C:' }
+        @{ Windows = 'D:\Windows'; Drive = 'D:' }
+    ) {
+        Mock Get-GuestSystemFolder { $Windows } -ParameterFilter { $Name -eq 'Windows' }
+
+        Get-GuestSystemDrive | Should -Be $Drive
+    }
+
+    It 'finds <Case> in the system folders' -ForEach @(
+        @{ Case = 'Windows PowerShell'; Command = 'Get-GuestWindowsPowerShell'; Expected = 'C:\Windows\System32?WindowsPowerShell?v1.0?powershell.exe' }
+        @{ Case = 'the hosts file'; Command = 'Get-GuestHostsFile'; Expected = 'C:\Windows\System32?drivers?etc?hosts' }
+        @{ Case = 'the Visual Studio Installer'; Command = 'Get-GuestVisualStudioInstallerFolder'; Expected = 'C:\Program Files (x86)?Microsoft Visual Studio?Installer' }
+    ) {
+        Mock Get-GuestSystemFolder { 'C:\Windows\System32' } -ParameterFilter { $Name -eq 'System' }
+        Mock Get-GuestSystemFolder { 'C:\Program Files (x86)' } -ParameterFilter { $Name -eq 'ProgramFilesX86' }
+
+        & $Command | Should -BeLike $Expected
+    }
+}
+
+Describe 'The guest''s LazyVM folders' {
+    BeforeAll {
+        $programFiles = Join-Path $TestDrive 'Program Files'
+        $lazyVM = [IO.Path]::Combine($programFiles, 'LazyVM')
+    }
+
+    AfterEach {
+        $env:ProgramFiles = $saved
     }
 
     BeforeEach {
+        $saved = $env:ProgramFiles
+        Mock Get-GuestSystemFolder { $programFiles } -ParameterFilter { $Name -eq 'ProgramFiles' }
         $calls = [System.Collections.Generic.List[string]]::new()
         Mock Get-GuestAdminFolderProblem { $calls.Add("check $Path"); '' }
         Mock Initialize-GuestAdminFolder { $calls.Add("admin $Path") }
@@ -353,13 +402,13 @@ Describe 'The guest''s LazyVM folders' {
         $folder = Initialize-GuestTaskFolder -TaskName 'LazyVM-windows-update'
 
         $folder | Should -Be (Get-GuestTaskFolder -TaskName 'LazyVM-windows-update')
-        $calls -join '|' | Should -Be ("check $env:ProgramFiles|admin $lazyVM|admin $([IO.Path]::Combine($lazyVM, 'Tasks'))|private $folder|private $([IO.Path]::Combine($folder, 'Output'))")
+        $calls -join '|' | Should -Be ("check $programFiles|admin $lazyVM|admin $([IO.Path]::Combine($lazyVM, 'Tasks'))|private $folder|private $([IO.Path]::Combine($folder, 'Output'))")
     }
 
     It 'stop, and make nothing, when Program Files itself is not safe; it is only checked, never changed' {
         Mock Get-GuestAdminFolderProblem { 'S-1-5-32-545 can change it' }
 
-        { Initialize-GuestTaskFolder -TaskName 'LazyVM-windows-update' } | Should -Throw "*$env:ProgramFiles*S-1-5-32-545 can change it*"
+        { Initialize-GuestTaskFolder -TaskName 'LazyVM-windows-update' } | Should -Throw "*$programFiles*S-1-5-32-545 can change it*"
 
         Should -Invoke Initialize-GuestAdminFolder -Times 0 -Exactly
         Should -Invoke Initialize-GuestPrivateFolder -Times 0 -Exactly
@@ -387,22 +436,27 @@ Describe 'The guest''s LazyVM folders' {
         $staging = Initialize-GuestStagingFolder
 
         $staging.Path | Should -Be ([IO.Path]::Combine($lazyVM, 'Staging'))
-        $calls -join '|' | Should -Be "check $env:ProgramFiles|admin $lazyVM|private $($staging.Path)"
+        $calls -join '|' | Should -Be "check $programFiles|admin $lazyVM|private $($staging.Path)"
         Should -Invoke Initialize-GuestPrivateFolder -Times 1 -Exactly -ParameterFilter { -not $ReadSid -and -not $ModifySid }
+    }
+
+    It 'check and use the Program Files Windows reports, even when $env:ProgramFiles names another folder (#317)' {
+        $env:ProgramFiles = Join-Path $TestDrive 'Elsewhere'
+
+        $staging = Initialize-GuestStagingFolder
+
+        $staging.Path | Should -Be ([IO.Path]::Combine($lazyVM, 'Staging'))
+        $calls -join '|' | Should -Be "check $programFiles|admin $lazyVM|private $($staging.Path)"
     }
 }
 
 Describe 'Start-GuestTask' {
     BeforeAll {
-        $programFiles = $env:ProgramFiles
-        $env:ProgramFiles = 'C:\Program Files'
+        Mock Get-GuestSystemFolder { 'C:\Program Files' } -ParameterFilter { $Name -eq 'ProgramFiles' }
+        Mock Get-GuestSystemFolder { 'C:\Windows\System32' } -ParameterFilter { $Name -eq 'System' }
         $taskFolder = Get-GuestTaskFolder -TaskName 'LazyVM-winget'
         # ? for the path separators, which are / where the tests run on Linux.
         $taskFile = 'C:?Program Files?LazyVM?Tasks?LazyVM-winget?LazyVM-winget'
-    }
-
-    AfterAll {
-        $env:ProgramFiles = $programFiles
     }
 
     BeforeEach {
@@ -451,6 +505,14 @@ Describe 'Start-GuestTask' {
         }
     }
 
+    It 'runs the wrapper with the Windows PowerShell in the system folder, not one found on the PATH (#317)' {
+        Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -Nonce 'n1' -TimeoutSeconds 60
+
+        Should -Invoke Register-ScheduledTask -Times 1 -Exactly -ParameterFilter {
+            $Action.Execute -like 'C:\Windows\System32?WindowsPowerShell?v1.0?powershell.exe'
+        }
+    }
+
     It 'leaves the folder''s access to Initialize-GuestTaskFolder, giving it the user and token the task runs with' {
         Start-GuestTask -TaskName 'LazyVM-winget' -Work 'return 1' -Nonce 'n1' -UserName 'devadmin' -Elevated -TimeoutSeconds 60
 
@@ -485,16 +547,8 @@ Describe 'The guest task wrapper' {
 }
 
 Describe 'Get-GuestTaskStatus' {
-    BeforeAll {
-        $programFiles = $env:ProgramFiles
-        $env:ProgramFiles = Join-Path $TestDrive 'Program Files'
-    }
-
-    AfterAll {
-        $env:ProgramFiles = $programFiles
-    }
-
     BeforeEach {
+        Mock Get-GuestSystemFolder { Join-Path $TestDrive 'Program Files' } -ParameterFilter { $Name -eq 'ProgramFiles' }
         Mock Get-ScheduledTask { [pscustomobject]@{ State = 'Ready' } }
         Mock Get-CimInstance { [pscustomobject]@{ LastBootUpTime = [datetime]'2026-10-31' } }
         $taskName = 'LazyVM-' + [guid]::NewGuid().ToString('N')

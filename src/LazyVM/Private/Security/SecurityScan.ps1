@@ -197,7 +197,7 @@ function Install-GuestSecurityFindingOpener {
             $trigger.Enabled = $true
             $triggers += $trigger
         }
-        $action = New-ScheduledTaskAction -Execute (Join-Path -Path $env:SystemRoot -ChildPath 'System32\WindowsPowerShell\v1.0\powershell.exe') -Argument $openerArgument
+        $action = New-ScheduledTaskAction -Execute (Get-GuestWindowsPowerShell) -Argument $openerArgument
         $principal = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel Limited
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
         Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Force | Out-Null
