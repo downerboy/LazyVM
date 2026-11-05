@@ -118,18 +118,26 @@ function Write-LogList {
     foreach ($item in $Items) { Write-LogEntry "  $item" $Level }
 }
 
+# The longest note from the guest that Write-GuestNote logs whole.
+$script:GuestNoteMaximumLength = 1000
+
 function Write-GuestNote {
     <#
       Logs what a guest script reported. Guest scripts report each event as
       @{ Level; Text } (New-GuestNote in Guest.Helpers.ps1), so the level is
-      decided where the event happens, never guessed from its wording.
+      decided where the event happens, never guessed from its wording. A
+      note can come from a task under the guest user's limited token, so
+      each is logged as one line, of at most $script:GuestNoteMaximumLength
+      characters: a note cannot make up log lines of its own.
     #>
     param([AllowNull()][object[]]$Notes = @())
 
     foreach ($note in @($Notes | Where-Object { $_ })) {
         $level = [RecordReader]::Text($note, 'Level')
         if ($level -notin 'INFO', 'WARN', 'ERROR', 'OK') { $level = 'INFO' }
-        Write-LogEntry "  $([RecordReader]::Text($note, 'Text'))" $level
+        $text = ([RecordReader]::Text($note, 'Text') -replace '\s*[\r\n]+\s*', ' ').Trim()
+        if ($text.Length -gt $script:GuestNoteMaximumLength) { $text = "$($text.Substring(0, $script:GuestNoteMaximumLength))... (cut short)" }
+        Write-LogEntry "  $text" $level
     }
 }
 
