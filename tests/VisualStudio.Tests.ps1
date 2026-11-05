@@ -695,10 +695,11 @@ Describe 'Save-GuestVisualStudioState and the settings still to be applied (#266
         Mock -ModuleName $module Write-GuestNote { }
         Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; Version = '18.0'; ProductLine = '2026'; InstanceId = 'a1b2c3d4' } }
         $guest = @{ Marker = 'Pending' }
-        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ Settings = 'C:\Users\devadmin\CurrentSettings.vssettings'; NuGetConfig = $null; GitConfig = $null; UserItems = $null; SettingsMarker = $guest.Marker; Notes = @() } }
-        Mock -ModuleName $module Copy-FromGuest { $null = New-Item -ItemType Directory -Path (Split-Path -Path $HostPath -Parent) -Force; Set-Content -LiteralPath $HostPath -Value '<UserSettings><Category name="Defaults"/></UserSettings>' }
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ SettingsFile = 'C:\Users\devadmin\CurrentSettings.vssettings'; SettingsMarker = $guest.Marker } }
+        Mock -ModuleName $module Invoke-GuestScript { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('<UserSettings><Category name="Defaults"/></UserSettings>')) } -ParameterFilter { "$ScriptBlock" -match 'Read-GuestTaskOutputFile' }
+        Mock -ModuleName $module Wait-GuestSignedIn { $true }
+        Mock -ModuleName $module Invoke-GuestTask { '{"Notes":[],"Files":["VisualStudio.vssettings"]}' }
         Mock -ModuleName $module Write-VisualStudioSettingMarker { }
-        Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         $vmSettings = $settings.Clone()
         $vmSettings.UseDevDrive = $false
         $vmSettings.VSSettingsBackup = Join-Path $TestDrive 'VisualStudio.vssettings'

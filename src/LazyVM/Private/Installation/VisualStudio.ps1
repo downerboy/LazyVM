@@ -505,6 +505,23 @@ function Write-VisualStudioSettingMarker {
 # of the guest account, which comes a while after the guest starts (#276).
 $script:VisualStudioSignInWaitMinutes = 3
 
+# The Visual Studio files in the guest account's profile that a capture
+# reads (Save-GuestVisualStudioUserFile) and a restore puts back
+# (Restore-GuestVisualStudioState), by key in the capture's record. Name is
+# the file's name in a guest task's folder and in the capture, as the guest
+# script Data\Guest.VisualStudioUserFiles.ps1 names it. The settings are
+# put back by the settings step, not with the others.
+$script:VisualStudioUserFile = @(
+    [pscustomobject]@{ Key = 'Settings'; Name = 'VisualStudio.vssettings' }
+    [pscustomobject]@{ Key = 'NuGetConfig'; Name = 'NuGet.Config' }
+    [pscustomobject]@{ Key = 'GitConfig'; Name = 'gitconfig' }
+    [pscustomobject]@{ Key = 'UserItems'; Name = 'vs-useritems.zip' }
+)
+
+# The most a capture reads back of each of those files. They are small; one
+# over this is not captured.
+$script:VisualStudioUserFileMaximumBytes = 50MB
+
 function Restore-GuestVisualStudioSetting {
     <#
       Applies the Visual Studio settings in VSSettingsBackup, which a capture

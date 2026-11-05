@@ -563,6 +563,13 @@ Describe 'Get-GuestTaskStatus' {
         (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -Be '3010'
     }
 
+    It 'reads a result the wrapper wrote with a byte order mark, as Windows PowerShell writes UTF-8' {
+        $null = New-Item -ItemType Directory -Path $output -Force
+        [IO.File]::WriteAllText($done, "n1 3010`r`n", [Text.UTF8Encoding]::new($true))
+
+        (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -Be '3010'
+    }
+
     It 'takes a result written for another start, or with no nonce, as no result yet' -ForEach @(
         @{ Written = 'n0 0' }
         @{ Written = '0' }
@@ -573,7 +580,7 @@ Describe 'Get-GuestTaskStatus' {
         (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeNullOrEmpty
     }
 
-    It 'reads nothing through a link in <Case>, which the task''s user may have made (#302 SEC-008)' -ForEach @(
+    It 'reads nothing through a link in <Case>, which the task''s user may have made, and says so as the task''s result (#302 SEC-008)' -ForEach @(
         @{ Case = 'place of the Output folder'; LinkOutput = $true }
         @{ Case = 'place of the result'; LinkOutput = $false }
     ) {
@@ -587,10 +594,139 @@ Describe 'Get-GuestTaskStatus' {
             $null = New-Item -ItemType Directory -Path $output -Force
             $null = New-Item -ItemType SymbolicLink -Path $done -Target (Join-Path $elsewhere "$taskName.done")
         }
-        Mock Get-Content { 'n1 0' }
+
+        (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeLike 'FAILED:*junction or link*'
+    }
+
+    It 'takes a result that <Case> as no result yet' -ForEach @(
+        @{ Case = 'is not there'; Fault = { throw [IO.FileNotFoundException]::new('not there') } }
+        @{ Case = 'another program holds open'; Fault = { throw [IO.IOException]::new('in use', -2147024864) } }
+    ) {
+        Mock Read-GuestTaskOutputFile $Fault
 
         (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeNullOrEmpty
-        Should -Invoke Get-Content -Times 0 -Exactly
+    }
+
+    It 'gives any other error reading the result as the task''s result, so the host reports it rather than waiting' {
+        Mock Read-GuestTaskOutputFile { throw 'Add-Type failed' }
+
+        (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeLike 'FAILED:*Add-Type failed*'
+    }
+}
+
+Describe 'Read-GuestTaskOutputFile (#330)' {
+    BeforeEach {
+        if (-not $IsWindows) { Set-ItResult -Skipped -Because 'it opens the file with the Windows API' }
+        # The task's folder, which only administrators can change; the user can change Output in it.
+        $taskFolder = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $output = Join-Path $taskFolder 'Output'
+        Mock Get-GuestTaskOutputFolder { $output }
+        $null = New-Item -ItemType Directory -Path $output -Force
+        $file = Join-Path $output 'NuGet.Config'
+        $elsewhere = New-TestFolder
+        Set-Content -LiteralPath (Join-Path $elsewhere 'NuGet.Config') -Value 'secret' -NoNewline
+        $read = { Read-GuestTaskOutputFile -TaskName 'LazyVM-VSUserFilesCapture' -Name 'NuGet.Config' -MaximumBytes 1KB }
+    }
+
+    It 'gives what a file the task wrote in its Output folder holds' {
+        Set-Content -LiteralPath $file -Value 'nuget' -NoNewline
+
+        [Text.Encoding]::UTF8.GetString((& $read)) | Should -Be 'nuget'
+        Should -Invoke Get-GuestTaskOutputFolder -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-VSUserFilesCapture' }
+    }
+
+    It 'gives an empty file as no bytes' {
+        Set-Content -LiteralPath $file -Value '' -NoNewline
+
+        $bytes = & $read
+
+        # One empty array, so a caller can always hand it to [Convert]::ToBase64String.
+        , $bytes | Should -BeOfType [byte[]]
+        $bytes.Length | Should -Be 0
+    }
+
+    It 'refuses, naming it, a <LinkType> in the place of <Case>, which the task''s user may have made' -ForEach @(
+        @{ Case = 'the Output folder'; LinkType = 'Junction'; LinkOutput = $true }
+        @{ Case = 'the Output folder'; LinkType = 'SymbolicLink'; LinkOutput = $true }
+        @{ Case = 'the file'; LinkType = 'SymbolicLink'; LinkOutput = $false }
+    ) {
+        if ($LinkOutput) {
+            Remove-Item -LiteralPath $output
+            $null = New-Item -ItemType $LinkType -Path $output -Target $elsewhere
+            $link = $output
+        }
+        else {
+            $null = New-Item -ItemType $LinkType -Path $file -Target (Join-Path $elsewhere 'NuGet.Config')
+            $link = $file
+        }
+
+        { & $read } | Should -Throw "*$link*junction or link*"
+    }
+
+    It 'refuses a file with another hard link, which could be a file only administrators may read' {
+        $null = New-Item -ItemType HardLink -Path $file -Target (Join-Path $elsewhere 'NuGet.Config')
+
+        { & $read } | Should -Throw "*$file*hard link*"
+    }
+
+    It 'refuses a file over the size it is given' {
+        Set-Content -LiteralPath $file -Value ('x' * 1025) -NoNewline
+
+        { & $read } | Should -Throw "*$file*over*"
+    }
+
+    It 'says so when the file is not there' {
+        { & $read } | Should -Throw "*$file*not there*"
+    }
+}
+
+Describe 'Get-GuestVisualStudioSettingsHash (#330)' {
+    BeforeAll {
+        $localAppData = $env:LOCALAPPDATA
+        $userProfile = $env:USERPROFILE
+    }
+
+    AfterAll {
+        $env:LOCALAPPDATA = $localAppData
+        $env:USERPROFILE = $userProfile
+    }
+
+    BeforeEach {
+        $env:USERPROFILE = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $env:LOCALAPPDATA = Join-Path $env:USERPROFILE 'AppData\Local'
+        $instanceFolder = Join-Path $env:LOCALAPPDATA 'Microsoft\VisualStudio\18.0_a1b2c3d4'
+        $settings = Join-Path $instanceFolder 'Settings\CurrentSettings.vssettings'
+        $null = New-Item -ItemType Directory -Path (Split-Path $settings -Parent) -Force
+        Set-Content -LiteralPath $settings -Value 'settings'
+        $elsewhere = New-TestFolder
+        $null = New-Item -ItemType Directory -Path (Join-Path $elsewhere 'Settings') -Force
+        Set-Content -LiteralPath (Join-Path $elsewhere 'Settings\CurrentSettings.vssettings') -Value 'secret'
+    }
+
+    It 'hashes the newest settings backup of the instance' {
+        Get-GuestVisualStudioSettingsHash -InstanceId 'a1b2c3d4' | Should -Be (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
+    }
+
+    It 'hashes nothing when there is no settings backup' {
+        Get-GuestVisualStudioSettingsHash -InstanceId 'ffff' | Should -Be ''
+    }
+
+    It 'hashes nothing, so no link leads an administrator''s read, when <Case> is a link' -ForEach @(
+        @{ Case = 'the settings file'; Folder = $false }
+        @{ Case = 'the instance''s folder'; Folder = $true }
+    ) {
+        if ($Folder) {
+            Remove-Item -LiteralPath $instanceFolder -Recurse -Force
+            $null = New-Item -ItemType SymbolicLink -Path $instanceFolder -Target $elsewhere
+        }
+        else {
+            Remove-Item -LiteralPath $settings
+            $null = New-Item -ItemType SymbolicLink -Path $settings -Target (Join-Path $elsewhere 'Settings\CurrentSettings.vssettings')
+        }
+        Mock Get-FileHash { [pscustomobject]@{ Hash = 'READ' } }
+
+        Get-GuestVisualStudioSettingsHash -InstanceId 'a1b2c3d4' | Should -Be ''
+        Should -Invoke Get-FileHash -Times 0 -Exactly
     }
 }
 
@@ -696,17 +832,6 @@ Describe 'What LazyVM stages in the guest (#302)' {
         $null = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-GuestToolingInventory -VM $VM }
 
         ($calls -join ',') | Should -Be 'staging,inventory C:\Program Files\LazyVM\Staging'
-    }
-
-    It 'stages the Visual Studio capture in the staging folder' {
-        $vmWithVs = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; InstallVisualStudio = $true }) }
-        Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ InstanceId = 'a1'; ProductLine = '2026'; DisplayName = 'VS'; Version = '18' } }
-        Mock -ModuleName $module Invoke-GuestScript { $calls.Add("capture $($ArgumentList[0])"); [pscustomobject]@{ Settings = $null; SettingsMarker = $null; NuGetConfig = $null; GitConfig = $null; UserItems = $null; Notes = @() } }
-        Mock -ModuleName $module Copy-FromGuest { }
-
-        $null = InModuleScope $module -Parameters @{ VM = $vmWithVs; Dir = $TestDrive } { param($VM, $Dir) Save-GuestVisualStudioState -VM $VM -CaptureDir $Dir }
-
-        ($calls -join ',') | Should -Be 'staging,capture C:\Program Files\LazyVM\Staging'
     }
 }
 

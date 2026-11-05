@@ -312,6 +312,32 @@ function Copy-FromGuest {
     Copy-Item -Path $GuestPath -Destination $HostPath -FromSession $session -Force -ErrorAction Stop
 }
 
+function Receive-GuestTaskOutputFile {
+    <#
+      Reads the file $Name that guest task $TaskName wrote in its Output
+      folder, of at most $MaximumBytes, and writes it to $Destination. The
+      guest checks and reads it on one handle, never through a link
+      (Read-GuestTaskOutputFile in Guest.Helpers.ps1), and gives it back as
+      base64. Throws when it cannot.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$TaskName,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][long]$MaximumBytes,
+        [Parameter(Mandatory)][string]$Destination
+    )
+
+    $read = @(Invoke-GuestScript -VM $VM -Activity "reading $Name" -TimeoutMinutes 5 -ArgumentList @($TaskName, $Name, $MaximumBytes) -ScriptBlock {
+            param($taskName, $name, $maximumBytes)
+            [Convert]::ToBase64String((Read-GuestTaskOutputFile -TaskName $taskName -Name $name -MaximumBytes $maximumBytes))
+        })
+    if ($read.Count -ne 1 -or $read[0] -isnot [string]) { throw "the guest did not give $Name back as one piece of text" }
+    New-Folder -Path (Split-Path -Path $Destination -Parent)
+    Assert-NoReparsePoint -Path $Destination
+    [IO.File]::WriteAllBytes($Destination, [Convert]::FromBase64String($read[0]))
+}
+
 function Copy-ToGuest {
     <#
       Pushes one file into a folder the guest already has: the staging folder

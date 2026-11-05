@@ -916,12 +916,12 @@ Describe 'Guest text in persistence findings and notes (SEC-004)' {
         $found[0].Where | Should -Be @('C:\x\u{202E}exe.txt')
     }
 
-    It 'makes what a guest script reports printable in the log' {
+    It 'makes what a guest script reports one printable line in the log' {
         Mock -ModuleName $module Write-LogEntry { }
 
-        InModuleScope $module { Write-GuestNote -Notes @(@{ Level = 'WARN'; Text = "line`r`nINJECTED" }) }
+        InModuleScope $module { Write-GuestNote -Notes @(@{ Level = 'WARN'; Text = "line`r`nINJECTED`e[2J" }) }
 
-        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -eq '  line\u{000D}\u{000A}INJECTED' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -eq '  line INJECTED\u{001B}[2J' }
     }
 }
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## [6.6.1](https://github.com/downerboy/LazyVM/compare/v6.6.0...v6.6.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* capture the user's Visual Studio files as the user, never following links ([#335](https://github.com/downerboy/LazyVM/issues/335)) ([c1afe20](https://github.com/downerboy/LazyVM/commit/c1afe2009e2976df18cb0ede5cecc15799c54c3f))
+
+## [6.6.0](https://github.com/downerboy/LazyVM/compare/v6.5.3...v6.6.0) (2026-11-04)
+
+
+### Features
+
+* approve security findings, persistence baseline and alert severity setting ([#329](https://github.com/downerboy/LazyVM/issues/329)) ([354b2ba](https://github.com/downerboy/LazyVM/commit/354b2ba0daa6609186d2f028db0d5025c217e810))
+
+
+### Bug Fixes
+
+* find Program Files from the system in the guest, not from the environment ([#331](https://github.com/downerboy/LazyVM/issues/331)) ([bdc2c40](https://github.com/downerboy/LazyVM/commit/bdc2c40ff932ac7993a6d3fefa2045ac41670355))
+* ignore duplicate Gallery module versions installed in both scopes ([#326](https://github.com/downerboy/LazyVM/issues/326)) ([00c6ea8](https://github.com/downerboy/LazyVM/commit/00c6ea8b6d36f7f0bec76ab93d636448e8aec846))
+* never follow links when restoring files into the user's profile ([#328](https://github.com/downerboy/LazyVM/issues/328)) ([eef925b](https://github.com/downerboy/LazyVM/commit/eef925be8bd9e2029d3102247aa15e92d9152c31))
+
 ## [6.5.3](https://github.com/downerboy/LazyVM/compare/v6.5.2...v6.5.3) (2026-11-03)
 
 

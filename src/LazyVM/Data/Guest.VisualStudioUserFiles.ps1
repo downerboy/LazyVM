@@ -1,37 +1,58 @@
-﻿# Guest.VisualStudioUserFiles.ps1 - Visual Studio's files put back into the user's profile (#310).
+﻿# Guest.VisualStudioUserFiles.ps1 - Visual Studio's files in the user's profile, captured and put back as that user (#310, #330).
 #
 # Runs in the GUEST, under Windows PowerShell 5.1, as the guest account
-# under its limited token: no PowerShell 7 syntax. The restore copies it to
-# C:\Program Files\LazyVM\Tasks\LazyVM-VSUserFiles\VisualStudioUserFiles.ps1,
-# the folder of its task, with the captured files beside it; that account
-# can read the folder but only administrators can change it.
+# under its limited token: no PowerShell 7 syntax. It is copied into the
+# folder of its task, under C:\Program Files\LazyVM\Tasks, as
+# VisualStudioUserFiles.ps1; that account can read the folder but only
+# administrators can change it. The places of the files are known here
+# only, for both directions:
 #
-# The files go where only that account's own processes write, so they are
-# written with that account's rights: a junction or link someone planted
-# there leads nowhere that account could not write anyway. Even so, nothing
-# is written through one. Before each file is written, the folder it is
-# restored under (-ProfileRoot, or -Documents for the snippets and
-# templates), every folder below it on the way, and the file itself, are
-# checked, and a junction, link or mount point refuses that file. A OneDrive
+# - NuGet.Config, in AppData\NuGet;
+# - .gitconfig, in the profile;
+# - the snippets, templates and settings, in Documents\Visual Studio <n>.
+#
+# Restore (the default): the captured files, given beside it, go into the
+# profile. Capture (-OutputFolder): those files, and the .vssettings file
+# -SettingsFile names, are copied into the task's Output folder, the
+# Documents folders as one zip archive, which the restore extracts.
+#
+# Only that account's own processes write in these places, so the files are
+# read and written with that account's rights: a junction or link someone
+# planted there leads nowhere that account could not reach anyway. Even so,
+# nothing is read or written through one. Before each file is read or
+# written, the folder it is under (-ProfileRoot, -Documents for the
+# snippets and templates, or -OutputFolder), every folder below it on the
+# way, and the file itself, are checked, and a junction, link or mount
+# point refuses that file; a capture also refuses the whole archive when it
+# finds one inside the Documents folders, never walking into it. A OneDrive file or
 # folder kept in the cloud looks the same and is refused too. The folders
 # above the root are not walked: when Documents is redirected, as LazyVM
 # puts it on the User disk, the walk for the snippets and templates starts
 # at the Documents folder itself. An archive entry whose name could lead
-# out of the Visual Studio folder is refused. A refused or failed file is a
-# WARN note and the rest carry on.
+# out of the Visual Studio folder is refused. A file over -MaximumBytes is
+# refused, and so is the archive when it holds one or comes out over it. A
+# refused or failed file is a WARN note and the rest carry on.
 #
-# Returns the notes, each @{ Level; Text } (New-GuestNote in Guest.Helpers.ps1,
-# which a task does not have).
+# Returns @{ Notes }, each note @{ Level; Text } (New-GuestNote in
+# Guest.Helpers.ps1, which a task does not have). A capture returns
+# @{ Notes; Files; Unread }: Files, the names of the files it wrote in
+# -OutputFolder; Unread, those of the files that are there but it refused
+# or could not read, which the host then keeps from its previous capture.
+# The archive is Unread when anything in the Documents folders was, so a
+# capture never drops a snippet or template the previous one had.
 
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Restore')]
 param(
     [Parameter(Mandatory)][string]$ProfileRoot,
     [Parameter(Mandatory)][string]$AppData,
     [Parameter(Mandatory)][string]$Documents,
     [Parameter(Mandatory)][string]$ProductLine,
-    [string]$NuGetConfig,
-    [string]$GitConfig,
-    [string]$UserItems
+    [Parameter(ParameterSetName = 'Restore')][string]$NuGetConfig,
+    [Parameter(ParameterSetName = 'Restore')][string]$GitConfig,
+    [Parameter(ParameterSetName = 'Restore')][string]$UserItems,
+    [Parameter(Mandatory, ParameterSetName = 'Capture')][string]$OutputFolder,
+    [Parameter(ParameterSetName = 'Capture')][string]$SettingsFile,
+    [Parameter(Mandatory, ParameterSetName = 'Capture')][long]$MaximumBytes
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,11 +67,19 @@ function New-Note {
     return [pscustomobject]@{ Level = $Level; Text = $Text }
 }
 
-function Get-WriteProblem {
+function Get-LinkText {
+    <# Why the junction or link at $Path is refused. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    return "$Path is a junction or link, or a OneDrive file or folder kept in the cloud, and LazyVM never reads or writes through one"
+}
+
+function Get-PathProblem {
     <#
-      Why $Path must not be written, or '' when it may: $Path is not inside
-      $Root, or $Root, a folder below it on the way to $Path, or $Path
-      itself is a reparse point. The attributes are those of the item
+      Why $Path must not be read or written, or '' when it may: $Path is not
+      inside $Root, or $Root, a folder below it on the way to $Path, or
+      $Path itself is a reparse point. The attributes are those of the item
       itself, never what a link leads to, so a link that leads nowhere yet
       is found too. Nothing below a missing folder can be there.
     #>
@@ -73,7 +102,7 @@ function Get-WriteProblem {
         try { $attributes = [IO.File]::GetAttributes($current) }
         catch [IO.FileNotFoundException], [IO.DirectoryNotFoundException] { return '' }
         if ($attributes -band [IO.FileAttributes]::ReparsePoint) {
-            return "$current is a junction or link, or a OneDrive folder kept in the cloud, and LazyVM never writes through one"
+            return (Get-LinkText -Path $current)
         }
         if ($index -ge $parts.Count) { return '' }
         $current = [IO.Path]::Combine($current, $parts[$index])
@@ -82,7 +111,7 @@ function Get-WriteProblem {
 
 function Write-ProfileFile {
     <#
-      Writes $Destination, under $Root, after Get-WriteProblem, making the
+      Writes $Destination, under $Root, after Get-PathProblem, making the
       folders it needs: a copy of the file $Source, or the zip archive
       entry $Entry extracted. Returns '' when it was written, or why it was
       not.
@@ -96,7 +125,7 @@ function Write-ProfileFile {
     )
 
     try {
-        $problem = Get-WriteProblem -Root $Root -Path $Destination
+        $problem = Get-PathProblem -Root $Root -Path $Destination
         if ($problem) { return $problem }
         $null = [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($Destination))
         if ($Entry) { [IO.Compression.ZipFileExtensions]::ExtractToFile($Entry, $Destination, $true) }
@@ -171,12 +200,176 @@ function Restore-ProfileArchive {
     New-Note -Level OK -Text "restored $restored snippet and template file(s)"
 }
 
-if ($NuGetConfig) {
-    Restore-ProfileFile -What 'NuGet.Config' -Source $NuGetConfig -Root $ProfileRoot -Destination ([IO.Path]::Combine($AppData, 'NuGet', 'NuGet.Config'))
+function New-Outcome {
+    <# How capturing one file or the archive went: State Missing (nothing there), Copied or Refused, and why when Refused. #>
+    param(
+        [Parameter(Mandatory)][ValidateSet('Missing', 'Copied', 'Refused')][string]$State,
+        [string]$Reason = ''
+    )
+
+    return [pscustomobject]@{ State = $State; Reason = $Reason }
 }
-if ($GitConfig) {
-    Restore-ProfileFile -What '.gitconfig' -Source $GitConfig -Root $ProfileRoot -Destination ([IO.Path]::Combine($ProfileRoot, '.gitconfig'))
+
+function Get-SizeText {
+    <# Why a file of $Length bytes is over $MaximumBytes. #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][long]$Length,
+        [Parameter(Mandatory)][long]$MaximumBytes
+    )
+
+    return "it is $Length bytes, over the $MaximumBytes LazyVM captures"
 }
-if ($UserItems) {
-    Restore-ProfileArchive -Archive $UserItems -Root $Documents -Destination ([IO.Path]::Combine($Documents, "Visual Studio $ProductLine"))
+
+function Save-ProfileFile {
+    <#
+      Copies the file $Source, under $Root, to $Destination, under
+      $OutputFolder (Write-ProfileFile), once Get-PathProblem finds no
+      reason not to read it and it is no more than $MaximumBytes. Returns
+      New-Outcome: Missing when there is no file at $Source. A link at
+      $Source, even one that leads nowhere, is Refused.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Destination,
+        [Parameter(Mandatory)][string]$OutputFolder,
+        [Parameter(Mandatory)][long]$MaximumBytes
+    )
+
+    $problem = Get-PathProblem -Root $Root -Path $Source
+    if ($problem) { return New-Outcome -State Refused -Reason $problem }
+    if (-not [IO.File]::Exists($Source)) { return New-Outcome -State Missing }
+    $length = ([IO.FileInfo]$Source).Length
+    if ($length -gt $MaximumBytes) { return New-Outcome -State Refused -Reason (Get-SizeText -Length $length -MaximumBytes $MaximumBytes) }
+    $problem = Write-ProfileFile -Root $OutputFolder -Destination $Destination -Source $Source
+    if ($problem) { return New-Outcome -State Refused -Reason $problem }
+    return New-Outcome -State Copied
 }
+
+function Get-ArchiveFile {
+    <#
+      The files in the folder $Path and below, each @{ Path; Entry; Length;
+      Problem }, Entry being its name in the archive: $Entry, then its own.
+      A junction or link found, which is not walked into, and a folder that
+      cannot be read, come back with only Entry and Problem.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Entry
+    )
+
+    try { $items = @(([IO.DirectoryInfo]$Path).GetFileSystemInfos()) }
+    catch { return [pscustomobject]@{ Entry = $Entry; Problem = "what is in $Path cannot be read: $($_.Exception.Message)" } }
+    foreach ($item in $items) {
+        $name = "$Entry/$($item.Name)"
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { [pscustomobject]@{ Entry = $name; Problem = (Get-LinkText -Path $item.FullName) } }
+        elseif ($item -is [IO.DirectoryInfo]) { Get-ArchiveFile -Path $item.FullName -Entry $name }
+        else { [pscustomobject]@{ Path = $item.FullName; Entry = $name; Length = $item.Length; Problem = '' } }
+    }
+}
+
+function Save-ProfileArchive {
+    <#
+      Zips the files in each of the folders $Folder of $Source, under
+      $Root, into $Archive, under $OutputFolder, each named from its folder
+      on (Code Snippets/...), as Restore-ProfileArchive extracts them.
+      Returns New-Outcome: Refused when a folder Get-PathProblem refuses,
+      anything Get-ArchiveFile finds a problem with, a file over
+      $MaximumBytes or one that cannot be read, or when the archive comes
+      out over $MaximumBytes; Missing when there is no file. An archive is
+      never Copied with anything left out of it. Adds a WARN note to
+      $Notes for each thing refused.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string[]]$Folder,
+        [Parameter(Mandatory)][string]$Archive,
+        [Parameter(Mandatory)][string]$OutputFolder,
+        [Parameter(Mandatory)][long]$MaximumBytes,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Notes
+    )
+
+    $found = @(foreach ($name in $Folder) {
+            $path = [IO.Path]::Combine($Source, $name)
+            $problem = Get-PathProblem -Root $Root -Path $path
+            if ($problem) { [pscustomobject]@{ Entry = $name; Problem = $problem } }
+            elseif ([IO.Directory]::Exists($path)) { Get-ArchiveFile -Path $path -Entry $name }
+        })
+    foreach ($file in @($found | Where-Object { -not $_.Problem -and $_.Length -gt $MaximumBytes })) {
+        $file.Problem = Get-SizeText -Length $file.Length -MaximumBytes $MaximumBytes
+    }
+    $problems = @($found | Where-Object { $_.Problem })
+    foreach ($item in $problems) { $Notes.Add((New-Note -Level WARN -Text "did not capture $($item.Entry): $($item.Problem)")) }
+    if ($problems.Count -gt 0) { return New-Outcome -State Refused }
+    if ($found.Count -eq 0) { return New-Outcome -State Missing }
+
+    $problem = Get-PathProblem -Root $OutputFolder -Path $Archive
+    if (-not $problem) {
+        try {
+            $zip = New-Object IO.Compression.ZipArchive([IO.File]::Create($Archive), [IO.Compression.ZipArchiveMode]::Create)
+            try {
+                foreach ($file in $found) {
+                    try { $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.Path, $file.Entry) }
+                    catch { $problem = "$($file.Entry) cannot be read: $($_.Exception.Message)"; break }
+                }
+            }
+            finally { $zip.Dispose() }
+        }
+        catch { $problem = $_.Exception.Message }
+    }
+    if (-not $problem) {
+        $length = ([IO.FileInfo]$Archive).Length
+        if ($length -gt $MaximumBytes) { $problem = "the archive $(Get-SizeText -Length $length -MaximumBytes $MaximumBytes)" }
+    }
+    if ($problem) {
+        $Notes.Add((New-Note -Level WARN -Text "did not capture the snippets and templates: $problem"))
+        return New-Outcome -State Refused
+    }
+    return New-Outcome -State Copied
+}
+
+$nuGetConfigPath = [IO.Path]::Combine($AppData, 'NuGet', 'NuGet.Config')
+$gitConfigPath = [IO.Path]::Combine($ProfileRoot, '.gitconfig')
+$visualStudioFolder = [IO.Path]::Combine($Documents, "Visual Studio $ProductLine")
+
+if ($PSCmdlet.ParameterSetName -eq 'Capture') {
+    $notes = [System.Collections.Generic.List[object]]::new()
+    $files = [System.Collections.Generic.List[string]]::new()
+    $unread = [System.Collections.Generic.List[string]]::new()
+    $captures = @(
+        @{ What = 'NuGet.Config'; Source = $nuGetConfigPath; Name = 'NuGet.Config' }
+        @{ What = '.gitconfig'; Source = $gitConfigPath; Name = 'gitconfig' }
+        @{ What = 'the Visual Studio settings'; Source = $SettingsFile; Name = 'VisualStudio.vssettings' }
+    )
+    foreach ($capture in @($captures | Where-Object { $_.Source })) {
+        $outcome = Save-ProfileFile -Root $ProfileRoot -Source $capture.Source -Destination ([IO.Path]::Combine($OutputFolder, $capture.Name)) `
+            -OutputFolder $OutputFolder -MaximumBytes $MaximumBytes
+        if ($outcome.State -eq 'Copied') { $files.Add($capture.Name) }
+        elseif ($outcome.State -eq 'Refused') {
+            $notes.Add((New-Note -Level WARN -Text "did not capture $($capture.What): $($outcome.Reason)"))
+            $unread.Add($capture.Name)
+        }
+    }
+    $archiveName = 'vs-useritems.zip'
+    $outcome = Save-ProfileArchive -Root $Documents -Source $visualStudioFolder -Folder 'Code Snippets', 'Templates', 'Settings' `
+        -Archive ([IO.Path]::Combine($OutputFolder, $archiveName)) -OutputFolder $OutputFolder -MaximumBytes $MaximumBytes -Notes $notes
+    # Save-ProfileArchive has said why in the notes.
+    if ($outcome.State -eq 'Copied') { $files.Add($archiveName) }
+    elseif ($outcome.State -eq 'Refused') { $unread.Add($archiveName) }
+    return [pscustomobject]@{ Notes = $notes.ToArray(); Files = $files.ToArray(); Unread = $unread.ToArray() }
+}
+
+$restored = @(
+    if ($NuGetConfig) {
+        Restore-ProfileFile -What 'NuGet.Config' -Source $NuGetConfig -Root $ProfileRoot -Destination $nuGetConfigPath
+    }
+    if ($GitConfig) {
+        Restore-ProfileFile -What '.gitconfig' -Source $GitConfig -Root $ProfileRoot -Destination $gitConfigPath
+    }
+    if ($UserItems) {
+        Restore-ProfileArchive -Archive $UserItems -Root $Documents -Destination $visualStudioFolder
+    }
+)
+return [pscustomobject]@{ Notes = $restored }

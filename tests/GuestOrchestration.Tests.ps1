@@ -378,3 +378,24 @@ Describe 'Set-GuestCustomization' {
         Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly
     }
 }
+
+Describe 'Write-GuestNote (#330)' {
+    BeforeEach {
+        $logged = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Write-LogEntry { $logged.Add("$($Level): $Message") }
+        $write = { param($Notes) InModuleScope $module -Parameters @{ Notes = $Notes } { param($Notes) Write-GuestNote -Notes $Notes } }
+    }
+
+    It 'logs a note the guest wrote over several lines as one line, so it cannot make up log lines of its own' {
+        & $write -Notes @([pscustomobject]@{ Level = 'WARN'; Text = "first`r`nOK: made up`nlast" })
+
+        $logged | Should -Be @('WARN:   first OK: made up last')
+    }
+
+    It 'cuts a note longer than 1000 characters short, and says so' {
+        & $write -Notes @([pscustomobject]@{ Level = 'INFO'; Text = ('x' * 1500) })
+
+        $logged[0] | Should -Be ("INFO:   $('x' * 1000)... (cut short)")
+    }
+}
+
