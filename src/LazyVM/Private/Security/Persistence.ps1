@@ -80,7 +80,7 @@ $script:RemovedFingerprint = 'removed'
 # one of them removed is High.
 $script:ProtectedPersistenceItem = @{
     ScheduledTask = @('\Microsoft\Windows\Windows Defender\*', '*Sysmon*')
-    Service       = @('WinDefend', 'WdNisSvc', 'MDCoreSvc', 'Sense', 'Sysmon', 'Sysmon64')
+    Service       = @('WinDefend', 'WdNisSvc', 'MDCoreSvc', 'Sense', $script:SysmonServicePattern)
 }
 
 # How every persistence finding ends: the way to accept a change you expect.

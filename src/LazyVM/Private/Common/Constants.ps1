@@ -43,6 +43,10 @@ $script:SecurityFindingsFileName = 'SecurityFindings.json'
 # The security scan's known-good persistence baseline and the findings the
 # VM's owner approved, in <Name>\Config (SecurityBaseline.ps1).
 $script:SecurityBaselineFileName = 'SecurityBaseline.json'
+# Sysmon's services by name (-like), the built-in one's and its driver
+# included: what Set-GuestSysmon looks for, and what the security scan
+# reports as High when one is removed.
+$script:SysmonServicePattern = 'Sysmon*'
 # The VM.json a VM was first built from, kept beside it to diff against it.
 $script:ProfileTemplateFileName = 'VM.Template.json'
 $script:SchemaFileName = 'LazyVM.Settings.schema.json'

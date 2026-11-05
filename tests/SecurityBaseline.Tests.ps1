@@ -174,6 +174,8 @@ Describe 'ConvertTo-PersistenceFinding' {
     It 'reports, as High, a removed <Name>, one of Defender''s or Sysmon''s own' -ForEach @(
         @{ Area = 'Service'; Name = 'WinDefend' }
         @{ Area = 'Service'; Name = 'Sysmon64' }
+        @{ Area = 'Service'; Name = 'Sysmon' }
+        @{ Area = 'Service'; Name = 'SysmonDrv' }
         @{ Area = 'ScheduledTask'; Name = '\Microsoft\Windows\Windows Defender\Windows Defender Scheduled Scan' }
     ) {
         $earlier = New-PersistenceFact
@@ -183,6 +185,15 @@ Describe 'ConvertTo-PersistenceFinding' {
 
         $found.Id | Should -Be @("${Area}:${Name}:removed")
         $found[0].Severity | Should -Be 'High'
+    }
+
+    It 'reports a removed service as Low when only part of its name is Sysmon''s' {
+        $earlier = New-PersistenceFact
+        $earlier.Service += [pscustomobject]@{ Name = 'MySysmonHelper'; Fingerprint = '0123456789ab'; Program = ''; InUserFolder = $false }
+
+        $found = @(ConvertTo-TestPersistenceFinding -Item (New-PersistenceFact) -Baseline (New-TestBaseline -Item $earlier))
+
+        $found[0].Severity | Should -Be 'Low'
     }
 
     It 'does not take an item it could not read for a removed one' {

@@ -69,6 +69,16 @@ Describe 'Set-GuestSysmon' {
         Should -Invoke -ModuleName $module Write-GuestNote -Times 1 -Exactly -ParameterFilter { $Notes[0].Text -eq 'Sysmon installed' }
     }
 
+    It 'finds Sysmon''s services by the pattern the security scan uses for them too (#334)' {
+        Mock -ModuleName $module Invoke-GuestScript { }
+        $pattern = InModuleScope $module { $script:SysmonServicePattern }
+
+        InModuleScope $module { Set-GuestSysmon -VM ([VMContext]::new(@{ VMName = 'Alpha'; GuestSysmon = $true })) }
+
+        $pattern | Should -Be 'Sysmon*'
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { $ArgumentList[4] -eq $pattern -and "$ScriptBlock" -match 'Get-Service -Name \$servicePattern' }
+    }
+
     It 'writes the configuration for sysmon in the staging folder, which only administrators can change, not in the admin''s TEMP (#317)' {
         Mock -ModuleName $module Invoke-GuestScript { }
 
