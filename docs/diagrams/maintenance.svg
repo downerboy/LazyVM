@@ -715,14 +715,16 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="345" y="3951">settings and the places programs start</text>
 <text class="at" x="345" y="3968">from, read as SYSTEM; the last against</text>
 <text class="at" x="345" y="3985">the baseline, recorded for any area it</text>
-<text class="at" x="345" y="4002">lacks; an item or area it cannot read is</text>
-<text class="at" x="345" y="4019">a finding; approved findings left out;</text>
-<text class="at" x="345" y="4036">the rest marked New, Still open or</text>
-<text class="at" x="345" y="4053">Resolved against the last scan, put in</text>
-<text class="at" x="345" y="4070">the guest, then kept. Opens the file for</text>
-<text class="at" x="345" y="4087">new findings of a severity in</text>
-<text class="at" x="345" y="4104">GuestSecurityScanAlertSeverity. Only</text>
-<text class="at" x="345" y="4121">reports</text>
+<text class="at" x="345" y="4002">lacks; an item or area it cannot read,</text>
+<text class="at" x="345" y="4019">and a removed one, is a finding; a 6.6.0</text>
+<text class="at" x="345" y="4036">baseline is upgraded by item name;</text>
+<text class="at" x="345" y="4053">approved findings left out; the rest</text>
+<text class="at" x="345" y="4070">marked New, Still open or Resolved</text>
+<text class="at" x="345" y="4087">against the last scan, put in the guest,</text>
+<text class="at" x="345" y="4104">then kept. Opens the file for new</text>
+<text class="at" x="345" y="4121">findings of a severity in</text>
+<text class="at" x="345" y="4138">GuestSecurityScanAlertSeverity. Only</text>
+<text class="at" x="345" y="4155">reports</text>
 </g>
 <g class="bx-store"><rect x="20" y="3848" width="255" height="203" rx="3"/>
 <text class="st" x="147.5" y="3862" text-anchor="middle">«guest»</text>

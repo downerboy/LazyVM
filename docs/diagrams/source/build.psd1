@@ -182,8 +182,8 @@
             Function = 'Save-GuestPersistenceBaseline'
             Area     = 'Security'
             Caller   = 'Build-LazyVM'
-            Note     = 'unless the host is restarting or GuestSecurityScan is off: at the first build, the VM as the build leaves it, which the nightly security scan compares with; at a later one, only an area the baseline lacks, so a change is never made known-good. A failure is logged and the next scan records what is missing'
-            Includes = @('Get-GuestPersistenceSnapshot', 'Install-GuestSecurityFindingOpener', 'Get-GuestPersistenceFact', 'New-PersistenceBaseline', 'Update-SecurityBaseline', 'Add-PersistenceBaselineArea')
+            Note     = 'unless the host is restarting or GuestSecurityScan is off: at the first build, the VM as the build leaves it, which the nightly security scan compares with; at a later one, only an area the baseline lacks, so a change is never made known-good. Approves automatic sign-in once for the VM. A failure is logged and the next scan records what is missing'
+            Includes = @('Get-GuestPersistenceSnapshot', 'Install-GuestSecurityFindingOpener', 'Get-GuestPersistenceFact', 'New-PersistenceBaseline', 'Update-SecurityBaseline', 'Add-PersistenceBaselineArea', 'Add-DefaultSecurityApproval')
             Reads    = @(@{ Label = 'places programs start from'; Kind = 'guest'; Store = 'Running guest'; Items = @('scheduled tasks, services, Run keys,', 'startup folders, WMI subscriptions,', 'local users, Administrators') })
             Writes   = @(@{ Label = 'known-good baseline, under a lock'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('SecurityBaseline.json') })
         }

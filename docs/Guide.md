@@ -425,7 +425,7 @@ Get-LazyVMSecurityFinding -Name DevBox | Where-Object Status -ne 'Resolved'
 
 `["High", "Medium"]` alerts only for those, and `[]` never alerts. Whatever it says, every finding is still in the log, in `Get-LazyVMSecurityFinding` and in the findings file. The config templates do not set it, so a new VM alerts for everything until you change it; `Export-LazyVMTemplate` carries your choice into a template of your own.
 
-Automatic sign-in is always found, as Info, so with the default the reminder shows it until you approve it: `Approve-LazyVMSecurityFinding -Name DevBox -Id 'AutoLogon:Winlogon:On' -Reason 'on by design'`.
+Automatic sign-in is always found, as Info, so the first build approves it for you, with the reason "LazyVM turns on autologon by design". It is listed by `Get-LazyVMSecurityFinding -Name DevBox -Approved`, and `Revoke-LazyVMSecurityFinding -Name DevBox -Id 'AutoLogon:Winlogon:On'` undoes it; a later build does not approve it again. A VM built before LazyVM did this gets it at its next build.
 
 #### The persistence baseline
 
@@ -435,6 +435,7 @@ Malware that gets in usually makes sure it starts again: it adds a scheduled tas
 - **A rebuild** reads the new VM after the build and before the restore, adds what the old baseline knew, and keeps the result only once the rebuild has passed its check. So something the restore puts back is known only if it was known before, and a rebuild that is rolled back keeps the old baseline.
 - **The nightly scan** records an area the baseline lacks, such as on a VM built before LazyVM had a baseline, or one the guest could not read until then. It reports nothing for that area that night.
 - Nothing ever writes an empty baseline over one that is there.
+- **A baseline kept by LazyVM 6.6.0** is upgraded, never recorded again from the VM. Its fingerprints were made another way, so only the item names it knew are kept. The first scan after the update takes an item whose name it knew as known, with its new fingerprint, and logs `baseline upgraded`; an item whose name it did not know is reported as new, and a name it knew that is gone, as removed.
 
 Every night the scan compares them with the baseline and reports each one that is **new** or **changed**:
 
@@ -451,11 +452,11 @@ Status: New
 ```
 
 - **The Id** is the area, the item's name, and a fingerprint: the SHA-256 of what it runs. That is its command line and the account it runs as; for a service, its program, DLL, start type and what it does when it fails; a startup item's contents; a subscription's query and command; and, for anything that points into a folder users can write to, the program file itself. When any of that changes, such as a service's program path, the Id changes, and the change is reported. A version number in a folder name is left out of the fingerprint, so an update that moves a program to its new version's folder, as Defender and Edge do, is not a change, except in a folder users can write to. Of what the fingerprint is made from, only the program's path leaves the VM, never the arguments, which could hold a password.
-- **Folders users can write to** are the user profiles, the Windows temporary folder, `ProgramData` (but Defender's own folder there), any network path, and a path written with one of a user's own variables, such as `%APPDATA%`. Every path on an item's command line counts, not only its program's.
+- **Folders users can write to** are the user profiles, the Windows temporary folder, any network path, a path written with one of a user's own variables, such as `%APPDATA%`, and a place in `ProgramData` whose access lets a user change it. For that last, LazyVM reads the access of the file and of each folder above it below `ProgramData`: if any lets Users, Authenticated Users, Everyone, INTERACTIVE or the guest account write, append, delete, create or change permissions, it counts. `ProgramData` itself is left out, since it lets every user make a folder of their own. So Defender's protected folder there does not count, and a vendor's folder anyone can write to does. Every path on an item's command line counts, not only its program's.
 - **Severity:** a new member of Administrators and a WMI event subscription are High; so is anything that points into a folder users can write to. Everything else is Medium.
 - **What cannot be read is a finding too.** An item LazyVM cannot read, perhaps because something stopped SYSTEM reading it, has the Id `<area>:<name>:unreadable` and is always reported. So is a link (reparse point) in a startup folder, which LazyVM never follows (`...:link`). A startup folder that is a link, or is inside one, cannot be read at all. An area the guest cannot read two scans running, such as the guest account's Run keys while it is not signed in, is a Medium finding, `UnreadableArea:<area>`, until it can be read again.
 - Text from the VM, such as an item's name, is shown with its control and format characters written out as `\u{XXXX}`, so a name cannot break a line of the log or of the findings file, or change what a screen reader says.
-- What was **removed** is not reported: it can no longer start anything.
+- What was **removed** is reported too, as `<area>:<name>:removed`: Low, or High when it is one of Defender's or Sysmon's own scheduled tasks or services, which malware turns off. Approve one you removed yourself.
 - LazyVM's own tasks are part of the baseline, `LazyVM-SecurityFindings` included, except the one the scan runs as.
 - **When the baseline file cannot be read**, LazyVM never writes over it. The scan counts every persistence area as not read and leaves the file alone, and the log says so each night. Approving or revoking a finding, or the next build, moves the file aside to `SecurityBaseline.json.bad` and stops, saying so; after that, the next build or scan records a new baseline. Every change to the file is made under a lock, so a scan and an approval at the same time do not undo each other.
 

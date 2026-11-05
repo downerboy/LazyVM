@@ -8,10 +8,13 @@
 #
 # A baseline area holds, for each item name, the fingerprints known for it.
 # An item is a finding when its fingerprint is not known for its name: new
-# when the name is not in the baseline, changed when it is. What was removed
-# is not reported: it can no longer start anything. Its Id is
-# '<area>:<name>:<fingerprint>' (Get-PersistenceItemId, the only place that
-# makes one); nothing takes an Id apart again.
+# when the name is not in the baseline, changed when it is. A name the
+# baseline knows that the guest no longer has is reported as removed: Low,
+# or High for one of Defender's or Sysmon's own tasks and services, which
+# malware turns off. Its Id is '<area>:<name>:<fingerprint>'
+# (Get-PersistenceItemId, the only place that makes one); nothing takes an
+# Id apart again, except Read-SecurityBaselineFile once, for a baseline
+# LazyVM 6.6.0 kept as Ids.
 
 # Each area the persistence collector reads, in its order: what one item is
 # called (Thing, Things), the severity of a new or changed one, why it
@@ -70,6 +73,15 @@ $script:PersistenceCheck = [ordered]@{
 # They are never known, so such an item is always a finding.
 $script:UnreadableFingerprint = 'unreadable'
 $script:LinkFingerprint = 'link'
+# The fingerprint of a finding about an item the baseline knows and the guest no longer has.
+$script:RemovedFingerprint = 'removed'
+
+# Defender's and Sysmon's own scheduled tasks and services, by name (-like):
+# one of them removed is High.
+$script:ProtectedPersistenceItem = @{
+    ScheduledTask = @('\Microsoft\Windows\Windows Defender\*', '*Sysmon*')
+    Service       = @('WinDefend', 'WdNisSvc', 'MDCoreSvc', 'Sense', 'Sysmon', 'Sysmon64')
+}
 
 # How every persistence finding ends: the way to accept a change you expect.
 $script:SecurityApprovalHint = 'If you know it and expect it, approve it on the host with Approve-LazyVMSecurityFinding and this Id. LazyVM then stops reporting it until it changes.'
@@ -116,7 +128,7 @@ function Test-PersistenceFingerprintKnowable {
     [OutputType([bool])]
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Fingerprint)
 
-    return $Fingerprint -and $Fingerprint -notin $script:UnreadableFingerprint, $script:LinkFingerprint
+    return $Fingerprint -and $Fingerprint -notin $script:UnreadableFingerprint, $script:LinkFingerprint, $script:RemovedFingerprint
 }
 
 function New-PersistenceBaseline {
@@ -166,6 +178,45 @@ function Add-PersistenceKnownFingerprint {
     if ($Fingerprint -notin $current) { $Known[$Name] = [string[]]@($current + $Fingerprint) }
 }
 
+function Get-PersistenceNameToUpgrade {
+    <# The names a baseline area kept by LazyVM 6.6.0 knew, still to upgrade; none for any other area. #>
+    [OutputType([string[]])]
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Area)
+
+    return [string[]]@($Area['NamesToUpgrade'] | Where-Object { $_ })
+}
+
+function Update-LegacyPersistenceBaseline {
+    <#
+      Upgrades each area of $Baseline that LazyVM 6.6.0 kept as Ids, whose
+      fingerprints are not trusted, only its item names (NamesToUpgrade):
+      an item tonight's facts $Item have under such a name is known from
+      now on with its new fingerprint; a name they do not have is kept with
+      none, so it is reported as removed; a name not in the list stays a
+      finding. An area the guest could not read tonight waits. Changes
+      $Baseline in place; returns the areas it upgraded.
+    #>
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Baseline,
+        [AllowNull()][object]$Item
+    )
+
+    $upgraded = foreach ($area in @($Baseline.Keys | Where-Object { Get-PersistenceNameToUpgrade -Area $Baseline[$_] })) {
+        $items = Get-PersistenceAreaItem -Item $Item -Area $area
+        if ($null -eq $items) { continue }
+        $recorded = $Baseline[$area]
+        $names = @(Get-PersistenceNameToUpgrade -Area $recorded)
+        foreach ($entry in @($items | Where-Object { $_.Name -in $names -and (Test-PersistenceFingerprintKnowable -Fingerprint $_.Fingerprint) })) {
+            Add-PersistenceKnownFingerprint -Known $recorded.Items -Name $entry.Name -Fingerprint $entry.Fingerprint
+        }
+        foreach ($name in @($names | Where-Object { -not $recorded.Items.ContainsKey($_) })) { $recorded.Items[$name] = [string[]]@() }
+        $Baseline[$area] = @{ RecordedAt = $recorded.RecordedAt; Items = $recorded.Items }
+        $area
+    }
+    return [string[]]@($upgraded)
+}
+
 function Join-PersistenceBaseline {
     <#
       The baseline $Baseline with, in each of its areas, the fingerprints
@@ -188,10 +239,14 @@ function Join-PersistenceBaseline {
         $known = New-PersistenceKnownTable
         foreach ($source in @($Baseline[$area], $Earlier[$area] | Where-Object { $_ })) {
             foreach ($name in $source.Items.Keys) {
+                if (-not $known.ContainsKey($name)) { $known[$name] = [string[]]@() }
                 foreach ($fingerprint in $source.Items[$name]) { Add-PersistenceKnownFingerprint -Known $known -Name $name -Fingerprint $fingerprint }
             }
         }
         $joined[$area] = @{ RecordedAt = $Baseline[$area].RecordedAt; Items = $known }
+        # Names an old baseline knew without fingerprints are still to upgrade.
+        $names = @(if ($Earlier.Contains($area)) { Get-PersistenceNameToUpgrade -Area $Earlier[$area] })
+        if ($names.Count -gt 0) { $joined[$area].NamesToUpgrade = [string[]]$names }
     }
     return $joined
 }
@@ -211,8 +266,9 @@ function Format-PersistenceBaselineCount {
 function ConvertTo-PersistenceFinding {
     <#
       A finding for each item in the facts $Item whose fingerprint its
-      area's $Baseline does not know for its name. An area the guest could
-      not read, or that has no baseline yet, gives none.
+      area's $Baseline does not know for its name, and for each name it
+      knows that the guest no longer has. An area the guest could not read,
+      or that has no baseline yet, gives none.
     #>
     [OutputType([SecurityFinding])]
     param(
@@ -229,7 +285,23 @@ function ConvertTo-PersistenceFinding {
             if ($named -and $entry.Fingerprint -in $recorded.Items[$entry.Name] -and (Test-PersistenceFingerprintKnowable -Fingerprint $entry.Fingerprint)) { continue }
             New-PersistenceFinding -Area $area -Item $entry -Changed:$named -RecordedAt $recorded.RecordedAt
         }
+        $present = [System.Collections.Generic.HashSet[string]]::new([string[]]@($items | ForEach-Object { $_.Name }), [StringComparer]::OrdinalIgnoreCase)
+        foreach ($name in @($recorded.Items.Keys | Where-Object { -not $present.Contains($_) } | Sort-Object)) {
+            $removed = [pscustomobject]@{ Name = $name; Fingerprint = $script:RemovedFingerprint; Program = ''; InUserFolder = $false }
+            New-PersistenceFinding -Area $area -Item $removed -RecordedAt $recorded.RecordedAt
+        }
     }
+}
+
+function Test-ProtectedPersistenceItem {
+    <# Whether $Name in $Area is one of Defender's or Sysmon's own tasks or services. #>
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][string]$Area,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    return @(@($script:ProtectedPersistenceItem[$Area]) | Where-Object { $_ -and $Name -like $_ }).Count -gt 0
 }
 
 function New-PersistenceFinding {
@@ -246,7 +318,14 @@ function New-PersistenceFinding {
     $thing = "$($check.Thing) $($Item.Name)"
     $since = Format-SecurityFindingTime -Time $RecordedAt
     $severity = $check.Severity
+    $why = $check.Why
     switch ($Item.Fingerprint) {
+        $script:RemovedFingerprint {
+            $title = "Removed $($check.Thing): $($Item.Name)"
+            $what = "The $thing was there when LazyVM recorded the baseline on $since, and is gone."
+            $why = 'Malware removes what protects the VM, such as Defender''s and Sysmon''s own tasks and services. Something you removed, or a program you uninstalled took with it, is fine.'
+            $severity = if (Test-ProtectedPersistenceItem -Area $Area -Name $Item.Name) { 'High' } else { 'Low' }
+        }
         $script:UnreadableFingerprint {
             $title = "Unreadable $($check.Thing): $($Item.Name)"
             $what = "LazyVM could not read the $thing, so it cannot tell whether it changed. A program can stop SYSTEM reading what it added, to hide it from checks like this one."
@@ -267,7 +346,7 @@ function New-PersistenceFinding {
         $severity = 'High'
     }
 
-    New-SecurityFinding -Id (Get-PersistenceItemId -Area $Area -Item $Item) -Severity $severity -Title $title -WhatWeFound $what -WhyItMatters $check.Why `
+    New-SecurityFinding -Id (Get-PersistenceItemId -Area $Area -Item $Item) -Severity $severity -Title $title -WhatWeFound $what -WhyItMatters $why `
         -HowToFix "$($check.Fix) $script:SecurityApprovalHint" -Where @(if ($Item.Program) { $Item.Program })
 }
 

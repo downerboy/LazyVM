@@ -68,6 +68,10 @@ function Invoke-GuestSecurityScan {
     }
     $baseline = Read-SecurityBaseline -VM $VM
     if (-not $baseline.Readable) { $persistence = $null }
+    $upgraded = @(Update-LegacyPersistenceBaseline -Baseline $baseline.Persistence -Item $persistence)
+    foreach ($area in $upgraded) {
+        Write-LogEntry "Security scan: baseline upgraded for the $($script:PersistenceCheck[$area].Things): each item LazyVM 6.6.0 knew by name is known with its new fingerprint; any other is reported." 'INFO'
+    }
     $added = Get-MissingPersistenceBaseline -Baseline $baseline.Persistence -Item $persistence -RecordedAt $scannedAt
     foreach ($area in $added.Keys) { $baseline.Persistence[$area] = $added[$area] }
 
@@ -95,6 +99,10 @@ function Invoke-GuestSecurityScan {
     $foundId = @($found | ForEach-Object { $_.Id })
     Update-SecurityBaseline -VM $VM -Change {
         param($record)
+        # An area upgraded tonight, unless something else upgraded it meanwhile.
+        foreach ($area in @($upgraded | Where-Object { $record.Persistence.Contains($_) -and (Get-PersistenceNameToUpgrade -Area $record.Persistence[$_]) })) {
+            $record.Persistence[$area] = $baseline.Persistence[$area]
+        }
         Add-PersistenceBaselineArea -Record $record -Baseline $added
         Remove-EndedSecurityApproval -Record $record -FoundId $foundId -Unchecked $unchecked
     }
@@ -171,8 +179,9 @@ function Save-GuestPersistenceBaseline {
       After Build-LazyVM: records the guest's persistence as the known-good
       baseline when the VM has none yet, its first build; on a VM that has
       one, only the areas it lacks, so running the build again never makes
-      a change known-good. Never throws. Skipped when GuestSecurityScan is
-      off.
+      a change known-good. Approves, once for the VM, what LazyVM does by
+      design (Add-DefaultSecurityApproval). Never throws. Skipped when
+      GuestSecurityScan is off.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -181,14 +190,16 @@ function Save-GuestPersistenceBaseline {
         return
     }
     $snapshot = Get-GuestPersistenceSnapshot -VM $VM
-    if (-not $snapshot) { return }
     try {
         Update-SecurityBaseline -VM $VM -Change {
             param($record)
-            $first = $record.Persistence.Count -eq 0
-            Add-PersistenceBaselineArea -Record $record -Baseline $snapshot
-            if ($first) { Write-LogEntry "Security baseline recorded: $(Format-PersistenceBaselineCount -Baseline $record.Persistence)" 'OK' }
-            else { Write-LogEntry 'Security baseline kept as it was; only an area it lacked, if any, was added' 'INFO' }
+            if ($snapshot) {
+                $first = $record.Persistence.Count -eq 0
+                Add-PersistenceBaselineArea -Record $record -Baseline $snapshot
+                if ($first) { Write-LogEntry "Security baseline recorded: $(Format-PersistenceBaselineCount -Baseline $record.Persistence)" 'OK' }
+                else { Write-LogEntry 'Security baseline kept as it was; only an area it lacked, if any, was added' 'INFO' }
+            }
+            Add-DefaultSecurityApproval -Record $record
         }
     }
     catch { Write-LogError 'Saving the security baseline failed (non-fatal)' $_ }

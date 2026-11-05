@@ -114,6 +114,23 @@ function Remove-EndedSecurityApproval {
     $Record.Approvals = [SecurityApproval[]]$live
 }
 
+function Add-DefaultSecurityApproval {
+    <#
+      Approves, in the baseline $Record, what LazyVM does by design:
+      automatic sign-in. Once for the VM (DefaultsApproved), so a later build
+      does not approve it again after it was revoked.
+    #>
+    param([Parameter(Mandatory)][pscustomobject]$Record)
+
+    if ($Record.DefaultsApproved) { return }
+    if ($script:AutoLogonFindingId -notin @($Record.Approvals | ForEach-Object { $_.Id })) {
+        $approval = [SecurityApproval]::new($script:AutoLogonFindingId, 'Info', $script:AutoLogonFindingTitle, [datetimeoffset]::Now, 'LazyVM turns on autologon by design')
+        $Record.Approvals = [SecurityApproval[]]@(@($Record.Approvals) + $approval)
+        Write-LogEntry "Approved the security finding $($script:AutoLogonFindingId): LazyVM turns on automatic sign-in by design. Revoke-LazyVMSecurityFinding undoes it." 'OK'
+    }
+    $Record.DefaultsApproved = $true
+}
+
 function Get-SecurityApprovalList {
     <# Get-LazyVMSecurityFinding -Approved: each approval, with the VM's name first. Says so when there is none. #>
     [OutputType('LazyVM.SecurityApproval')]

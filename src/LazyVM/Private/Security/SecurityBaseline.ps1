@@ -7,6 +7,12 @@
 #                (Persistence.ps1)
 #   Approvals    each approved finding's Id, severity, title, when and why
 #                (the SecurityApproval class, SecurityApproval.ps1)
+#   DefaultsApproved  whether the findings LazyVM approves at the first
+#                build were approved, so a later build does not approve one
+#                again that was revoked
+# An area LazyVM 6.6.0 kept as Ids is read as the names it knew
+# (NamesToUpgrade), without their fingerprints, until a scan upgrades it
+# (Update-LegacyPersistenceBaseline).
 #
 # Readers (Read-SecurityBaseline) never fail: a file that cannot be read is
 # logged and reads as Readable = $false, with nothing in it. Every write goes
@@ -90,28 +96,53 @@ function Read-SecurityBaselineFile {
     [OutputType([pscustomobject])]
     param([Parameter(Mandatory)][string]$Path)
 
-    $record = [pscustomobject]@{ Persistence = [ordered]@{}; Approvals = [SecurityApproval[]]@() }
+    $record = [pscustomobject]@{ Persistence = [ordered]@{}; Approvals = [SecurityApproval[]]@(); DefaultsApproved = $false }
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $record }
 
     $kept = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -DateKind String
     $areas = [RecordReader]::Field($kept, 'Persistence')
     foreach ($area in @(if ($areas) { $areas.PSObject.Properties })) {
-        $items = @([RecordReader]::Field($area.Value, 'Items'))
-        # One kept as Ids (LazyVM 6.6 before #334) is left out, for the next scan to record again.
-        if (@($items | Where-Object { $_ -is [string] }).Count -gt 0) { continue }
+        $recordedAt = [datetimeoffset]::Parse([RecordReader]::Text($area.Value, 'RecordedAt'), [cultureinfo]::InvariantCulture)
+        $items = @([RecordReader]::Field($area.Value, 'Items') | Where-Object { $_ })
+        if (@($items | Where-Object { $_ -is [string] }).Count -gt 0) {
+            Add-LegacyPersistenceArea -Persistence $record.Persistence -Area $area.Name -Id ([string[]]$items) -RecordedAt $recordedAt
+            continue
+        }
         $known = New-PersistenceKnownTable
-        foreach ($item in @($items | Where-Object { $_ })) {
-            foreach ($fingerprint in [RecordReader]::Strings($item, 'Fingerprints')) {
-                Add-PersistenceKnownFingerprint -Known $known -Name ([RecordReader]::Text($item, 'Name')) -Fingerprint $fingerprint
-            }
-        }
-        $record.Persistence[$area.Name] = @{
-            RecordedAt = [datetimeoffset]::Parse([RecordReader]::Text($area.Value, 'RecordedAt'), [cultureinfo]::InvariantCulture)
-            Items      = $known
-        }
+        foreach ($item in $items) { $known[[RecordReader]::Text($item, 'Name')] = [RecordReader]::Strings($item, 'Fingerprints') }
+        $record.Persistence[$area.Name] = @{ RecordedAt = $recordedAt; Items = $known }
+        $names = [RecordReader]::Strings($area.Value, 'NamesToUpgrade')
+        if ($names.Count -gt 0) { $record.Persistence[$area.Name].NamesToUpgrade = $names }
     }
     $record.Approvals = [SecurityApproval[]]@(@([RecordReader]::Field($kept, 'Approvals')) | Where-Object { $_ } | ForEach-Object { [SecurityApproval]::FromObject($_) })
+    $record.DefaultsApproved = [bool][RecordReader]::Field($kept, 'DefaultsApproved')
     return $record
+}
+
+function Add-LegacyPersistenceArea {
+    <#
+      An area LazyVM 6.6.0 kept as Ids ('<area>:<name>:<fingerprint>'), put
+      into $Persistence as the names it knew, without their fingerprints,
+      which a scan upgrades. The guest account's Run keys and startup
+      folder, which 6.6.0 kept with those for all users, go to UserRunKey
+      and UserStartupFolder.
+    #>
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Persistence,
+        [Parameter(Mandatory)][string]$Area,
+        [Parameter(Mandatory)][string[]]$Id,
+        [Parameter(Mandatory)][datetimeoffset]$RecordedAt
+    )
+
+    foreach ($itemId in $Id) {
+        $rest = $itemId.Substring([Math]::Min($Area.Length + 1, $itemId.Length))
+        $name = if ($rest.Contains(':')) { $rest.Substring(0, $rest.LastIndexOf(':')) } else { $rest }
+        $target = $Area
+        if ($Area -eq 'RunKey' -and $name -like 'HKCU\*') { $target = 'UserRunKey' }
+        if ($Area -eq 'StartupFolder' -and $name -notlike 'All users\*') { $target = 'UserStartupFolder' }
+        if (-not $Persistence.Contains($target)) { $Persistence[$target] = @{ RecordedAt = $RecordedAt; Items = (New-PersistenceKnownTable); NamesToUpgrade = [string[]]@() } }
+        if ($name -notin $Persistence[$target].NamesToUpgrade) { $Persistence[$target].NamesToUpgrade = [string[]]@($Persistence[$target].NamesToUpgrade + $name) }
+    }
 }
 
 function ConvertTo-SecurityBaselineJson {
@@ -126,7 +157,9 @@ function ConvertTo-SecurityBaselineJson {
             RecordedAt = ([datetimeoffset]$Record.Persistence[$area].RecordedAt).ToString('o', [cultureinfo]::InvariantCulture)
             Items      = @($known.Keys | Sort-Object | ForEach-Object { [ordered]@{ Name = $_; Fingerprints = @($known[$_]) } })
         }
+        $names = @(Get-PersistenceNameToUpgrade -Area $Record.Persistence[$area])
+        if ($names.Count -gt 0) { $areas[$area].NamesToUpgrade = $names }
     }
-    $document = [ordered]@{ Persistence = $areas; Approvals = @($Record.Approvals | ForEach-Object { $_.ToRecord() }) }
+    $document = [ordered]@{ Persistence = $areas; Approvals = @($Record.Approvals | ForEach-Object { $_.ToRecord() }); DefaultsApproved = [bool]$Record.DefaultsApproved }
     return (ConvertTo-Json -InputObject $document -Depth 6)
 }

@@ -364,13 +364,17 @@ function Get-WindowsUpdatePauseFinding {
     }
 }
 
+# Automatic sign-in's finding, which the first build approves (Add-DefaultSecurityApproval).
+$script:AutoLogonFindingId = 'AutoLogon:Winlogon:On'
+$script:AutoLogonFindingTitle = 'Automatic sign-in is on'
+
 function Get-AutoLogonFinding {
     <# Automatic sign-in, which LazyVM keeps on by design: reported for information. #>
     [OutputType([SecurityFinding])]
     param([Parameter(Mandatory)][object]$Fact)
 
     if ($Fact.On) {
-        New-SecurityFinding -Id 'AutoLogon:Winlogon:On' -Severity Info -Title 'Automatic sign-in is on' `
+        New-SecurityFinding -Id $script:AutoLogonFindingId -Severity Info -Title $script:AutoLogonFindingTitle `
             -WhatWeFound 'Windows signs the guest account in by itself whenever the VM starts.' `
             -WhyItMatters 'LazyVM keeps it on by design, so maintenance can work in your session. Anyone who can open the VM on the host is signed in without a password, so keep the host locked.' `
             -HowToFix 'Nothing to do. Only a VM built with Build-LazyVM -NoUnattend is without it.'

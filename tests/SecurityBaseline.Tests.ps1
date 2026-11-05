@@ -149,7 +149,7 @@ Describe 'ConvertTo-PersistenceFinding' {
     ) {
         $baseline = New-TestBaseline -Item (New-PersistenceFact)
         $facts = New-PersistenceFact
-        $facts.$Area = @([pscustomobject]@{ Name = 'Added'; Fingerprint = '0123456789ab'; Program = ''; InUserFolder = $false })
+        $facts.$Area = @($facts.$Area) + [pscustomobject]@{ Name = 'Added'; Fingerprint = '0123456789ab'; Program = ''; InUserFolder = $false }
 
         $found = @(ConvertTo-TestPersistenceFinding -Item $facts -Baseline $baseline)
 
@@ -158,12 +158,39 @@ Describe 'ConvertTo-PersistenceFinding' {
         $found[0].Where.Count | Should -Be 0
     }
 
-    It 'does not report what was removed, which cannot start anything' {
+    It 'reports what was removed as Low' {
         $baseline = New-TestBaseline -Item (New-PersistenceFact)
         $facts = New-PersistenceFact
         $facts.Service = @()
 
-        @(ConvertTo-TestPersistenceFinding -Item $facts -Baseline $baseline).Count | Should -Be 0
+        $found = @(ConvertTo-TestPersistenceFinding -Item $facts -Baseline $baseline)
+
+        $found.Id | Should -Be @('Service:MySvc:removed')
+        $found[0].Severity | Should -Be 'Low'
+        $found[0].Title | Should -Be 'Removed service: MySvc'
+        $found[0].WhatWeFound | Should -BeLike '*MySvc was there when LazyVM recorded the baseline*, and is gone*'
+    }
+
+    It 'reports, as High, a removed <Name>, one of Defender''s or Sysmon''s own' -ForEach @(
+        @{ Area = 'Service'; Name = 'WinDefend' }
+        @{ Area = 'Service'; Name = 'Sysmon64' }
+        @{ Area = 'ScheduledTask'; Name = '\Microsoft\Windows\Windows Defender\Windows Defender Scheduled Scan' }
+    ) {
+        $earlier = New-PersistenceFact
+        $earlier.$Area += [pscustomobject]@{ Name = $Name; Fingerprint = '0123456789ab'; Program = ''; InUserFolder = $false }
+
+        $found = @(ConvertTo-TestPersistenceFinding -Item (New-PersistenceFact) -Baseline (New-TestBaseline -Item $earlier))
+
+        $found.Id | Should -Be @("${Area}:${Name}:removed")
+        $found[0].Severity | Should -Be 'High'
+    }
+
+    It 'does not take an item it could not read for a removed one' {
+        $baseline = New-TestBaseline -Item (New-PersistenceFact)
+        $facts = New-PersistenceFact
+        $facts.Service[0].Fingerprint = 'unreadable'
+
+        @(ConvertTo-TestPersistenceFinding -Item $facts -Baseline $baseline).Id | Should -Be @('Service:MySvc:unreadable')
     }
 
     It 'leaves out an area the guest could not read, or that has no baseline yet' {
@@ -937,5 +964,154 @@ Describe 'Update-SecurityBaseline' {
         }
         finally { $held.Dispose() }
         $vm.Settings.SecurityBaselineFile | Should -Not -Exist
+    }
+}
+
+Describe 'A baseline kept by LazyVM 6.6.0, as Ids (#334)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-LogError { }
+        Mock -ModuleName $module Install-GuestSecurityFindingOpener { }
+        Mock -ModuleName $module Publish-GuestSecurityFinding { }
+        Mock -ModuleName $module Get-GuestSecurityFact { [pscustomobject]@{ CollectedAt = '2026-11-05T10:40:00Z'; Checks = [pscustomobject]@{ SMBv1 = [pscustomobject]@{ Enabled = $false } } } }
+        $script:vm = New-TestVM -Root (New-TestRoot)
+        # As 6.6.0 kept it: each area's Ids, with 12-digit fingerprints, the guest account's Run keys and startup folder in RunKey and StartupFolder.
+        $old = [ordered]@{
+            Persistence = [ordered]@{
+                ScheduledTask = @{ RecordedAt = '2026-11-01T02:40:00-08:00'; Items = @('ScheduledTask:\Updater:aaaaaaaaaaaa', 'ScheduledTask:\Gone:bbbbbbbbbbbb') }
+                RunKey        = @{ RecordedAt = '2026-11-01T02:40:00-08:00'; Items = @('RunKey:HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Y:cccccccccccc', 'RunKey:HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\X:dddddddddddd') }
+            }
+            Approvals   = @(@{ Id = 'AutoLogon:Winlogon:On'; Severity = 'Info'; Title = 'Automatic sign-in is on'; ApprovedOn = '2026-11-02T08:00:00-08:00'; Reason = 'mine' })
+        }
+        New-Item -ItemType Directory -Path (Split-Path -Path $script:vm.Settings.SecurityBaselineFile -Parent) -Force | Out-Null
+        Set-Content -LiteralPath $script:vm.Settings.SecurityBaselineFile -Value (ConvertTo-Json -InputObject $old -Depth 6)
+        $script:persistence = New-PersistenceFact
+        $script:persistence.ScheduledTask = @(
+            [pscustomobject]@{ Name = '\Updater'; Fingerprint = ('1' * 64); Program = ''; InUserFolder = $false }
+            [pscustomobject]@{ Name = '\Evil'; Fingerprint = ('2' * 64); Program = ''; InUserFolder = $false }
+        )
+        $script:persistence.RunKey = @([pscustomobject]@{ Name = 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Y'; Fingerprint = ('3' * 64); Program = ''; InUserFolder = $false })
+        $script:persistence.UserRunKey = @([pscustomobject]@{ Name = 'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\X'; Fingerprint = ('4' * 64); Program = ''; InUserFolder = $false })
+        Mock -ModuleName $module Get-GuestPersistenceFact { [pscustomobject]@{ Items = $script:persistence } }
+    }
+
+    It 'accepts, at the first scan, an item whose name it knew, with its new fingerprint, and reports one it did not, then keeps the new format' {
+        InModuleScope $module -Parameters @{ VM = $script:vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
+
+        $ids = @((Get-Content -LiteralPath $script:vm.Settings.SecurityFindingsFile -Raw | ConvertFrom-Json).Findings).Id
+        $ids | Should -Contain ('ScheduledTask:\Evil:' + ('2' * 64))
+        $ids | Should -Contain 'ScheduledTask:\Gone:removed'
+        @($ids | Where-Object { $_ -like 'ScheduledTask:\Updater:*' -or $_ -like '*Run\X:*' -or $_ -like '*Run\Y:*' }).Count | Should -Be 0
+        Get-TestBaselineItem -VM $script:vm -Area 'ScheduledTask' | Should -Contain ('\Updater:' + ('1' * 64))
+        Get-TestBaselineItem -VM $script:vm -Area 'UserRunKey' | Should -Be @('HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\X:' + ('4' * 64))
+        Get-TestBaselineItem -VM $script:vm -Area 'ScheduledTask' | Should -Not -Contain '\Evil:*'
+        (Get-Content -LiteralPath $script:vm.Settings.SecurityBaselineFile -Raw) | Should -Not -BeLike '*NamesToUpgrade*'
+        @((Read-TestBaselineFile -VM $script:vm).Approvals).Id | Should -Be @('AutoLogon:Winlogon:On')
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*baseline upgraded*scheduled tasks*' -and $Level -eq 'INFO' }
+    }
+
+    It 'never records it again from the guest, at a build or a scan, before it is upgraded' {
+        InModuleScope $module -Parameters @{ VM = $script:vm } { param($VM) Save-GuestPersistenceBaseline -VM $VM }
+
+        (Get-Content -LiteralPath $script:vm.Settings.SecurityBaselineFile -Raw) | Should -BeLike '*NamesToUpgrade*\Gone*'
+        Get-TestBaselineItem -VM $script:vm -Area 'ScheduledTask' | Should -Not -Contain '\Evil:*'
+    }
+
+    It 'keeps the names it knew through an approval made before the first scan' {
+        Save-TestFindingRecord -VM $script:vm -Finding @(New-TestFinding -Id 'SMBv1:Server:On')
+        InModuleScope $module -Parameters @{ VM = $script:vm; Finding = (New-TestFinding -Id 'SMBv1:Server:On') } { param($VM, $Finding) Add-SecurityApproval -VM $VM -Finding $Finding }
+
+        (Get-Content -LiteralPath $script:vm.Settings.SecurityBaselineFile -Raw) | Should -BeLike '*NamesToUpgrade*\Updater*'
+    }
+}
+
+Describe 'Automatic sign-in, approved at the first build (#334)' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Write-LogError { }
+        Mock -ModuleName $module Install-GuestSecurityFindingOpener { }
+        Mock -ModuleName $module Get-GuestPersistenceFact { [pscustomobject]@{ Items = (New-PersistenceFact) } }
+        $script:vm = New-TestVM -Root (New-TestRoot)
+        Mock -ModuleName $module Assert-Administrator { }
+        Mock -ModuleName $module Complete-CommandRun { }
+        Mock -ModuleName $module Initialize-CommandRun { $script:vm }
+    }
+
+    It 'is approved, with the reason, and listed with the approvals' {
+        InModuleScope $module -Parameters @{ VM = $script:vm } { param($VM) Save-GuestPersistenceBaseline -VM $VM }
+
+        $approved = @(Get-LazyVMSecurityFinding -Name Alpha -Approved)
+        $approved.Id | Should -Be @('AutoLogon:Winlogon:On')
+        $approved[0].Reason | Should -Be 'LazyVM turns on autologon by design'
+        $approved[0].Severity | Should -Be 'Info'
+    }
+
+    It 'is not approved again by a later build once revoked' {
+        InModuleScope $module -Parameters @{ VM = $script:vm } { param($VM) Save-GuestPersistenceBaseline -VM $VM }
+        Revoke-LazyVMSecurityFinding -Name Alpha -Id 'AutoLogon:Winlogon:On' -Confirm:$false
+
+        InModuleScope $module -Parameters @{ VM = $script:vm } { param($VM) Save-GuestPersistenceBaseline -VM $VM }
+
+        @((Read-TestBaselineFile -VM $script:vm).Approvals).Count | Should -Be 0
+    }
+
+    It 'is approved even when the guest could not be read at that build' {
+        Mock -ModuleName $module Get-GuestPersistenceFact { throw 'the guest stopped answering' }
+
+        InModuleScope $module -Parameters @{ VM = $script:vm } { param($VM) Save-GuestPersistenceBaseline -VM $VM }
+
+        @((Read-TestBaselineFile -VM $script:vm).Approvals).Id | Should -Be @('AutoLogon:Winlogon:On')
+        @((Read-TestBaselineFile -VM $script:vm).Persistence.PSObject.Properties).Count | Should -Be 0
+    }
+}
+
+Describe 'A program in ProgramData, judged by its folder''s access (#334)' {
+    BeforeAll {
+        $script:collectorCommands = @('Get-ScheduledTask', 'Get-CimInstance', 'Get-LocalUser', 'Get-LocalGroupMember')
+        foreach ($name in $script:collectorCommands) { Set-Item -Path "function:global:$name" -Value { throw 'not available' } }
+        Add-MissingCommandStub -Stub @{ 'Get-Acl' = { param([string]$LiteralPath) throw "Get-Acl is a test stub; mock it ($LiteralPath)." } }
+        $script:programData = [Environment]::GetFolderPath('CommonApplicationData')
+        $script:setProgramData = -not $env:ProgramData
+        if ($script:setProgramData) { $env:ProgramData = $script:programData }
+
+        function New-TestAcl {
+            <# A folder's access as Get-Acl gives it: $Sid allowed $Rights. #>
+            param([string]$Sid, [string]$Rights)
+            $rule = [pscustomobject]@{
+                IdentityReference = [pscustomobject]@{ Value = $Sid }
+                AccessControlType = 'Allow'
+                FileSystemRights  = [System.Security.AccessControl.FileSystemRights]$Rights
+                PropagationFlags  = [System.Security.AccessControl.PropagationFlags]::None
+            }
+            $acl = [pscustomobject]@{ Rules = @($rule) }
+            $acl | Add-Member -MemberType ScriptMethod -Name GetAccessRules -Value { $this.Rules }
+            return $acl
+        }
+    }
+
+    AfterAll {
+        foreach ($name in $script:collectorCommands) { Remove-Item -Path "function:global:$name" -ErrorAction SilentlyContinue }
+        if ($script:setProgramData) { Remove-Item -Path env:ProgramData }
+    }
+
+    BeforeEach {
+        Mock -ModuleName $module Test-Path { $false }
+        Mock -ModuleName $module Get-Item { throw 'not available' }
+        $script:task = [pscustomobject]@{ TaskPath = '\'; TaskName = 'Updater'; Principal = [pscustomobject]@{ UserId = 'SYSTEM'; GroupId = ''; RunLevel = 'Highest' }; Actions = @([pscustomobject]@{ Execute = '%ProgramData%\Vendor\Tool\app.exe'; Arguments = ''; WorkingDirectory = '' }) }
+        Set-Item -Path 'function:global:Get-ScheduledTask' -Value { $script:task }
+    }
+
+    It 'is in a folder users can write to when <Case>' -ForEach @(
+        @{ Case = 'Users can create files in it'; Sid = 'S-1-5-32-545'; Rights = 'CreateFiles'; Expected = $true }
+        @{ Case = 'Everyone can delete what is in it'; Sid = 'S-1-1-0'; Rights = 'DeleteSubdirectoriesAndFiles'; Expected = $true }
+        @{ Case = 'only administrators can change it'; Sid = 'S-1-5-32-544'; Rights = 'FullControl'; Expected = $false }
+        @{ Case = 'Users can only read it'; Sid = 'S-1-5-32-545'; Rights = 'ReadAndExecute'; Expected = $false }
+    ) {
+        $script:acl = New-TestAcl -Sid $Sid -Rights $Rights
+        Mock -ModuleName $module Get-Acl { $script:acl }
+
+        $facts = InModuleScope $module { & $script:GuestPersistenceWork 'LazyVM-persistence-scan' 'dev' } | ConvertFrom-Json
+
+        $facts.Items.ScheduledTask[0].InUserFolder | Should -Be $Expected
     }
 }

@@ -27,7 +27,8 @@
 # change; never for an item that points into a folder users can write to.
 #
 # Folders users can write to: the user profiles, the Windows temporary
-# folder, ProgramData but Defender's own folder there, any network path, and a path written with one of a
+# folder, a folder in ProgramData that its access (or that of a folder above
+# it there) lets a user change, any network path, and a path written with one of a
 # user's own variables, such as %APPDATA%, which SYSTEM would expand to its
 # own profile. Every path on an item's command line is checked, not only the
 # program's. Windows' own folders come from Windows, not the environment.
@@ -39,8 +40,17 @@ $script:GuestPersistenceWork = {
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
     $windowsFolder = [Environment]::GetFolderPath('Windows')
     $programData = [Environment]::GetFolderPath('CommonApplicationData')
-    # Defender's own folder in ProgramData, which only it can change, and whose version folders change with every update.
-    $defenderFolder = [System.IO.Path]::Combine($programData, 'Microsoft', 'Windows Defender') + '\'
+    # Who counts as a user when deciding whether one can write to a folder
+    # in ProgramData: Users, Authenticated Users, Everyone, INTERACTIVE, and
+    # the guest account (added once it is found).
+    $userSids = @('S-1-5-32-545', 'S-1-5-11', 'S-1-1-0', 'S-1-5-4')
+    # Rights that change a folder or what is in it, as $script:GuestWriteRights
+    # in Guest.Helpers.ps1 and $script:WriteRights in TrustedCode.ps1: write
+    # and append data, extended attributes and attributes, delete (the
+    # folder, or anything in it), change permissions, take ownership, and
+    # generic write or all.
+    $writeRights = [long]0x500D0156
+    $writableByUsers = @{}
     $userVariable = '%(APPDATA|LOCALAPPDATA|TEMP|TMP|USERPROFILE|HOMEPATH|HOMEDRIVE|ONEDRIVE)%'
 
     function Add-ScanNote {
@@ -95,9 +105,45 @@ $script:GuestPersistenceWork = {
         if ($Token -match $userVariable) { return $true }
         $path = (Expand-GuestPath -Path $Token).Trim('"')
         if ($path.StartsWith('\\')) { return $true }
-        if ($path.StartsWith($defenderFolder, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+        if (Test-ProgramDataWritable -Path $path) { return $true }
         foreach ($folder in $userFolders) {
             if ($folder -and $path.StartsWith($folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        }
+        return $false
+    }
+
+    function Test-WritableByUser {
+        <# Whether the file or folder $Path gives a user (one of $userSids) a right that changes it ($writeRights). Missing, or unreadable, is no. #>
+        param([string]$Path)
+        if ($writableByUsers.ContainsKey($Path)) { return $writableByUsers[$Path] }
+        $writable = $false
+        try {
+            $acl = Get-Acl -LiteralPath $Path
+            foreach ($rule in @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))) {
+                $insideOnly = [bool]($rule.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly)
+                if ("$($rule.AccessControlType)" -ne 'Allow' -or $insideOnly -or "$($rule.IdentityReference.Value)" -notin $userSids) { continue }
+                if ([long]$rule.FileSystemRights -band $writeRights) { $writable = $true; break }
+            }
+        }
+        catch { $writable = $false }
+        $writableByUsers[$Path] = $writable
+        return $writable
+    }
+
+    function Test-ProgramDataWritable {
+        <#
+          Whether $Path, in ProgramData, or a folder above it below
+          ProgramData, can be changed by a user. ProgramData itself is left
+          out: it lets every user make a folder of their own, which does
+          not let them change anyone else's.
+        #>
+        param([string]$Path)
+        $root = $programData.TrimEnd('\')
+        if (-not $root -or -not $Path.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { return $false }
+        $current = $Path.TrimEnd('\')
+        while ($current.Length -gt $root.Length) {
+            if (Test-WritableByUser -Path $current) { return $true }
+            $current = $current.Substring(0, $current.LastIndexOf('\'))
         }
         return $false
     }
@@ -185,12 +231,13 @@ $script:GuestPersistenceWork = {
 
     # The folders users can write to, and the guest account's security
     # identifier and profile folder, for its Run keys and startup folder.
-    $userFolders = @([System.IO.Path]::Combine($windowsFolder, 'Temp'), $programData)
+    $userFolders = @([System.IO.Path]::Combine($windowsFolder, 'Temp'))
     $user = @{ Sid = ''; Profile = ''; Problem = '' }
     try {
         $profileList = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'
         $userFolders += [Environment]::ExpandEnvironmentVariables((Get-ItemProperty -LiteralPath $profileList).ProfilesDirectory)
         $user.Sid = (New-Object System.Security.Principal.NTAccount($UserName)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+        $userSids += $user.Sid
         $user.Profile = [Environment]::ExpandEnvironmentVariables((Get-ItemProperty -LiteralPath "$profileList\$($user.Sid)").ProfileImagePath)
     }
     catch { $user.Problem = "could not find the account $UserName ($($_.Exception.Message))" }
