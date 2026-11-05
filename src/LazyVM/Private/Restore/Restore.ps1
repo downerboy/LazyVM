@@ -360,10 +360,7 @@ function Restore-GuestVisualStudioState {
     $files = [RecordReader]::Field($Manifest.VisualStudio, 'Files')
     $inputFile = @{ 'VisualStudioUserFiles.ps1' = (Join-Path -Path $script:DataDir -ChildPath 'Guest.VisualStudioUserFiles.ps1') }
     $sent = @{}
-    foreach ($file in @(
-            @{ Key = 'NuGetConfig'; Name = 'NuGet.Config' }
-            @{ Key = 'GitConfig'; Name = 'gitconfig' }
-            @{ Key = 'UserItems'; Name = 'UserItems.zip' })) {
+    foreach ($file in @($script:VisualStudioUserFile | Where-Object { $_.Key -ne 'Settings' })) {
         $hostPath = [RecordReader]::Text($files, $file.Key)
         if (-not $hostPath -or -not (Test-Path -LiteralPath $hostPath)) { continue }
         $inputFile[$file.Name] = $hostPath
@@ -385,12 +382,12 @@ function Restore-GuestVisualStudioState {
         if ($nuget) { $given.NuGetConfig = Join-Path $TaskFolder $nuget }
         if ($gitconfig) { $given.GitConfig = Join-Path $TaskFolder $gitconfig }
         if ($userItems) { $given.UserItems = Join-Path $TaskFolder $userItems }
-        $notes = & (Join-Path $TaskFolder 'VisualStudioUserFiles.ps1') -ProfileRoot $env:USERPROFILE -AppData $env:APPDATA -Documents ([Environment]::GetFolderPath('MyDocuments')) @given
-        # The task's result is one line of text, so the notes go back as JSON.
-        return (ConvertTo-Json -InputObject @($notes) -Compress)
+        $result = & (Join-Path $TaskFolder 'VisualStudioUserFiles.ps1') -ProfileRoot $env:USERPROFILE -AppData $env:APPDATA -Documents ([Environment]::GetFolderPath('MyDocuments')) @given
+        # The task's result is one line of text, so it goes back as JSON.
+        return (ConvertTo-Json -InputObject $result -Compress -Depth 4)
     }
     # What a task under the limited token reports is only that account's word.
-    try { $notes = @(ConvertFrom-Json -InputObject $report) }
+    try { $notes = @([RecordReader]::Field((ConvertFrom-Json -InputObject $report), 'Notes')) }
     catch {
         Write-LogEntry "  could not read what the Visual Studio files restore reported: $($_.Exception.Message)" 'WARN'
         return

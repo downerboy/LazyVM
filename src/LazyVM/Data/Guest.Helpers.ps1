@@ -328,6 +328,22 @@ function Get-GuestVisualStudioSettingsFile {
     return $null
 }
 
+function Get-GuestVisualStudioSettingsHash {
+    <#
+      The SHA256 hash of the newest .vssettings backup of the Visual Studio
+      with instance $InstanceId (Get-GuestVisualStudioSettingsFile), or ''
+      when there is none, or when a junction or link is on the way to it
+      from the profile, which the user's own processes could have put there
+      to lead an administrator's read to another file (#330).
+    #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$InstanceId)
+
+    $settings = Get-GuestVisualStudioSettingsFile -InstanceId $InstanceId
+    if (-not $settings -or (Test-GuestLinkOnPath -Root $env:USERPROFILE -Path $settings)) { return '' }
+    return (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
+}
+
 # Where the guest records, per user, what it has of each Visual Studio
 # instance's settings (#266): its marker, in the value named for the instance
 # id, and the night maintenance first found that Visual Studio opened while
@@ -1644,7 +1660,8 @@ function Invoke-GuestGalleryModuleUpdate {
 # token can read its folder and change only Output, so what it is given
 # stays as LazyVM wrote it; its result is only that user's word. As that
 # user can make anything in Output a link, administrators never write,
-# move or delete there, and read only what is not a link (#302). Each start
+# move or delete there, and read only on one handle checked for links
+# (Read-GuestTaskOutputFile; #302, #330). Each start
 # gets a nonce in its arguments, which the wrapper writes before the
 # result, so a result from an earlier start is never taken for this one.
 
@@ -1755,7 +1772,7 @@ function Get-GuestTaskStatus {
     <#
       Done: what the wrapper wrote for the start with $Nonce, or $null while
       it runs; the task's state; the boot time. A result for another start,
-      or read through a junction or link, counts as none. A task under a
+      or one Read-GuestTaskOutputFile refuses, counts as none. A task under a
       user's limited token can write its own result, so its Done is only
       that user's word.
     #>
@@ -1764,11 +1781,13 @@ function Get-GuestTaskStatus {
         [Parameter(Mandatory)][string]$Nonce
     )
 
-    $output = Get-GuestTaskOutputFolder -TaskName $TaskName
-    $done = Join-Path $output "$TaskName.done"
     $result = $null
-    if (-not (Test-GuestReparsePoint -Path $output) -and -not (Test-GuestReparsePoint -Path $done) -and (Test-Path -LiteralPath $done)) {
-        $written = (Get-Content -LiteralPath $done -Raw).Trim()
+    # Not there yet, or not one LazyVM reads (Read-GuestTaskOutputFile): no result.
+    try { $bytes = Read-GuestTaskOutputFile -TaskName $TaskName -Name "$TaskName.done" -MaximumBytes $script:GuestTaskResultMaximumBytes }
+    catch { $bytes = $null }
+    if ($null -ne $bytes) {
+        # Windows PowerShell writes UTF-8 with a byte order mark.
+        $written = [Text.Encoding]::UTF8.GetString($bytes).TrimStart([char]0xFEFF).Trim()
         if ($written.StartsWith("$Nonce ")) { $result = $written.Substring($Nonce.Length + 1) }
     }
     return [pscustomobject]@{
@@ -1778,44 +1797,193 @@ function Get-GuestTaskStatus {
     }
 }
 
+# The most Get-GuestTaskStatus reads of a task's result.
+$script:GuestTaskResultMaximumBytes = 1MB
+
+# Reads a file in a task's Output folder on one handle (Read-GuestTaskOutputFile).
+$script:GuestTaskOutputReaderSource = @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+namespace LazyVM
+{
+    public static class TaskOutputReader
+    {
+        private const uint GenericRead = 0x80000000;
+        private const uint FileReadAttributes = 0x80;
+        private const uint FileShareRead = 0x1;
+        private const uint OpenExisting = 3;
+        private const uint FlagBackupSemantics = 0x02000000;
+        private const uint FlagOpenReparsePoint = 0x00200000;
+        private const uint AttributeDirectory = 0x10;
+        private const uint AttributeReparsePoint = 0x400;
+        private const int FileAttributeTagInfoClass = 9;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FileAttributeTagInfo
+        {
+            public uint FileAttributes;
+            public uint ReparseTag;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ByHandleFileInformation
+        {
+            public uint FileAttributes;
+            public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+            public uint VolumeSerialNumber;
+            public uint FileSizeHigh;
+            public uint FileSizeLow;
+            public uint NumberOfLinks;
+            public uint FileIndexHigh;
+            public uint FileIndexLow;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetFileInformationByHandleEx(SafeFileHandle file, int infoClass, out FileAttributeTagInfo info, uint size);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetFileInformationByHandle(SafeFileHandle file, out ByHandleFileInformation info);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, StringBuilder path, uint size, uint flags);
+
+        private static SafeFileHandle Open(string path, uint access, uint flags)
+        {
+            SafeFileHandle handle = CreateFileW(path, access, FileShareRead, IntPtr.Zero, OpenExisting, flags, IntPtr.Zero);
+            if (handle.IsInvalid)
+            {
+                int error = Marshal.GetLastWin32Error();
+                if (error == 2 || error == 3) { throw new FileNotFoundException(path + " is not there"); }
+                throw new IOException(path + " cannot be opened: " + new Win32Exception(error).Message);
+            }
+            return handle;
+        }
+
+        private static string FinalPath(SafeFileHandle handle)
+        {
+            StringBuilder path = new StringBuilder(32768);
+            uint length = GetFinalPathNameByHandleW(handle, path, (uint)path.Capacity, 0);
+            if (length == 0 || length >= path.Capacity) { throw new Win32Exception(Marshal.GetLastWin32Error()); }
+            string text = path.ToString();
+            if (text.StartsWith(@"\\?\UNC\", StringComparison.Ordinal)) { return @"\\" + text.Substring(8); }
+            if (text.StartsWith(@"\\?\", StringComparison.Ordinal)) { return text.Substring(4); }
+            return text;
+        }
+
+        // The bytes of the file name in folder, read on the one handle that
+        // was checked: not a reparse point itself, reached through none
+        // (its final path is folder\name under the final path of folder's
+        // parent, which only administrators can change), with no other hard
+        // link, and no more than maximumBytes.
+        public static byte[] Read(string folder, string name, long maximumBytes)
+        {
+            string full = Path.GetFullPath(folder).TrimEnd('\\', '/');
+            string expected;
+            using (SafeFileHandle parent = Open(Path.GetDirectoryName(full), FileReadAttributes, FlagBackupSemantics))
+            {
+                expected = Path.Combine(FinalPath(parent), Path.GetFileName(full), name);
+            }
+            string path = Path.Combine(full, name);
+            using (SafeFileHandle handle = Open(path, GenericRead, FlagOpenReparsePoint))
+            {
+                FileAttributeTagInfo tag;
+                if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfoClass, out tag, (uint)Marshal.SizeOf(typeof(FileAttributeTagInfo))))
+                {
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                }
+                if ((tag.FileAttributes & AttributeReparsePoint) != 0) { throw new IOException(path + " is a junction or link, and LazyVM never reads through one"); }
+                if ((tag.FileAttributes & AttributeDirectory) != 0) { throw new IOException(path + " is a folder, not a file"); }
+                string final = FinalPath(handle);
+                if (!string.Equals(final, expected, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new IOException(path + " leads to " + final + " through a junction or link, and LazyVM never reads through one");
+                }
+                ByHandleFileInformation information;
+                if (!GetFileInformationByHandle(handle, out information)) { throw new Win32Exception(Marshal.GetLastWin32Error()); }
+                if (information.NumberOfLinks != 1)
+                {
+                    throw new IOException(path + " has " + information.NumberOfLinks + " hard links, and LazyVM reads only a file with one");
+                }
+                long length = ((long)information.FileSizeHigh << 32) | information.FileSizeLow;
+                if (length > maximumBytes) { throw new IOException(path + " is " + length + " bytes, over the " + maximumBytes + " LazyVM reads back"); }
+                byte[] bytes = new byte[length];
+                int read = 0;
+                using (FileStream stream = new FileStream(handle, FileAccess.Read))
+                {
+                    while (read < bytes.Length)
+                    {
+                        int count = stream.Read(bytes, read, bytes.Length - read);
+                        if (count == 0) { break; }
+                        read += count;
+                    }
+                }
+                if (read != bytes.Length) { Array.Resize(ref bytes, read); }
+                return bytes;
+            }
+        }
+    }
+}
+'@
+
 function Read-GuestTaskOutputFile {
     <#
-      What the file $Name that task $TaskName wrote in its Output folder
-      holds, as base64, for an administrator to read: checked and read in
-      this one call, so the task's user has no time between the two to put
-      a junction or link in place of the folder or the file. Throws when
-      either is one, when the file is over $MaximumBytes, or when it is not
-      there. The task's user can change the file, so what it holds is only
-      that user's word. Hard links are not reparse points, so this does not
-      see them; they are out of scope, as making one needs write access to
-      the file it leads to.
+      The bytes of the file $Name that task $TaskName wrote in its Output
+      folder, for an administrator to read. The task's user can change
+      Output, and could put a junction, link or mount point in place of the
+      folder or the file between a check and a read, so it is opened once,
+      without following a link at the file itself, and everything is
+      checked on that handle before it is read from (TaskOutputReader): the
+      file is not a reparse point; its final path is Output\$Name, so no
+      junction on the way led elsewhere; it has no other hard link, which
+      could be a file only administrators may read; and it is no more than
+      $MaximumBytes. Throws why not, or that it is not there. What the file
+      holds is only that user's word.
     #>
-    [OutputType([string])]
+    [OutputType([byte[]])]
     param(
         [Parameter(Mandatory)][string]$TaskName,
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][long]$MaximumBytes
     )
 
-    $output = Get-GuestTaskOutputFolder -TaskName $TaskName
-    $path = Join-Path $output $Name
-    foreach ($checked in $output, $path) {
-        if (Test-GuestReparsePoint -Path $checked) { throw "$checked is a junction or link, and LazyVM never reads through one" }
+    if (-not ('LazyVM.TaskOutputReader' -as [type])) { Add-Type -TypeDefinition $script:GuestTaskOutputReaderSource }
+    try { $bytes = [LazyVM.TaskOutputReader]::Read((Get-GuestTaskOutputFolder -TaskName $TaskName), $Name, $MaximumBytes) }
+    catch [System.Management.Automation.MethodInvocationException] { throw $_.Exception.InnerException }
+    return , $bytes
+}
+
+function Test-GuestLinkOnPath {
+    <#
+      Whether $Path is not inside $Root, or $Root, a folder below it on the
+      way to $Path, or $Path itself is a junction or link, which would lead
+      an administrator's read elsewhere.
+    #>
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    $separators = [char[]]@('\', '/')
+    $current = [IO.Path]::GetFullPath($Root).TrimEnd($separators)
+    $full = [IO.Path]::GetFullPath($Path)
+    if (-not $full.StartsWith($current + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    if (Test-GuestReparsePoint -Path $current) { return $true }
+    foreach ($part in $full.Substring($current.Length).Split($separators, [StringSplitOptions]::RemoveEmptyEntries)) {
+        $current = [IO.Path]::Combine($current, $part)
+        if (Test-GuestReparsePoint -Path $current) { return $true }
     }
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "$path is not there" }
-    $stream = [IO.File]::OpenRead($path)
-    try {
-        if ($stream.Length -gt $MaximumBytes) { throw "$path is $([math]::Ceiling($stream.Length / 1MB)) MB, over the $($MaximumBytes / 1MB) MB LazyVM reads back" }
-        $bytes = New-Object byte[] $stream.Length
-        $read = 0
-        while ($read -lt $bytes.Length) {
-            $count = $stream.Read($bytes, $read, $bytes.Length - $read)
-            if ($count -eq 0) { break }
-            $read += $count
-        }
-    }
-    finally { $stream.Dispose() }
-    return [Convert]::ToBase64String($bytes, 0, $read)
+    return $false
 }
 
 function Remove-GuestTask {

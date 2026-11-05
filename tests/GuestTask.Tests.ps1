@@ -563,6 +563,13 @@ Describe 'Get-GuestTaskStatus' {
         (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -Be '3010'
     }
 
+    It 'reads a result the wrapper wrote with a byte order mark, as Windows PowerShell writes UTF-8' {
+        $null = New-Item -ItemType Directory -Path $output -Force
+        [IO.File]::WriteAllText($done, "n1 3010`r`n", [Text.UTF8Encoding]::new($true))
+
+        (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -Be '3010'
+    }
+
     It 'takes a result written for another start, or with no nonce, as no result yet' -ForEach @(
         @{ Written = 'n0 0' }
         @{ Written = '0' }
@@ -596,7 +603,10 @@ Describe 'Get-GuestTaskStatus' {
 
 Describe 'Read-GuestTaskOutputFile (#330)' {
     BeforeEach {
-        $output = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        if (-not $IsWindows) { Set-ItResult -Skipped -Because 'it opens the file with the Windows API' }
+        # The task's folder, which only administrators can change; the user can change Output in it.
+        $taskFolder = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $output = Join-Path $taskFolder 'Output'
         Mock Get-GuestTaskOutputFolder { $output }
         $null = New-Item -ItemType Directory -Path $output -Force
         $file = Join-Path $output 'NuGet.Config'
@@ -605,28 +615,41 @@ Describe 'Read-GuestTaskOutputFile (#330)' {
         $read = { Read-GuestTaskOutputFile -TaskName 'LazyVM-VSUserFilesCapture' -Name 'NuGet.Config' -MaximumBytes 1KB }
     }
 
-    It 'gives what a file the task wrote in its Output folder holds, as base64' {
+    It 'gives what a file the task wrote in its Output folder holds' {
         Set-Content -LiteralPath $file -Value 'nuget' -NoNewline
 
-        [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((& $read))) | Should -Be 'nuget'
+        [Text.Encoding]::UTF8.GetString((& $read)) | Should -Be 'nuget'
         Should -Invoke Get-GuestTaskOutputFolder -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-VSUserFilesCapture' }
     }
 
-    It 'refuses, naming it, a link in the place of <Case>, which the task''s user may have made' -ForEach @(
-        @{ Case = 'the Output folder'; LinkOutput = $true }
-        @{ Case = 'the file'; LinkOutput = $false }
+    It 'gives an empty file as no bytes' {
+        Set-Content -LiteralPath $file -Value '' -NoNewline
+
+        @(& $read).Count | Should -Be 0
+    }
+
+    It 'refuses, naming it, a <LinkType> in the place of <Case>, which the task''s user may have made' -ForEach @(
+        @{ Case = 'the Output folder'; LinkType = 'Junction'; LinkOutput = $true }
+        @{ Case = 'the Output folder'; LinkType = 'SymbolicLink'; LinkOutput = $true }
+        @{ Case = 'the file'; LinkType = 'SymbolicLink'; LinkOutput = $false }
     ) {
         if ($LinkOutput) {
             Remove-Item -LiteralPath $output
-            $null = New-Item -ItemType SymbolicLink -Path $output -Target $elsewhere
+            $null = New-Item -ItemType $LinkType -Path $output -Target $elsewhere
             $link = $output
         }
         else {
-            $null = New-Item -ItemType SymbolicLink -Path $file -Target (Join-Path $elsewhere 'NuGet.Config')
+            $null = New-Item -ItemType $LinkType -Path $file -Target (Join-Path $elsewhere 'NuGet.Config')
             $link = $file
         }
 
         { & $read } | Should -Throw "*$link*junction or link*"
+    }
+
+    It 'refuses a file with another hard link, which could be a file only administrators may read' {
+        $null = New-Item -ItemType HardLink -Path $file -Target (Join-Path $elsewhere 'NuGet.Config')
+
+        { & $read } | Should -Throw "*$file*hard link*"
     }
 
     It 'refuses a file over the size it is given' {
@@ -637,6 +660,56 @@ Describe 'Read-GuestTaskOutputFile (#330)' {
 
     It 'says so when the file is not there' {
         { & $read } | Should -Throw "*$file*not there*"
+    }
+}
+
+Describe 'Get-GuestVisualStudioSettingsHash (#330)' {
+    BeforeAll {
+        $localAppData = $env:LOCALAPPDATA
+        $userProfile = $env:USERPROFILE
+    }
+
+    AfterAll {
+        $env:LOCALAPPDATA = $localAppData
+        $env:USERPROFILE = $userProfile
+    }
+
+    BeforeEach {
+        $env:USERPROFILE = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $env:LOCALAPPDATA = Join-Path $env:USERPROFILE 'AppData\Local'
+        $instanceFolder = Join-Path $env:LOCALAPPDATA 'Microsoft\VisualStudio\18.0_a1b2c3d4'
+        $settings = Join-Path $instanceFolder 'Settings\CurrentSettings.vssettings'
+        $null = New-Item -ItemType Directory -Path (Split-Path $settings -Parent) -Force
+        Set-Content -LiteralPath $settings -Value 'settings'
+        $elsewhere = New-TestFolder
+        $null = New-Item -ItemType Directory -Path (Join-Path $elsewhere 'Settings') -Force
+        Set-Content -LiteralPath (Join-Path $elsewhere 'Settings\CurrentSettings.vssettings') -Value 'secret'
+    }
+
+    It 'hashes the newest settings backup of the instance' {
+        Get-GuestVisualStudioSettingsHash -InstanceId 'a1b2c3d4' | Should -Be (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash
+    }
+
+    It 'hashes nothing when there is no settings backup' {
+        Get-GuestVisualStudioSettingsHash -InstanceId 'ffff' | Should -Be ''
+    }
+
+    It 'hashes nothing, so no link leads an administrator''s read, when <Case> is a link' -ForEach @(
+        @{ Case = 'the settings file'; Folder = $false }
+        @{ Case = 'the instance''s folder'; Folder = $true }
+    ) {
+        if ($Folder) {
+            Remove-Item -LiteralPath $instanceFolder -Recurse -Force
+            $null = New-Item -ItemType SymbolicLink -Path $instanceFolder -Target $elsewhere
+        }
+        else {
+            Remove-Item -LiteralPath $settings
+            $null = New-Item -ItemType SymbolicLink -Path $settings -Target (Join-Path $elsewhere 'Settings\CurrentSettings.vssettings')
+        }
+        Mock Get-FileHash { [pscustomobject]@{ Hash = 'READ' } }
+
+        Get-GuestVisualStudioSettingsHash -InstanceId 'a1b2c3d4' | Should -Be ''
+        Should -Invoke Get-FileHash -Times 0 -Exactly
     }
 }
 

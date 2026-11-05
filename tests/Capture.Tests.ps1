@@ -210,14 +210,14 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         $null = New-Item -ItemType Directory -Path $root -Force
         $backup = Join-Path $root 'VisualStudio.vssettings'
         Set-Content -LiteralPath $backup -Value 'backup' -NoNewline
-        $vmSettings = @{ VMName = 'Alpha'; GuestAdminUser = 'devadmin'; InstallVisualStudio = $true; VSSettingsBackup = $backup }
+        $vmSettings = @{ VMName = 'Alpha'; GuestAdminUser = 'devadmin'; InstallVisualStudio = $true; VSSettingsBackup = $backup; StateDir = $root }
         $capture = {
             InModuleScope $module -Parameters @{ Settings = $vmSettings; CaptureDir = $captureDir } {
                 param($Settings, $CaptureDir) Save-GuestVisualStudioState -VM ([VMContext]::new($Settings)) -CaptureDir $CaptureDir
             }
         }
         # The previous capture, with each file holding "previous <name>".
-        $previousDir = Join-Path $root 'old\vs'
+        $previousDir = Join-Path $root 'Captures\20261101-010101\vs'
         $null = New-Item -ItemType Directory -Path $previousDir -Force
         $previousFiles = [ordered]@{}
         foreach ($file in @(@{ Key = 'Settings'; Name = 'VisualStudio.vssettings' }, @{ Key = 'NuGetConfig'; Name = 'NuGet.Config' }, @{ Key = 'GitConfig'; Name = 'gitconfig' }, @{ Key = 'UserItems'; Name = 'vs-useritems.zip' })) {
@@ -225,9 +225,16 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
             Set-Content -LiteralPath $path -Value "previous $($file.Name)" -NoNewline
             $previousFiles[$file.Key] = $path
         }
+        $earlier = @{}
         $usePrevious = {
             Mock -ModuleName $module Get-CaptureManifest {
-                InModuleScope $module -Parameters @{ Files = $previousFiles } { param($Files) $m = [CaptureManifest]::new(); $m.VisualStudio = [pscustomobject]@{ Files = [pscustomobject]$Files }; $m }
+                InModuleScope $module -Parameters @{ Files = $previousFiles; Earlier = $earlier } {
+                    param($Files, $Earlier)
+                    $m = [CaptureManifest]::new()
+                    $m.Stamp = '20261101-010101'
+                    $m.VisualStudio = [pscustomobject]@{ Files = [pscustomobject]$Files; CarriedForward = [pscustomobject]$Earlier }
+                    $m
+                }
             }
         }
         $content = { param([string]$Name) Get-Content -LiteralPath (Join-Path $vsDir $Name) -Raw }
@@ -350,6 +357,73 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         @($logged | Where-Object { $_ -like 'INFO:*carried forward*' }).Count | Should -Be 1
     }
 
+    It 'keeps the previous capture''s copy of a file the task found but refused or could not read, and only of files it knows of' {
+        & $usePrevious
+        $report.Files = @('NuGet.Config')
+        $report.Unread = @('gitconfig', '..\..\Windows\System32\config\SAM')
+
+        $result = & $capture
+
+        & $content -Name 'gitconfig' | Should -Be 'previous gitconfig'
+        @($result.Files.Keys) | Should -Be @('NuGetConfig', 'GitConfig')
+        @($logged | Where-Object { $_ -like 'INFO:*carried forward*' }).Count | Should -Be 1
+    }
+
+    It 'keeps the previous capture''s copy of a file the guest does not give back as one piece of text' {
+        & $usePrevious
+        Mock -ModuleName $module Invoke-GuestScript { 'one'; 'two' } -ParameterFilter { "$ScriptBlock" -match 'Read-GuestTaskOutputFile' -and $ArgumentList[1] -eq 'NuGet.Config' }
+
+        $null = & $capture
+
+        @($logged | Where-Object { $_ -like 'WARN:*NuGet.Config*one piece of text*' }).Count | Should -Be 1
+        & $content -Name 'NuGet.Config' | Should -Be 'previous NuGet.Config'
+    }
+
+    It 'records which capture last read a file carried forward, and how many captures in a row it has been' {
+        & $usePrevious
+        Mock -ModuleName $module Wait-GuestSignedIn { $false }
+
+        $result = & $capture
+
+        $result.CarriedForward['GitConfig'].From | Should -Be '20261101-010101'
+        $result.CarriedForward['GitConfig'].Times | Should -Be 1
+        @($logged | Where-Object { $_ -like 'WARN:*has not been read*' }) | Should -BeNullOrEmpty
+    }
+
+    It 'keeps where a file was last read from, counts on, and warns once it has not been read for 3 captures' {
+        & $usePrevious
+        $earlier.GitConfig = [pscustomobject]@{ From = '20261020-000000'; Times = 2 }
+        Mock -ModuleName $module Wait-GuestSignedIn { $false }
+
+        $result = & $capture
+
+        $result.CarriedForward['GitConfig'].From | Should -Be '20261020-000000'
+        $result.CarriedForward['GitConfig'].Times | Should -Be 3
+        @($logged | Where-Object { $_ -like 'WARN:*gitconfig has not been read for 3 captures, since the capture of 20261020-000000*' }).Count | Should -Be 1
+    }
+
+    It 'records nothing as carried forward for a file read this time' {
+        & $usePrevious
+
+        $result = & $capture
+
+        $result.CarriedForward.Count | Should -Be 0
+    }
+
+    It 'carries forward only files in the VM''s captures folder, and warns of one the previous capture names elsewhere' {
+        $outside = Join-Path $root 'Elsewhere\gitconfig'
+        $null = New-Item -ItemType Directory -Path (Split-Path $outside -Parent) -Force
+        Set-Content -LiteralPath $outside -Value 'outside'
+        $previousFiles['GitConfig'] = $outside
+        & $usePrevious
+        Mock -ModuleName $module Wait-GuestSignedIn { $false }
+
+        $result = & $capture
+
+        $result.Files.Contains('GitConfig') | Should -BeFalse
+        @($logged | Where-Object { $_ -like 'WARN:*gitconfig*not in*Captures*' }).Count | Should -Be 1
+    }
+
     It 'carries nothing forward for a file the task did not find, which the user may have removed' {
         & $usePrevious
         $report.Files = @('NuGet.Config')
@@ -422,7 +496,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
         & $writeFile -Path (Join-Path $vsFolder 'Settings\CurrentSettings.vssettings') -Text 'documents settings'
         & $writeFile -Path (Join-Path $elsewhere 'secret.txt') -Text 'secret'
 
-        $run = @{ ProfileRoot = $profileRoot; AppData = $appData; Documents = $documents; ProductLine = '18'; OutputFolder = $output; SettingsFile = $settingsFile }
+        $run = @{ ProfileRoot = $profileRoot; AppData = $appData; Documents = $documents; ProductLine = '18'; OutputFolder = $output; SettingsFile = $settingsFile; MaximumBytes = 1KB }
         $zip = Join-Path $output 'vs-useritems.zip'
 
         # Replaces what is at $Path with a link of $Type to $Target.
@@ -433,6 +507,13 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
             $null = New-Item -ItemType $Type -Path $Path -Value $Target
         }
         $skipJunctionOffWindows = { param([string]$Type) if ($Type -eq 'Junction' -and -not $IsWindows) { Set-ItResult -Skipped -Because 'junctions exist only on Windows' } }
+        # Runs the script while $Path is open with no sharing, as another program may hold it.
+        $runWhileLocked = {
+            param([string]$Path)
+            $lock = [IO.File]::Open($Path, 'Open', 'ReadWrite', 'None')
+            try { & $userFiles @run } finally { $lock.Dispose() }
+        }
+        $skipOffWindows = { if (-not $IsWindows) { Set-ItResult -Skipped -Because 'only Windows keeps others from reading a file someone has open' } }
         # The names in the archive the script wrote, with / between folders.
         $entries = {
             $archive = [IO.Compression.ZipFile]::OpenRead($zip)
@@ -452,11 +533,20 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
         $result = & $userFiles @run
 
         @($result.Notes) | Should -BeNullOrEmpty
+        @($result.Unread) | Should -BeNullOrEmpty
         @($result.Files) | Should -Be @('NuGet.Config', 'gitconfig', 'VisualStudio.vssettings', 'vs-useritems.zip')
         Get-Content -LiteralPath (Join-Path $output 'NuGet.Config') | Should -Be 'nuget'
         Get-Content -LiteralPath (Join-Path $output 'gitconfig') | Should -Be 'git'
         Get-Content -LiteralPath (Join-Path $output 'VisualStudio.vssettings') | Should -Be 'settings'
         & $entries | Should -Be @('Code Snippets/Visual C#/loop.snippet', 'Settings/CurrentSettings.vssettings', 'Templates/class.zip')
+    }
+
+    It 'names the files as the host''s table of Visual Studio files does' {
+        $table = InModuleScope $module { @($script:VisualStudioUserFile.Name) }
+
+        $result = & $userFiles @run
+
+        @($result.Files | Sort-Object) | Should -Be @($table | Sort-Object)
     }
 
     It 'makes an archive the restore puts back where it was' {
@@ -487,6 +577,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
 
         & $nothingSecret
         @($result.Files) | Should -Not -Contain 'NuGet.Config'
+        @($result.Unread) | Should -Be @('NuGet.Config')
         @($result.Files) | Should -Contain 'gitconfig'
         $warnings = @($result.Notes | Where-Object { $_.Level -eq 'WARN' })
         $warnings.Count | Should -Be 1
@@ -504,6 +595,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
 
         & $nothingSecret
         @($result.Files) | Should -Not -Contain $Name
+        @($result.Unread) | Should -Be @($Name)
         @($result.Files) | Should -Contain 'NuGet.Config'
         @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*$What*$link*"
     }
@@ -515,47 +607,67 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
 
         & $nothingSecret
         @($result.Files) | Should -Not -Contain 'VisualStudio.vssettings'
+        @($result.Unread) | Should -Be @('VisualStudio.vssettings')
         @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*the Visual Studio settings*not inside*'
     }
 
-    It 'leaves out, naming it, a <LinkType> to a folder inside the snippets, and zips the rest' -ForEach @(@{ LinkType = 'SymbolicLink' }, @{ LinkType = 'Junction' }) {
-        & $skipJunctionOffWindows -Type $LinkType
-        $link = Join-Path $vsFolder 'Code Snippets\Visual C#\Planted'
-        & $makeLink -Path $link -Target $elsewhere -Type $LinkType
-
-        $result = & $userFiles @run
-
-        & $nothingSecret
-        & $entries | Should -Be @('Code Snippets/Visual C#/loop.snippet', 'Settings/CurrentSettings.vssettings', 'Templates/class.zip')
-        $warnings = @($result.Notes | Where-Object { $_.Level -eq 'WARN' })
-        $warnings.Count | Should -Be 1
-        $warnings[0].Text | Should -BeLike "*$link*"
-    }
-
-    It 'leaves out, naming it, a link to a file inside the templates' {
-        $link = Join-Path $vsFolder 'Templates\planted.zip'
-        & $makeLink -Path $link -Target (Join-Path $elsewhere 'secret.txt')
-
-        $result = & $userFiles @run
-
-        & $nothingSecret
-        & $entries | Should -Not -Contain 'Templates/planted.zip'
-        & $entries | Should -Contain 'Templates/class.zip'
-        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*$link*"
-    }
-
-    It 'leaves out the <Folder> folder when it is a <LinkType>, and zips the others' -ForEach @(
-        foreach ($type in 'SymbolicLink', 'Junction') { @{ Folder = 'Code Snippets'; LinkType = $type } }
+    It 'reports the archive as not read, naming the link, when <Case>, so the previous one is kept' -ForEach @(
+        @{ Case = 'a SymbolicLink to a folder is inside the snippets'; Link = 'Code Snippets\Visual C#\Planted'; LinkType = 'SymbolicLink'; ToFile = $false }
+        @{ Case = 'a Junction is inside the snippets'; Link = 'Code Snippets\Visual C#\Planted'; LinkType = 'Junction'; ToFile = $false }
+        @{ Case = 'a link to a file is inside the templates'; Link = 'Templates\planted.zip'; LinkType = 'SymbolicLink'; ToFile = $true }
+        @{ Case = 'the Code Snippets folder is a SymbolicLink'; Link = 'Code Snippets'; LinkType = 'SymbolicLink'; ToFile = $false }
+        @{ Case = 'the Code Snippets folder is a Junction'; Link = 'Code Snippets'; LinkType = 'Junction'; ToFile = $false }
     ) {
         & $skipJunctionOffWindows -Type $LinkType
-        $link = Join-Path $vsFolder $Folder
-        & $makeLink -Path $link -Target $elsewhere -Type $LinkType
+        $path = Join-Path $vsFolder $Link
+        $target = if ($ToFile) { Join-Path $elsewhere 'secret.txt' } else { $elsewhere }
+        & $makeLink -Path $path -Target $target -Type $LinkType
 
         $result = & $userFiles @run
 
         & $nothingSecret
-        & $entries | Should -Be @('Settings/CurrentSettings.vssettings', 'Templates/class.zip')
-        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*$link*"
+        Test-Path -LiteralPath $zip | Should -BeFalse
+        @($result.Files) | Should -Not -Contain 'vs-useritems.zip'
+        @($result.Unread) | Should -Be @('vs-useritems.zip')
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*$path*"
+        @($result.Files) | Should -Contain 'NuGet.Config'
+    }
+
+    It 'reports <What> as not read when another program holds it open, and captures the rest' -ForEach @(
+        @{ What = 'NuGet.Config'; Name = 'NuGet.Config'; Locked = 'AppData\Roaming\NuGet\NuGet.Config'; InDocuments = $false }
+        @{ What = 'the snippets and templates'; Name = 'vs-useritems.zip'; Locked = 'Visual Studio 18\Templates\class.zip'; InDocuments = $true }
+    ) {
+        & $skipOffWindows
+        $path = if ($InDocuments) { Join-Path $documents $Locked } else { Join-Path $profileRoot $Locked }
+
+        $result = & $runWhileLocked -Path $path
+
+        @($result.Unread) | Should -Be @($Name)
+        @($result.Files) | Should -Not -Contain $Name
+        @($result.Files) | Should -Contain 'gitconfig'
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }) | Should -Not -BeNullOrEmpty
+    }
+
+    It 'refuses NuGet.Config when it is over the most it may copy, and reports it as not read' {
+        & $writeFile -Path (Join-Path $appData 'NuGet\NuGet.Config') -Text ('x' * 2KB)
+
+        $result = & $userFiles @run
+
+        @($result.Unread) | Should -Be @('NuGet.Config')
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*NuGet.Config*over*'
+    }
+
+    It 'leaves a snippet or template over the most it may copy out of the archive, with a WARN, and still captures the archive' {
+        $big = Join-Path $vsFolder 'Templates\big.zip'
+        & $writeFile -Path $big -Text ('x' * 2KB)
+
+        $result = & $userFiles @run
+
+        @($result.Files) | Should -Contain 'vs-useritems.zip'
+        @($result.Unread) | Should -BeNullOrEmpty
+        & $entries | Should -Not -Contain 'Templates/big.zip'
+        & $entries | Should -Contain 'Templates/class.zip'
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*Templates/big.zip*over*'
     }
 
     It 'zips nothing when the Visual Studio folder itself is a <LinkType>' -ForEach @(@{ LinkType = 'SymbolicLink' }, @{ LinkType = 'Junction' }) {
@@ -568,6 +680,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
 
         Test-Path -LiteralPath $zip | Should -BeFalse
         @($result.Files) | Should -Not -Contain 'vs-useritems.zip'
+        @($result.Unread) | Should -Be @('vs-useritems.zip')
         $warnings = @($result.Notes | Where-Object { $_.Level -eq 'WARN' })
         $warnings | Should -Not -BeNullOrEmpty
         $warnings.Text | ForEach-Object { $_ | Should -BeLike "*$vsFolder*" }
@@ -581,6 +694,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
 
         Test-Path -LiteralPath $planted | Should -BeFalse
         @($result.Files) | Should -Not -Contain 'gitconfig'
+        @($result.Unread) | Should -Be @('gitconfig')
         @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*.gitconfig*gitconfig*'
     }
 
@@ -593,6 +707,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
 
         @($result.Notes) | Should -BeNullOrEmpty
         @($result.Files) | Should -BeNullOrEmpty
+        @($result.Unread) | Should -BeNullOrEmpty
         @(Get-ChildItem -LiteralPath $output -Force) | Should -BeNullOrEmpty
     }
 }

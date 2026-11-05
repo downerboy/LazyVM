@@ -115,10 +115,9 @@ function Get-GuestStateFingerprint {
     $snapshot = Invoke-GuestScript -VM $VM -Activity 'state fingerprint' -TimeoutMinutes 5 -ArgumentList @($instanceId) -ScriptBlock {
         param($instanceId)
         $ErrorActionPreference = 'Stop'
-        $settings = if ($instanceId) { Get-GuestVisualStudioSettingsFile -InstanceId $instanceId } else { $null }
         return [pscustomobject]@{
             Thumbprints              = @(Get-GuestCapturedCertificate | ForEach-Object { $_.Certificate.Thumbprint })
-            VisualStudioSettingsHash = if ($settings) { (Get-FileHash -LiteralPath $settings -Algorithm SHA256).Hash } else { '' }
+            VisualStudioSettingsHash = if ($instanceId) { Get-GuestVisualStudioSettingsHash -InstanceId $instanceId } else { '' }
         }
     }
     return ConvertTo-GuestStateFingerprint -Snapshot $snapshot
@@ -210,15 +209,20 @@ function Save-GuestVisualStudioState {
     $read = Save-GuestVisualStudioUserFile -VM $VM -ProductLine "$($vs.ProductLine)" -SettingsFile "$($info.SettingsFile)" -Folder $vsDir
     $carried = Copy-PreviousVisualStudioUserFile -VM $VM -Key $read.Unread -Folder $vsDir
     $files = [ordered]@{}
+    $carriedForward = [ordered]@{}
     foreach ($key in $script:VisualStudioUserFile.Key) {
         if ($read.Files.Contains($key)) { $files[$key] = $read.Files[$key] }
-        elseif ($carried.Contains($key)) { $files[$key] = $carried[$key] }
+        elseif ($carried.Contains($key)) {
+            $files[$key] = $carried[$key].Path
+            $carriedForward[$key] = [ordered]@{ From = $carried[$key].From; Times = $carried[$key].Times }
+        }
     }
     $captured = [ordered]@{
-        DisplayName = $vs.DisplayName
-        Version     = $vs.Version
-        ProductLine = "$($vs.ProductLine)"
-        Files       = $files
+        DisplayName    = $vs.DisplayName
+        Version        = $vs.Version
+        ProductLine    = "$($vs.ProductLine)"
+        Files          = $files
+        CarriedForward = $carriedForward
     }
 
     # The build's settings step applies VSSettingsBackup, so the captured
@@ -249,36 +253,28 @@ function Save-GuestVisualStudioState {
     return [pscustomobject]$captured
 }
 
-# What Save-GuestVisualStudioUserFile reads back, by the name the guest
-# script (Data\Guest.VisualStudioUserFiles.ps1) gives each in its Output
-# folder, which is also its name in the capture.
-$script:VisualStudioUserFile = @(
-    [pscustomobject]@{ Key = 'Settings'; Name = 'VisualStudio.vssettings' }
-    [pscustomobject]@{ Key = 'NuGetConfig'; Name = 'NuGet.Config' }
-    [pscustomobject]@{ Key = 'GitConfig'; Name = 'gitconfig' }
-    [pscustomobject]@{ Key = 'UserItems'; Name = 'vs-useritems.zip' }
-)
-
-# The most Save-GuestVisualStudioUserFile reads back of each file. The files
-# are small; one over this is refused.
-$script:VisualStudioUserFileMaximumBytes = 50MB
+# A file carried forward this many captures in a row is a WARN: it has
+# not been read for that long.
+$script:VisualStudioCarryForwardWarnAfter = 3
 
 function Save-GuestVisualStudioUserFile {
     <#
       Reads the Visual Studio files in the guest account's profile into
       $Folder. Returns Files, where each went, by key
       ($script:VisualStudioUserFile), and Unread, the keys of the files it
-      could not read this time, for Copy-PreviousVisualStudioUserFile. A
-      file the task did not find, which the user may have removed, is in
-      neither. The account's limited processes can change those places,
+      could not read this time, for Copy-PreviousVisualStudioUserFile: all
+      of them when the task did not run or its report cannot be read, the
+      ones the task reports it found but refused or could not read, and the
+      ones that could not be read back. A file the task did not find, which
+      the user may have removed, is in neither. The account's limited processes can change those places,
       and the administrator's rights would follow a junction or link
       planted there to files only an administrator may read, which the
       next restore would put in the profile (#330). So a guest task under
       that limited token reads them (Data\Guest.VisualStudioUserFiles.ps1),
       never through a link, and writes them in its Output folder; the
-      administrator reads one there in the same call that checks neither
-      the folder nor the file is a link (Read-GuestTaskOutputFile), and
-      only the files it knows of that the task said it wrote. The task
+      administrator reads one there on one handle, never through a link
+      (Receive-GuestTaskOutputFile), and only the files it knows of that
+      the task said it wrote. The task
       needs the account signed in, so it waits for automatic sign-in as the
       restore does. Forgiving: no one signed in, the task failing, and each
       file not read are a WARN, and the rest carry on.
@@ -302,10 +298,10 @@ function Save-GuestVisualStudioUserFile {
     try {
         $report = Invoke-GuestTask -VM $VM -TaskName $taskName -Activity 'Visual Studio files capture' -TimeoutMinutes 15 -AsGuestUser `
             -InputFile @{ 'VisualStudioUserFiles.ps1' = (Join-Path -Path $script:DataDir -ChildPath 'Guest.VisualStudioUserFiles.ps1') } `
-            -ArgumentList @($ProductLine, $SettingsFile) -Work {
-            param($productLine, $settingsFile)
+            -ArgumentList @($ProductLine, $SettingsFile, $script:VisualStudioUserFileMaximumBytes) -Work {
+            param($productLine, $settingsFile, $maximumBytes)
             $result = & (Join-Path $TaskFolder 'VisualStudioUserFiles.ps1') -ProfileRoot $env:USERPROFILE -AppData $env:APPDATA `
-                -Documents ([Environment]::GetFolderPath('MyDocuments')) -ProductLine $productLine -SettingsFile $settingsFile -OutputFolder $TaskOutput
+                -Documents ([Environment]::GetFolderPath('MyDocuments')) -ProductLine $productLine -SettingsFile $settingsFile -OutputFolder $TaskOutput -MaximumBytes $maximumBytes
             # The task's result is one line of text, so it goes back as JSON.
             return (ConvertTo-Json -InputObject $result -Compress -Depth 4)
         }
@@ -313,6 +309,7 @@ function Save-GuestVisualStudioUserFile {
         $reported = ConvertFrom-Json -InputObject $report
         $notes = @([RecordReader]::Field($reported, 'Notes'))
         $written = [RecordReader]::Strings($reported, 'Files')
+        $refused = [RecordReader]::Strings($reported, 'Unread')
     }
     catch {
         Write-LogEntry "  could not capture the Visual Studio files: $($_.Exception.Message)" 'WARN'
@@ -321,15 +318,11 @@ function Save-GuestVisualStudioUserFile {
     Write-GuestNote -Notes $notes
 
     $unread = [System.Collections.Generic.List[string]]::new()
+    foreach ($file in @($script:VisualStudioUserFile | Where-Object { $refused -contains $_.Name })) { $unread.Add($file.Key) }
     foreach ($file in @($script:VisualStudioUserFile | Where-Object { $written -contains $_.Name })) {
         $destination = Join-Path $Folder $file.Name
         try {
-            $base64 = Invoke-GuestScript -VM $VM -Activity "reading $($file.Name)" -TimeoutMinutes 5 -ArgumentList @($taskName, $file.Name, $script:VisualStudioUserFileMaximumBytes) -ScriptBlock {
-                param($taskName, $name, $maximumBytes) Read-GuestTaskOutputFile -TaskName $taskName -Name $name -MaximumBytes $maximumBytes
-            }
-            New-Folder -Path $Folder
-            Assert-NoReparsePoint -Path $destination
-            [IO.File]::WriteAllBytes($destination, [Convert]::FromBase64String("$base64"))
+            Receive-GuestTaskOutputFile -VM $VM -TaskName $taskName -Name $file.Name -MaximumBytes $script:VisualStudioUserFileMaximumBytes -Destination $destination
             $files[$file.Key] = $destination
             Write-LogEntry "  $($file.Name)" 'OK'
         }
@@ -344,10 +337,15 @@ function Save-GuestVisualStudioUserFile {
 function Copy-PreviousVisualStudioUserFile {
     <#
       Copies into $Folder the Visual Studio files with the keys $Key
-      ($script:VisualStudioUserFile) that the VM's previous capture has, and
-      returns where each went, by key. For files that could not be read this
-      time, so that a capture never drops what an earlier one had. Each one
-      carried forward is logged; one that cannot be is a WARN.
+      ($script:VisualStudioUserFile) that the VM's previous capture has, for
+      files that could not be read this time, so that a capture never drops
+      what an earlier one had. Returns, by key, @{ Path; From; Times }: where
+      it went, the stamp of the capture that last read it, and how many
+      captures in a row it has now been carried forward. Only files in the
+      VM's captures folder are taken. Each one carried forward is logged,
+      and is a WARN once it has not been read for
+      $script:VisualStudioCarryForwardWarnAfter captures; one that cannot
+      be carried forward is a WARN.
     #>
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
@@ -358,16 +356,30 @@ function Copy-PreviousVisualStudioUserFile {
 
     $carried = [ordered]@{}
     if ($Key.Count -eq 0) { return $carried }
-    $previous = [RecordReader]::Field([RecordReader]::Field((Get-CaptureManifest -VM $VM), 'VisualStudio'), 'Files')
+    $previous = Get-CaptureManifest -VM $VM
+    $record = [RecordReader]::Field($previous, 'VisualStudio')
+    $files = [RecordReader]::Field($record, 'Files')
+    $earlier = [RecordReader]::Field($record, 'CarriedForward')
+    $captures = Join-Path $VM.Settings.StateDir $script:CaptureFolderName
     foreach ($file in @($script:VisualStudioUserFile | Where-Object { $Key -contains $_.Key })) {
-        $source = [RecordReader]::Text($previous, $file.Key)
+        $source = [RecordReader]::Text($files, $file.Key)
         if (-not $source -or -not (Test-Path -LiteralPath $source -PathType Leaf)) { continue }
+        if (-not (Test-PathWithin -Path $source -Folder $captures)) {
+            Write-LogEntry "  could not carry $($file.Name) forward: the previous capture names $source, which is not in $captures" 'WARN'
+            continue
+        }
+        $before = [RecordReader]::Field($earlier, $file.Key)
+        $from = if ($before) { [RecordReader]::Text($before, 'From') } else { [RecordReader]::Text($previous, 'Stamp') }
+        $times = 1 + $(if ($before) { [int][RecordReader]::Text($before, 'Times') } else { 0 })
         $destination = Join-Path $Folder $file.Name
         try {
             New-Folder -Path $Folder
             Copy-CheckedItem -Path $source -Destination $destination
-            $carried[$file.Key] = $destination
+            $carried[$file.Key] = [pscustomobject]@{ Path = $destination; From = $from; Times = $times }
             Write-LogEntry "  $($file.Name) carried forward from the previous capture, as it could not be read this time" 'INFO'
+            if ($times -ge $script:VisualStudioCarryForwardWarnAfter) {
+                Write-LogEntry "  $($file.Name) has not been read for $times captures, since the capture of $from - see the warnings above for why" 'WARN'
+            }
         }
         catch {
             Write-LogEntry "  could not carry $($file.Name) forward from the previous capture: $($_.Exception.Message)" 'WARN'

@@ -90,7 +90,7 @@ Describe 'Restore-GuestVisualStudioState (#310)' {
         Mock -ModuleName $module Invoke-GuestScript { }
         Mock -ModuleName $module Wait-GuestSignedIn { $true }
         Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ ProductLine = '18'; InstanceId = 'a1b2c3d4' } }
-        Mock -ModuleName $module Invoke-GuestTask { '[{"Level":"OK","Text":"restored NuGet.Config"}]' }
+        Mock -ModuleName $module Invoke-GuestTask { '{"Notes":[{"Level":"OK","Text":"restored NuGet.Config"}]}' }
 
         $captured = Join-Path $TestDrive 'vs'
         $null = New-Item -ItemType Directory -Path $captured -Force
@@ -125,12 +125,12 @@ Describe 'Restore-GuestVisualStudioState (#310)' {
         & $restore -Files $files
 
         Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter {
-            (@($InputFile.Keys | Sort-Object) -join ',') -eq 'gitconfig,NuGet.Config,UserItems.zip,VisualStudioUserFiles.ps1' -and
+            (@($InputFile.Keys | Sort-Object) -join ',') -eq 'gitconfig,NuGet.Config,VisualStudioUserFiles.ps1,vs-useritems.zip' -and
             $InputFile['VisualStudioUserFiles.ps1'] -eq $guestScript -and
             $InputFile['NuGet.Config'] -eq $files.NuGetConfig -and
-            $InputFile['UserItems.zip'] -eq $files.UserItems -and
+            $InputFile['vs-useritems.zip'] -eq $files.UserItems -and
             "$Work" -match "Join-Path \`$TaskFolder 'VisualStudioUserFiles\.ps1'" -and
-            $ArgumentList[0] -eq '18' -and $ArgumentList[1] -eq 'NuGet.Config' -and $ArgumentList[2] -eq 'gitconfig' -and $ArgumentList[3] -eq 'UserItems.zip'
+            $ArgumentList[0] -eq '18' -and $ArgumentList[1] -eq 'NuGet.Config' -and $ArgumentList[2] -eq 'gitconfig' -and $ArgumentList[3] -eq 'vs-useritems.zip'
         }
     }
 
@@ -203,7 +203,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
         Set-Content -LiteralPath (Join-Path $items 'Code Snippets\loop.snippet') -Value 'snippet'
         Set-Content -LiteralPath (Join-Path $items 'Templates\class.zip') -Value 'template'
         $null = New-Item -ItemType Directory -Path $task -Force
-        $zip = Join-Path $task 'UserItems.zip'
+        $zip = Join-Path $task 'vs-useritems.zip'
         [IO.Compression.ZipFile]::CreateFromDirectory($items, $zip)
         Set-Content -LiteralPath (Join-Path $task 'NuGet.Config') -Value 'nuget'
         Set-Content -LiteralPath (Join-Path $task 'gitconfig') -Value 'git'
@@ -240,7 +240,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
     }
 
     It 'puts NuGet.Config, .gitconfig and the snippets and templates in the profile' {
-        $notes = @(& $userFiles @run)
+        $notes = @((& $userFiles @run).Notes)
 
         Get-Content -LiteralPath (Join-Path $appData 'NuGet\NuGet.Config') | Should -Be 'nuget'
         Get-Content -LiteralPath (Join-Path $profileRoot '.gitconfig') | Should -Be 'git'
@@ -270,7 +270,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
         $link = Join-Path $profileRoot $Folder
         & $makeLink -Path $link -Target $elsewhere -Type $LinkType
 
-        $notes = @(& $userFiles @run)
+        $notes = @((& $userFiles @run).Notes)
 
         & $nothingElsewhere
         $warnings = @($notes | Where-Object { $_.Level -eq 'WARN' })
@@ -283,7 +283,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
         $link = Join-Path $profileRoot '.gitconfig'
         & $makeLink -Path $link -Target (Join-Path $elsewhere 'planted')
 
-        $notes = @(& $userFiles @run)
+        $notes = @((& $userFiles @run).Notes)
 
         & $nothingElsewhere
         @($notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike "*.gitconfig*$link*"
@@ -295,7 +295,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
         $null = New-Item -ItemType Directory -Path $real -Force
         & $makeLink -Path $profileRoot -Target $real -Type $LinkType
 
-        $notes = @(& $userFiles @run)
+        $notes = @((& $userFiles @run).Notes)
 
         @(Get-ChildItem -LiteralPath $real -Recurse -Force -File).Count | Should -Be 0
         $warnings = @($notes | Where-Object { $_.Level -eq 'WARN' })
@@ -308,7 +308,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
         $link = Join-Path $vsFolder 'Code Snippets'
         & $makeLink -Path $link -Target $elsewhere -Type $LinkType
 
-        $notes = @(& $userFiles @run)
+        $notes = @((& $userFiles @run).Notes)
 
         & $nothingElsewhere
         Get-Content -LiteralPath (Join-Path $vsFolder 'Templates\class.zip') | Should -Be 'template'
@@ -324,7 +324,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
     ) {
         $run.UserItems = & $newArchive -Names @($Name, 'Templates/kept.txt')
 
-        $notes = @(& $userFiles @run)
+        $notes = @((& $userFiles @run).Notes)
 
         @(Get-ChildItem -LiteralPath $documents -Recurse -Force -File | Where-Object { $_.FullName -notlike "$vsFolder*" }).Count | Should -Be 0
         @(Get-ChildItem -LiteralPath $vsFolder -Recurse -Force -File).Name | Should -Be @('kept.txt')
@@ -337,7 +337,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
     It 'reports a damaged archive as one WARN and keeps what it restored before it' {
         Set-Content -LiteralPath $zip -Value 'not a zip archive'
 
-        $notes = @(& $userFiles @run)
+        $notes = @((& $userFiles @run).Notes)
 
         $notes.Text | Should -Contain 'restored NuGet.Config'
         $notes.Text | Should -Contain 'restored .gitconfig'
@@ -350,7 +350,7 @@ Describe 'Guest.VisualStudioUserFiles.ps1 (#310)' {
         $run.Remove('NuGetConfig')
         $run.Remove('UserItems')
 
-        $notes = @(& $userFiles @run)
+        $notes = @((& $userFiles @run).Notes)
 
         Test-Path -LiteralPath (Join-Path $appData 'NuGet') | Should -BeFalse
         Test-Path -LiteralPath $vsFolder | Should -BeFalse
