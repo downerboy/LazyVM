@@ -206,11 +206,19 @@ function Save-GuestVisualStudioState {
     }
     if (-not $info.SettingsFile) { Write-LogEntry '  no .vssettings backup found (open and close Visual Studio once to create one)' 'WARN' }
 
+    $vsDir = Join-Path $CaptureDir 'vs'
+    $read = Save-GuestVisualStudioUserFile -VM $VM -ProductLine "$($vs.ProductLine)" -SettingsFile "$($info.SettingsFile)" -Folder $vsDir
+    $carried = Copy-PreviousVisualStudioUserFile -VM $VM -Key $read.Unread -Folder $vsDir
+    $files = [ordered]@{}
+    foreach ($key in $script:VisualStudioUserFile.Key) {
+        if ($read.Files.Contains($key)) { $files[$key] = $read.Files[$key] }
+        elseif ($carried.Contains($key)) { $files[$key] = $carried[$key] }
+    }
     $captured = [ordered]@{
         DisplayName = $vs.DisplayName
         Version     = $vs.Version
         ProductLine = "$($vs.ProductLine)"
-        Files       = Save-GuestVisualStudioUserFile -VM $VM -ProductLine "$($vs.ProductLine)" -SettingsFile "$($info.SettingsFile)" -Folder (Join-Path $CaptureDir 'vs')
+        Files       = $files
     }
 
     # The build's settings step applies VSSettingsBackup, so the captured
@@ -218,8 +226,9 @@ function Save-GuestVisualStudioState {
     # while the backup is still pending in the guest, or the guest records
     # nothing (a VM built before it did) and there is a backup: nightly
     # maintenance applies the backup first, and until then the guest's own
-    # settings may be a new install's defaults (#266).
-    if ($captured.Files.Contains('Settings')) {
+    # settings may be a new install's defaults (#266). Only settings read
+    # this time: ones carried forward may be older than the guest's.
+    if ($read.Files.Contains('Settings')) {
         $hasBackup = Test-Path -LiteralPath $VM.Settings.VSSettingsBackup
         if (Test-VisualStudioSettingPending -Marker $info.SettingsMarker -HasBackup $hasBackup) {
             Write-LogEntry '  kept the Visual Studio settings backup: the guest is still to have it applied, which nightly maintenance does' 'INFO'
@@ -240,7 +249,7 @@ function Save-GuestVisualStudioState {
     return [pscustomobject]$captured
 }
 
-# What Save-GuestVisualStudioUserFile copies back, by the name the guest
+# What Save-GuestVisualStudioUserFile reads back, by the name the guest
 # script (Data\Guest.VisualStudioUserFiles.ps1) gives each in its Output
 # folder, which is also its name in the capture.
 $script:VisualStudioUserFile = @(
@@ -250,25 +259,31 @@ $script:VisualStudioUserFile = @(
     [pscustomobject]@{ Key = 'UserItems'; Name = 'vs-useritems.zip' }
 )
 
+# The most Save-GuestVisualStudioUserFile reads back of each file. The files
+# are small; one over this is refused.
+$script:VisualStudioUserFileMaximumBytes = 50MB
+
 function Save-GuestVisualStudioUserFile {
     <#
-      Copies the Visual Studio files in the guest account's profile into
-      $Folder, and returns where each went, by key
-      ($script:VisualStudioUserFile). The account's limited processes can
-      change those places, and the administrator's rights would follow a
-      junction or link planted there to files only an administrator may
-      read, which the next restore would put in the profile (#330). So a
-      guest task under that limited token reads them
-      (Data\Guest.VisualStudioUserFiles.ps1), never through a link, and
-      writes them in its Output folder; the administrator reads one there
-      only once neither the folder nor the file is a link
-      (Get-GuestTaskOutputFile), and only the files it knows of that the
-      task said it wrote. The task needs the account signed in, so it waits
-      for automatic sign-in as the restore does. Forgiving: no one signed
-      in, the task failing, and each file not copied are a WARN, and the
-      rest carry on.
+      Reads the Visual Studio files in the guest account's profile into
+      $Folder. Returns Files, where each went, by key
+      ($script:VisualStudioUserFile), and Unread, the keys of the files it
+      could not read this time, for Copy-PreviousVisualStudioUserFile. A
+      file the task did not find, which the user may have removed, is in
+      neither. The account's limited processes can change those places,
+      and the administrator's rights would follow a junction or link
+      planted there to files only an administrator may read, which the
+      next restore would put in the profile (#330). So a guest task under
+      that limited token reads them (Data\Guest.VisualStudioUserFiles.ps1),
+      never through a link, and writes them in its Output folder; the
+      administrator reads one there in the same call that checks neither
+      the folder nor the file is a link (Read-GuestTaskOutputFile), and
+      only the files it knows of that the task said it wrote. The task
+      needs the account signed in, so it waits for automatic sign-in as the
+      restore does. Forgiving: no one signed in, the task failing, and each
+      file not read are a WARN, and the rest carry on.
     #>
-    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    [OutputType([pscustomobject])]
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][string]$ProductLine,
@@ -276,10 +291,11 @@ function Save-GuestVisualStudioUserFile {
         [Parameter(Mandatory)][string]$Folder
     )
 
-    $copied = [ordered]@{}
+    $files = [ordered]@{}
+    $none = [pscustomobject]@{ Files = $files; Unread = @($script:VisualStudioUserFile.Key) }
     if (-not (Wait-GuestSignedIn -VM $VM -TimeoutMinutes $script:VisualStudioSignInWaitMinutes)) {
         Write-LogEntry "  '$($VM.Runtime.GuestAdminUser)' is not signed in - Visual Studio files not captured" 'WARN'
-        return $copied
+        return $none
     }
 
     $taskName = "${script:TaskPrefix}VSUserFilesCapture"
@@ -300,25 +316,64 @@ function Save-GuestVisualStudioUserFile {
     }
     catch {
         Write-LogEntry "  could not capture the Visual Studio files: $($_.Exception.Message)" 'WARN'
-        return $copied
+        return $none
     }
     Write-GuestNote -Notes $notes
 
+    $unread = [System.Collections.Generic.List[string]]::new()
     foreach ($file in @($script:VisualStudioUserFile | Where-Object { $written -contains $_.Name })) {
         $destination = Join-Path $Folder $file.Name
         try {
-            $guestPath = Invoke-GuestScript -VM $VM -Activity "checking $($file.Name)" -TimeoutMinutes 2 -ArgumentList @($taskName, $file.Name) -ScriptBlock {
-                param($taskName, $name) Get-GuestTaskOutputFile -TaskName $taskName -Name $name
+            $base64 = Invoke-GuestScript -VM $VM -Activity "reading $($file.Name)" -TimeoutMinutes 5 -ArgumentList @($taskName, $file.Name, $script:VisualStudioUserFileMaximumBytes) -ScriptBlock {
+                param($taskName, $name, $maximumBytes) Read-GuestTaskOutputFile -TaskName $taskName -Name $name -MaximumBytes $maximumBytes
             }
-            Copy-FromGuest -VM $VM -GuestPath $guestPath -HostPath $destination
-            $copied[$file.Key] = $destination
+            New-Folder -Path $Folder
+            Assert-NoReparsePoint -Path $destination
+            [IO.File]::WriteAllBytes($destination, [Convert]::FromBase64String("$base64"))
+            $files[$file.Key] = $destination
             Write-LogEntry "  $($file.Name)" 'OK'
         }
         catch {
+            $unread.Add($file.Key)
             Write-LogEntry "  could not retrieve $($file.Name): $($_.Exception.Message)" 'WARN'
         }
     }
-    return $copied
+    return [pscustomobject]@{ Files = $files; Unread = $unread.ToArray() }
+}
+
+function Copy-PreviousVisualStudioUserFile {
+    <#
+      Copies into $Folder the Visual Studio files with the keys $Key
+      ($script:VisualStudioUserFile) that the VM's previous capture has, and
+      returns where each went, by key. For files that could not be read this
+      time, so that a capture never drops what an earlier one had. Each one
+      carried forward is logged; one that cannot be is a WARN.
+    #>
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [AllowEmptyCollection()][string[]]$Key = @(),
+        [Parameter(Mandatory)][string]$Folder
+    )
+
+    $carried = [ordered]@{}
+    if ($Key.Count -eq 0) { return $carried }
+    $previous = [RecordReader]::Field([RecordReader]::Field((Get-CaptureManifest -VM $VM), 'VisualStudio'), 'Files')
+    foreach ($file in @($script:VisualStudioUserFile | Where-Object { $Key -contains $_.Key })) {
+        $source = [RecordReader]::Text($previous, $file.Key)
+        if (-not $source -or -not (Test-Path -LiteralPath $source -PathType Leaf)) { continue }
+        $destination = Join-Path $Folder $file.Name
+        try {
+            New-Folder -Path $Folder
+            Copy-CheckedItem -Path $source -Destination $destination
+            $carried[$file.Key] = $destination
+            Write-LogEntry "  $($file.Name) carried forward from the previous capture, as it could not be read this time" 'INFO'
+        }
+        catch {
+            Write-LogEntry "  could not carry $($file.Name) forward from the previous capture: $($_.Exception.Message)" 'WARN'
+        }
+    }
+    return $carried
 }
 
 # ── SQL Server ───────────────────────────────────────────────────────────────

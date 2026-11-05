@@ -594,20 +594,21 @@ Describe 'Get-GuestTaskStatus' {
     }
 }
 
-Describe 'Get-GuestTaskOutputFile (#330)' {
+Describe 'Read-GuestTaskOutputFile (#330)' {
     BeforeEach {
         $output = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         Mock Get-GuestTaskOutputFolder { $output }
         $null = New-Item -ItemType Directory -Path $output -Force
         $file = Join-Path $output 'NuGet.Config'
         $elsewhere = New-TestFolder
-        Set-Content -LiteralPath (Join-Path $elsewhere 'NuGet.Config') -Value 'secret'
+        Set-Content -LiteralPath (Join-Path $elsewhere 'NuGet.Config') -Value 'secret' -NoNewline
+        $read = { Read-GuestTaskOutputFile -TaskName 'LazyVM-VSUserFilesCapture' -Name 'NuGet.Config' -MaximumBytes 1KB }
     }
 
-    It 'gives the place of a file the task wrote in its Output folder' {
-        Set-Content -LiteralPath $file -Value 'nuget'
+    It 'gives what a file the task wrote in its Output folder holds, as base64' {
+        Set-Content -LiteralPath $file -Value 'nuget' -NoNewline
 
-        Get-GuestTaskOutputFile -TaskName 'LazyVM-VSUserFilesCapture' -Name 'NuGet.Config' | Should -Be $file
+        [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((& $read))) | Should -Be 'nuget'
         Should -Invoke Get-GuestTaskOutputFolder -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'LazyVM-VSUserFilesCapture' }
     }
 
@@ -625,11 +626,17 @@ Describe 'Get-GuestTaskOutputFile (#330)' {
             $link = $file
         }
 
-        { Get-GuestTaskOutputFile -TaskName 'LazyVM-VSUserFilesCapture' -Name 'NuGet.Config' } | Should -Throw "*$link*junction or link*"
+        { & $read } | Should -Throw "*$link*junction or link*"
+    }
+
+    It 'refuses a file over the size it is given' {
+        Set-Content -LiteralPath $file -Value ('x' * 1025) -NoNewline
+
+        { & $read } | Should -Throw "*$file*over*"
     }
 
     It 'says so when the file is not there' {
-        { Get-GuestTaskOutputFile -TaskName 'LazyVM-VSUserFilesCapture' -Name 'NuGet.Config' } | Should -Throw "*$file*not there*"
+        { & $read } | Should -Throw "*$file*not there*"
     }
 }
 
@@ -639,7 +646,7 @@ Describe 'What administrators do in a task''s Output folder (#302 SEC-008)' {
         foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path (Split-Path -Path $PSScriptRoot -Parent) 'src/LazyVM') -Recurse -Filter '*.ps1')) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$null)
             foreach ($function in $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
-                if ($function.Name -ne 'Get-GuestTaskOutputFolder' -and $function.Body.Extent.Text -match 'Get-GuestTaskOutput(Folder|File)\b') {
+                if ($function.Name -ne 'Get-GuestTaskOutputFolder' -and $function.Body.Extent.Text -match 'Get-GuestTaskOutputFolder') {
                     @{ Function = $function.Name; Body = $function.Body.Extent.Text }
                 }
             }

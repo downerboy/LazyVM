@@ -189,9 +189,10 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         Mock -ModuleName $module Write-GuestNote { }
         Mock -ModuleName $module Get-GuestStagingFolder { 'C:\Program Files\LazyVM\Staging' }
         Mock -ModuleName $module Get-GuestVisualStudio { [pscustomobject]@{ DisplayName = 'Visual Studio Community 2026'; Version = '18.0'; ProductLine = '18'; InstanceId = 'a1b2c3d4' } }
-        $guest = @{ SettingsFile = 'C:\Users\devadmin\AppData\Local\Microsoft\VisualStudio\18.0_a1b2c3d4\Settings\CurrentSettings.vssettings' }
-        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ SettingsFile = $guest.SettingsFile; SettingsMarker = 'Pending' } }
-        Mock -ModuleName $module Invoke-GuestScript { "C:\Program Files\LazyVM\Tasks\$($ArgumentList[0])\Output\$($ArgumentList[1])" } -ParameterFilter { "$ScriptBlock" -match 'Get-GuestTaskOutputFile' }
+        $guest = @{ SettingsFile = 'C:\Users\devadmin\AppData\Local\Microsoft\VisualStudio\18.0_a1b2c3d4\Settings\CurrentSettings.vssettings'; Marker = 'Pending' }
+        Mock -ModuleName $module Invoke-GuestScript { [pscustomobject]@{ SettingsFile = $guest.SettingsFile; SettingsMarker = $guest.Marker } }
+        # Each file read back holds "fresh <name>".
+        Mock -ModuleName $module Invoke-GuestScript { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("fresh $($ArgumentList[1])")) } -ParameterFilter { "$ScriptBlock" -match 'Read-GuestTaskOutputFile' }
         Mock -ModuleName $module Wait-GuestSignedIn { $true }
         $report = @{
             Notes = @(@{ Level = 'WARN'; Text = 'did not capture .gitconfig: planted' })
@@ -199,16 +200,37 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         }
         Mock -ModuleName $module Invoke-GuestTask { ConvertTo-Json -InputObject $report -Compress -Depth 4 }
         Mock -ModuleName $module Copy-FromGuest { }
+        Mock -ModuleName $module Write-VisualStudioSettingMarker { }
+        Mock -ModuleName $module Get-CaptureManifest { $null }
 
         $guestScript = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.VisualStudioUserFiles.ps1'
-        $output = 'C:\Program Files\LazyVM\Tasks\LazyVM-VSUserFilesCapture\Output'
-        $captureDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-        $vmSettings = @{ VMName = 'Alpha'; GuestAdminUser = 'devadmin'; InstallVisualStudio = $true; VSSettingsBackup = (Join-Path $TestDrive 'VisualStudio.vssettings') }
+        $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $captureDir = Join-Path $root 'new'
+        $vsDir = Join-Path $captureDir 'vs'
+        $null = New-Item -ItemType Directory -Path $root -Force
+        $backup = Join-Path $root 'VisualStudio.vssettings'
+        Set-Content -LiteralPath $backup -Value 'backup' -NoNewline
+        $vmSettings = @{ VMName = 'Alpha'; GuestAdminUser = 'devadmin'; InstallVisualStudio = $true; VSSettingsBackup = $backup }
         $capture = {
             InModuleScope $module -Parameters @{ Settings = $vmSettings; CaptureDir = $captureDir } {
                 param($Settings, $CaptureDir) Save-GuestVisualStudioState -VM ([VMContext]::new($Settings)) -CaptureDir $CaptureDir
             }
         }
+        # The previous capture, with each file holding "previous <name>".
+        $previousDir = Join-Path $root 'old\vs'
+        $null = New-Item -ItemType Directory -Path $previousDir -Force
+        $previousFiles = [ordered]@{}
+        foreach ($file in @(@{ Key = 'Settings'; Name = 'VisualStudio.vssettings' }, @{ Key = 'NuGetConfig'; Name = 'NuGet.Config' }, @{ Key = 'GitConfig'; Name = 'gitconfig' }, @{ Key = 'UserItems'; Name = 'vs-useritems.zip' })) {
+            $path = Join-Path $previousDir $file.Name
+            Set-Content -LiteralPath $path -Value "previous $($file.Name)" -NoNewline
+            $previousFiles[$file.Key] = $path
+        }
+        $usePrevious = {
+            Mock -ModuleName $module Get-CaptureManifest {
+                InModuleScope $module -Parameters @{ Files = $previousFiles } { param($Files) $m = [CaptureManifest]::new(); $m.VisualStudio = [pscustomobject]@{ Files = [pscustomobject]$Files }; $m }
+            }
+        }
+        $content = { param([string]$Name) Get-Content -LiteralPath (Join-Path $vsDir $Name) -Raw }
     }
 
     It 'reads the files with a task under the guest account''s limited token, given only its script and the settings file''s place' {
@@ -229,38 +251,37 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         Should -Invoke -ModuleName $module Get-GuestStagingFolder -Times 0 -Exactly
     }
 
-    It 'copies each file the task wrote from its Output folder, once the folder and the file are checked, into the capture' {
+    It 'reads each file the task wrote from its Output folder in the call that checks it, up to 50 MB, into the capture' {
         $result = & $capture
 
         foreach ($name in $report.Files) {
             Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
-                "$ScriptBlock" -match 'Get-GuestTaskOutputFile' -and $ArgumentList[0] -eq 'LazyVM-VSUserFilesCapture' -and $ArgumentList[1] -eq $name
+                "$ScriptBlock" -match 'Read-GuestTaskOutputFile' -and $ArgumentList[0] -eq 'LazyVM-VSUserFilesCapture' -and $ArgumentList[1] -eq $name -and $ArgumentList[2] -eq 50MB
             }
-            Should -Invoke -ModuleName $module Copy-FromGuest -Times 1 -Exactly -ParameterFilter {
-                $GuestPath -eq "$output\$name" -and $HostPath -eq (Join-Path (Join-Path $captureDir 'vs') $name)
-            }
+            & $content -Name $name | Should -Be "fresh $name"
         }
+        Should -Invoke -ModuleName $module Copy-FromGuest -Times 0 -Exactly
         @($result.Files.Keys) | Should -Be @('Settings', 'NuGetConfig', 'GitConfig', 'UserItems')
+        $result.Files['NuGetConfig'] | Should -Be (Join-Path $vsDir 'NuGet.Config')
     }
 
-    It 'copies only the files it knows of that the task says it wrote' {
+    It 'reads only the files it knows of that the task says it wrote' {
         $report.Files = @('NuGet.Config', '..\..\Windows\System32\config\SAM', 'other.txt')
 
         $result = & $capture
 
-        Should -Invoke -ModuleName $module Copy-FromGuest -Times 1 -Exactly
-        Should -Invoke -ModuleName $module Copy-FromGuest -Times 1 -Exactly -ParameterFilter { $GuestPath -eq "$output\NuGet.Config" }
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { "$ScriptBlock" -match 'Read-GuestTaskOutputFile' }
         @($result.Files.Keys) | Should -Be @('NuGetConfig')
     }
 
-    It 'leaves out, with a WARN, a file the check refuses, and copies the rest' {
-        Mock -ModuleName $module Invoke-GuestScript { throw "$output\gitconfig is a junction or link" } -ParameterFilter { "$ScriptBlock" -match 'Get-GuestTaskOutputFile' -and $ArgumentList[1] -eq 'gitconfig' }
+    It 'leaves out, with a WARN, a file the guest refuses to read, and reads the rest' {
+        Mock -ModuleName $module Invoke-GuestScript { throw 'gitconfig is a junction or link' } -ParameterFilter { "$ScriptBlock" -match 'Read-GuestTaskOutputFile' -and $ArgumentList[1] -eq 'gitconfig' }
 
         $result = & $capture
 
         @($logged | Where-Object { $_ -like 'WARN:*gitconfig*junction or link*' }).Count | Should -Be 1
-        Should -Invoke -ModuleName $module Copy-FromGuest -Times 3 -Exactly
         $result.Files.Contains('GitConfig') | Should -BeFalse
+        @($result.Files.Keys).Count | Should -Be 3
     }
 
     It 'logs what the task reported' {
@@ -280,7 +301,7 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         $result.Files.Count | Should -Be 0
     }
 
-    It 'logs one WARN, copies nothing and carries on, when <Case>' -ForEach @(
+    It 'logs one WARN, reads nothing and carries on, when <Case>' -ForEach @(
         @{ Case = 'what the task reported cannot be read'; Fails = $false }
         @{ Case = 'the task fails'; Fails = $true }
     ) {
@@ -290,8 +311,73 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         $result = & $capture
 
         @($logged | Where-Object { $_ -like 'WARN:*Visual Studio files*' }).Count | Should -Be 1
-        Should -Invoke -ModuleName $module Copy-FromGuest -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 0 -Exactly -ParameterFilter { "$ScriptBlock" -match 'Read-GuestTaskOutputFile' }
         $result.DisplayName | Should -Be 'Visual Studio Community 2026'
+    }
+
+    It 'keeps the previous capture''s files, and says so, when <Case>' -ForEach @(
+        @{ Case = 'the account is not signed in'; Skip = 'SignedOut' }
+        @{ Case = 'the task fails'; Skip = 'Fails' }
+        @{ Case = 'what the task reported cannot be read'; Skip = 'Unreadable' }
+    ) {
+        & $usePrevious
+        switch ($Skip) {
+            'SignedOut' { Mock -ModuleName $module Wait-GuestSignedIn { $false } }
+            'Fails' { Mock -ModuleName $module Invoke-GuestTask { throw 'failed in the guest' } }
+            'Unreadable' { Mock -ModuleName $module Invoke-GuestTask { 'not { json' } }
+        }
+
+        $result = & $capture
+
+        @($result.Files.Keys) | Should -Be @('Settings', 'NuGetConfig', 'GitConfig', 'UserItems')
+        foreach ($key in $previousFiles.Keys) {
+            $name = Split-Path -Path $previousFiles[$key] -Leaf
+            $result.Files[$key] | Should -Be (Join-Path $vsDir $name)
+            & $content -Name $name | Should -Be "previous $name"
+            $logged | Should -Contain "INFO:   $name carried forward from the previous capture, as it could not be read this time"
+        }
+    }
+
+    It 'keeps the previous capture''s copy of a file the guest refused to read, and the fresh copies of the rest' {
+        & $usePrevious
+        Mock -ModuleName $module Invoke-GuestScript { throw 'too big' } -ParameterFilter { "$ScriptBlock" -match 'Read-GuestTaskOutputFile' -and $ArgumentList[1] -eq 'gitconfig' }
+
+        $result = & $capture
+
+        & $content -Name 'gitconfig' | Should -Be 'previous gitconfig'
+        & $content -Name 'NuGet.Config' | Should -Be 'fresh NuGet.Config'
+        $result.Files.Contains('GitConfig') | Should -BeTrue
+        @($logged | Where-Object { $_ -like 'INFO:*carried forward*' }).Count | Should -Be 1
+    }
+
+    It 'carries nothing forward for a file the task did not find, which the user may have removed' {
+        & $usePrevious
+        $report.Files = @('NuGet.Config')
+
+        $result = & $capture
+
+        @($result.Files.Keys) | Should -Be @('NuGetConfig')
+        @($logged | Where-Object { $_ -like '*carried forward*' }) | Should -BeNullOrEmpty
+    }
+
+    It 'carries nothing forward, and carries on, when there is no previous capture' {
+        Mock -ModuleName $module Wait-GuestSignedIn { $false }
+
+        $result = & $capture
+
+        $result.Files.Count | Should -Be 0
+        @($logged | Where-Object { $_ -like '*carried forward*' }) | Should -BeNullOrEmpty
+    }
+
+    It 'never refreshes the settings backup from settings carried forward, which may be older than the guest''s' {
+        & $usePrevious
+        $guest.Marker = 'OLDHASH'
+        Mock -ModuleName $module Wait-GuestSignedIn { $false }
+
+        $null = & $capture
+
+        Get-Content -LiteralPath $backup -Raw | Should -Be 'backup'
+        Should -Invoke -ModuleName $module Write-VisualStudioSettingMarker -Times 0 -Exactly
     }
 
     It 'says when Visual Studio has saved no settings yet, and still reads the other files' {

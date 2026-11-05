@@ -1778,18 +1778,23 @@ function Get-GuestTaskStatus {
     }
 }
 
-function Get-GuestTaskOutputFile {
+function Read-GuestTaskOutputFile {
     <#
-      The place of the file $Name that task $TaskName wrote in its Output
-      folder, for an administrator to read, once neither the folder nor the
-      file is a junction or link; throws why not, or that it is not there.
-      The task's user can change the file, so what it holds is only that
-      user's word.
+      What the file $Name that task $TaskName wrote in its Output folder
+      holds, as base64, for an administrator to read: checked and read in
+      this one call, so the task's user has no time between the two to put
+      a junction or link in place of the folder or the file. Throws when
+      either is one, when the file is over $MaximumBytes, or when it is not
+      there. The task's user can change the file, so what it holds is only
+      that user's word. Hard links are not reparse points, so this does not
+      see them; they are out of scope, as making one needs write access to
+      the file it leads to.
     #>
     [OutputType([string])]
     param(
         [Parameter(Mandatory)][string]$TaskName,
-        [Parameter(Mandatory)][string]$Name
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][long]$MaximumBytes
     )
 
     $output = Get-GuestTaskOutputFolder -TaskName $TaskName
@@ -1798,7 +1803,19 @@ function Get-GuestTaskOutputFile {
         if (Test-GuestReparsePoint -Path $checked) { throw "$checked is a junction or link, and LazyVM never reads through one" }
     }
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "$path is not there" }
-    return $path
+    $stream = [IO.File]::OpenRead($path)
+    try {
+        if ($stream.Length -gt $MaximumBytes) { throw "$path is $([math]::Ceiling($stream.Length / 1MB)) MB, over the $($MaximumBytes / 1MB) MB LazyVM reads back" }
+        $bytes = New-Object byte[] $stream.Length
+        $read = 0
+        while ($read -lt $bytes.Length) {
+            $count = $stream.Read($bytes, $read, $bytes.Length - $read)
+            if ($count -eq 0) { break }
+            $read += $count
+        }
+    }
+    finally { $stream.Dispose() }
+    return [Convert]::ToBase64String($bytes, 0, $read)
 }
 
 function Remove-GuestTask {
