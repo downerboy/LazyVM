@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.6.1](https://github.com/downerboy/LazyVM/compare/v6.6.0...v6.6.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* capture the user's Visual Studio files as the user, never following links ([#335](https://github.com/downerboy/LazyVM/issues/335)) ([c1afe20](https://github.com/downerboy/LazyVM/commit/c1afe2009e2976df18cb0ede5cecc15799c54c3f))
+
 ## [6.6.0](https://github.com/downerboy/LazyVM/compare/v6.5.3...v6.6.0) (2026-11-04)
 
 
