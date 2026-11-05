@@ -625,7 +625,11 @@ Describe 'Read-GuestTaskOutputFile (#330)' {
     It 'gives an empty file as no bytes' {
         Set-Content -LiteralPath $file -Value '' -NoNewline
 
-        @(& $read).Count | Should -Be 0
+        $bytes = & $read
+
+        # One empty array, so a caller can always hand it to [Convert]::ToBase64String.
+        , $bytes | Should -BeOfType [byte[]]
+        $bytes.Length | Should -Be 0
     }
 
     It 'refuses, naming it, a <LinkType> in the place of <Case>, which the task''s user may have made' -ForEach @(
