@@ -158,6 +158,21 @@ function Invoke-CommandRun {
     }
 }
 
+function Write-CommandItemError {
+    <#
+      Reports that one pipeline item of a command could not be done: in the
+      log, and as a non-terminating error of the command $Cmdlet, so the
+      items after it still run.
+    #>
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.PSCmdlet]$Cmdlet,
+        [Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    Write-LogEntry $ErrorRecord.Exception.Message 'ERROR'
+    $Cmdlet.WriteError($ErrorRecord)
+}
+
 function Set-ForceConfirmation {
     <#
       Makes -Force skip the confirmation in the calling command, unless

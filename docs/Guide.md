@@ -429,12 +429,17 @@ Automatic sign-in is always found, as Info, so with the default the reminder sho
 
 #### The persistence baseline
 
-Malware that gets in usually makes sure it starts again: it adds a scheduled task or a service, an entry in a Run key or the startup folder, a WMI event subscription, or an account of its own. LazyVM records all of these as the **known-good baseline** at the end of `Build-LazyVM` and of every rebuild, after the restore, and keeps it in `Config\SecurityBaseline.json` in the VM's folder. Running `Build-LazyVM` again on a built VM records it again. A VM built before LazyVM had a baseline gets one at its next scan, which reports nothing for it that night; so does an area the guest could not read when the baseline was recorded.
+Malware that gets in usually makes sure it starts again: it adds a scheduled task or a service, an entry in a Run key or the startup folder, a WMI event subscription, or an account of its own. LazyVM records all of these as the **known-good baseline** and keeps it in `Config\SecurityBaseline.json` in the VM's folder:
+
+- **The first build** records it, at the end of `Build-LazyVM`. Running `Build-LazyVM` again, with `-FromPhase` or not, never makes a change known-good: it only adds an area the baseline lacks.
+- **A rebuild** reads the new VM after the build and before the restore, adds what the old baseline knew, and keeps the result only once the rebuild has passed its check. So something the restore puts back is known only if it was known before, and a rebuild that is rolled back keeps the old baseline.
+- **The nightly scan** records an area the baseline lacks, such as on a VM built before LazyVM had a baseline, or one the guest could not read until then. It reports nothing for that area that night.
+- Nothing ever writes an empty baseline over one that is there.
 
 Every night the scan compares them with the baseline and reports each one that is **new** or **changed**:
 
 ```
-Id: ScheduledTask:\Updater:3f9a1c2b7d4e
+Id: ScheduledTask:\Updater:3f9a1c2b7d4e8f0a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a
 Severity: Medium
 Title: New scheduled task: \Updater
 What we found: The scheduled task \Updater was not there when LazyVM recorded the baseline on 2026-11-02 02:40. It starts the program under Where.
@@ -445,29 +450,33 @@ First seen: 2026-11-03 02:40
 Status: New
 ```
 
-- **The Id** is the area, the item's name, and a fingerprint of what it runs: its command line and the account it runs as, a service's program and DLL, a startup item's contents, a subscription's query and command. When any of that changes, such as a service's program path, the Id changes, and the change is reported. A version number in a folder name is left out of the fingerprint, so an update that moves a program to its new version's folder, as Defender and Edge do, is not a change. Only the fingerprint leaves the VM, never the command line, which could hold a password.
-- **Severity:** a new member of Administrators and a WMI event subscription are High; so is anything whose program is in a folder users can write to, such as a user profile or the Windows temporary folder. Everything else is Medium.
+- **The Id** is the area, the item's name, and a fingerprint: the SHA-256 of what it runs. That is its command line and the account it runs as; for a service, its program, DLL, start type and what it does when it fails; a startup item's contents; a subscription's query and command; and, for anything that points into a folder users can write to, the program file itself. When any of that changes, such as a service's program path, the Id changes, and the change is reported. A version number in a folder name is left out of the fingerprint, so an update that moves a program to its new version's folder, as Defender and Edge do, is not a change, except in a folder users can write to. Of what the fingerprint is made from, only the program's path leaves the VM, never the arguments, which could hold a password.
+- **Folders users can write to** are the user profiles, the Windows temporary folder, `ProgramData` (but Defender's own folder there), any network path, and a path written with one of a user's own variables, such as `%APPDATA%`. Every path on an item's command line counts, not only its program's.
+- **Severity:** a new member of Administrators and a WMI event subscription are High; so is anything that points into a folder users can write to. Everything else is Medium.
+- **What cannot be read is a finding too.** An item LazyVM cannot read, perhaps because something stopped SYSTEM reading it, has the Id `<area>:<name>:unreadable` and is always reported. So is a link (reparse point) in a startup folder, which LazyVM never follows (`...:link`). A startup folder that is a link, or is inside one, cannot be read at all. An area the guest cannot read two scans running, such as the guest account's Run keys while it is not signed in, is a Medium finding, `UnreadableArea:<area>`, until it can be read again.
+- Text from the VM, such as an item's name, is shown with its control and format characters written out as `\u{XXXX}`, so a name cannot break a line of the log or of the findings file, or change what a screen reader says.
 - What was **removed** is not reported: it can no longer start anything.
 - LazyVM's own tasks are part of the baseline, `LazyVM-SecurityFindings` included, except the one the scan runs as.
+- **When the baseline file cannot be read**, LazyVM never writes over it. The scan counts every persistence area as not read and leaves the file alone, and the log says so each night. Approving or revoking a finding, or the next build, moves the file aside to `SecurityBaseline.json.bad` and stops, saying so; after that, the next build or scan records a new baseline. Every change to the file is made under a lock, so a scan and an approval at the same time do not undo each other.
 
 Installing software adds services and tasks, so expect findings after you install something. Approve the ones you expect.
 
 #### Approving a finding
 
-`Approve-LazyVMSecurityFinding` accepts a finding you expect. It records the Id, the severity, the title, the date and your reason in `Config\SecurityBaseline.json`, and nothing of what was found. Do not put a password in the reason. It asks first only with `-Confirm`, and `-WhatIf` shows what it would do. Only an open finding of the last scan can be approved.
+`Approve-LazyVMSecurityFinding` accepts a finding you expect. It records the Id, the severity, the title, the date and your reason in `Config\SecurityBaseline.json`, and nothing of what was found. Do not put a password in the reason. It asks first, naming the finding (`-Confirm:$false` does not), and `-WhatIf` shows what it would do. Only an open finding of the last scan can be approved. One that cannot, in a pipeline, is reported as an error, and the rest are still approved; `Revoke-LazyVMSecurityFinding` does the same. Choose findings by their Id, not their title: a title is made from names that whatever is in the VM chose.
 
 ```powershell
-Approve-LazyVMSecurityFinding -Name DevBox -Id 'Service:MySvc:3f9a1c2b7d4e' -Reason 'my own service'
-Get-LazyVMSecurityFinding -Name DevBox | Where-Object Severity -eq 'Info' | Approve-LazyVMSecurityFinding
+Approve-LazyVMSecurityFinding -Name DevBox -Id 'Service:MySvc:3f9a1c2b7d4e8f0a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a' -Reason 'my own service'
+Get-LazyVMSecurityFinding -Name DevBox | Where-Object Id -like 'Service:MySvc:*' | Approve-LazyVMSecurityFinding
 Get-LazyVMSecurityFinding -Name DevBox -Approved
-Revoke-LazyVMSecurityFinding -Name DevBox -Id 'Service:MySvc:3f9a1c2b7d4e'
+Revoke-LazyVMSecurityFinding -Name DevBox -Id 'Service:MySvc:3f9a1c2b7d4e8f0a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a'
 ```
 
 - An approved **setting or persistence item** is not reported while the scan finds it with the same Id. When it changes, its Id changes, so the change is reported, and the approval ends.
 - An approved **event**, such as a Defender detection, covers that one occurrence. Another one has an Id of its own and is reported.
 - Once a scan no longer finds an approved finding, because it changed, was fixed or is over, its approval ends; the log says so. An approval of an area the guest could not read that night is kept.
 - The finding leaves `Get-LazyVMSecurityFinding` and the reminder at once. `LazyVM Findings.txt` in the VM still lists it until the next scan replaces the file. The log of each scan says how many approved findings it left out.
-- A rebuild keeps the approvals, but records a new baseline, so approvals of persistence items it now holds end at the next scan.
+- A rebuild keeps the approvals. An approved persistence item the rebuilt VM still has keeps its approval.
 - `Revoke-LazyVMSecurityFinding` undoes an approval. The next scan reports the finding again, as new, if it still finds it.
 
 ### Why rearm first

@@ -276,10 +276,10 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
    - Writes D34, configured guest: Guest (user databases on D:\SQLData, VS settings imported, or pending, for nightly maintenance)
 20. `Unregister-ResumeTask` (Host, called by Invoke-VMBuild): unless the host is restarting
    - Writes D35, resume entries removed: Task Scheduler (resume task deleted, Resume.json deleted)
-21. `Save-GuestPersistenceBaseline` (Security, called by Build-LazyVM): unless the host is restarting or GuestSecurityScan is off: the VM as the build leaves it, which the nightly security scan compares with; a failure is logged and the next scan records it
-   - Also runs `Install-GuestSecurityFindingOpener`, `Get-GuestPersistenceFact`, `New-PersistenceBaseline`, `Read-SecurityBaseline`, `Save-SecurityBaseline`
+21. `Save-GuestPersistenceBaseline` (Security, called by Build-LazyVM): unless the host is restarting or GuestSecurityScan is off: at the first build, the VM as the build leaves it, which the nightly security scan compares with; at a later one, only an area the baseline lacks, so a change is never made known-good. A failure is logged and the next scan records what is missing
+   - Also runs `Get-GuestPersistenceSnapshot`, `Install-GuestSecurityFindingOpener`, `Get-GuestPersistenceFact`, `New-PersistenceBaseline`, `Update-SecurityBaseline`, `Add-PersistenceBaselineArea`
    - Reads D36, places programs start from: Running guest (scheduled tasks, services, Run keys,, startup folders, WMI subscriptions,, local users, Administrators)
-   - Writes D37, known-good baseline, approvals kept: <VM>\Config\ (SecurityBaseline.json)
+   - Writes D37, known-good baseline, under a lock: <VM>\Config\ (SecurityBaseline.json)
 22. `Write-RecoveryKeyReminder` (Disks, called by Build-LazyVM): when the build is over: reminds you to export any recovery password not exported yet, with the command
    - Reads D38, stored and exported keys: <VM>\ (Credentials\bitlocker.cred, Config\RecoveryKeyExport.json)
    - Writes D39, reminder: Console and log (one line, with the command)
@@ -364,8 +364,8 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM, with -Ro
 23. `Update-GuestWindows` (Maintenance, called by Invoke-DailyMaintenance): quality and security updates; restarts only when nobody can be disturbed
    - Reads D42, updates: Windows Update (quality and security updates)
    - Writes D43, patched Windows: Running guest (updates installed, restart now or left pending)
-24. `Invoke-GuestSecurityScan` (Security, called by Invoke-DailyMaintenance): unless GuestSecurityScan is off: a Defender quick scan, the security settings and the places programs start from, read as SYSTEM; the last against the baseline, recorded for any area it lacks; approved findings left out; the rest marked New, Still open or Resolved against the last scan, put in the guest, then kept. Opens the file for new findings of a severity in GuestSecurityScanAlertSeverity. Only reports
-   - Also runs `Get-GuestSecurityFact`, `Install-GuestSecurityFindingOpener`, `Get-GuestPersistenceItem`, `Read-SecurityBaseline`, `Add-MissingPersistenceBaseline`, `ConvertTo-SecurityFinding`, `ConvertTo-PersistenceFinding`, `Select-UnapprovedSecurityFinding`, `Compare-SecurityFinding`, `Publish-GuestSecurityFinding`, `Save-SecurityFindingRecord`, `Save-ScannedSecurityBaseline`
+24. `Invoke-GuestSecurityScan` (Security, called by Invoke-DailyMaintenance): unless GuestSecurityScan is off: a Defender quick scan, the security settings and the places programs start from, read as SYSTEM; the last against the baseline, recorded for any area it lacks; an item or area it cannot read is a finding; approved findings left out; the rest marked New, Still open or Resolved against the last scan, put in the guest, then kept. Opens the file for new findings of a severity in GuestSecurityScanAlertSeverity. Only reports
+   - Also runs `Get-GuestSecurityFact`, `Install-GuestSecurityFindingOpener`, `Get-GuestPersistenceItem`, `Read-SecurityFindingRecord`, `Read-SecurityBaseline`, `Get-MissingPersistenceBaseline`, `ConvertTo-SecurityFinding`, `ConvertTo-PersistenceFinding`, `Get-UnreadablePersistenceAreaFinding`, `Select-UnapprovedSecurityFinding`, `Compare-SecurityFinding`, `Publish-GuestSecurityFinding`, `Save-SecurityFindingRecord`, `Update-SecurityBaseline`, `Add-PersistenceBaselineArea`, `Remove-EndedSecurityApproval`
    - Reads D44, security facts: Running guest (Defender status and detections, firewall, UAC, BitLocker, SMB 1, RDP, Guest,, LSA, Secure Boot, VBS, AutoRun, paused updates, scheduled tasks, services, Run keys, startup, folders, WMI subscriptions, users, Administrators)
    - Reads D45, last findings: <VM>\Logs\ (SecurityFindings.json)
    - Reads D46, baseline and approvals: <VM>\Config\ (SecurityBaseline.json)
@@ -441,17 +441,19 @@ Called by: `Invoke-LazyVMMaintenance` (no rearms left,, or the rearm failed).
 8. `Invoke-BuildPhase -FromPhase 3` (Host, called by Invoke-Rebuild): phases 3 to 8 of Build a VM: folders, media, disks (existing ones are kept), a new VM, installs and configuration
    - Reads D11, tooling list: <VM>\Config\ (VM.json  Tooling)
    - Writes D12, new VM: VM <VM> (new Disks\<VM>-OS.vhdx, old D:, W: and U: attached)
-9. `Restore-GuestState` (Restore, called by Invoke-Rebuild): when there is a capture: Windows, VS, SQL, app settings; a failed step does not stop the rest (see Restore state)
-   - Reads D13, captured state: <VM>\State\ (manifest.json and, captured files)
-   - Writes D14, restored state: New guest (state put back)
-10. `Save-GuestPersistenceBaseline` (Security, called by Invoke-Rebuild): unless GuestSecurityScan is off: the new VM, with what was restored, in place of the old VMs baseline; a failure is logged and the next scan records it
-   - Also runs `Install-GuestSecurityFindingOpener`, `Get-GuestPersistenceFact`, `New-PersistenceBaseline`, `Read-SecurityBaseline`, `Save-SecurityBaseline`
-   - Reads D15, places programs start from: Running guest (scheduled tasks, services, Run keys,, startup folders, WMI subscriptions,, local users, Administrators)
-   - Writes D16, known-good baseline, approvals kept: <VM>\Config\ (SecurityBaseline.json)
+9. `Get-RebuildPersistenceBaseline` (Security, called by Invoke-Rebuild): unless GuestSecurityScan is off: the new VM before the restore, kept in memory; nothing is written yet
+   - Also runs `Get-GuestPersistenceSnapshot`, `Install-GuestSecurityFindingOpener`, `Get-GuestPersistenceFact`, `New-PersistenceBaseline`
+   - Reads D13, places programs start from: New guest (scheduled tasks, services, Run keys,, startup folders, WMI subscriptions,, local users, Administrators)
+10. `Restore-GuestState` (Restore, called by Invoke-Rebuild): when there is a capture: Windows, VS, SQL, app settings; a failed step does not stop the rest (see Restore state)
+   - Reads D14, captured state: <VM>\State\ (manifest.json and, captured files)
+   - Writes D15, restored state: New guest (state put back)
 11. `Test-RebuiltVM` (Maintenance, called by Invoke-Rebuild): VM running and reachable, products, SQL, databases online, D: and W: mounted
-   - Reads D17, products expected: <VM>\Config\ (VM.json)
-   - Reads D18, databases expected: <VM>\State\ (manifest.json  Databases)
-12. `Remove-RetiredVM` (Maintenance, called by Invoke-Rebuild): only when the build had no problems and verification passed; otherwise the old disk is kept and the log says how to roll back
+   - Reads D16, products expected: <VM>\Config\ (VM.json)
+   - Reads D17, databases expected: <VM>\State\ (manifest.json  Databases)
+12. `Save-RebuildPersistenceBaseline` (Security, called by Invoke-Rebuild): only when the rebuild passed its check: the new VM's baseline joined to the old one, so a restored item is known only if it was before; a rollback keeps the old one
+   - Also runs `Update-SecurityBaseline`, `Join-PersistenceBaseline`
+   - Writes D18, known-good baseline, under a lock: <VM>\Config\ (SecurityBaseline.json)
+13. `Remove-RetiredVM` (Maintenance, called by Invoke-Rebuild): only when the build had no problems and verification passed; otherwise the old disk is kept and the log says how to roll back
    - Writes D19, disk space reclaimed: <VM>\ (Disks\<VM>-OS.retired-<stamp>.vhdx,, Virtual Machines.retired-<stamp>\, deleted (DeleteRetiredDiskOnSuccess))
 
 <a id="tooling-record"></a>
@@ -816,7 +818,7 @@ Lists what the last nightly security scan found, but the findings approved since
    - Reads D1, settings, VM profile, guest user name: VM context sources (HKCU:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
 2. `Get-SecurityFindingList` (Security): without -Approved: each finding of the last scan not approved since, with the VM's name; a warning when no scan has run yet
-   - Also runs `Read-SecurityFindingRecord`, `Read-SecurityBaseline`, `Select-UnapprovedSecurityFinding`
+   - Also runs `Read-SecurityFindingRecord`, `Read-SecurityBaseline`, `Select-UnapprovedSecurityFinding`, `ConvertTo-VMRecordView`
    - Reads D3, last findings: <VM>\Logs\ (SecurityFindings.json)
    - Reads D4, approvals: <VM>\Config\ (SecurityBaseline.json)
    - Writes D5, findings: Pipeline (LazyVM.SecurityFinding: Name, Id, Severity, Title,, WhatWeFound, WhyItMatters, HowToFix, FirstSeen, Status)
@@ -838,12 +840,12 @@ Records an open finding of the last scan as approved, with the date and reason, 
 1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
    - Reads D1, settings, VM profile, guest user name: VM context sources (HKCU:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
-2. `Get-ApprovableSecurityFinding` (Security): before asking: stops, saying why, unless the Id is an open finding of the last scan not approved yet
+2. `Get-ApprovableSecurityFinding` (Security): before asking: unless the Id is an open finding of the last scan not approved yet, says why as an error, and the pipeline goes on
    - Also runs `Read-SecurityBaseline`, `Read-SecurityFindingRecord`, `Format-SecurityFindingTime`
    - Reads D3, last findings: <VM>\Logs\ (SecurityFindings.json)
    - Reads D4, approvals: <VM>\Config\ (SecurityBaseline.json)
-3. `Add-SecurityApproval` (Security): unless -WhatIf, or -Confirm is declined: adds the approval, never what was found
-   - Also runs `Read-SecurityBaseline`, `Save-SecurityBaseline`
+3. `Add-SecurityApproval` (Security): asks first; unless -WhatIf, or the question is declined: adds the approval, never what was found, under a lock. A baseline that cannot be read is moved aside, and this fails
+   - Also runs `Update-SecurityBaseline`
    - Writes D5, approval: Id, Severity, Title, ApprovedOn, Reason: <VM>\Config\ (SecurityBaseline.json)
 
 <a id="security-revoke"></a>
@@ -859,11 +861,11 @@ Removes an approval, so the next nightly scan reports the finding again if it st
 1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
    - Reads D1, settings, VM profile, guest user name: VM context sources (HKCU:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
-2. `Get-SecurityApproval` (Security): before asking: stops, saying so, unless the Id is approved
+2. `Get-SecurityApproval` (Security): before asking: unless the Id is approved, says so as an error, and the pipeline goes on
    - Also runs `Read-SecurityBaseline`
    - Reads D3, approvals: <VM>\Config\ (SecurityBaseline.json)
 3. `Remove-SecurityApproval` (Security): unless -WhatIf, or -Confirm is declined: removes the approval
-   - Also runs `Read-SecurityBaseline`, `Save-SecurityBaseline`
+   - Also runs `Update-SecurityBaseline`
    - Writes D4, approvals without it: <VM>\Config\ (SecurityBaseline.json)
 
 <a id="test"></a>

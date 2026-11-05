@@ -501,7 +501,8 @@ Describe 'Invoke-Rebuild' {
         Mock -ModuleName $module Restore-GuestState { $true }
         Mock -ModuleName $module Test-RebuiltVM { [pscustomobject]@{ Passed = $true; Failures = @() } }
         Mock -ModuleName $module Remove-RetiredVM { 'stray' }
-        Mock -ModuleName $module Save-GuestPersistenceBaseline { 'stray' }
+        Mock -ModuleName $module Get-RebuildPersistenceBaseline { [ordered]@{} }
+        Mock -ModuleName $module Save-RebuildPersistenceBaseline { 'stray' }
     }
 
     It 'returns only $true when the rebuild passes its check' {
@@ -511,15 +512,26 @@ Describe 'Invoke-Rebuild' {
         $result[0] | Should -BeTrue
     }
 
-    It 'records the security baseline of the new VM after the restore, before the check (#290)' {
+    It 'reads the new VM''s security baseline before the restore, and keeps it only once the rebuild passed its check (#334)' {
         $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Invoke-BuildPhase { $script:order.Add('build'); $buildComplete }
+        Mock -ModuleName $module Get-RebuildPersistenceBaseline { $script:order.Add('read baseline'); [ordered]@{ Service = 'new' } }
         Mock -ModuleName $module Restore-GuestState { $script:order.Add('restore'); $true }
-        Mock -ModuleName $module Save-GuestPersistenceBaseline { $script:order.Add('baseline') }
         Mock -ModuleName $module Test-RebuiltVM { $script:order.Add('check'); [pscustomobject]@{ Passed = $true; Failures = @() } }
+        Mock -ModuleName $module Save-RebuildPersistenceBaseline { $script:order.Add('keep baseline') }
 
         $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Rebuild -VM $VM }
 
-        $script:order | Should -Be @('restore', 'baseline', 'check')
+        $script:order | Should -Be @('build', 'read baseline', 'restore', 'check', 'keep baseline')
+        Should -Invoke -ModuleName $module Save-RebuildPersistenceBaseline -Times 1 -Exactly -ParameterFilter { $Baseline.Service -eq 'new' }
+    }
+
+    It 'keeps the old VM''s security baseline when the rebuild fails its check, so a rollback keeps it (#334)' {
+        Mock -ModuleName $module Test-RebuiltVM { [pscustomobject]@{ Passed = $false; Failures = @('SQL Server is not running') } }
+
+        $null = InModuleScope $module -Parameters @{ VM = $testVM } { param($VM) Invoke-Rebuild -VM $VM }
+
+        Should -Invoke -ModuleName $module Save-RebuildPersistenceBaseline -Times 0
     }
 
     It 'retires nothing when the personal files cannot be put on the User disk (#137)' {
@@ -568,7 +580,8 @@ Describe 'Invoke-Rebuild verification' {
         Mock -ModuleName $module Invoke-BuildPhase { $buildComplete }
         Mock -ModuleName $module Restore-GuestState { $true }
         Mock -ModuleName $module Remove-RetiredVM { }
-        Mock -ModuleName $module Save-GuestPersistenceBaseline { }
+        Mock -ModuleName $module Get-RebuildPersistenceBaseline { }
+        Mock -ModuleName $module Save-RebuildPersistenceBaseline { }
         Mock -ModuleName $module Assert-GuestCredential { [pscredential]::new('admin', [securestring]::new()) }
         Mock -ModuleName $module Connect-Guest { }
         Mock -ModuleName $module Get-GuestInstallerProduct { }

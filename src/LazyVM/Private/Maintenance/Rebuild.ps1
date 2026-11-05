@@ -2,8 +2,8 @@
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
 #   capture -> shut down -> retire the old OS disk by RENAME -> build phases
-#   3-8 -> restore -> record the security baseline -> check -> only then
-#   delete the retired disk.
+#   3-8 -> read the new VM's security baseline -> restore -> check -> only
+#   then keep that baseline and delete the retired disk.
 #
 # The old OS disk is never deleted until every build phase has completed
 # without problems and the new guest has passed the check, so a failed
@@ -48,13 +48,14 @@ function Invoke-Rebuild {
 
     $rebuildOk = $false
     $buildOutcome = $null
+    $persistenceBaseline = $null
     try {
         $buildOutcome = Invoke-BuildPhase -VM $VM -FromPhase 3 -NoUnattend:$NoUnattend
+        # The new VM before the restore, so what the restore puts back is known only if it was before (#334).
+        $persistenceBaseline = Get-RebuildPersistenceBaseline -VM $VM
         if ($manifest -and -not (Restore-GuestState -VM $VM)) {
             Write-LogEntry 'Some of the capture could not be restored; the log above says what' 'WARN'
         }
-        # The new VM, with what was restored, is what the nightly security scan compares with (#290).
-        $null = Save-GuestPersistenceBaseline -VM $VM
         $rebuildOk = $true
     }
     catch {
@@ -77,6 +78,8 @@ function Invoke-Rebuild {
     $builtCleanly = $buildOutcome -eq [BuildOutcome]::Complete
     if ($rebuildOk -and $builtCleanly -and $verification.Passed) {
         Write-LogEntry "Rebuild verified in $elapsed minutes" 'OK'
+        # Only now: a rebuild that is rolled back keeps the old VM's baseline.
+        $null = Save-RebuildPersistenceBaseline -VM $VM -Baseline $persistenceBaseline
         if ($retired) { $null = Remove-RetiredVM -VM $VM -Retired $retired }
         return $true
     }

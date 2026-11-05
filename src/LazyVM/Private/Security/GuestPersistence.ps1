@@ -1,31 +1,47 @@
-# GuestPersistence.ps1 - What runs in the guest to list the places a program can start itself again (#290).
+# GuestPersistence.ps1 - What runs in the guest to list the places a program can start itself again (#290, #334).
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
 # $script:GuestPersistenceWork runs as SYSTEM through Invoke-GuestTask, in
-# Windows PowerShell 5.1, without the guest helpers, after the build to
-# record the known-good baseline and every night to compare with it
-# (Persistence.ps1). It only reads; it changes nothing.
+# Windows PowerShell 5.1, without the guest helpers, after a build to record
+# the known-good baseline and every night to compare with it
+# (Persistence.ps1). It only reads; it changes nothing, and it follows no
+# link in a startup folder.
 
 # The collector. For each area of $script:PersistenceCheck, in its order,
 # every item there: @{ Name; Fingerprint; Program; InUserFolder }. Each area
 # reads in a try/catch of its own, so one that cannot be read is a note, its
-# items are $null, and the others still run. Returns one line of JSON:
-# { Notes = @(@{ Level; Text }); Items = @{ <area> = @(...) or $null } }.
+# items are $null, and the others still run. So does each item: one that
+# cannot be read has the fingerprint 'unreadable', and a link in a startup
+# folder the fingerprint 'link', which the host always reports. Returns one
+# line of JSON: { Notes = @(@{ Level; Text }); Items = @{ <area> = @(...) or $null } }.
 # $OwnTaskName is the task it runs as, which it leaves out; $UserName is the
 # guest account, whose Run keys and startup folder it reads too.
 #
-# The fingerprint is the first 12 hex digits of a SHA-256 of what the item
-# runs: its command line, account and the like. Only the fingerprint leaves
-# the guest, never what it is made from, since a command line can hold a
-# password. A version number in a folder name ('\4.18.25010.11-0\') is left
-# out of it, so an update that moves a program to its new version's folder,
-# as Defender and Edge do, is not a change.
+# The fingerprint is the SHA-256, in hex, of what the item runs: its command
+# line, account, failure actions and the like, and, for an item that points
+# into a folder users can write to, the program file itself. Of what it is
+# made from, only the program's path leaves the guest, never the arguments,
+# since a command line can hold a password. A version number in a folder
+# name ('\4.18.25010.11-0\') is left out of it, so an update that moves a
+# program to its new version's folder, as Defender and Edge do, is not a
+# change; never for an item that points into a folder users can write to.
+#
+# Folders users can write to: the user profiles, the Windows temporary
+# folder, ProgramData but Defender's own folder there, any network path, and a path written with one of a
+# user's own variables, such as %APPDATA%, which SYSTEM would expand to its
+# own profile. Every path on an item's command line is checked, not only the
+# program's. Windows' own folders come from Windows, not the environment.
 $script:GuestPersistenceWork = {
     param([string]$OwnTaskName, [string]$UserName)
 
     $ErrorActionPreference = 'Stop'
     $notes = New-Object System.Collections.ArrayList
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $windowsFolder = [Environment]::GetFolderPath('Windows')
+    $programData = [Environment]::GetFolderPath('CommonApplicationData')
+    # Defender's own folder in ProgramData, which only it can change, and whose version folders change with every update.
+    $defenderFolder = [System.IO.Path]::Combine($programData, 'Microsoft', 'Windows Defender') + '\'
+    $userVariable = '%(APPDATA|LOCALAPPDATA|TEMP|TMP|USERPROFILE|HOMEPATH|HOMEDRIVE|ONEDRIVE)%'
 
     function Add-ScanNote {
         param([string]$Level, [string]$Text)
@@ -42,16 +58,30 @@ $script:GuestPersistenceWork = {
         }
     }
 
-    # Windows reports its own folder; the environment could be changed.
-    $windowsFolder = [Environment]::GetFolderPath('Windows')
+    function Read-Item {
+        <# The item $Read makes for $Name, or, when it cannot be read, one with the fingerprint 'unreadable' and a note. #>
+        param([string]$Area, [string]$Name, [scriptblock]$Read)
+        try { return (& $Read) }
+        catch {
+            Add-ScanNote -Level 'WARN' -Text "Security scan: could not read the $Area item $Name ($($_.Exception.Message))"
+            return @{ Name = $Name; Fingerprint = 'unreadable'; Program = ''; InUserFolder = $false }
+        }
+    }
 
-    function Get-ProgramPath {
-        <# The program a command line starts, with its environment variables expanded: the part in quotes, or up to the first .exe or the like, or its first word. #>
-        param([string]$CommandLine)
-        $line = [Environment]::ExpandEnvironmentVariables("$CommandLine".Trim())
+    function Expand-GuestPath {
+        <# $Path with its environment variables expanded, and the forms Windows writes service paths in made full. #>
+        param([string]$Path)
+        $line = [Environment]::ExpandEnvironmentVariables("$Path".Trim())
         if ($line.StartsWith('\??\')) { $line = $line.Substring(4) }
         if ($line -match '^\\SystemRoot\\') { $line = $windowsFolder + $line.Substring(11) }
         if ($line -match '^system32\\') { $line = "$windowsFolder\" + $line }
+        return $line
+    }
+
+    function Get-ProgramPath {
+        <# The program a command line starts: the part in quotes, or up to the first .exe or the like, or its first word. #>
+        param([string]$CommandLine)
+        $line = Expand-GuestPath -Path $CommandLine
         if (-not $line) { return '' }
         if ($line.StartsWith('"')) { return $line.Substring(1).Split('"')[0] }
         $program = [regex]::Match($line, '^(.+?\.(exe|com|bat|cmd|dll|ps1|vbs|js))(\s|,|$)', 'IgnoreCase')
@@ -59,26 +89,103 @@ $script:GuestPersistenceWork = {
         return $line.Split(' ')[0]
     }
 
-    function Test-InUserFolder {
-        <# Whether $Path is in a folder users can write to: the user profiles, or the Windows temporary folder. #>
-        param([string]$Path)
+    function Test-UserFolderPath {
+        <# Whether the path-like text $Token points into a folder users can write to. #>
+        param([string]$Token)
+        if ($Token -match $userVariable) { return $true }
+        $path = (Expand-GuestPath -Path $Token).Trim('"')
+        if ($path.StartsWith('\\')) { return $true }
+        if ($path.StartsWith($defenderFolder, [StringComparison]::OrdinalIgnoreCase)) { return $false }
         foreach ($folder in $userFolders) {
-            if ($Path -and $folder -and $Path.StartsWith($folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+            if ($folder -and $path.StartsWith($folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        }
+        return $false
+    }
+
+    function Test-PointsIntoUserFolder {
+        <# Whether any path on the command lines $Text points into a folder users can write to. #>
+        param([string[]]$Text)
+        foreach ($line in @($Text | Where-Object { $_ })) {
+            foreach ($token in [regex]::Matches($line, '"[^"]+"|[^\s,;=]+')) {
+                if ($token.Value -match '^"?([A-Za-z]:\\|\\\\|%)' -and (Test-UserFolderPath -Token $token.Value)) { return $true }
+            }
         }
         return $false
     }
 
     function New-PersistenceItem {
-        param([string]$Name, [string[]]$Part, [string]$Program = '')
-        $text = (@($Part | ForEach-Object { "$_" -replace '\\\d+(\.\d+)+(-\d+)?\\', '\<version>\' }) -join "`n")
-        $hash = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($text))
-        $fingerprint = -join @($hash[0..5] | ForEach-Object { $_.ToString('x2') })
-        return @{ Name = $Name; Fingerprint = $fingerprint; Program = $Program; InUserFolder = (Test-InUserFolder -Path $Program) }
+        <#
+          The item $Name, fingerprinted from $Part. $CommandLine is every
+          command line it holds, $Program the program it starts.
+        #>
+        param([string]$Name, [string[]]$Part, [string]$Program = '', [string[]]$CommandLine = @())
+        $inUserFolder = Test-PointsIntoUserFolder -Text (@($CommandLine) + $Program)
+        $parts = @($Part | ForEach-Object { "$_" })
+        if ($inUserFolder) {
+            # The program file itself, when it is on a local disk and not a link.
+            if ($Program -match '^[A-Za-z]:\\' -and (Test-Path -LiteralPath $Program -PathType Leaf)) {
+                $file = Get-Item -LiteralPath $Program -Force
+                if (-not ($file.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) { $parts += (Get-FileHash -LiteralPath $Program -Algorithm SHA256).Hash }
+            }
+        }
+        else {
+            $parts = @($parts | ForEach-Object { $_ -replace '\\\d+(\.\d+)+(-\d+)?\\', '\<version>\' })
+        }
+        $hash = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($parts -join "`n"))
+        $fingerprint = -join @($hash | ForEach-Object { $_.ToString('x2') })
+        return @{ Name = $Name; Fingerprint = $fingerprint; Program = $Program; InUserFolder = $inUserFolder }
     }
 
-    # The guest account's security identifier and profile folder, for its
-    # Run keys and startup folder, and the folder every profile is in.
-    $userFolders = @([System.IO.Path]::Combine($windowsFolder, 'Temp'))
+    function Read-RunKey {
+        <# Every value of the Run and RunOnce keys under $Path, named under $Shown. #>
+        param([string]$Area, [string]$Shown, [string]$Path)
+        foreach ($run in 'Run', 'RunOnce') {
+            $keyPath = "$Path\$run"
+            if (-not (Test-Path -LiteralPath $keyPath)) { continue }
+            $key = Get-Item -LiteralPath $keyPath
+            foreach ($value in @($key.GetValueNames() | Where-Object { $_ })) {
+                Read-Item -Area $Area -Name "$Shown\$run\$value" -Read {
+                    $command = "$($key.GetValue($value, '', 'DoNotExpandEnvironmentNames'))"
+                    New-PersistenceItem -Name "$Shown\$run\$value" -Part @($command) -Program (Get-ProgramPath -CommandLine $command) -CommandLine @($command)
+                }
+            }
+        }
+    }
+
+    function Assert-NoLinkOnPath {
+        <# Stops when $Folder, or a folder above it up to $Base, is a link (reparse point) or a network path. #>
+        param([string]$Folder, [string]$Base)
+        if ($Folder.StartsWith('\\')) { throw "$Folder is a network path, which LazyVM does not read" }
+        $current = $Folder
+        while ($current -and $current.Length -ge $Base.TrimEnd('\').Length) {
+            if (Test-Path -LiteralPath $current) {
+                if ((Get-Item -LiteralPath $current -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) { throw "$current is a link (reparse point), which LazyVM does not follow" }
+            }
+            $current = Split-Path -Path $current -Parent
+        }
+    }
+
+    function Read-StartupFolder {
+        <# Every file in the startup folder $Folder, named under $Owner: a link is reported as one, never followed. #>
+        param([string]$Area, [string]$Owner, [string]$Folder, [string]$Base)
+        Assert-NoLinkOnPath -Folder $Folder -Base $Base
+        if (-not (Test-Path -LiteralPath $Folder)) { return }
+        $shell = New-Object -ComObject WScript.Shell
+        foreach ($file in @(Get-ChildItem -LiteralPath $Folder -File -Force)) {
+            $name = "$Owner\$($file.Name)"
+            Read-Item -Area $Area -Name $name -Read {
+                if ($file.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                    return @{ Name = $name; Fingerprint = 'link'; Program = ''; InUserFolder = $false }
+                }
+                $program = if ($file.Extension -eq '.lnk') { "$($shell.CreateShortcut($file.FullName).TargetPath)" } else { $file.FullName }
+                New-PersistenceItem -Name $name -Part @((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash) -Program $program
+            }
+        }
+    }
+
+    # The folders users can write to, and the guest account's security
+    # identifier and profile folder, for its Run keys and startup folder.
+    $userFolders = @([System.IO.Path]::Combine($windowsFolder, 'Temp'), $programData)
     $user = @{ Sid = ''; Profile = ''; Problem = '' }
     try {
         $profileList = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'
@@ -92,79 +199,85 @@ $script:GuestPersistenceWork = {
     $ownTask = '\' + $OwnTaskName
 
     $items.ScheduledTask = Read-Area 'ScheduledTask' {
-        foreach ($task in @(Get-ScheduledTask)) {
+        # A task that cannot be read is reported as one, not left out.
+        $taskErrors = @()
+        $tasks = @(Get-ScheduledTask -ErrorAction SilentlyContinue -ErrorVariable taskErrors)
+        foreach ($problem in @($taskErrors)) {
+            $name = if ($problem.TargetObject) { "$($problem.TargetObject)" } else { '(a task that could not be listed)' }
+            Read-Item -Area 'ScheduledTask' -Name $name -Read { throw $problem }
+        }
+        foreach ($task in $tasks) {
             $name = "$($task.TaskPath)$($task.TaskName)"
             if ($name -eq $ownTask) { continue }
-            $parts = @("$($task.Principal.UserId)|$($task.Principal.GroupId)|$($task.Principal.RunLevel)")
-            $program = ''
-            foreach ($action in @($task.Actions)) {
-                if ($action.Execute) {
-                    $parts += "Run|$($action.Execute)|$($action.Arguments)|$($action.WorkingDirectory)"
-                    if (-not $program) { $program = Get-ProgramPath -CommandLine $action.Execute }
+            Read-Item -Area 'ScheduledTask' -Name $name -Read {
+                $parts = @("$($task.Principal.UserId)|$($task.Principal.GroupId)|$($task.Principal.RunLevel)")
+                $commands = @()
+                $program = ''
+                foreach ($action in @($task.Actions)) {
+                    if ($action.Execute) {
+                        $parts += "Run|$($action.Execute)|$($action.Arguments)|$($action.WorkingDirectory)"
+                        $commands += @("$($action.Execute)", "$($action.Arguments)", "$($action.WorkingDirectory)")
+                        if (-not $program) { $program = Get-ProgramPath -CommandLine $action.Execute }
+                    }
+                    else { $parts += "Com|$($action.ClassId)|$($action.Data)" }
                 }
-                else { $parts += "Com|$($action.ClassId)|$($action.Data)" }
+                New-PersistenceItem -Name $name -Part $parts -Program $program -CommandLine $commands
             }
-            New-PersistenceItem -Name $name -Part $parts -Program $program
         }
     }
 
     $items.Service = Read-Area 'Service' {
-        foreach ($key in @(Get-ChildItem -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services')) {
-            $type = $key.GetValue('Type', $null, 'DoNotExpandEnvironmentNames')
-            $image = "$($key.GetValue('ImagePath', '', 'DoNotExpandEnvironmentNames'))"
-            # Services in a process of their own or shared (0x10, 0x20), not
-            # drivers, and not the copies of a per-user service Windows makes
-            # at each sign-in (0x80), whose names change.
-            if ($null -eq $type -or -not $image -or ([int]$type -band 0x30) -eq 0 -or ([int]$type -band 0x80)) { continue }
-            # A service in svchost.exe runs its ServiceDll.
-            $dll = ''
-            $parameters = $key.OpenSubKey('Parameters')
-            if ($parameters) {
-                $dll = "$($parameters.GetValue('ServiceDll', '', 'DoNotExpandEnvironmentNames'))"
-                $parameters.Close()
+        $services = Get-Item -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services'
+        foreach ($name in @($services.GetSubKeyNames())) {
+            $service = Read-Item -Area 'Service' -Name $name -Read {
+                $key = $services.OpenSubKey($name)
+                if (-not $key) { throw 'its key cannot be opened' }
+                $type = $key.GetValue('Type', $null, 'DoNotExpandEnvironmentNames')
+                $image = "$($key.GetValue('ImagePath', '', 'DoNotExpandEnvironmentNames'))"
+                # Services in a process of their own or shared (0x10, 0x20),
+                # not drivers, and not the copies of a per-user service
+                # Windows makes at each sign-in (0x80), whose names change.
+                if ($null -eq $type -or -not $image -or ([int]$type -band 0x30) -eq 0 -or ([int]$type -band 0x80)) { return $null }
+                # A service in svchost.exe runs its ServiceDll.
+                $dll = ''
+                $parameters = $key.OpenSubKey('Parameters')
+                if ($parameters) {
+                    $dll = "$($parameters.GetValue('ServiceDll', '', 'DoNotExpandEnvironmentNames'))"
+                    $parameters.Close()
+                }
+                # What it runs when it fails, and when it starts, can start a program too.
+                $failureCommand = "$($key.GetValue('FailureCommand', '', 'DoNotExpandEnvironmentNames'))"
+                $failureActions = $key.GetValue('FailureActions', $null, 'DoNotExpandEnvironmentNames')
+                $failureText = if ($failureActions -is [byte[]]) { [BitConverter]::ToString($failureActions) } else { "$failureActions" }
+                $program = if ($dll) { Get-ProgramPath -CommandLine $dll } else { Get-ProgramPath -CommandLine $image }
+                $parts = @($image, $dll, "$($key.GetValue('ObjectName', '', 'DoNotExpandEnvironmentNames'))", "$($key.GetValue('Start', '', 'DoNotExpandEnvironmentNames'))", $failureCommand, $failureText)
+                New-PersistenceItem -Name $name -Part $parts -Program $program -CommandLine @($image, $dll, $failureCommand)
             }
-            $program = if ($dll) { Get-ProgramPath -CommandLine $dll } else { Get-ProgramPath -CommandLine $image }
-            New-PersistenceItem -Name $key.PSChildName -Part @($image, $dll, "$($key.GetValue('ObjectName', '', 'DoNotExpandEnvironmentNames'))") -Program $program
+            if ($service) { $service }
         }
     }
 
+    # For every user, whether or not the guest account is signed in.
     $items.RunKey = Read-Area 'RunKey' {
+        Read-RunKey -Area 'RunKey' -Shown 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion' -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion'
+        Read-RunKey -Area 'RunKey' -Shown 'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion' -Path 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion'
+    }
+
+    $items.UserRunKey = Read-Area 'UserRunKey' {
         if ($user.Problem) { throw $user.Problem }
         $hive = "Registry::HKEY_USERS\$($user.Sid)"
         if (-not (Test-Path -LiteralPath $hive)) { throw "$UserName is not signed in, so their Run keys cannot be read" }
-        $keys = [ordered]@{
-            'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion'             = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion'
-            'HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion' = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion'
-            'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion'             = "$hive\SOFTWARE\Microsoft\Windows\CurrentVersion"
-        }
-        foreach ($shown in $keys.Keys) {
-            foreach ($run in 'Run', 'RunOnce') {
-                $path = "$($keys[$shown])\$run"
-                if (-not (Test-Path -LiteralPath $path)) { continue }
-                $key = Get-Item -LiteralPath $path
-                foreach ($value in @($key.GetValueNames() | Where-Object { $_ })) {
-                    $command = "$($key.GetValue($value, '', 'DoNotExpandEnvironmentNames'))"
-                    New-PersistenceItem -Name "$shown\$run\$value" -Part @($command) -Program (Get-ProgramPath -CommandLine $command)
-                }
-            }
-        }
+        Read-RunKey -Area 'UserRunKey' -Shown 'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion' -Path "$hive\SOFTWARE\Microsoft\Windows\CurrentVersion"
     }
 
     $items.StartupFolder = Read-Area 'StartupFolder' {
+        Read-StartupFolder -Area 'StartupFolder' -Owner 'All users' -Folder ([Environment]::GetFolderPath('CommonStartup')) -Base $programData
+    }
+
+    $items.UserStartupFolder = Read-Area 'UserStartupFolder' {
         if ($user.Problem) { throw $user.Problem }
-        $folders = [ordered]@{
-            'All users' = [Environment]::GetFolderPath('CommonStartup')
-            $UserName   = Join-Path -Path $user.Profile -ChildPath 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup'
-        }
-        $shell = New-Object -ComObject WScript.Shell
-        foreach ($owner in $folders.Keys) {
-            $folder = $folders[$owner]
-            if (-not $folder -or -not (Test-Path -LiteralPath $folder)) { continue }
-            foreach ($file in @(Get-ChildItem -LiteralPath $folder -File -Force)) {
-                $program = if ($file.Extension -eq '.lnk') { $shell.CreateShortcut($file.FullName).TargetPath } else { $file.FullName }
-                New-PersistenceItem -Name "$owner\$($file.Name)" -Part @((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash) -Program $program
-            }
-        }
+        $folder = Join-Path -Path $user.Profile -ChildPath 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup'
+        Read-StartupFolder -Area 'UserStartupFolder' -Owner $UserName -Folder $folder -Base $user.Profile
     }
 
     $items.WmiSubscription = Read-Area 'WmiSubscription' {
@@ -177,15 +290,17 @@ $script:GuestPersistenceWork = {
         foreach ($consumer in @(Get-CimInstance -Namespace $namespace -ClassName __EventConsumer)) {
             $definition = @($consumer.CimInstanceProperties | Where-Object { $_.Name -notlike '__*' } | Sort-Object -Property Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
             $program = if ($consumer.ExecutablePath) { "$($consumer.ExecutablePath)" } elseif ($consumer.CommandLineTemplate) { Get-ProgramPath -CommandLine $consumer.CommandLineTemplate } else { "$($consumer.ScriptFileName)" }
-            $consumers["$($consumer.CimClass.CimClassName).$($consumer.Name)"] = @{ Definition = ($definition -join '|'); Program = $program }
+            $commands = @("$($consumer.ExecutablePath)", "$($consumer.CommandLineTemplate)", "$($consumer.ScriptFileName)")
+            $consumers["$($consumer.CimClass.CimClassName).$($consumer.Name)"] = @{ Definition = ($definition -join '|'); Program = $program; Commands = $commands }
         }
         foreach ($binding in @(Get-CimInstance -Namespace $namespace -ClassName __FilterToConsumerBinding)) {
             $filterName = "$($binding.Filter.Name)"
             $consumerName = "$($binding.Consumer.CimClass.CimClassName).$($binding.Consumer.Name)"
-            $consumer = $consumers[$consumerName]
-            $definition = if ($consumer) { $consumer.Definition } else { '' }
-            $program = if ($consumer) { $consumer.Program } else { '' }
-            New-PersistenceItem -Name "$filterName to $consumerName" -Part @($filters[$filterName], $definition) -Program $program
+            Read-Item -Area 'WmiSubscription' -Name "$filterName to $consumerName" -Read {
+                $consumer = $consumers[$consumerName]
+                if (-not $consumer) { $consumer = @{ Definition = ''; Program = ''; Commands = @() } }
+                New-PersistenceItem -Name "$filterName to $consumerName" -Part @($filters[$filterName], $consumer.Definition) -Program $consumer.Program -CommandLine $consumer.Commands
+            }
         }
     }
 

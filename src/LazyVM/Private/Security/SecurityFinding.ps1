@@ -418,16 +418,16 @@ function Compare-SecurityFinding {
 function Test-SecurityFindingAlert {
     <#
       Whether the scan found something new of a severity that alerts
-      ($Severity, the setting GuestSecurityScanAlertSeverity): what opens
+      ($AlertSeverity, the setting GuestSecurityScanAlertSeverity): what opens
       the findings file at the next sign-in.
     #>
     [OutputType([bool])]
     param(
         [AllowEmptyCollection()][object[]]$Finding = @(),
-        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Severity
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$AlertSeverity
     )
 
-    return @($Finding | Where-Object { $_.Status -eq 'New' -and $_.Severity -in $Severity }).Count -gt 0
+    return @($Finding | Where-Object { $_.Status -eq 'New' -and $_.Severity -in $AlertSeverity }).Count -gt 0
 }
 
 function Format-SecurityFinding {
@@ -512,17 +512,17 @@ function Format-SecurityFindingReport {
 function Get-SecurityFindingReminderMessage {
     <#
       The one-line reminder of the VM's open findings of a severity that
-      alerts ($Severity, the setting GuestSecurityScanAlertSeverity), with
+      alerts ($AlertSeverity, the setting GuestSecurityScanAlertSeverity), with
       how many of each, or $null when it has none.
     #>
     [OutputType([string])]
     param(
         [AllowEmptyCollection()][object[]]$Finding = @(),
         [Parameter(Mandatory)][string]$VMName,
-        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Severity
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$AlertSeverity
     )
 
-    $open = @($Finding | Where-Object { $_.Status -ne 'Resolved' -and $_.Severity -in $Severity })
+    $open = @($Finding | Where-Object { $_.Status -ne 'Resolved' -and $_.Severity -in $AlertSeverity })
     if ($open.Count -eq 0) { return $null }
     $counts = foreach ($level in [SecurityFinding]::Severities) {
         $count = @($open | Where-Object { $_.Severity -eq $level }).Count

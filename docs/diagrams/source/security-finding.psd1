@@ -22,7 +22,7 @@
             Function = 'Get-SecurityFindingList'
             Area     = 'Security'
             Note     = 'without -Approved: each finding of the last scan not approved since, with the VM''s name; a warning when no scan has run yet'
-            Includes = @('Read-SecurityFindingRecord', 'Read-SecurityBaseline', 'Select-UnapprovedSecurityFinding')
+            Includes = @('Read-SecurityFindingRecord', 'Read-SecurityBaseline', 'Select-UnapprovedSecurityFinding', 'ConvertTo-VMRecordView')
             Reads    = @(
                 @{ Label = 'last findings'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('SecurityFindings.json') }
                 @{ Label = 'approvals'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('SecurityBaseline.json') }

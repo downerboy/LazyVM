@@ -123,13 +123,15 @@ function Write-GuestNote {
       Logs what a guest script reported. Guest scripts report each event as
       @{ Level; Text } (New-GuestNote in Guest.Helpers.ps1), so the level is
       decided where the event happens, never guessed from its wording.
+      Its text is made printable first (ConvertTo-PrintableText), since a
+      guest can put control characters in it.
     #>
     param([AllowNull()][object[]]$Notes = @())
 
     foreach ($note in @($Notes | Where-Object { $_ })) {
         $level = [RecordReader]::Text($note, 'Level')
         if ($level -notin 'INFO', 'WARN', 'ERROR', 'OK') { $level = 'INFO' }
-        Write-LogEntry "  $([RecordReader]::Text($note, 'Text'))" $level
+        Write-LogEntry "  $(ConvertTo-PrintableText -Text ([RecordReader]::Text($note, 'Text')))" $level
     }
 }
 
