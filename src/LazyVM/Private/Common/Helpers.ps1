@@ -51,6 +51,33 @@ function Write-TextFileAtomic {
     }
 }
 
+function ConvertTo-PrintableText {
+    <#
+      $Text with every control or format character (CR, LF, ESC, the
+      bidirectional marks and the like) written out as \u{XXXX}, so text
+      from a guest cannot break a log line, move the console's cursor or
+      reorder what a screen reader says.
+    #>
+    [OutputType([string])]
+    param([AllowNull()][AllowEmptyString()][string]$Text)
+
+    return [regex]::Replace("$Text", '\p{Cc}|\p{Cf}', { param($match) '\u{{{0:X4}}}' -f [int][char]$match.Value })
+}
+
+function ConvertTo-VMRecordView {
+    <# $Record as a Get- command shows it: of the type $TypeName, with the VM's name first, then each of its properties. #>
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)][string]$VMName,
+        [Parameter(Mandatory)][string]$TypeName,
+        [Parameter(Mandatory)][object]$Record
+    )
+
+    $shown = [ordered]@{ PSTypeName = $TypeName; Name = $VMName }
+    foreach ($property in $Record.PSObject.Properties) { $shown[$property.Name] = $property.Value }
+    return [pscustomobject]$shown
+}
+
 function New-Folder {
     <# Creates a folder, and any parents, if it is not there yet. #>
     param([Parameter(Mandatory)][string]$Path)

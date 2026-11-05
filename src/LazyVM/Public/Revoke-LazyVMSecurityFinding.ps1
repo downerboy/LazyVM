@@ -1,12 +1,13 @@
 function Revoke-LazyVMSecurityFinding {
     <#
     .SYNOPSIS
-    Undoes the approval of a security finding, so the nightly scan reports it again.
+    Revokes an approval of a security finding, so the nightly scan reports it again.
 
     .DESCRIPTION
     Removes the approval Approve-LazyVMSecurityFinding recorded in the VM's
     Config\SecurityBaseline.json. The next nightly scan reports the finding
-    again, as new, if it still finds it.
+    again, as new, if it still finds it. An Id that is not approved is
+    reported as an error, and the rest of the pipeline is still revoked.
 
     .PARAMETER Name
     The VM. May be left out while there is only one.
@@ -39,7 +40,11 @@ function Revoke-LazyVMSecurityFinding {
     process {
         Invoke-CommandRun -Title 'Revoke a security finding approval' -Name $Name -FailureMessage 'Revoking the approval failed' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
-            $approval = Get-SecurityApproval -VM $VM -Id $Id
+            try { $approval = Get-SecurityApproval -VM $VM -Id $Id }
+            catch {
+                Write-CommandItemError -Cmdlet $PSCmdlet -ErrorRecord $_
+                return
+            }
             if ($PSCmdlet.ShouldProcess($VM.Name, "Revoke the approval of the security finding $Id ($($approval.Title)), so the nightly scan reports it again")) {
                 Remove-SecurityApproval -VM $VM -Id $Id
             }

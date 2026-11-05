@@ -362,13 +362,13 @@ Describe 'Test-SecurityFindingAlert' {
     ) {
         $finding = New-TestFinding -Status $Status -Severity $Severity
 
-        InModuleScope $module -Parameters @{ Finding = $finding } { param($Finding) Test-SecurityFindingAlert -Finding @($Finding) -Severity 'High', 'Medium' } | Should -Be $Expected
+        InModuleScope $module -Parameters @{ Finding = $finding } { param($Finding) Test-SecurityFindingAlert -Finding @($Finding) -AlertSeverity 'High', 'Medium' } | Should -Be $Expected
     }
 
     It 'is $false for anything when no severity alerts' {
         $finding = New-TestFinding -Status 'New' -Severity 'High'
 
-        InModuleScope $module -Parameters @{ Finding = $finding } { param($Finding) Test-SecurityFindingAlert -Finding @($Finding) -Severity @() } | Should -BeFalse
+        InModuleScope $module -Parameters @{ Finding = $finding } { param($Finding) Test-SecurityFindingAlert -Finding @($Finding) -AlertSeverity @() } | Should -BeFalse
     }
 }
 
@@ -419,7 +419,7 @@ Describe 'Get-SecurityFindingReminderMessage' {
             New-TestFinding -Severity 'Low' -Status 'New'
         )
 
-        $message = InModuleScope $module -Parameters @{ Finding = $findings } { param($Finding) Get-SecurityFindingReminderMessage -Finding $Finding -VMName 'Alpha' -Severity 'High', 'Medium' }
+        $message = InModuleScope $module -Parameters @{ Finding = $findings } { param($Finding) Get-SecurityFindingReminderMessage -Finding $Finding -VMName 'Alpha' -AlertSeverity 'High', 'Medium' }
 
         $message | Should -Be '2 security finding(s) on Alpha need attention (1 High, 1 Medium). See them with: Get-LazyVMSecurityFinding -Name Alpha'
     }
@@ -427,7 +427,7 @@ Describe 'Get-SecurityFindingReminderMessage' {
     It 'says nothing when only resolved findings, or those of severities that do not alert, are left' {
         $findings = @((New-TestFinding -Severity 'Low'), (New-TestFinding -Severity 'High' -Status 'Resolved'))
 
-        InModuleScope $module -Parameters @{ Finding = $findings } { param($Finding) Get-SecurityFindingReminderMessage -Finding $Finding -VMName 'Alpha' -Severity 'High', 'Medium' } | Should -BeNullOrEmpty
+        InModuleScope $module -Parameters @{ Finding = $findings } { param($Finding) Get-SecurityFindingReminderMessage -Finding $Finding -VMName 'Alpha' -AlertSeverity 'High', 'Medium' } | Should -BeNullOrEmpty
     }
 }
 
@@ -439,7 +439,10 @@ Describe 'Invoke-GuestSecurityScan' {
         $script:check = New-GoodCheck
         $script:collectedAt = '2026-11-02T10:40:00.0000000Z'
         Mock -ModuleName $module Get-GuestSecurityFact { [pscustomobject]@{ CollectedAt = $script:collectedAt; Checks = $script:check } }
-        Mock -ModuleName $module Get-GuestPersistenceFact { [pscustomobject]@{ Items = $null } }
+        # A guest whose places programs start from are all empty, and read.
+        $script:noPersistence = [ordered]@{}
+        foreach ($area in (InModuleScope $module { @($script:PersistenceCheck.Keys) })) { $script:noPersistence[$area] = @() }
+        Mock -ModuleName $module Get-GuestPersistenceFact { [pscustomobject]@{ Items = [pscustomobject]$script:noPersistence } }
     }
 
     It 'leaves the guest alone when GuestSecurityScan is off' {

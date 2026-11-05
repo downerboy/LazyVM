@@ -35,8 +35,8 @@ function Set-GuestSysmon {
         $configText = Get-Content -LiteralPath $configPath -Raw
         $configHash = (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash
         $notes = Invoke-GuestScript -VM $VM -Activity 'Sysmon' -TimeoutMinutes 15 `
-            -ArgumentList @($configText, $configHash, $script:GuestBusyEventLogSize, $script:GuestMarkerKey, (Get-GuestStagingFolder -VM $VM)) -ScriptBlock {
-            param($configText, $configHash, $eventLogSizeBytes, $markerKey, $stagingFolder)
+            -ArgumentList @($configText, $configHash, $script:GuestBusyEventLogSize, $script:GuestMarkerKey, $script:SysmonServicePattern, (Get-GuestStagingFolder -VM $VM)) -ScriptBlock {
+            param($configText, $configHash, $eventLogSizeBytes, $markerKey, $servicePattern, $stagingFolder)
             $ErrorActionPreference = 'Stop'
             $notes = @()
 
@@ -51,7 +51,7 @@ function Set-GuestSysmon {
                 return New-GuestNote -Level WARN -Text 'Sysmon: this Windows has no built-in Sysmon (it came with the February 2026 update); the next run tries again, after Windows Update has brought it'
             }
 
-            $services = @(Get-Service -Name 'Sysmon*' -ErrorAction SilentlyContinue)
+            $services = @(Get-Service -Name $servicePattern -ErrorAction SilentlyContinue)
             if ("$($feature.State)" -ne 'Enabled') {
                 # The built-in Sysmon cannot run beside the standalone one from Sysinternals.
                 if ($services.Count -gt 0) {

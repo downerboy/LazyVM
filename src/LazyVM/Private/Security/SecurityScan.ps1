@@ -1,12 +1,13 @@
-# SecurityScan.ps1 - The nightly security scan of each guest, and where its findings go (#290).
+# SecurityScan.ps1 - The nightly security scan of each guest, and where its findings go (#290, #334).
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
-# The last step of the nightly maintenance. Two collectors run in the guest
+# It also records the known-good baseline after a build and a rebuild
+# (SecurityBaseline.ps1 keeps it). The last step of the nightly maintenance. Two collectors run in the guest
 # as SYSTEM: $script:GuestSecurityScanWork, a Defender quick scan, then the
 # facts each settings check needs, and $script:GuestPersistenceWork, the
 # places a program can start itself again. The host turns them into findings
 # (SecurityFinding.ps1, Persistence.ps1), leaves out the approved ones
-# (SecurityBaseline.ps1), logs each one, writes them to LazyVM Findings.txt
+# (SecurityApproval.ps1), logs each one, writes them to LazyVM Findings.txt
 # on the guest's desktop, and keeps them in <VM>\Logs\SecurityFindings.json.
 # When the scan found something new of a severity that alerts
 # (GuestSecurityScanAlertSeverity, every one by default), the file opens in
@@ -39,8 +40,9 @@ function Invoke-GuestSecurityScan {
       Still open or Resolved against the last scan, logs them, puts them on
       the guest's desktop, and only then keeps them and the baseline, so a
       scan whose findings did not reach the guest counts as not done and its
-      new findings are still new the next night. Skipped when
-      GuestSecurityScan is off.
+      new findings are still new the next night. With a baseline that cannot
+      be read, every persistence area counts as not read, and the baseline
+      is left as it is. Skipped when GuestSecurityScan is off.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
@@ -58,15 +60,25 @@ function Invoke-GuestSecurityScan {
     $previous = Read-SecurityFindingRecord -VM $VM
     $since = $null
     $previousFindings = @()
+    $previouslyUnchecked = @()
     if ($previous) {
         $since = $previous.ScannedAt
         $previousFindings = $previous.Findings
+        $previouslyUnchecked = $previous.Unchecked
     }
     $baseline = Read-SecurityBaseline -VM $VM
-    Add-MissingPersistenceBaseline -Baseline $baseline.Persistence -Item $persistence -RecordedAt $scannedAt
+    if (-not $baseline.Readable) { $persistence = $null }
+    $upgraded = @(Update-LegacyPersistenceBaseline -Baseline $baseline.Persistence -Item $persistence)
+    foreach ($area in $upgraded) {
+        Write-LogEntry "Security scan: baseline upgraded for the $($script:PersistenceCheck[$area].Things): each item LazyVM 6.6.0 knew by name is known with its new fingerprint; any other is reported." 'INFO'
+    }
+    $added = Get-MissingPersistenceBaseline -Baseline $baseline.Persistence -Item $persistence -RecordedAt $scannedAt
+    foreach ($area in $added.Keys) { $baseline.Persistence[$area] = $added[$area] }
 
-    $found = @(ConvertTo-SecurityFinding -Check $facts.Checks -Since $since -ScannedAt $scannedAt) + @(ConvertTo-PersistenceFinding -Item $persistence -Baseline $baseline.Persistence)
     $unchecked = @(Get-UncheckedSecurityArea -Check $facts.Checks) + @(Get-UncheckedSecurityArea -Check $persistence -Area @($script:PersistenceCheck.Keys))
+    $found = @(ConvertTo-SecurityFinding -Check $facts.Checks -Since $since -ScannedAt $scannedAt)
+    $found += @(ConvertTo-PersistenceFinding -Item $persistence -Baseline $baseline.Persistence)
+    $found += @(Get-UnreadablePersistenceAreaFinding -Unchecked $unchecked -PreviouslyUnchecked $previouslyUnchecked)
     $reported = @(Select-UnapprovedSecurityFinding -Finding $found -Approval $baseline.Approvals)
     $earlier = @(Select-UnapprovedSecurityFinding -Finding $previousFindings -Approval $baseline.Approvals)
     $findings = @(Compare-SecurityFinding -Current $reported -Previous $earlier -ScannedAt $scannedAt -Unchecked $unchecked)
@@ -77,10 +89,54 @@ function Invoke-GuestSecurityScan {
     if ($approvedCount -gt 0) {
         Write-LogEntry "Security scan: $approvedCount approved finding(s) not reported. List them with: Get-LazyVMSecurityFinding -Name $($VM.Name) -Approved" 'INFO'
     }
-    $alertScanId = if (Test-SecurityFindingAlert -Finding $findings -Severity $alertSeverity) { $scannedAt.ToString($script:StampFormat) } else { '' }
+    $alertScanId = if (Test-SecurityFindingAlert -Finding $findings -AlertSeverity $alertSeverity) { $scannedAt.ToString($script:StampFormat) } else { '' }
     Publish-GuestSecurityFinding -VM $VM -Text (Format-SecurityFindingReport -Finding $findings -VMName $VM.Name -ScannedAt $scannedAt) -AlertScanId $alertScanId
-    Save-SecurityFindingRecord -VM $VM -ScannedAt $scannedAt -Finding $findings
-    Save-ScannedSecurityBaseline -VM $VM -Persistence $baseline.Persistence -FoundId @($found | ForEach-Object { $_.Id }) -Unchecked $unchecked
+    Save-SecurityFindingRecord -VM $VM -ScannedAt $scannedAt -Finding $findings -Unchecked $unchecked
+    if (-not $baseline.Readable) {
+        Write-LogEntry 'Security scan: the security baseline could not be read, so it was left as it is. Approving or revoking a finding moves it aside; then the next scan records a new one.' 'WARN'
+        return
+    }
+    $foundId = @($found | ForEach-Object { $_.Id })
+    Update-SecurityBaseline -VM $VM -Change {
+        param($record)
+        # An area upgraded tonight, unless something else upgraded it meanwhile.
+        foreach ($area in @($upgraded | Where-Object { $record.Persistence.Contains($_) -and (Get-PersistenceNameToUpgrade -Area $record.Persistence[$_]) })) {
+            $record.Persistence[$area] = $baseline.Persistence[$area]
+        }
+        Add-PersistenceBaselineArea -Record $record -Baseline $added
+        Remove-EndedSecurityApproval -Record $record -FoundId $foundId -Unchecked $unchecked
+    }
+}
+
+function Get-MissingPersistenceBaseline {
+    <#
+      The baseline, from tonight's facts $Item, of each area $Baseline
+      lacks, such as one the guest could not read when the baseline was
+      recorded, or on a VM built before LazyVM had one. Logs each area.
+    #>
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Baseline,
+        [AllowNull()][object]$Item,
+        [Parameter(Mandatory)][datetimeoffset]$RecordedAt
+    )
+
+    $missing = @($script:PersistenceCheck.Keys | Where-Object { -not $Baseline.Contains($_) })
+    $added = New-PersistenceBaseline -Item $Item -RecordedAt $RecordedAt -Area $missing
+    foreach ($area in $added.Keys) {
+        Write-LogEntry "Security scan: recorded the baseline of $($script:PersistenceCheck[$area].Things) ($($added[$area].Items.Count)). Changes from it are reported from the next scan on." 'INFO'
+    }
+    return $added
+}
+
+function Add-PersistenceBaselineArea {
+    <# Puts into the baseline $Record each area of $Baseline it does not have yet; never changes or removes one it has. #>
+    param(
+        [Parameter(Mandatory)][pscustomobject]$Record,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Baseline
+    )
+
+    foreach ($area in @($Baseline.Keys | Where-Object { -not $Record.Persistence.Contains($_) })) { $Record.Persistence[$area] = $Baseline[$area] }
 }
 
 function Get-GuestPersistenceItem {
@@ -97,6 +153,95 @@ function Get-GuestPersistenceItem {
         Write-LogError 'Security scan: the places programs start from could not be read (non-fatal); their findings stay as they were' $_
         return $null
     }
+}
+
+function Get-GuestPersistenceSnapshot {
+    <#
+      The guest's persistence as a baseline, as it is now, with the findings
+      opener registered first so it is part of it. $null, logged, when the
+      guest cannot be read.
+    #>
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    try {
+        Install-GuestSecurityFindingOpener -VM $VM
+        return (New-PersistenceBaseline -Item (Get-GuestPersistenceFact -VM $VM).Items -RecordedAt ([datetimeoffset]::Now))
+    }
+    catch {
+        Write-LogError 'Reading the places programs start from for the security baseline failed (non-fatal); the next nightly scan records what is missing' $_
+        return $null
+    }
+}
+
+function Save-GuestPersistenceBaseline {
+    <#
+      After Build-LazyVM: records the guest's persistence as the known-good
+      baseline when the VM has none yet, its first build; on a VM that has
+      one, only the areas it lacks, so running the build again never makes
+      a change known-good. Approves, once for the VM, what LazyVM does by
+      design (Add-DefaultSecurityApproval). Never throws. Skipped when
+      GuestSecurityScan is off.
+    #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    if (-not $VM.Settings.GuestSecurityScan) {
+        Write-LogEntry 'Security baseline turned off in the settings (GuestSecurityScan) - skipping' 'INFO'
+        return
+    }
+    $snapshot = Get-GuestPersistenceSnapshot -VM $VM
+    try {
+        Update-SecurityBaseline -VM $VM -Change {
+            param($record)
+            if ($snapshot) {
+                $first = $record.Persistence.Count -eq 0
+                Add-PersistenceBaselineArea -Record $record -Baseline $snapshot
+                if ($first) { Write-LogEntry "Security baseline recorded: $(Format-PersistenceBaselineCount -Baseline $record.Persistence)" 'OK' }
+                else { Write-LogEntry 'Security baseline kept as it was; only an area it lacked, if any, was added' 'INFO' }
+            }
+            Add-DefaultSecurityApproval -Record $record
+        }
+    }
+    catch { Write-LogError 'Saving the security baseline failed (non-fatal)' $_ }
+}
+
+function Get-RebuildPersistenceBaseline {
+    <#
+      During a rebuild, after the build and before the restore: the new
+      VM's persistence, which Save-RebuildPersistenceBaseline joins to the
+      old baseline once the rebuild passes its check. $null, logged, when
+      the guest cannot be read or GuestSecurityScan is off; the old
+      baseline is then kept.
+    #>
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    if (-not $VM.Settings.GuestSecurityScan) { return $null }
+    return (Get-GuestPersistenceSnapshot -VM $VM)
+}
+
+function Save-RebuildPersistenceBaseline {
+    <#
+      Once a rebuild passed its check: the new VM's baseline $Baseline,
+      recorded before the restore, with the fingerprints the old baseline
+      knows added, so an item the restore put back counts as known only if
+      it was known before. Areas $Baseline lacks keep the old baseline.
+      Nothing is written without $Baseline. Never throws.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [AllowNull()][System.Collections.IDictionary]$Baseline
+    )
+
+    if (-not $Baseline) { return }
+    try {
+        Update-SecurityBaseline -VM $VM -Change {
+            param($record)
+            $record.Persistence = Join-PersistenceBaseline -Baseline $Baseline -Earlier $record.Persistence
+            Write-LogEntry "Security baseline recorded for the rebuilt VM: $(Format-PersistenceBaselineCount -Baseline $record.Persistence)" 'OK'
+        }
+    }
+    catch { Write-LogError 'Saving the security baseline of the rebuilt VM failed (non-fatal); the old one is kept' $_ }
 }
 
 function Get-GuestSecurityFact {
@@ -117,45 +262,6 @@ function Get-GuestSecurityFact {
     return $facts
 }
 
-function Read-SecurityFindingRecord {
-    <#
-      The VM's last scan: when the guest collected its facts (ScannedAt) and
-      its Findings. $null before the first scan, or when the record cannot
-      be read, which then counts as no scan, and is logged.
-    #>
-    [OutputType([pscustomobject])]
-    param([Parameter(Mandatory)][VMContext]$VM)
-
-    $path = $VM.Settings.SecurityFindingsFile
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
-    try {
-        $record = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -DateKind String
-        return [pscustomobject]@{
-            ScannedAt = [datetimeoffset]::Parse([string]$record.ScannedAt, [cultureinfo]::InvariantCulture)
-            Findings  = [SecurityFinding[]]@(@($record.Findings) | ForEach-Object { [SecurityFinding]::FromObject($_) })
-        }
-    }
-    catch {
-        Write-LogEntry "The last security findings ($path) could not be read, so this counts as the first scan: $($_.Exception.Message)" 'WARN'
-        return $null
-    }
-}
-
-function Save-SecurityFindingRecord {
-    <# Keeps the scan's findings in <VM>\Logs\SecurityFindings.json, with when the guest collected them. Holds no secrets. #>
-    param(
-        [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][datetimeoffset]$ScannedAt,
-        [Parameter(Mandatory)][AllowEmptyCollection()][SecurityFinding[]]$Finding
-    )
-
-    $record = [ordered]@{
-        ScannedAt = $ScannedAt.ToString('o', [cultureinfo]::InvariantCulture)
-        Findings  = @($Finding | ForEach-Object { $_.ToRecord() })
-    }
-    Write-TextFileAtomic -Path $VM.Settings.SecurityFindingsFile -Text (ConvertTo-Json -InputObject $record -Depth 4)
-}
-
 function Write-SecurityFindingLog {
     <#
       Logs how many findings the scan has, then each finding one field to a
@@ -168,9 +274,9 @@ function Write-SecurityFindingLog {
     )
 
     $summary = if ($Finding.Count -eq 0) { 'no findings' } else { Format-SecurityFindingCount -Finding $Finding }
-    Write-LogEntry "Security scan: $summary" $(if (Test-SecurityFindingAlert -Finding $Finding -Severity $AlertSeverity) { 'WARN' } else { 'OK' })
+    Write-LogEntry "Security scan: $summary" $(if (Test-SecurityFindingAlert -Finding $Finding -AlertSeverity $AlertSeverity) { 'WARN' } else { 'OK' })
     for ($i = 0; $i -lt $Finding.Count; $i++) {
-        $level = if ($Finding[$i].Status -eq 'Resolved') { 'OK' } elseif (Test-SecurityFindingAlert -Finding @($Finding[$i]) -Severity $AlertSeverity) { 'WARN' } else { 'INFO' }
+        $level = if ($Finding[$i].Status -eq 'Resolved') { 'OK' } elseif (Test-SecurityFindingAlert -Finding @($Finding[$i]) -AlertSeverity $AlertSeverity) { 'WARN' } else { 'INFO' }
         Write-LogList -Heading "  Security finding $($i + 1) of $($Finding.Count)" -Items (Format-SecurityFinding -Finding $Finding[$i]) -Level $level
     }
 }
@@ -245,7 +351,7 @@ function Write-SecurityFindingReminder {
         $record = Read-SecurityFindingRecord -VM $VM
         if (-not $record) { return }
         $open = @(Select-UnapprovedSecurityFinding -Finding $record.Findings -Approval (Read-SecurityBaseline -VM $VM).Approvals)
-        $message = Get-SecurityFindingReminderMessage -Finding $open -VMName $VM.Name -Severity @($VM.Settings.GuestSecurityScanAlertSeverity)
+        $message = Get-SecurityFindingReminderMessage -Finding $open -VMName $VM.Name -AlertSeverity @($VM.Settings.GuestSecurityScanAlertSeverity)
     }
     catch {
         Write-LogError "Could not check the security findings of $($VM.Name) (non-fatal)" $_
@@ -265,8 +371,6 @@ function Get-SecurityFindingList {
         return
     }
     foreach ($finding in @(Select-UnapprovedSecurityFinding -Finding $record.Findings -Approval (Read-SecurityBaseline -VM $VM).Approvals)) {
-        $shown = [ordered]@{ PSTypeName = 'LazyVM.SecurityFinding'; Name = $VM.Name }
-        foreach ($property in $finding.PSObject.Properties) { $shown[$property.Name] = $property.Value }
-        [pscustomobject]$shown
+        ConvertTo-VMRecordView -VMName $VM.Name -TypeName 'LazyVM.SecurityFinding' -Record $finding
     }
 }

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 631" width="1030" height="631" role="img" aria-labelledby="t-security-approve">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 682" width="1030" height="682" role="img" aria-labelledby="t-security-approve">
 <title id="t-security-approve">Approve a security finding: calls in order, with data flowing in from the left and out to the right</title>
 <style>
 svg{--bg:#ffffff;--fg:#17202a;--muted:#52606d;--line:#9aa5b1;--mod:#eef2f6;--store:#fbf6ea;--cmd:#e9eef9;--call:#1f5fbf;--data:#b86e00;--on:#ffffff}
@@ -24,7 +24,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-c" d="M0,0 L10,5 L0,10 z"/></marker>
 <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-d" d="M0,0 L10,5 L0,10 z"/></marker>
 </defs>
-<rect class="bg" x="0" y="0" width="1030" height="631"/>
+<rect class="bg" x="0" y="0" width="1030" height="682"/>
 <text class="cap" x="20" y="16">INPUTS</text>
 <text class="cap" x="335" y="16">CALLS IN ORDER</text>
 <text class="cap" x="740" y="16">OUTPUTS</text>
@@ -77,9 +77,10 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="nm" x="500.5" y="339" text-anchor="middle">Get-ApprovableSecurityFinding()</text>
 <line class="div" x1="335" y1="346" x2="640" y2="346"/>
 <g class="sn"><circle cx="351" cy="330" r="10"/><text x="351" y="334" text-anchor="middle">2</text></g>
-<text class="at" x="345" y="361">before asking: stops, saying why, unless</text>
-<text class="at" x="345" y="378">the Id is an open finding of the last</text>
-<text class="at" x="345" y="395">scan not approved yet</text>
+<text class="at" x="345" y="361">before asking: unless the Id is an open</text>
+<text class="at" x="345" y="378">finding of the last scan not approved</text>
+<text class="at" x="345" y="395">yet, says why as an error, and the</text>
+<text class="at" x="345" y="412">pipeline goes on</text>
 </g>
 <g class="bx-store"><rect x="20" y="309" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="323" text-anchor="middle">«file»</text>
@@ -93,13 +94,16 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="20" y1="442" x2="275" y2="442"/>
 <text class="at" x="30" y="457">SecurityBaseline.json</text>
 </g>
-<g class="bx-mod"><rect x="335" y="517" width="305" height="84" rx="3"/>
+<g class="bx-mod"><rect x="335" y="517" width="305" height="135" rx="3"/>
 <text class="st" x="500.5" y="531" text-anchor="middle">«Security»</text>
 <text class="nm" x="500.5" y="547" text-anchor="middle">Add-SecurityApproval()</text>
 <line class="div" x1="335" y1="554" x2="640" y2="554"/>
 <g class="sn"><circle cx="351" cy="538" r="10"/><text x="351" y="542" text-anchor="middle">3</text></g>
-<text class="at" x="345" y="569">unless -WhatIf, or -Confirm is declined:</text>
-<text class="at" x="345" y="586">adds the approval, never what was found</text>
+<text class="at" x="345" y="569">asks first; unless -WhatIf, or the</text>
+<text class="at" x="345" y="586">question is declined: adds the approval,</text>
+<text class="at" x="345" y="603">never what was found, under a lock. A</text>
+<text class="at" x="345" y="620">baseline that cannot be read is moved</text>
+<text class="at" x="345" y="637">aside, and this fails</text>
 </g>
 <g class="bx-store"><rect x="740" y="517" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="531" text-anchor="middle">«file»</text>

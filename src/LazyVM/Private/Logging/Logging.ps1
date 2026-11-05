@@ -128,14 +128,15 @@ function Write-GuestNote {
       decided where the event happens, never guessed from its wording. A
       note can come from a task under the guest user's limited token, so
       each is logged as one line, of at most $script:GuestNoteMaximumLength
-      characters: a note cannot make up log lines of its own.
+      characters, with its control characters made printable
+      (ConvertTo-PrintableText): a note cannot make up log lines of its own.
     #>
     param([AllowNull()][object[]]$Notes = @())
 
     foreach ($note in @($Notes | Where-Object { $_ })) {
         $level = [RecordReader]::Text($note, 'Level')
         if ($level -notin 'INFO', 'WARN', 'ERROR', 'OK') { $level = 'INFO' }
-        $text = ([RecordReader]::Text($note, 'Text') -replace '\s*[\r\n]+\s*', ' ').Trim()
+        $text = ConvertTo-PrintableText -Text (([RecordReader]::Text($note, 'Text') -replace '\s*[\r\n]+\s*', ' ').Trim())
         if ($text.Length -gt $script:GuestNoteMaximumLength) { $text = "$($text.Substring(0, $script:GuestNoteMaximumLength))... (cut short)" }
         Write-LogEntry "  $text" $level
     }

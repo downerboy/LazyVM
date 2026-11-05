@@ -67,21 +67,20 @@
             Writes    = @(@{ Label = 'new VM'; Kind = 'Hyper-V'; Store = 'VM <VM>'; Items = @('new Disks\<VM>-OS.vhdx', 'old D:, W: and U: attached') })
         }
         @{
+            Function = 'Get-RebuildPersistenceBaseline'
+            Area     = 'Security'
+            Caller   = 'Invoke-Rebuild'
+            Note     = 'unless GuestSecurityScan is off: the new VM before the restore, kept in memory; nothing is written yet'
+            Includes = @('Get-GuestPersistenceSnapshot', 'Install-GuestSecurityFindingOpener', 'Get-GuestPersistenceFact', 'New-PersistenceBaseline')
+            Reads    = @(@{ Label = 'places programs start from'; Kind = 'guest'; Store = 'New guest'; Items = @('scheduled tasks, services, Run keys,', 'startup folders, WMI subscriptions,', 'local users, Administrators') })
+        }
+        @{
             Function = 'Restore-GuestState'
             Area     = 'Restore'
             Caller   = 'Invoke-Rebuild'
             Note     = 'when there is a capture: Windows, VS, SQL, app settings; a failed step does not stop the rest (see Restore state)'
             Reads    = @(@{ Label = 'captured state'; Kind = 'folder'; Store = '<VM>\State\'; Items = @('manifest.json and', 'captured files') })
             Writes   = @(@{ Label = 'restored state'; Kind = 'guest'; Store = 'New guest'; Items = @('state put back') })
-        }
-        @{
-            Function = 'Save-GuestPersistenceBaseline'
-            Area     = 'Security'
-            Caller   = 'Invoke-Rebuild'
-            Note     = 'unless GuestSecurityScan is off: the new VM, with what was restored, in place of the old VMs baseline; a failure is logged and the next scan records it'
-            Includes = @('Install-GuestSecurityFindingOpener', 'Get-GuestPersistenceFact', 'New-PersistenceBaseline', 'Read-SecurityBaseline', 'Save-SecurityBaseline')
-            Reads    = @(@{ Label = 'places programs start from'; Kind = 'guest'; Store = 'Running guest'; Items = @('scheduled tasks, services, Run keys,', 'startup folders, WMI subscriptions,', 'local users, Administrators') })
-            Writes   = @(@{ Label = 'known-good baseline, approvals kept'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('SecurityBaseline.json') })
         }
         @{
             Function = 'Test-RebuiltVM'
@@ -92,6 +91,14 @@
                 @{ Label = 'products expected'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json') }
                 @{ Label = 'databases expected'; Kind = 'folder'; Store = '<VM>\State\'; Items = @('manifest.json  Databases') }
             )
+        }
+        @{
+            Function = 'Save-RebuildPersistenceBaseline'
+            Area     = 'Security'
+            Caller   = 'Invoke-Rebuild'
+            Note     = 'only when the rebuild passed its check: the new VM''s baseline joined to the old one, so a restored item is known only if it was before; a rollback keeps the old one'
+            Includes = @('Update-SecurityBaseline', 'Join-PersistenceBaseline')
+            Writes   = @(@{ Label = 'known-good baseline, under a lock'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('SecurityBaseline.json') })
         }
         @{
             Function = 'Remove-RetiredVM'

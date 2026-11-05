@@ -48,12 +48,14 @@ function Get-LazyVMSecurityFinding {
     .OUTPUTS
     LazyVM.SecurityFinding, or with -Approved LazyVM.SecurityApproval
     #>
-    [CmdletBinding()]
-    [OutputType('LazyVM.SecurityFinding', 'LazyVM.SecurityApproval')]
+    [CmdletBinding(DefaultParameterSetName = 'Finding')]
+    [OutputType('LazyVM.SecurityFinding', ParameterSetName = 'Finding')]
+    [OutputType('LazyVM.SecurityApproval', ParameterSetName = 'Approved')]
     param(
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
+        [Parameter(Mandatory, ParameterSetName = 'Approved')]
         [switch]$Approved
     )
 

@@ -19,8 +19,11 @@ function Approve-LazyVMSecurityFinding {
     straight away. LazyVM Findings.txt in the VM still lists it until the
     next nightly scan replaces the file.
 
-    Only an open finding of the last scan can be approved.
-    Revoke-LazyVMSecurityFinding undoes an approval.
+    Only an open finding of the last scan can be approved. It asks first,
+    naming the finding; -Confirm:$false approves without asking. A finding
+    that cannot be approved is reported as an error, and the rest of the
+    pipeline is still approved. Revoke-LazyVMSecurityFinding undoes an
+    approval.
 
     .PARAMETER Name
     The VM. May be left out while there is only one.
@@ -35,14 +38,15 @@ function Approve-LazyVMSecurityFinding {
     Approve-LazyVMSecurityFinding -Name DevBox -Id 'AutoLogon:Winlogon:On' -Reason 'LazyVM keeps it on by design'
 
     .EXAMPLE
-    Get-LazyVMSecurityFinding -Name DevBox | Where-Object Title -like '*MyService*' | Approve-LazyVMSecurityFinding -Reason 'my own service'
+    Get-LazyVMSecurityFinding -Name DevBox | Where-Object Id -like 'Service:MyService:*' | Approve-LazyVMSecurityFinding -Reason 'my own service'
 
-    Approves the findings the pipeline gives it, by their Name and Id.
+    Approves the findings the pipeline gives it, by their Name and Id. Pick
+    them by Id: a title is made from names that whatever is in the VM chose.
 
     .OUTPUTS
     None.
     #>
-    [CmdletBinding(SupportsShouldProcess)]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     [OutputType([void])]
     param(
         [Parameter(Position = 0, ValueFromPipelineByPropertyName)]
@@ -58,7 +62,11 @@ function Approve-LazyVMSecurityFinding {
     process {
         Invoke-CommandRun -Title 'Approve a security finding' -Name $Name -FailureMessage 'Approving the security finding failed' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
-            $finding = Get-ApprovableSecurityFinding -VM $VM -Id $Id
+            try { $finding = Get-ApprovableSecurityFinding -VM $VM -Id $Id }
+            catch {
+                Write-CommandItemError -Cmdlet $PSCmdlet -ErrorRecord $_
+                return
+            }
             if ($PSCmdlet.ShouldProcess($VM.Name, "Approve the security finding $Id ($($finding.Title)), so the nightly scan stops reporting it until it changes")) {
                 Add-SecurityApproval -VM $VM -Finding $finding -Reason $Reason
             }
