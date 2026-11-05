@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.6.2](https://github.com/downerboy/LazyVM/compare/v6.6.1...v6.6.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* harden the security scan's persistence baseline and approvals ([#336](https://github.com/downerboy/LazyVM/issues/336)) ([ddfcd34](https://github.com/downerboy/LazyVM/commit/ddfcd34effe992baf4fe1af1f1bc6751c90787fe))
+
 ## [6.6.1](https://github.com/downerboy/LazyVM/compare/v6.6.0...v6.6.1) (2026-11-05)
 
 
