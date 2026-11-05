@@ -580,7 +580,7 @@ Describe 'Get-GuestTaskStatus' {
         (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeNullOrEmpty
     }
 
-    It 'reads nothing through a link in <Case>, which the task''s user may have made (#302 SEC-008)' -ForEach @(
+    It 'reads nothing through a link in <Case>, which the task''s user may have made, and says so as the task''s result (#302 SEC-008)' -ForEach @(
         @{ Case = 'place of the Output folder'; LinkOutput = $true }
         @{ Case = 'place of the result'; LinkOutput = $false }
     ) {
@@ -594,10 +594,23 @@ Describe 'Get-GuestTaskStatus' {
             $null = New-Item -ItemType Directory -Path $output -Force
             $null = New-Item -ItemType SymbolicLink -Path $done -Target (Join-Path $elsewhere "$taskName.done")
         }
-        Mock Get-Content { 'n1 0' }
+
+        (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeLike 'FAILED:*junction or link*'
+    }
+
+    It 'takes a result that <Case> as no result yet' -ForEach @(
+        @{ Case = 'is not there'; Fault = { throw [IO.FileNotFoundException]::new('not there') } }
+        @{ Case = 'another program holds open'; Fault = { throw [IO.IOException]::new('in use', -2147024864) } }
+    ) {
+        Mock Read-GuestTaskOutputFile $Fault
 
         (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeNullOrEmpty
-        Should -Invoke Get-Content -Times 0 -Exactly
+    }
+
+    It 'gives any other error reading the result as the task''s result, so the host reports it rather than waiting' {
+        Mock Read-GuestTaskOutputFile { throw 'Add-Type failed' }
+
+        (Get-GuestTaskStatus -TaskName $taskName -Nonce 'n1').Done | Should -BeLike 'FAILED:*Add-Type failed*'
     }
 }
 

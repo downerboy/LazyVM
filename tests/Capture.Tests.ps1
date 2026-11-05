@@ -201,7 +201,6 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         Mock -ModuleName $module Invoke-GuestTask { ConvertTo-Json -InputObject $report -Compress -Depth 4 }
         Mock -ModuleName $module Copy-FromGuest { }
         Mock -ModuleName $module Write-VisualStudioSettingMarker { }
-        Mock -ModuleName $module Get-CaptureManifest { $null }
 
         $guestScript = Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data\Guest.VisualStudioUserFiles.ps1'
         $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
@@ -226,17 +225,21 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
             $previousFiles[$file.Key] = $path
         }
         $earlier = @{}
-        $usePrevious = {
-            Mock -ModuleName $module Get-CaptureManifest {
-                InModuleScope $module -Parameters @{ Files = $previousFiles; Earlier = $earlier } {
-                    param($Files, $Earlier)
-                    $m = [CaptureManifest]::new()
-                    $m.Stamp = '20261101-010101'
-                    $m.VisualStudio = [pscustomobject]@{ Files = [pscustomobject]$Files; CarriedForward = [pscustomobject]$Earlier }
-                    $m
-                }
+        # Writes the manifest of the capture $Stamp, with these Visual Studio files and carried-forward records.
+        $writeManifest = {
+            param([string]$Stamp, [System.Collections.IDictionary]$Files, [System.Collections.IDictionary]$Earlier = @{})
+            $json = InModuleScope $module -Parameters @{ Stamp = $Stamp; Files = $Files; Earlier = $Earlier } {
+                param($Stamp, $Files, $Earlier)
+                $m = [CaptureManifest]::new()
+                $m.Stamp = $Stamp
+                $m.VisualStudio = [pscustomobject]@{ Files = [pscustomobject]$Files; CarriedForward = [pscustomobject]$Earlier }
+                $m.ToJson()
             }
+            $folder = Join-Path $root "Captures\$Stamp"
+            $null = New-Item -ItemType Directory -Path $folder -Force
+            Set-Content -LiteralPath (Join-Path $folder 'manifest.json') -Value $json
         }
+        $usePrevious = { & $writeManifest -Stamp '20261101-010101' -Files $previousFiles -Earlier $earlier }
         $content = { param([string]$Name) Get-Content -LiteralPath (Join-Path $vsDir $Name) -Raw }
     }
 
@@ -341,7 +344,7 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
             $name = Split-Path -Path $previousFiles[$key] -Leaf
             $result.Files[$key] | Should -Be (Join-Path $vsDir $name)
             & $content -Name $name | Should -Be "previous $name"
-            $logged | Should -Contain "INFO:   $name carried forward from the previous capture, as it could not be read this time"
+            $logged | Should -Contain "INFO:   $name carried forward from the capture of 20261101-010101, as it could not be read this time"
         }
     }
 
@@ -369,6 +372,17 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         @($logged | Where-Object { $_ -like 'INFO:*carried forward*' }).Count | Should -Be 1
     }
 
+    It 'never puts an older copy over a file read this time, whatever the task says it could not read' {
+        & $usePrevious
+        $report.Unread = @('gitconfig')
+
+        $result = & $capture
+
+        & $content -Name 'gitconfig' | Should -Be 'fresh gitconfig'
+        @($logged | Where-Object { $_ -like '*carried forward*' }) | Should -BeNullOrEmpty
+        $result.CarriedForward.Count | Should -Be 0
+    }
+
     It 'keeps the previous capture''s copy of a file the guest does not give back as one piece of text' {
         & $usePrevious
         Mock -ModuleName $module Invoke-GuestScript { 'one'; 'two' } -ParameterFilter { "$ScriptBlock" -match 'Read-GuestTaskOutputFile' -and $ArgumentList[1] -eq 'NuGet.Config' }
@@ -391,8 +405,8 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
     }
 
     It 'keeps where a file was last read from, counts on, and warns once it has not been read for 3 captures' {
-        & $usePrevious
         $earlier.GitConfig = [pscustomobject]@{ From = '20261020-000000'; Times = 2 }
+        & $usePrevious
         Mock -ModuleName $module Wait-GuestSignedIn { $false }
 
         $result = & $capture
@@ -400,6 +414,35 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         $result.CarriedForward['GitConfig'].From | Should -Be '20261020-000000'
         $result.CarriedForward['GitConfig'].Times | Should -Be 3
         @($logged | Where-Object { $_ -like 'WARN:*gitconfig has not been read for 3 captures, since the capture of 20261020-000000*' }).Count | Should -Be 1
+    }
+
+    It 'looks back past a capture that does not have a file, to the newest that does' {
+        $older = Join-Path $root 'Captures\20261025-000000\vs\gitconfig'
+        $null = New-Item -ItemType Directory -Path (Split-Path $older -Parent) -Force
+        Set-Content -LiteralPath $older -Value 'older gitconfig' -NoNewline
+        & $writeManifest -Stamp '20261025-000000' -Files ([ordered]@{ GitConfig = $older })
+        $previousFiles.Remove('GitConfig')
+        & $usePrevious
+        # A capture that cannot be read is passed over.
+        $null = New-Item -ItemType Directory -Path (Join-Path $root 'Captures\20261030-000000') -Force
+        Set-Content -LiteralPath (Join-Path $root 'Captures\20261030-000000\manifest.json') -Value 'not { json'
+        Mock -ModuleName $module Wait-GuestSignedIn { $false }
+
+        $result = & $capture
+
+        & $content -Name 'gitconfig' | Should -Be 'older gitconfig'
+        $result.CarriedForward['GitConfig'].From | Should -Be '20261025-000000'
+        & $content -Name 'NuGet.Config' | Should -Be 'previous NuGet.Config'
+    }
+
+    It 'counts from nothing when the record of how often a file was carried forward is not a number' {
+        $earlier.GitConfig = [pscustomobject]@{ From = '20261020-000000'; Times = 'lots' }
+        & $usePrevious
+        Mock -ModuleName $module Wait-GuestSignedIn { $false }
+
+        $result = & $capture
+
+        $result.CarriedForward['GitConfig'].Times | Should -Be 1
     }
 
     It 'records nothing as carried forward for a file read this time' {
@@ -421,7 +464,7 @@ Describe 'Save-GuestVisualStudioState reads the user''s files as the user (#330)
         $result = & $capture
 
         $result.Files.Contains('GitConfig') | Should -BeFalse
-        @($logged | Where-Object { $_ -like 'WARN:*gitconfig*not in*Captures*' }).Count | Should -Be 1
+        @($logged | Where-Object { $_ -like 'WARN:*gitconfig*not in*Captures*' -or $_ -like 'WARN:*GitConfig*not in*Captures*' }).Count | Should -Be 1
     }
 
     It 'carries nothing forward for a file the task did not find, which the user may have removed' {
@@ -657,17 +700,28 @@ Describe 'Guest.VisualStudioUserFiles.ps1 capturing the files as the user (#330)
         @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*NuGet.Config*over*'
     }
 
-    It 'leaves a snippet or template over the most it may copy out of the archive, with a WARN, and still captures the archive' {
+    It 'reports the archive as not read, naming the file, when a snippet or template is over the most it may copy, so the previous one is kept' {
         $big = Join-Path $vsFolder 'Templates\big.zip'
         & $writeFile -Path $big -Text ('x' * 2KB)
 
         $result = & $userFiles @run
 
-        @($result.Files) | Should -Contain 'vs-useritems.zip'
-        @($result.Unread) | Should -BeNullOrEmpty
-        & $entries | Should -Not -Contain 'Templates/big.zip'
-        & $entries | Should -Contain 'Templates/class.zip'
+        @($result.Files) | Should -Not -Contain 'vs-useritems.zip'
+        @($result.Unread) | Should -Be @('vs-useritems.zip')
         @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*Templates/big.zip*over*'
+    }
+
+    It 'reports the archive as not read when it comes out over the most it may copy, though each file is under it' {
+        foreach ($index in 1..4) {
+            $text = -join (1..700 | ForEach-Object { [char](Get-Random -Minimum 33 -Maximum 126) })
+            & $writeFile -Path (Join-Path $vsFolder "Templates\random$index.txt") -Text $text
+        }
+
+        $result = & $userFiles @run
+
+        @($result.Files) | Should -Not -Contain 'vs-useritems.zip'
+        @($result.Unread) | Should -Be @('vs-useritems.zip')
+        @($result.Notes | Where-Object { $_.Level -eq 'WARN' }).Text | Should -BeLike '*snippets and templates*over*'
     }
 
     It 'zips nothing when the Visual Studio folder itself is a <LinkType>' -ForEach @(@{ LinkType = 'SymbolicLink' }, @{ LinkType = 'Junction' }) {

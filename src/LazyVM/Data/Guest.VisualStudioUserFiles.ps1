@@ -30,9 +30,8 @@
 # puts it on the User disk, the walk for the snippets and templates starts
 # at the Documents folder itself. An archive entry whose name could lead
 # out of the Visual Studio folder is refused. A file over -MaximumBytes is
-# not captured: on its own it is refused, and in the snippets and templates
-# it is left out of the archive. A refused or failed file is a WARN note and
-# the rest carry on.
+# refused, and so is the archive when it holds one or comes out over it. A
+# refused or failed file is a WARN note and the rest carry on.
 #
 # Returns @{ Notes }, each note @{ Level; Text } (New-GuestNote in
 # Guest.Helpers.ps1, which a task does not have). A capture returns
@@ -276,10 +275,11 @@ function Save-ProfileArchive {
       $Root, into $Archive, under $OutputFolder, each named from its folder
       on (Code Snippets/...), as Restore-ProfileArchive extracts them.
       Returns New-Outcome: Refused when a folder Get-PathProblem refuses,
-      anything Get-ArchiveFile finds a problem with, or a file that cannot
-      be read; Missing when there is no file. A file that would take the
-      archive's files over nine tenths of $MaximumBytes is left out. Adds a
-      WARN note to $Notes for each thing refused or left out.
+      anything Get-ArchiveFile finds a problem with, a file over
+      $MaximumBytes or one that cannot be read, or when the archive comes
+      out over $MaximumBytes; Missing when there is no file. An archive is
+      never Copied with anything left out of it. Adds a WARN note to
+      $Notes for each thing refused.
     #>
     param(
         [Parameter(Mandatory)][string]$Root,
@@ -297,29 +297,20 @@ function Save-ProfileArchive {
             if ($problem) { [pscustomobject]@{ Entry = $name; Problem = $problem } }
             elseif ([IO.Directory]::Exists($path)) { Get-ArchiveFile -Path $path -Entry $name }
         })
+    foreach ($file in @($found | Where-Object { -not $_.Problem -and $_.Length -gt $MaximumBytes })) {
+        $file.Problem = Get-SizeText -Length $file.Length -MaximumBytes $MaximumBytes
+    }
     $problems = @($found | Where-Object { $_.Problem })
     foreach ($item in $problems) { $Notes.Add((New-Note -Level WARN -Text "did not capture $($item.Entry): $($item.Problem)")) }
     if ($problems.Count -gt 0) { return New-Outcome -State Refused }
-
-    # The archive's own headers need room too, so its files are kept to
-    # nine tenths of the most the host reads back.
-    $room = [long]($MaximumBytes * 0.9)
-    $files = @(foreach ($file in $found) {
-            if ($file.Length -gt $room) {
-                $Notes.Add((New-Note -Level WARN -Text "did not capture $($file.Entry): $(Get-SizeText -Length $file.Length -MaximumBytes $room)"))
-                continue
-            }
-            $room -= $file.Length
-            $file
-        })
-    if ($files.Count -eq 0) { return New-Outcome -State Missing }
+    if ($found.Count -eq 0) { return New-Outcome -State Missing }
 
     $problem = Get-PathProblem -Root $OutputFolder -Path $Archive
     if (-not $problem) {
         try {
             $zip = New-Object IO.Compression.ZipArchive([IO.File]::Create($Archive), [IO.Compression.ZipArchiveMode]::Create)
             try {
-                foreach ($file in $files) {
+                foreach ($file in $found) {
                     try { $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.Path, $file.Entry) }
                     catch { $problem = "$($file.Entry) cannot be read: $($_.Exception.Message)"; break }
                 }
@@ -327,6 +318,10 @@ function Save-ProfileArchive {
             finally { $zip.Dispose() }
         }
         catch { $problem = $_.Exception.Message }
+    }
+    if (-not $problem) {
+        $length = ([IO.FileInfo]$Archive).Length
+        if ($length -gt $MaximumBytes) { $problem = "the archive $(Get-SizeText -Length $length -MaximumBytes $MaximumBytes)" }
     }
     if ($problem) {
         $Notes.Add((New-Note -Level WARN -Text "did not capture the snippets and templates: $problem"))

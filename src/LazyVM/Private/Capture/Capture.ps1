@@ -17,12 +17,30 @@ function Get-CaptureManifest {
     <# The VM's last capture, or $null when it has none or it cannot be read. #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $path = Get-CaptureManifestPath -VM $VM
-    if (-not (Test-Path -LiteralPath $path)) { return $null }
-    try { return [CaptureManifest]::FromJson((Get-Content -LiteralPath $path -Raw)) }
+    return Read-CaptureManifest -Path (Get-CaptureManifestPath -VM $VM)
+}
+
+function Read-CaptureManifest {
+    <# The capture whose manifest is $Path, or $null when there is none or it cannot be read, which is logged. #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    try { return [CaptureManifest]::FromJson((Get-Content -LiteralPath $Path -Raw)) }
     catch {
-        Write-LogEntry "The capture at $path cannot be used: $($_.Exception.Message)" 'WARN'
+        Write-LogEntry "The capture at $Path cannot be used: $($_.Exception.Message)" 'WARN'
         return $null
+    }
+}
+
+function Get-CaptureHistory {
+    <# The VM's captures under StateDir\Captures that can be read, newest first (Read-CaptureManifest). #>
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $folders = @(Get-ChildItem -LiteralPath (Join-Path $VM.Settings.StateDir $script:CaptureFolderName) -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d{8}-\d{6}$' } | Sort-Object -Property Name -Descending)
+    foreach ($folder in $folders) {
+        $manifest = Read-CaptureManifest -Path (Join-Path $folder.FullName $script:ManifestFileName)
+        if ($manifest) { $manifest }
     }
 }
 
@@ -207,7 +225,9 @@ function Save-GuestVisualStudioState {
 
     $vsDir = Join-Path $CaptureDir 'vs'
     $read = Save-GuestVisualStudioUserFile -VM $VM -ProductLine "$($vs.ProductLine)" -SettingsFile "$($info.SettingsFile)" -Folder $vsDir
-    $carried = Copy-PreviousVisualStudioUserFile -VM $VM -Key $read.Unread -Folder $vsDir
+    # A file read this time is never replaced with an older copy, whatever the task says.
+    $unread = @($read.Unread | Where-Object { -not $read.Files.Contains($_) })
+    $carried = Copy-PreviousVisualStudioUserFile -VM $VM -Key $unread -Folder $vsDir
     $files = [ordered]@{}
     $carriedForward = [ordered]@{}
     foreach ($key in $script:VisualStudioUserFile.Key) {
@@ -337,13 +357,13 @@ function Save-GuestVisualStudioUserFile {
 function Copy-PreviousVisualStudioUserFile {
     <#
       Copies into $Folder the Visual Studio files with the keys $Key
-      ($script:VisualStudioUserFile) that the VM's previous capture has, for
-      files that could not be read this time, so that a capture never drops
-      what an earlier one had. Returns, by key, @{ Path; From; Times }: where
-      it went, the stamp of the capture that last read it, and how many
-      captures in a row it has now been carried forward. Only files in the
-      VM's captures folder are taken. Each one carried forward is logged,
-      and is a WARN once it has not been read for
+      ($script:VisualStudioUserFile), each from the newest of the VM's
+      captures that has it (Find-PreviousVisualStudioUserFile), for files
+      that could not be read this time, so that a capture never drops what
+      an earlier one had. Returns, by key, @{ Path; From; Times }: where it
+      went, the stamp of the capture that last read it, and how many
+      captures in a row it has now been carried forward. Each one carried
+      forward is logged, and is a WARN once it has not been read for
       $script:VisualStudioCarryForwardWarnAfter captures; one that cannot
       be carried forward is a WARN.
     #>
@@ -356,36 +376,59 @@ function Copy-PreviousVisualStudioUserFile {
 
     $carried = [ordered]@{}
     if ($Key.Count -eq 0) { return $carried }
-    $previous = Get-CaptureManifest -VM $VM
-    $record = [RecordReader]::Field($previous, 'VisualStudio')
-    $files = [RecordReader]::Field($record, 'Files')
-    $earlier = [RecordReader]::Field($record, 'CarriedForward')
-    $captures = Join-Path $VM.Settings.StateDir $script:CaptureFolderName
+    $history = @(Get-CaptureHistory -VM $VM)
     foreach ($file in @($script:VisualStudioUserFile | Where-Object { $Key -contains $_.Key })) {
-        $source = [RecordReader]::Text($files, $file.Key)
-        if (-not $source -or -not (Test-Path -LiteralPath $source -PathType Leaf)) { continue }
-        if (-not (Test-PathWithin -Path $source -Folder $captures)) {
-            Write-LogEntry "  could not carry $($file.Name) forward: the previous capture names $source, which is not in $captures" 'WARN'
-            continue
-        }
-        $before = [RecordReader]::Field($earlier, $file.Key)
-        $from = if ($before) { [RecordReader]::Text($before, 'From') } else { [RecordReader]::Text($previous, 'Stamp') }
-        $times = 1 + $(if ($before) { [int][RecordReader]::Text($before, 'Times') } else { 0 })
+        $found = Find-PreviousVisualStudioUserFile -VM $VM -History $history -Key $file.Key
+        if (-not $found) { continue }
         $destination = Join-Path $Folder $file.Name
         try {
             New-Folder -Path $Folder
-            Copy-CheckedItem -Path $source -Destination $destination
-            $carried[$file.Key] = [pscustomobject]@{ Path = $destination; From = $from; Times = $times }
-            Write-LogEntry "  $($file.Name) carried forward from the previous capture, as it could not be read this time" 'INFO'
-            if ($times -ge $script:VisualStudioCarryForwardWarnAfter) {
-                Write-LogEntry "  $($file.Name) has not been read for $times captures, since the capture of $from - see the warnings above for why" 'WARN'
+            Copy-CheckedItem -Path $found.Path -Destination $destination
+            $carried[$file.Key] = [pscustomobject]@{ Path = $destination; From = $found.From; Times = $found.Times + 1 }
+            Write-LogEntry "  $($file.Name) carried forward from the capture of $($found.Stamp), as it could not be read this time" 'INFO'
+            if ($found.Times + 1 -ge $script:VisualStudioCarryForwardWarnAfter) {
+                Write-LogEntry "  $($file.Name) has not been read for $($found.Times + 1) captures, since the capture of $($found.From) - see the warnings above for why" 'WARN'
             }
         }
         catch {
-            Write-LogEntry "  could not carry $($file.Name) forward from the previous capture: $($_.Exception.Message)" 'WARN'
+            Write-LogEntry "  could not carry $($file.Name) forward from the capture of $($found.Stamp): $($_.Exception.Message)" 'WARN'
         }
     }
     return $carried
+}
+
+function Find-PreviousVisualStudioUserFile {
+    <#
+      The Visual Studio file with key $Key in the newest capture in
+      $History (Get-CaptureHistory) that has it, as @{ Path; Stamp; From;
+      Times }: its place, that capture's stamp, the stamp of the capture
+      that last read it, and how many captures in a row it had been carried
+      forward; $null when none has it. Only files in the VM's captures
+      folder count; a capture that names one elsewhere is a WARN, and older
+      ones are looked at.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [AllowEmptyCollection()][object[]]$History,
+        [Parameter(Mandatory)][string]$Key
+    )
+
+    $captures = Join-Path $VM.Settings.StateDir $script:CaptureFolderName
+    foreach ($manifest in $History) {
+        $record = [RecordReader]::Field($manifest, 'VisualStudio')
+        $source = [RecordReader]::Text([RecordReader]::Field($record, 'Files'), $Key)
+        if (-not $source -or -not (Test-Path -LiteralPath $source -PathType Leaf)) { continue }
+        if (-not (Test-PathWithin -Path $source -Folder $captures)) {
+            Write-LogEntry "  the capture of $($manifest.Stamp) names $source for $Key, which is not in $captures - not carried forward from there" 'WARN'
+            continue
+        }
+        $before = [RecordReader]::Field([RecordReader]::Field($record, 'CarriedForward'), $Key)
+        $times = 0
+        if ($before -and -not [int]::TryParse([RecordReader]::Text($before, 'Times'), [ref]$times)) { $times = 0 }
+        $from = if ($before) { [RecordReader]::Text($before, 'From') } else { $manifest.Stamp }
+        return [pscustomobject]@{ Path = $source; Stamp = $manifest.Stamp; From = $from; Times = $times }
+    }
+    return $null
 }
 
 # ── SQL Server ───────────────────────────────────────────────────────────────

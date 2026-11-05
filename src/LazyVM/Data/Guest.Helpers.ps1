@@ -1772,7 +1772,9 @@ function Get-GuestTaskStatus {
     <#
       Done: what the wrapper wrote for the start with $Nonce, or $null while
       it runs; the task's state; the boot time. A result for another start,
-      or one Read-GuestTaskOutputFile refuses, counts as none. A task under a
+      one not there yet, and one being written, count as none. One
+      Read-GuestTaskOutputFile refuses or cannot read, a link included, is
+      FAILED: and why, which Invoke-GuestTask reports. A task under a
       user's limited token can write its own result, so its Done is only
       that user's word.
     #>
@@ -1782,9 +1784,15 @@ function Get-GuestTaskStatus {
     )
 
     $result = $null
-    # Not there yet, or not one LazyVM reads (Read-GuestTaskOutputFile): no result.
+    $bytes = $null
     try { $bytes = Read-GuestTaskOutputFile -TaskName $TaskName -Name "$TaskName.done" -MaximumBytes $script:GuestTaskResultMaximumBytes }
-    catch { $bytes = $null }
+    catch {
+        # Not written yet, or being written: no result yet. Anything else is
+        # the task's result, so the host reports it rather than waiting on.
+        $fault = $_.Exception
+        $pending = $fault -is [IO.FileNotFoundException] -or ($fault -is [IO.IOException] -and $fault.HResult -eq $script:GuestSharingViolation)
+        if (-not $pending) { $result = "FAILED: could not read the task's result: $($fault.Message)" }
+    }
     if ($null -ne $bytes) {
         # Windows PowerShell writes UTF-8 with a byte order mark.
         $written = [Text.Encoding]::UTF8.GetString($bytes).TrimStart([char]0xFEFF).Trim()
@@ -1799,6 +1807,9 @@ function Get-GuestTaskStatus {
 
 # The most Get-GuestTaskStatus reads of a task's result.
 $script:GuestTaskResultMaximumBytes = 1MB
+
+# The HResult of a file another program holds open (ERROR_SHARING_VIOLATION).
+$script:GuestSharingViolation = -2147024864
 
 # Reads a file in a task's Output folder on one handle (Read-GuestTaskOutputFile).
 $script:GuestTaskOutputReaderSource = @'
@@ -1864,7 +1875,7 @@ namespace LazyVM
             {
                 int error = Marshal.GetLastWin32Error();
                 if (error == 2 || error == 3) { throw new FileNotFoundException(path + " is not there"); }
-                throw new IOException(path + " cannot be opened: " + new Win32Exception(error).Message);
+                throw new IOException(path + " cannot be opened: " + new Win32Exception(error).Message, unchecked((int)0x80070000 | error));
             }
             return handle;
         }
