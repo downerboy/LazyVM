@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.7.0](https://github.com/downerboy/LazyVM/compare/v6.6.2...v6.7.0) (2026-11-06)
+
+
+### Features
+
+* review the guest's events in the security scan, log PowerShell 7 script blocks, size Sysmon's log like the others ([#340](https://github.com/downerboy/LazyVM/issues/340)) ([290bbc1](https://github.com/downerboy/LazyVM/commit/290bbc1170306d94a736465597f13caca99ec091))
+
 ## [6.6.2](https://github.com/downerboy/LazyVM/compare/v6.6.1...v6.6.2) (2026-11-05)
 
 
