@@ -283,6 +283,21 @@ Describe 'The suspicious PowerShell patterns' {
     }
 }
 
+Describe 'The suspicious PowerShell patterns on a large script (#344)' {
+    It 'tests a 2 MB script block that matches none well within the guest''s 2-second limit' {
+        $text = ('Write-Output "FromBase64String is mentioned here, but nothing runs it" ' * 30000)
+
+        $elapsed = InModuleScope $module -Parameters @{ Text = $text } {
+            param($Text)
+            $watch = [Diagnostics.Stopwatch]::StartNew()
+            foreach ($pattern in $script:SuspiciousPowerShell) { $null = [regex]::IsMatch($Text, $pattern.Pattern, [Text.RegularExpressions.RegexOptions]::None, [timespan]::FromSeconds(2)) }
+            $watch.Elapsed
+        }
+
+        $elapsed.TotalSeconds | Should -BeLessThan 2
+    }
+}
+
 Describe 'Get-CrashDumpFinding' {
     It 'reports one Low finding for each folder with new crash files, with how many' {
         $fact = New-Fact @{ Items = @(

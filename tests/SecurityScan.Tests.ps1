@@ -828,6 +828,51 @@ Describe 'The guest collector' {
         }
     }
 
+    It 'gives Get-WinEvent the window in the guest''s local time, as Windows PowerShell 5.1 reads it whatever the time''s kind (#344)' {
+        $calls = [System.Collections.Generic.List[hashtable]]::new()
+        Set-Item -Path 'function:global:Get-WinEvent' -Value ({
+                param($FilterHashtable, $MaxEvents)
+                $calls.Add(@{ Filter = $FilterHashtable; MaxEvents = $MaxEvents })
+                $e = [System.Management.Automation.ErrorRecord]::new([Exception]::new('none'), 'NoMatchingEventsFound,Microsoft.PowerShell.Commands.GetWinEventCommand', 'ObjectNotFound', $null)
+                throw $e
+            }.GetNewClosure())
+        try {
+            $null = InModuleScope $module { & $script:GuestSecurityScanWork 0 '2026-11-06T22:10:00.0000000Z' }
+
+            $calls.Count | Should -BeGreaterThan 0
+            foreach ($call in $calls) {
+                $call.Filter.StartTime.Kind | Should -Be 'Local'
+                $call.Filter.EndTime.Kind | Should -Be 'Local'
+                $call.Filter.StartTime.ToUniversalTime() | Should -Be ([datetime]::new(2026, 11, 6, 22, 10, 0, [DateTimeKind]::Utc))
+            }
+        }
+        finally { Set-Item -Path 'function:global:Get-WinEvent' -Value { throw 'not available' } }
+    }
+
+    It 'logs one line for the script blocks that took too long to test, with how many (#344)' {
+        $xml = "<Event><EventData><Data Name='ScriptBlockId'>b1</Data><Data Name='ScriptBlockText'>$('a' * 40)!</Data></EventData></Event>"
+        $blocks = foreach ($i in 1..2) {
+            $block = [pscustomobject]@{ Id = 4104; TimeCreated = [datetime]::UtcNow.AddMinutes(-5) }
+            $block | Add-Member -MemberType ScriptMethod -Name ToXml -Value ({ $xml }.GetNewClosure())
+            $block
+        }
+        Set-Item -Path 'function:global:Get-WinEvent' -Value ({
+                param($FilterHashtable, $MaxEvents)
+                if ($FilterHashtable.LogName -eq 'Microsoft-Windows-PowerShell/Operational') { return @($blocks | Select-Object -First $MaxEvents) }
+                $e = [System.Management.Automation.ErrorRecord]::new([Exception]::new('none'), 'NoMatchingEventsFound,Microsoft.PowerShell.Commands.GetWinEventCommand', 'ObjectNotFound', $null)
+                throw $e
+            }.GetNewClosure())
+        try {
+            # A pattern that backtracks without end on that text, so each block times out.
+            $facts = InModuleScope $module { & $script:GuestSecurityScanWork 0 '' @('^(a+)+$') 24 } | ConvertFrom-Json
+
+            $skipped = @($facts.Notes | Where-Object { $_.Text -like '*took too long to test*' })
+            $skipped.Count | Should -Be 1
+            $skipped[0].Text | Should -BeLike '*2 script blocks*'
+        }
+        finally { Set-Item -Path 'function:global:Get-WinEvent' -Value { throw 'not available' } }
+    }
+
     It 'reads no events, and no failure, from a log that is not there, such as Sysmon''s before it is installed (#290)' {
         Set-Item -Path 'function:global:Get-WinEvent' -Value {
             $e = [System.Management.Automation.ErrorRecord]::new([Exception]::new('no log'), 'NoMatchingLogsFound,Microsoft.PowerShell.Commands.GetWinEventCommand', 'ObjectNotFound', $null)

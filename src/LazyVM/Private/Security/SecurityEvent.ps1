@@ -25,7 +25,8 @@ $script:SecurityEventFirstScanHours = 24
 # (SecurityEvent.Tests.ps1 checks).
 $script:SuspiciousPowerShell = @(
     @{ Pattern = '(?i)\s-e(nc(odedcommand)?)?\s+[A-Za-z0-9+/=]{40,}'; Reason = 'starts PowerShell with an encoded command' }
-    @{ Pattern = '(?is)(?=.*FromBase64String)(?=.*(\biex\b|Invoke-Expression))'; Reason = 'decodes text and runs it' }
+    # Anchored, so the two look-aheads are tried once, not at every position of a large script (#344).
+    @{ Pattern = '(?is)\A(?=.*FromBase64String)(?=.*(\biex\b|Invoke-Expression))'; Reason = 'decodes text and runs it' }
     @{ Pattern = '(?is)(DownloadString|DownloadFile|DownloadData|Invoke-WebRequest|\biwr\b|Invoke-RestMethod|\birm\b).{0,300}(\biex\b|Invoke-Expression)|(\biex\b|Invoke-Expression).{0,300}(DownloadString|Invoke-WebRequest|\biwr\b|Invoke-RestMethod|\birm\b)'; Reason = 'downloads text and runs it' }
     @{ Pattern = '(?i)(\[char\]\s*\d+\s*\)?\s*\+\s*){3,}'; Reason = 'builds its text one character at a time' }
 )

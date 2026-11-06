@@ -86,6 +86,45 @@ $script:ProtectedPersistenceItem = @{
 # How every persistence finding ends: the way to accept a change you expect.
 $script:SecurityApprovalHint = 'If you know it and expect it, approve it on the host with Approve-LazyVMSecurityFinding and this Id. LazyVM then stops reporting it until it changes.'
 
+# A GUID in braces, which Windows gives some scheduled tasks and changes each
+# time it re-creates them with the same content, such as its per-user
+# \SoftLanding\<SID>\...-{GUID} tasks (#344).
+$script:PersistenceGuidPattern = '\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}'
+
+function Get-PersistenceItemKey {
+    <#
+      The name an item is known by in $Area: its name, except that a
+      scheduled task's GUIDs are left out (shown as {GUID}), so a task
+      Windows re-creates under a new GUID is the same task. Used for the
+      baseline, for the facts and for the Id alike.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Area,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Name
+    )
+
+    if ($Area -ne 'ScheduledTask') { return $Name }
+    return ($Name -replace $script:PersistenceGuidPattern, '{GUID}')
+}
+
+function ConvertTo-PersistenceKnownByKey {
+    <# The known table $Known of $Area by Get-PersistenceItemKey, fingerprints of names that share a key merged: a baseline recorded with the GUIDs in the names, as LazyVM 6.7.1 and earlier did. #>
+    [OutputType([System.Collections.Generic.Dictionary[string, string[]]])]
+    param(
+        [Parameter(Mandatory)][string]$Area,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Known
+    )
+
+    $byKey = New-PersistenceKnownTable
+    foreach ($name in @($Known.Keys)) {
+        $key = Get-PersistenceItemKey -Area $Area -Name $name
+        if (-not $byKey.ContainsKey($key)) { $byKey[$key] = [string[]]@() }
+        foreach ($fingerprint in @($Known[$name])) { Add-PersistenceKnownFingerprint -Known $byKey -Name $key -Fingerprint $fingerprint }
+    }
+    return , $byKey
+}
+
 function Get-PersistenceItemId {
     <# An item's Id: its area, its name and its fingerprint. The only place one is made. #>
     [OutputType([string])]
@@ -99,9 +138,10 @@ function Get-PersistenceItemId {
 
 function Get-PersistenceAreaItem {
     <#
-      The items the guest's facts $Item list for $Area, each as Name,
-      Fingerprint, Program and InUserFolder, with the guest's text made
-      printable (ConvertTo-PrintableText) before anything is made from it.
+      The items the guest's facts $Item list for $Area, each as Name (the
+      name it is known by, Get-PersistenceItemKey), Fingerprint, Program and
+      InUserFolder, with the guest's text made printable
+      (ConvertTo-PrintableText) before anything is made from it.
       $null when the guest could not read the area.
     #>
     [OutputType([pscustomobject[]])]
@@ -114,7 +154,7 @@ function Get-PersistenceAreaItem {
     if ($null -eq $found) { return $null }
     $items = foreach ($entry in @($found | Where-Object { $_ })) {
         [pscustomobject]@{
-            Name         = ConvertTo-PrintableText -Text ([RecordReader]::Text($entry, 'Name'))
+            Name         = Get-PersistenceItemKey -Area $Area -Name (ConvertTo-PrintableText -Text ([RecordReader]::Text($entry, 'Name')))
             Fingerprint  = ConvertTo-PrintableText -Text ([RecordReader]::Text($entry, 'Fingerprint'))
             Program      = ConvertTo-PrintableText -Text ([RecordReader]::Text($entry, 'Program'))
             InUserFolder = [bool][RecordReader]::Field($entry, 'InUserFolder')
@@ -206,7 +246,7 @@ function Update-LegacyPersistenceBaseline {
         $items = Get-PersistenceAreaItem -Item $Item -Area $area
         if ($null -eq $items) { continue }
         $recorded = $Baseline[$area]
-        $names = @(Get-PersistenceNameToUpgrade -Area $recorded)
+        $names = @(Get-PersistenceNameToUpgrade -Area $recorded | ForEach-Object { Get-PersistenceItemKey -Area $area -Name $_ })
         foreach ($entry in @($items | Where-Object { $_.Name -in $names -and (Test-PersistenceFingerprintKnowable -Fingerprint $_.Fingerprint) })) {
             Add-PersistenceKnownFingerprint -Known $recorded.Items -Name $entry.Name -Fingerprint $entry.Fingerprint
         }
@@ -280,13 +320,14 @@ function ConvertTo-PersistenceFinding {
         $items = Get-PersistenceAreaItem -Item $Item -Area $area
         if ($null -eq $items -or -not $Baseline.Contains($area)) { continue }
         $recorded = $Baseline[$area]
+        $known = ConvertTo-PersistenceKnownByKey -Area $area -Known $recorded.Items
         foreach ($entry in $items) {
-            $named = $recorded.Items.ContainsKey($entry.Name)
-            if ($named -and $entry.Fingerprint -in $recorded.Items[$entry.Name] -and (Test-PersistenceFingerprintKnowable -Fingerprint $entry.Fingerprint)) { continue }
+            $named = $known.ContainsKey($entry.Name)
+            if ($named -and $entry.Fingerprint -in $known[$entry.Name] -and (Test-PersistenceFingerprintKnowable -Fingerprint $entry.Fingerprint)) { continue }
             New-PersistenceFinding -Area $area -Item $entry -Changed:$named -RecordedAt $recorded.RecordedAt
         }
         $present = [System.Collections.Generic.HashSet[string]]::new([string[]]@($items | ForEach-Object { $_.Name }), [StringComparer]::OrdinalIgnoreCase)
-        foreach ($name in @($recorded.Items.Keys | Where-Object { -not $present.Contains($_) } | Sort-Object)) {
+        foreach ($name in @($known.Keys | Where-Object { -not $present.Contains($_) } | Sort-Object)) {
             $removed = [pscustomobject]@{ Name = $name; Fingerprint = $script:RemovedFingerprint; Program = ''; InUserFolder = $false }
             New-PersistenceFinding -Area $area -Item $removed -RecordedAt $recorded.RecordedAt
         }
