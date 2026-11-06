@@ -98,7 +98,9 @@ $script:GuestSecurityScanWork = {
     function Read-Event {
         <# The events of the log $LogName with these ids, from the last scan to now, newest first; none when there are none or the log is not there. #>
         param([string]$LogName, [int[]]$Id, [int]$Maximum = 5000)
-        try { return @(Get-WinEvent -FilterHashtable @{ LogName = $LogName; Id = $Id; StartTime = $from; EndTime = $collectedDate } -MaxEvents $Maximum -ErrorAction Stop) }
+        # In local time: Windows PowerShell 5.1 reads StartTime and EndTime as local whatever their kind, so a UTC time is hours off (#344).
+        $filter = @{ LogName = $LogName; Id = $Id; StartTime = $from.ToLocalTime(); EndTime = $collectedDate.ToLocalTime() }
+        try { return @(Get-WinEvent -FilterHashtable $filter -MaxEvents $Maximum -ErrorAction Stop) }
         catch {
             if ("$($_.FullyQualifiedErrorId)" -like 'NoMatchingEventsFound*' -or "$($_.FullyQualifiedErrorId)" -like 'NoMatchingLogsFound*') { return @() }
             throw
@@ -327,6 +329,7 @@ $script:GuestSecurityScanWork = {
 
     $checks.PowerShellScript = Read-Check 'PowerShellScript' {
         $logs = [ordered]@{ PowerShell = 'Microsoft-Windows-PowerShell/Operational'; PowerShellCore = 'PowerShellCore/Operational' }
+        $skipped = 0
         $suspicious = foreach ($name in $logs.Keys) {
             foreach ($record in @(Read-Event -LogName $logs[$name] -Id 4104 -Maximum 10000)) {
                 $text = "$((Get-EventData $record).ScriptBlockText)"
@@ -334,10 +337,14 @@ $script:GuestSecurityScanWork = {
                 for ($index = 0; $index -lt $scriptPatterns.Count; $index++) {
                     # A pattern that takes too long on a script counts as no match.
                     try { if ([regex]::IsMatch($text, $scriptPatterns[$index], [Text.RegularExpressions.RegexOptions]::None, [timespan]::FromSeconds(2))) { $matched += $index } }
-                    catch [System.Text.RegularExpressions.RegexMatchTimeoutException] { Add-ScanNote -Level 'WARN' -Text 'Security scan: a script block took too long to test and was skipped' }
+                    catch [System.Text.RegularExpressions.RegexMatchTimeoutException] { $skipped++ }
                 }
                 if ($matched.Count -gt 0) { @{ Log = $name; Time = (Get-EventTime $record); BlockId = (Get-EventData $record).ScriptBlockId; Matched = @($matched) } }
             }
+        }
+        if ($skipped -gt 0) {
+            $blocks = if ($skipped -eq 1) { '1 script block' } else { "$skipped script blocks" }
+            Add-ScanNote -Level 'WARN' -Text "Security scan: $blocks took too long to test against one of the patterns, so were not checked for it"
         }
         @{ Events = @($suspicious | Select-Object -First 25) }
     }

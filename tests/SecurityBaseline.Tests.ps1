@@ -215,6 +215,56 @@ Describe 'ConvertTo-PersistenceFinding' {
     }
 }
 
+Describe 'Scheduled tasks Windows re-creates under a new GUID (#344)' {
+    BeforeAll {
+        $softLanding = '\SoftLanding\S-1-5-21-1-2-3-1000\SoftLandingDeferralTask-{0}'
+        function New-SoftLandingFact {
+            param([string]$Guid, [string]$Fingerprint = 'bb8e18448bb7')
+            $facts = New-PersistenceFact
+            $facts.ScheduledTask += [pscustomobject]@{ Name = ($softLanding -f "{$Guid}"); Fingerprint = $Fingerprint; Program = ''; InUserFolder = $false }
+            return $facts
+        }
+    }
+
+    It 'are not new or removed when only the GUID in the name changed' {
+        $baseline = New-TestBaseline -Item (New-SoftLandingFact -Guid '72a3f997-3fe8-41bc-8d37-9bbc67ffcc80')
+
+        $found = @(ConvertTo-TestPersistenceFinding -Item (New-SoftLandingFact -Guid '34a65aa0-5e78-405d-8978-3a9da2956460') -Baseline $baseline)
+
+        $found.Count | Should -Be 0
+    }
+
+    It 'are still reported as changed when what they run changed, by a name without the GUID, so the Id stays the same' {
+        $baseline = New-TestBaseline -Item (New-SoftLandingFact -Guid '72a3f997-3fe8-41bc-8d37-9bbc67ffcc80')
+
+        $found = @(ConvertTo-TestPersistenceFinding -Item (New-SoftLandingFact -Guid '34A65AA0-5E78-405D-8978-3A9DA2956460' -Fingerprint '999999999999') -Baseline $baseline)
+
+        $found.Count | Should -Be 1
+        $found[0].Id | Should -Be ('ScheduledTask:' + ($softLanding -f '{GUID}') + ':999999999999')
+        $found[0].Title | Should -BeLike 'Changed scheduled task:*'
+    }
+
+    It 'are matched against a baseline recorded with the GUID in the name, as LazyVM 6.7.1 and earlier recorded it' {
+        $raw = InModuleScope $module -Parameters @{ Name = ($softLanding -f '{72a3f997-3fe8-41bc-8d37-9bbc67ffcc80}') } {
+            param($Name)
+            $known = New-PersistenceKnownTable
+            Add-PersistenceKnownFingerprint -Known $known -Name $Name -Fingerprint 'bb8e18448bb7'
+            $baseline = New-PersistenceBaseline -Item (ConvertTo-Json -InputObject @{ ScheduledTask = @() } | ConvertFrom-Json) -RecordedAt ([datetimeoffset]::Now) -Area ScheduledTask
+            $baseline.ScheduledTask.Items = $known
+            $baseline
+        }
+        $facts = [pscustomobject]@{ ScheduledTask = @([pscustomobject]@{ Name = ($softLanding -f '{34a65aa0-5e78-405d-8978-3a9da2956460}'); Fingerprint = 'bb8e18448bb7'; Program = ''; InUserFolder = $false }) }
+
+        @(ConvertTo-TestPersistenceFinding -Item $facts -Baseline $raw).Count | Should -Be 0
+    }
+
+    It 'leaves the GUIDs of other areas alone' {
+        $name = InModuleScope $module { Get-PersistenceItemKey -Area 'Service' -Name 'Svc-{72a3f997-3fe8-41bc-8d37-9bbc67ffcc80}' }
+
+        $name | Should -Be 'Svc-{72a3f997-3fe8-41bc-8d37-9bbc67ffcc80}'
+    }
+}
+
 Describe 'New-PersistenceBaseline' {
     It 'records the fingerprint of each item of each area the guest read, and leaves out an area it could not, and an item it could not fingerprint' {
         $facts = New-PersistenceFact
