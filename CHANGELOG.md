@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.7.1](https://github.com/downerboy/LazyVM/compare/v6.7.0...v6.7.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* write settings, configuration, templates and schemas as UTF-8 without a BOM ([#342](https://github.com/downerboy/LazyVM/issues/342)) ([e1b2695](https://github.com/downerboy/LazyVM/commit/e1b269529475b4bb1b67cb5d443df5b4e8db6b8d))
+
 ## [6.7.0](https://github.com/downerboy/LazyVM/compare/v6.6.2...v6.7.0) (2026-11-06)
 
 
