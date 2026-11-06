@@ -51,12 +51,8 @@ function Invoke-GuestSecurityScan {
         return
     }
 
-    Write-LogEntry 'Security scan: Defender quick scan, then the security settings and the places programs start from...' 'INFO'
-    $facts = Get-GuestSecurityFact -VM $VM
-    # Registered before the persistence is read, so the opener's task is as LazyVM leaves it.
-    Install-GuestSecurityFindingOpener -VM $VM
-    $persistence = Get-GuestPersistenceItem -VM $VM
-    $scannedAt = [datetimeoffset]::Parse([string]$facts.CollectedAt, [cultureinfo]::InvariantCulture).ToLocalTime()
+    Write-LogEntry 'Security scan: Defender quick scan, then the security settings, what happened since the last scan and the places programs start from...' 'INFO'
+    # The last scan first: what happened since then is what the guest reads.
     $previous = Read-SecurityFindingRecord -VM $VM
     $since = $null
     $previousFindings = @()
@@ -66,6 +62,11 @@ function Invoke-GuestSecurityScan {
         $previousFindings = $previous.Findings
         $previouslyUnchecked = $previous.Unchecked
     }
+    $facts = Get-GuestSecurityFact -VM $VM -Since $since
+    # Registered before the persistence is read, so the opener's task is as LazyVM leaves it.
+    Install-GuestSecurityFindingOpener -VM $VM
+    $persistence = Get-GuestPersistenceItem -VM $VM
+    $scannedAt = [datetimeoffset]::Parse([string]$facts.CollectedAt, [cultureinfo]::InvariantCulture).ToLocalTime()
     $baseline = Read-SecurityBaseline -VM $VM
     if (-not $baseline.Readable) { $persistence = $null }
     $upgraded = @(Update-LegacyPersistenceBaseline -Baseline $baseline.Persistence -Item $persistence)
@@ -249,14 +250,23 @@ function Get-GuestSecurityFact {
       Runs the collector in the guest as SYSTEM, which the Defender cmdlets
       and some of the settings need, within its time budget, and logs what
       it reports about itself, such as an area it could not read. Returns
-      its facts: CollectedAt, Notes, and Checks by area. Its only argument
-      is the quick scan's time limit; nothing secret is passed.
+      its facts: CollectedAt, Notes, and Checks by area. Its arguments are
+      the quick scan's time limit, when the last scan collected ($Since,
+      $null for the first scan: the events and crash files since then are
+      read), the patterns script blocks are tested against and how many
+      hours the first scan reads back; nothing secret is passed.
     #>
     [OutputType([pscustomobject])]
-    param([Parameter(Mandatory)][VMContext]$VM)
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [AllowNull()][object]$Since
+    )
+
+    $sinceText = if ($null -ne $Since) { ([datetimeoffset]$Since).UtcDateTime.ToString('o', [cultureinfo]::InvariantCulture) } else { '' }
+    $scriptPattern = @($script:SuspiciousPowerShell | ForEach-Object { $_.Pattern })
 
     $json = Invoke-GuestTask -VM $VM -TaskName "${script:TaskPrefix}security-scan" -Activity 'security scan' -TimeoutMinutes $script:SecurityScanTimeoutMinutes `
-        -Work $script:GuestSecurityScanWork -ArgumentList @($script:SecurityQuickScanMinutes)
+        -Work $script:GuestSecurityScanWork -ArgumentList @($script:SecurityQuickScanMinutes, $sinceText, $scriptPattern, $script:SecurityEventFirstScanHours)
     $facts = ConvertFrom-Json -InputObject $json -DateKind String
     Write-GuestNote -Notes @($facts.Notes)
     return $facts

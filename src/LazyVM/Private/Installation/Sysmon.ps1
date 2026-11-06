@@ -11,7 +11,8 @@ function Set-GuestSysmon {
     <#
       Sets up Sysmon in the guest, at every build and every night: turns
       the feature on if it is off, installs Sysmon with the configuration
-      in Data\Sysmon if it is not installed, and sets a 256 MB event log.
+      in Data\Sysmon if it is not installed, and gives its event log at least
+      256 MB, circular (the event logging step's rule: a bigger log keeps its size).
       The hash of the configuration last applied is kept in the guest's
       LazyVM registry key, so the configuration is applied again (sysmon -c,
       no restart) only when a LazyVM release ships a different one. A
@@ -92,11 +93,9 @@ function Set-GuestSysmon {
                 $notes += New-GuestNote -Level INFO -Text 'Sysmon: running with LazyVM''s configuration'
             }
 
-            $log = New-Object -TypeName System.Diagnostics.Eventing.Reader.EventLogConfiguration -ArgumentList 'Microsoft-Windows-Sysmon/Operational'
-            if ($log.MaximumSizeInBytes -ne $eventLogSizeBytes) {
-                $log.MaximumSizeInBytes = $eventLogSizeBytes
-                $log.SaveChanges()
-                $notes += New-GuestNote -Level OK -Text "Sysmon: event log size set to $($eventLogSizeBytes / 1MB) MB"
+            # The event logging step's rule (#298): at least this size, circular, never smaller than it is.
+            if (Set-GuestEventLogMinimum -Name 'Microsoft-Windows-Sysmon/Operational' -MinimumSizeInBytes $eventLogSizeBytes) {
+                $notes += New-GuestNote -Level OK -Text "Sysmon: event log set to at least $($eventLogSizeBytes / 1MB) MB, overwriting its oldest events"
             }
             return $notes
         }

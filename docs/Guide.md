@@ -381,6 +381,7 @@ What it checks:
 - **Microsoft Defender:** a quick scan every night, then whether Defender Antivirus, real-time protection and tamper protection are on, whether its virus definitions are more than 7 days old, and every threat it detected since the last scan.
 - **Settings, measured against the Microsoft security baseline:** the firewall profiles, User Account Control, BitLocker on each disk, the old SMB 1 protocol, Network Level Authentication for Remote Desktop, the Guest account, LSA protection, Secure Boot, virtualization-based security (VBS), AutoRun, and whether Windows updates are paused.
 - **Automatic sign-in** is on by design ([section 5](#5-the-90-day-cycle), step 12), so it is listed as Info.
+- **What happened since the last scan** (the first scan reads back 24 hours), from the event logs and the crash folders. See [What happened since the last scan](#what-happened-since-the-last-scan).
 - **The places a program can start itself again**, compared with the known-good baseline recorded after the build: scheduled tasks, services, the Run and RunOnce keys (for all users and for the guest account), the startup folders (All users and the guest account's), WMI event subscriptions, local users and the members of Administrators. See [The persistence baseline](#the-persistence-baseline).
 
 The scan runs in the VM as SYSTEM, with up to 20 minutes for the Defender and settings checks and 15 of them for the quick scan, and up to 10 more for the places programs start from; a quick scan that takes longer is stopped and runs again the next night. A check that cannot be read is logged and the others still run; its findings from the night before stay open rather than being taken as resolved. When the findings cannot be written to the VM, the scan is not kept, so its new findings are still new the next night.
@@ -414,6 +415,26 @@ Get-LazyVMSecurityFinding -Name DevBox | Where-Object Status -ne 'Resolved'
 ```
 
 `GuestSecurityScan = false` in the VM's `VM.json` turns the scan off. The findings file and the task that opens it stay in the VM as they are.
+
+#### What happened since the last scan
+
+The scan also reads the events and files written since the previous scan collected. Only who, what and when leave the VM: never a script's text, a command line or a file's content.
+
+| Id starts with | Severity | What it means |
+|---|---|---|
+| `LogCleared:` | High | The Security log was cleared (event 1102), or another log was (event 104 in the System log). |
+| `SignIn:BruteForce:` | High | At least 5 failed sign-ins (event 4625, wrong password or unknown user) for one account from one source within 5 minutes, then a successful one (event 4624: interactive, network or remote) for that account from that source within 5 minutes of the last failure. It names the account, the source, the number of failures and the time of the success. Failures that no success follows are not reported. |
+| `SignIn:Spraying:` | Medium | At least 3 accounts failing from one source within 5 minutes, then one of them signing in from there within 5 minutes. |
+| `AccountChange:AdminAdded:` | High | A user was added to Administrators (event 4732). |
+| `AccountChange:UserCreated:` | Medium | A user was created (event 4720). |
+| `AccountChange:ServiceInstalled:` | Medium | A service was installed (events 7045 and 4697). Sysmon's, which LazyVM installs, is left out. |
+| `Sysmon:LsassAccess:` | High | A program opened LSASS with the access that reads its memory (Sysmon event 10). LazyVM's Sysmon configuration records only that. |
+| `Sysmon:RemoteThread:` | Medium | A program started a thread in another process (Sysmon event 8). |
+| `Sysmon:StartedFromTemp:` | Low | A program ran from a Temp or Downloads folder (Sysmon event 1). One finding for each program, however often it ran. |
+| `PowerShellScript:` | Medium | A script block (event 4104, in Windows PowerShell's or PowerShell 7's log) that starts PowerShell with an encoded command, decodes text and runs it, downloads text and runs it, or builds its text one character at a time. The finding names the script block, so you can read it in Event Viewer. |
+| `CrashDump:` | Low | New files in `Minidump`, `LiveKernelReports` or the Windows error reporting folder. One finding for each folder. |
+
+An event is reported by the scan after it happened, and is resolved by the scan after that: it does not stay open. Approving one covers only that occurrence. Defender's own detections (events 1116 and 1117) are not read from the log: Defender's list of detections, above, already has each one.
 
 #### Which severities alert you
 
@@ -646,8 +667,8 @@ When BitLocker asks for a recovery key, it shows the start of a key ID: type the
 
 Each VM runs the [Sysmon built into Windows 11](https://learn.microsoft.com/windows/security/operating-system-security/sysmon/overview). It records what happens in the VM, such as programs started, network connections from unusual places, and files and registry keys that malware uses to stay, so you can look back if something odd happened. It only records: it blocks nothing and raises no alerts.
 
-- **Where the events are:** Event Viewer, under **Applications and Services Logs > Microsoft > Windows > Sysmon > Operational**. They stay in the VM; nothing is sent anywhere. The log holds 256 MB, then overwrites the oldest events.
-- **The configuration:** [SwiftOnSecurity's sysmon-config](https://github.com/SwiftOnSecurity/sysmon-config) (Creative Commons Attribution 4.0), copied into LazyVM at a fixed commit as `Data\Sysmon\sysmonconfig.xml`, never downloaded. LazyVM's additions, marked `LazyVM:` in the file, leave out the build noise of Visual Studio, MSBuild, the .NET SDK, NuGet and SQL Server. What those programs start elsewhere, such as a build event's `cmd.exe` or a SQL Agent job step, is still recorded.
+- **Where the events are:** Event Viewer, under **Applications and Services Logs > Microsoft > Windows > Sysmon > Operational**. They stay in the VM; nothing is sent anywhere. The log holds at least 256 MB, then overwrites the oldest events: the same rule as the other logs ([Event logging](#event-logging)), so a log you made bigger keeps its size.
+- **The configuration:** [SwiftOnSecurity's sysmon-config](https://github.com/SwiftOnSecurity/sysmon-config) (Creative Commons Attribution 4.0), copied into LazyVM at a fixed commit as `Data\Sysmon\sysmonconfig.xml`, never downloaded. LazyVM's additions, marked `LazyVM:` in the file, leave out the build noise of Visual Studio, MSBuild, the .NET SDK, NuGet and SQL Server, and record a program opening LSASS with the access that reads its memory, which the [security scan](#what-happened-since-the-last-scan) looks for. What those programs start elsewhere, such as a build event's `cmd.exe` or a SQL Agent job step, is still recorded.
 - **Checked every night:** every build and every night, LazyVM turns the Sysmon feature on if it is off, installs Sysmon if it is missing, applies the configuration if LazyVM ships a newer one than the VM last got, and sets the log size if it changed. Nothing restarts. If you change Sysmon's configuration by hand with `sysmon -c`, LazyVM does not notice and leaves it until it next ships a new configuration.
 - **When it cannot:** Windows ISOs from before February 2026 have no built-in Sysmon; LazyVM logs that and tries again each night, so Sysmon starts once Windows Update brings it. A standalone Sysmon from Sysinternals cannot run beside the built-in one, so LazyVM leaves it alone and says so in the log. Nothing here ever stops a build or a maintenance run.
 
@@ -655,9 +676,9 @@ Each VM runs the [Sysmon built into Windows 11](https://learn.microsoft.com/wind
 
 Each VM keeps the event logs, the audit policy and PowerShell logging at the [Microsoft security baseline for Windows 11](https://learn.microsoft.com/windows/security/operating-system-security/device-management/windows-security-configuration-framework/windows-security-baselines) (version 25H2), so Windows records what you would want to look back at if something odd happened. Everything stays in the VM; nothing is sent anywhere.
 
-- **Log sizes:** Application and System hold 32 MB, Security 192 MB, as the baseline sets. Windows PowerShell holds 32 MB and PowerShell's Operational log 256 MB, as Sysmon's does, because script block logging fills it. Each overwrites its oldest events when full, so logging never stops and old logs never fill `C:`.
+- **Log sizes:** Application and System hold 32 MB, Security 192 MB, as the baseline sets. Windows PowerShell holds 32 MB, and the Operational logs of Windows PowerShell and of PowerShell 7 (`PowerShellCore/Operational`, only where PowerShell 7 is installed) 256 MB each, as Sysmon's does, because script block logging fills them. Each overwrites its oldest events when full, so logging never stops and old logs never fill `C:`.
 - **Audit policy:** the baseline's advanced audit policy, such as logons, account and group changes, process creation (event 4688), changes to the audit policy itself and firewall rule changes. The command line of each process started is recorded with it.
-- **PowerShell:** script block logging (event 4104 in PowerShell's Operational log) records the code each script runs. Module logging stays off, as in the baseline: it records the values every command is given, which would put the passwords LazyVM passes inside the VM, such as BitLocker recovery passwords, in the log in clear text.
+- **PowerShell:** script block logging (event 4104 in the Operational log of Windows PowerShell, and of PowerShell 7 where it is installed, which has policy keys of its own) records the code each script runs. Module logging stays off, as in the baseline: it records the values every command is given, which would put the passwords LazyVM passes inside the VM, such as BitLocker recovery passwords, in the log in clear text.
 - **Checked every night:** every build and every night, LazyVM puts back only what is missing. A log you made bigger keeps its size, and auditing you turned on is never turned off. Nothing restarts. `GuestEventLogging` set to `false` leaves all of it as it is.
 - **When it cannot:** a failure is logged and the next night tries again. Nothing here ever stops a build or a maintenance run.
 

@@ -59,6 +59,7 @@ Describe 'Get-EventLogSizeFix' {
         @{ Name = 'System'; Size = 32 }
         @{ Name = 'Windows PowerShell'; Size = 32 }
         @{ Name = 'Microsoft-Windows-PowerShell/Operational'; Size = 256 }
+        @{ Name = 'PowerShellCore/Operational'; Size = 256 }
     ) {
         $fixes = @(InModuleScope $module -Parameters @{ Logs = (New-TestLogState -Size 1MB) } { param($Logs) Get-EventLogSizeFix -Log $Logs })
 
@@ -67,11 +68,18 @@ Describe 'Get-EventLogSizeFix' {
         $fix[0].MaximumSizeInBytes | Should -Be ($Size * 1MB)
     }
 
-    It 'sizes PowerShell''s Operational log as Sysmon''s, from the one constant both use' {
-        $sizes = InModuleScope $module { @{ Shared = $script:GuestBusyEventLogSize; PowerShell = $script:GuestEventLogMinimumSize['Microsoft-Windows-PowerShell/Operational'] } }
+    It 'sizes the PowerShell Operational logs, Windows PowerShell''s and PowerShell 7''s, as Sysmon''s, from the one constant they all use' {
+        $sizes = InModuleScope $module {
+            @{
+                Shared         = $script:GuestBusyEventLogSize
+                PowerShell     = $script:GuestEventLogMinimumSize['Microsoft-Windows-PowerShell/Operational']
+                PowerShellCore = $script:GuestEventLogMinimumSize['PowerShellCore/Operational']
+            }
+        }
 
         $sizes.Shared | Should -Be 256MB
         $sizes.PowerShell | Should -Be $sizes.Shared
+        $sizes.PowerShellCore | Should -Be $sizes.Shared
     }
 
     It 'keeps a log someone made bigger at its size' {
@@ -149,28 +157,45 @@ Describe 'Get-AuditPolicyFix' {
 
 Describe 'Get-LoggingPolicyValueFix' {
     It 'finds nothing to fix when every value is set' {
-        $fixes = @(InModuleScope $module -Parameters @{ Values = (New-TestPolicyValueState) } { param($Values) Get-LoggingPolicyValueFix -Value $Values })
+        $fixes = @(InModuleScope $module -Parameters @{ Values = (New-TestPolicyValueState); Logs = (New-TestLogState) } { param($Values, $Logs) Get-LoggingPolicyValueFix -Value $Values -Log $Logs })
 
         $fixes.Count | Should -Be 0
     }
 
     It 'turns on <What>' -ForEach @(
         @{ What = 'the command line in process creation events'; Name = 'ProcessCreationIncludeCmdLine_Enabled' }
-        @{ What = 'PowerShell script block logging'; Name = 'EnableScriptBlockLogging' }
         @{ What = 'the audit subcategories over the old categories'; Name = 'SCENoApplyLegacyAuditPolicy' }
     ) {
-        $fixes = @(InModuleScope $module -Parameters @{ Values = (New-TestPolicyValueState -Value $null) } { param($Values) Get-LoggingPolicyValueFix -Value $Values })
+        $fixes = @(InModuleScope $module -Parameters @{ Values = (New-TestPolicyValueState -Value $null); Logs = (New-TestLogState) } { param($Values, $Logs) Get-LoggingPolicyValueFix -Value $Values -Log $Logs })
 
         $fix = @($fixes | Where-Object Name -eq $Name)
         $fix.Count | Should -Be 1
         $fix[0].Value | Should -Be 1
     }
 
+    It 'turns on script block logging for Windows PowerShell and for PowerShell 7, each under its own policy key (#297)' {
+        $fixes = @(InModuleScope $module -Parameters @{ Values = (New-TestPolicyValueState -Value $null); Logs = (New-TestLogState) } { param($Values, $Logs) Get-LoggingPolicyValueFix -Value $Values -Log $Logs })
+
+        $paths = @($fixes | Where-Object Name -eq 'EnableScriptBlockLogging' | ForEach-Object Path)
+        $paths | Should -Contain 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging'
+        $paths | Should -Contain 'HKLM:\SOFTWARE\Policies\Microsoft\PowerShellCore\ScriptBlockLogging'
+        $paths.Count | Should -Be 2
+    }
+
+    It 'leaves PowerShell 7''s policy alone in a guest where its log is not there, because PowerShell 7 is not installed (#297)' {
+        $logs = @(New-TestLogState | Where-Object Name -ne 'PowerShellCore/Operational')
+
+        $fixes = @(InModuleScope $module -Parameters @{ Values = (New-TestPolicyValueState -Value $null); Logs = $logs } { param($Values, $Logs) Get-LoggingPolicyValueFix -Value $Values -Log $Logs })
+
+        @($fixes | Where-Object Path -like '*PowerShellCore*').Count | Should -Be 0
+        @($fixes | Where-Object Name -eq 'EnableScriptBlockLogging').Count | Should -Be 1
+    }
+
     It 'sets a value someone changed back' {
         $values = New-TestPolicyValueState
         $values[0].Value = 0
 
-        $fixes = @(InModuleScope $module -Parameters @{ Values = $values } { param($Values) Get-LoggingPolicyValueFix -Value $Values })
+        $fixes = @(InModuleScope $module -Parameters @{ Values = $values; Logs = (New-TestLogState) } { param($Values, $Logs) Get-LoggingPolicyValueFix -Value $Values -Log $Logs })
 
         $fixes.Count | Should -Be 1
         $fixes[0].Name | Should -Be $values[0].Name
@@ -287,6 +312,67 @@ Describe 'Get-GuestLoggingState' {
         $backups.Count | Should -Be 1
         Split-Path -Path $backups[0] -Parent | Should -Be $folder
         Should -Invoke Remove-Item -Times 1 -Exactly -ParameterFilter { $LiteralPath -eq $backups[0] }
+    }
+}
+
+Describe 'Get-GuestLoggingState and a log that is not there' {
+    It 'reports the logs that are there and leaves out one that is not, such as PowerShell 7''s when it is not installed (#297)' {
+        Mock Invoke-GuestAuditPol { }
+        Mock ConvertFrom-AuditPolicyBackup { @{} }
+        Mock Remove-Item { }
+        Mock Get-ItemProperty { }
+        Mock New-Object {
+            if ($ArgumentList -eq 'PowerShellCore/Operational') {
+                # What Windows PowerShell 5.1 throws for a channel that does not exist.
+                throw [System.Management.Automation.MethodInvocationException]::new('The specified channel could not be found.', [System.IO.FileNotFoundException]::new('EventLogNotFoundException'))
+            }
+            [pscustomobject]@{ MaximumSizeInBytes = 1MB; LogMode = 'Circular' }
+        }
+
+        $state = Get-GuestLoggingState -LogName @('Security', 'PowerShellCore/Operational') -PolicyValue @([pscustomobject]@{ Path = 'HKLM:\SOFTWARE\Test'; Name = 'Value' }) -Folder (Join-Path $TestDrive 'Staging')
+
+        @($state.Logs | ForEach-Object Name) | Should -Be @('Security')
+    }
+
+    It 'still fails for any other error reading a log' {
+        Mock Invoke-GuestAuditPol { }
+        Mock ConvertFrom-AuditPolicyBackup { @{} }
+        Mock Remove-Item { }
+        Mock New-Object { throw [System.UnauthorizedAccessException]::new('Access is denied') }
+
+        { Get-GuestLoggingState -LogName @('Security') -PolicyValue @([pscustomobject]@{ Path = 'HKLM:\SOFTWARE\Test'; Name = 'Value' }) -Folder (Join-Path $TestDrive 'Staging') } | Should -Throw '*Access is denied*'
+    }
+}
+
+Describe 'Set-GuestEventLogMinimum' {
+    It 'raises a smaller log to the size and makes it circular, and says it changed it (#298)' {
+        Mock New-Object { [pscustomobject]@{ MaximumSizeInBytes = 1MB; LogMode = 'Circular' } }
+        Mock Set-GuestEventLogSize { }
+
+        $changed = Set-GuestEventLogMinimum -Name 'Microsoft-Windows-Sysmon/Operational' -MinimumSizeInBytes 256MB
+
+        $changed | Should -BeTrue
+        Should -Invoke Set-GuestEventLogSize -Times 1 -Exactly -ParameterFilter { $Name -eq 'Microsoft-Windows-Sysmon/Operational' -and $MaximumSizeInBytes -eq 256MB }
+    }
+
+    It 'keeps a log someone made bigger at its size, and makes it circular if it is not (#298)' {
+        Mock New-Object { [pscustomobject]@{ MaximumSizeInBytes = 1GB; LogMode = 'Retain' } }
+        Mock Set-GuestEventLogSize { }
+
+        $changed = Set-GuestEventLogMinimum -Name 'Microsoft-Windows-Sysmon/Operational' -MinimumSizeInBytes 256MB
+
+        $changed | Should -BeTrue
+        Should -Invoke Set-GuestEventLogSize -Times 1 -Exactly -ParameterFilter { $MaximumSizeInBytes -eq 1GB }
+    }
+
+    It 'leaves a log that is big enough and circular alone, and says it did (#298)' {
+        Mock New-Object { [pscustomobject]@{ MaximumSizeInBytes = 512MB; LogMode = 'Circular' } }
+        Mock Set-GuestEventLogSize { }
+
+        $changed = Set-GuestEventLogMinimum -Name 'Microsoft-Windows-Sysmon/Operational' -MinimumSizeInBytes 256MB
+
+        $changed | Should -BeFalse
+        Should -Invoke Set-GuestEventLogSize -Times 0 -Exactly
     }
 }
 

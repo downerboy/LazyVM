@@ -71,6 +71,13 @@ $script:SecurityCheck = [ordered]@{
     AutoRun           = { param($fact) Get-AutoRunFinding -Fact $fact }
     WindowsUpdate     = { param($fact, $scan) Get-WindowsUpdatePauseFinding -Fact $fact -ScannedAt $scan.ScannedAt }
     AutoLogon         = { param($fact) Get-AutoLogonFinding -Fact $fact }
+    # What happened since the last scan (SecurityEvent.ps1).
+    LogCleared        = { param($fact) Get-LogClearedFinding -Fact $fact }
+    SignIn            = { param($fact) Get-SignInFinding -Fact $fact }
+    AccountChange     = { param($fact) Get-AccountChangeFinding -Fact $fact }
+    Sysmon            = { param($fact) Get-SysmonFinding -Fact $fact }
+    PowerShellScript  = { param($fact) Get-PowerShellScriptFinding -Fact $fact }
+    CrashDump         = { param($fact) Get-CrashDumpFinding -Fact $fact }
 }
 
 function ConvertTo-SecurityFinding {

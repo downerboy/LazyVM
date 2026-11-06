@@ -29,6 +29,12 @@ BeforeAll {
             AutoRun           = @{ NoAutorun = 1; NoDriveTypeAutoRun = 255 }
             WindowsUpdate     = @{ PausedUntil = @() }
             AutoLogon         = @{ On = $false }
+            LogCleared        = @{ Events = @() }
+            SignIn            = @{ Events = @() }
+            AccountChange     = @{ Events = @() }
+            Sysmon            = @{ Events = @() }
+            PowerShellScript  = @{ Events = @() }
+            CrashDump         = @{ Items = @() }
         }
         return (ConvertTo-Json -InputObject $checks -Depth 6 | ConvertFrom-Json -DateKind String)
     }
@@ -453,6 +459,17 @@ Describe 'Invoke-GuestSecurityScan' {
         Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Message -match 'turned off in the settings \(GuestSecurityScan\)' }
     }
 
+    It 'has the guest read from when the last scan collected, and from the first scan''s window when there was none (#290)' {
+        $vm = New-TestVM -Root (New-TestRoot)
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
+        $script:collectedAt = '2026-11-03T10:40:00.0000000Z'
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
+
+        Should -Invoke -ModuleName $module Get-GuestSecurityFact -Times 1 -Exactly -ParameterFilter { $null -eq $Since }
+        Should -Invoke -ModuleName $module Get-GuestSecurityFact -Times 1 -Exactly -ParameterFilter { $null -ne $Since -and ([datetimeoffset]$Since) -eq [datetimeoffset]'2026-11-02T10:40:00Z' }
+    }
+
     It 'keeps the findings, logs each one, and asks the guest to open the desktop file for new High ones, once' {
         $vm = New-TestVM -Root (New-TestRoot)
         $script:check.SMBv1.Enabled = $true
@@ -552,6 +569,32 @@ Describe 'Get-GuestSecurityFact' {
             -not $AsGuestUser -and $TimeoutMinutes -eq 20 -and "$Work" -eq $expected -and $ArgumentList[0] -eq 15
         }
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Defender quick scan finished*' -and $Level -eq 'OK' }
+    }
+
+    It 'has the guest read the first scan''s window, 24 hours back, when there is no earlier scan (#290)' {
+        $vm = New-TestVM -Root (New-TestRoot)
+
+        $null = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-GuestSecurityFact -VM $VM -Since $null }
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter { $ArgumentList[1] -eq '' -and $ArgumentList[3] -eq 24 }
+    }
+
+    It 'has the guest read the events and files since the last scan, in UTC (#290)' {
+        $vm = New-TestVM -Root (New-TestRoot)
+        $since = [datetimeoffset]::new(2026, 11, 2, 2, 40, 0, [timespan]::FromHours(-8))
+
+        $null = InModuleScope $module -Parameters @{ VM = $vm; Since = $since } { param($VM, $Since) Get-GuestSecurityFact -VM $VM -Since $Since }
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter { [datetimeoffset]::Parse($ArgumentList[1]) -eq $since -and $ArgumentList[1] -like '*Z' }
+    }
+
+    It 'gives the guest the patterns script blocks are tested against, and nothing else about them (#290)' {
+        $vm = New-TestVM -Root (New-TestRoot)
+        $patterns = InModuleScope $module { @($script:SuspiciousPowerShell | ForEach-Object { $_.Pattern }) }
+
+        $null = InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Get-GuestSecurityFact -VM $VM }
+
+        Should -Invoke -ModuleName $module Invoke-GuestTask -Times 1 -Exactly -ParameterFilter { ($ArgumentList[2] -join '|') -ceq ($patterns -join '|') -and $ArgumentList.Count -eq 4 }
     }
 }
 
@@ -684,6 +727,136 @@ Describe 'The guest collector' {
             $facts.Checks.$area | Should -BeNullOrEmpty -Because $area
             @($facts.Notes | Where-Object { $_.Level -eq 'WARN' -and $_.Text -like "*read $area *" }).Count | Should -Be 1 -Because $area
         }
+    }
+
+    It 'reads the events the host reviews, and reports only who, what and when, never a script, a command line or a path inside a file (#290)' {
+        function global:New-TestEvent {
+            param([int]$Id, [datetime]$At, [hashtable]$Data = @{}, [switch]$UserData)
+            $fields = ($Data.GetEnumerator() | ForEach-Object { if ($UserData) { "<$($_.Key)>$($_.Value)</$($_.Key)>" } else { "<Data Name='$($_.Key)'>$($_.Value)</Data>" } }) -join ''
+            $body = if ($UserData) { "<UserData><LogFileCleared>$fields</LogFileCleared></UserData>" } else { "<EventData>$fields</EventData>" }
+            $record = [pscustomobject]@{ Id = $Id; TimeCreated = $At }
+            $xml = "<Event>$body</Event>"
+            $record | Add-Member -MemberType ScriptMethod -Name ToXml -Value ({ $xml }.GetNewClosure())
+            return $record
+        }
+        $at = [datetime]::UtcNow.AddHours(-1)
+        $eventsByLog = @{
+            'Security'                                 = @(
+                (New-TestEvent -Id 1102 -At $at -Data @{ SubjectUserName = 'intruder' } -UserData)
+                (New-TestEvent -Id 4720 -At $at -Data @{ TargetUserName = 'newuser'; SubjectUserName = 'sean' })
+                (New-TestEvent -Id 4732 -At $at -Data @{ MemberSid = 'S-1-5-21-1'; MemberName = '-'; TargetSid = 'S-1-5-32-544'; SubjectUserName = 'sean' })
+                (New-TestEvent -Id 4732 -At $at -Data @{ MemberSid = 'S-1-5-21-2'; MemberName = '-'; TargetSid = 'S-1-5-32-545'; SubjectUserName = 'sean' })
+            )
+            'System'                                   = @(
+                (New-TestEvent -Id 104 -At $at -Data @{ Channel = 'Application'; SubjectUserName = 'intruder' } -UserData)
+                (New-TestEvent -Id 7045 -At $at -Data @{ ServiceName = 'EvilSvc'; ImagePath = 'C:\Tools\evil.exe' })
+            )
+            'Microsoft-Windows-Sysmon/Operational'     = @(
+                (New-TestEvent -Id 10 -At $at -Data @{ SourceImage = 'C:\x\dump.exe'; TargetImage = 'C:\Windows\System32\lsass.exe'; GrantedAccess = '0x1010' })
+                (New-TestEvent -Id 1 -At $at -Data @{ Image = 'C:\Users\sean\AppData\Local\Temp\setup.exe'; CommandLine = 'setup.exe --secret hunter2' })
+                (New-TestEvent -Id 1 -At $at -Data @{ Image = 'C:\Windows\System32\notepad.exe' })
+            )
+            'Microsoft-Windows-PowerShell/Operational' = @(
+                (New-TestEvent -Id 4104 -At $at -Data @{ ScriptBlockId = 'b1'; ScriptBlockText = '$b = [Convert]::FromBase64String($secret); iex $b' })
+                (New-TestEvent -Id 4104 -At $at -Data @{ ScriptBlockId = 'b2'; ScriptBlockText = 'Get-Date' })
+            )
+        }
+        Set-Item -Path 'function:global:Get-WinEvent' -Value ({
+                param($FilterHashtable, $MaxEvents)
+                $events = @($eventsByLog[$FilterHashtable.LogName] | Where-Object { $_ -and $_.Id -in $FilterHashtable.Id } | Select-Object -First $MaxEvents)
+                if ($events.Count -eq 0) { $e = [System.Management.Automation.ErrorRecord]::new([Exception]::new('none'), 'NoMatchingEventsFound,Microsoft.PowerShell.Commands.GetWinEventCommand', 'ObjectNotFound', $null); throw $e }
+                $events
+            }.GetNewClosure())
+        try {
+            $patterns = InModuleScope $module { @($script:SuspiciousPowerShell | ForEach-Object { $_.Pattern }) }
+
+            $json = InModuleScope $module -Parameters @{ Patterns = $patterns } { param($Patterns) & $script:GuestSecurityScanWork 0 '' $Patterns 24 }
+            $facts = $json | ConvertFrom-Json
+
+            @($facts.Checks.LogCleared.Events | ForEach-Object { "$($_.Log):$($_.By)" }) | Should -Be @('Security:intruder', 'Application:intruder')
+            @($facts.Checks.AccountChange.Events | ForEach-Object { $_.Id }) | Should -Be @(4720, 4732, 7045)
+            $facts.Checks.AccountChange.Events[1].Name | Should -Be 'S-1-5-21-1'
+            $facts.Checks.AccountChange.Events[2].Path | Should -Be 'C:\Tools\evil.exe'
+            @($facts.Checks.Sysmon.Events | ForEach-Object { $_.Id }) | Should -Be @(10, 1)
+            $facts.Checks.Sysmon.Events[0].Access | Should -Be '0x1010'
+            @($facts.Checks.PowerShellScript.Events).Count | Should -Be 1
+            $facts.Checks.PowerShellScript.Events[0].BlockId | Should -Be 'b1'
+            @($facts.Checks.PowerShellScript.Events[0].Matched) | Should -Be @(1)
+            $json | Should -Not -Match 'hunter2'
+            $json | Should -Not -Match 'FromBase64String'
+        }
+        finally {
+            Remove-Item -Path 'function:global:New-TestEvent' -ErrorAction SilentlyContinue
+            Set-Item -Path 'function:global:Get-WinEvent' -Value { throw 'not available' }
+        }
+    }
+
+    It 'counts a failure only for a wrong password or an unknown user, and a success only for the accounts and sources that failed (#290)' {
+        function global:New-TestEvent {
+            param([int]$Id, [datetime]$At, [hashtable]$Data)
+            $fields = ($Data.GetEnumerator() | ForEach-Object { "<Data Name='$($_.Key)'>$($_.Value)</Data>" }) -join ''
+            $record = [pscustomobject]@{ Id = $Id; TimeCreated = $At }
+            $xml = "<Event><EventData>$fields</EventData></Event>"
+            $record | Add-Member -MemberType ScriptMethod -Name ToXml -Value ({ $xml }.GetNewClosure())
+            return $record
+        }
+        $at = [datetime]::UtcNow.AddHours(-1)
+        $eventsByLog = @{
+            'Security' = @(
+                (New-TestEvent -Id 4625 -At $at -Data @{ TargetUserName = 'sean'; IpAddress = '10.0.0.9'; LogonType = 3; SubStatus = '0xC000006A' })
+                (New-TestEvent -Id 4625 -At $at -Data @{ TargetUserName = 'sean'; IpAddress = '10.0.0.9'; LogonType = 3; SubStatus = '0xC0000071' })
+                (New-TestEvent -Id 4624 -At $at -Data @{ TargetUserName = 'Sean'; IpAddress = '10.0.0.9'; LogonType = 3 })
+                (New-TestEvent -Id 4624 -At $at -Data @{ TargetUserName = 'sean'; IpAddress = '10.0.0.9'; LogonType = 5 })
+                (New-TestEvent -Id 4624 -At $at -Data @{ TargetUserName = 'other'; IpAddress = '10.0.0.9'; LogonType = 3 })
+                (New-TestEvent -Id 4624 -At $at -Data @{ TargetUserName = 'sean'; IpAddress = '10.0.0.77'; LogonType = 3 })
+            )
+        }
+        Set-Item -Path 'function:global:Get-WinEvent' -Value ({
+                param($FilterHashtable, $MaxEvents)
+                $events = @($eventsByLog[$FilterHashtable.LogName] | Where-Object { $_ -and $_.Id -in $FilterHashtable.Id } | Select-Object -First $MaxEvents)
+                if ($events.Count -eq 0) { $e = [System.Management.Automation.ErrorRecord]::new([Exception]::new('none'), 'NoMatchingEventsFound,Microsoft.PowerShell.Commands.GetWinEventCommand', 'ObjectNotFound', $null); throw $e }
+                $events
+            }.GetNewClosure())
+        try {
+            $facts = InModuleScope $module { & $script:GuestSecurityScanWork 0 } | ConvertFrom-Json
+
+            @($facts.Checks.SignIn.Events | ForEach-Object { "$($_.Id):$($_.Account):$($_.Source)" }) | Should -Be @('4625:sean:10.0.0.9', '4624:Sean:10.0.0.9')
+        }
+        finally {
+            Remove-Item -Path 'function:global:New-TestEvent' -ErrorAction SilentlyContinue
+            Set-Item -Path 'function:global:Get-WinEvent' -Value { throw 'not available' }
+        }
+    }
+
+    It 'reads no events, and no failure, from a log that is not there, such as Sysmon''s before it is installed (#290)' {
+        Set-Item -Path 'function:global:Get-WinEvent' -Value {
+            $e = [System.Management.Automation.ErrorRecord]::new([Exception]::new('no log'), 'NoMatchingLogsFound,Microsoft.PowerShell.Commands.GetWinEventCommand', 'ObjectNotFound', $null)
+            throw $e
+        }
+        try {
+            $facts = InModuleScope $module { & $script:GuestSecurityScanWork 0 } | ConvertFrom-Json
+
+            @($facts.Checks.Sysmon.Events).Count | Should -Be 0
+            @($facts.Checks.PowerShellScript.Events).Count | Should -Be 0
+            @($facts.Notes | Where-Object { $_.Level -eq 'WARN' -and $_.Text -like '*read Sysmon *' }).Count | Should -Be 0
+        }
+        finally { Set-Item -Path 'function:global:Get-WinEvent' -Value { throw 'not available' } }
+    }
+
+    It 'reports the new crash files by folder and name, and does not follow a link out of the folder (#290)' {
+        $windows = Join-Path $TestDrive 'Windows'
+        $dump = New-Item -ItemType Directory -Path (Join-Path $windows 'Minidump') -Force
+        Set-Content -LiteralPath (Join-Path $dump 'new.dmp') -Value 'x'
+        $old = Join-Path $dump 'old.dmp'
+        Set-Content -LiteralPath $old -Value 'x'
+        (Get-Item -LiteralPath $old).LastWriteTimeUtc = [datetime]::UtcNow.AddDays(-30)
+        $outside = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'Outside') -Force
+        Set-Content -LiteralPath (Join-Path $outside 'secret.dmp') -Value 'x'
+        New-Item -ItemType Junction -Path (Join-Path $dump 'link') -Target $outside -ErrorAction SilentlyContinue | Out-Null
+        if (-not (Test-Path -LiteralPath (Join-Path $dump 'link'))) { New-Item -ItemType SymbolicLink -Path (Join-Path $dump 'link') -Target $outside | Out-Null }
+        $facts = InModuleScope $module -Parameters @{ Windows = $windows; Data = (Join-Path $TestDrive 'ProgramData') } { param($Windows, $Data) & $script:GuestSecurityScanWork 0 '' @() 24 $Windows $Data } | ConvertFrom-Json
+
+        @($facts.Checks.CrashDump.Items | ForEach-Object { "$($_.Folder):$($_.Name)" }) | Should -Be @('Minidump:new.dmp')
     }
 
     It 'reads the firewall profiles from the active store' {
