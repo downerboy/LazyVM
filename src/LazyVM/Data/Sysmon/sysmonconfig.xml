@@ -480,9 +480,15 @@
 		<!--COMMENT:	Monitor for processes accessing other process' memory.-->
 
 		<!--DATA: UtcTime, SourceProcessGuid, SourceProcessId, SourceThreadId, SourceImage, TargetProcessGuid, TargetProcessId, TargetImage, GrantedAccess, CallTrace-->
-	<RuleGroup name="" groupRelation="or">
+	<!--LAZYVM: Only what the nightly security scan reads (#290): a process opening LSASS with the access that reads its memory (the rights credential dumpers ask for). Both rules must match: the target, and one of the access values.-->
+	<RuleGroup name="LsassMemoryAccess" groupRelation="and">
 		<ProcessAccess onmatch="include">
-			<!--NOTE: Using "include" with no rules means nothing in this section will be logged-->
+			<TargetImage condition="end with">\lsass.exe</TargetImage>
+			<GrantedAccess condition="is">0x1010</GrantedAccess>
+			<GrantedAccess condition="is">0x1410</GrantedAccess>
+			<GrantedAccess condition="is">0x1438</GrantedAccess>
+			<GrantedAccess condition="is">0x143A</GrantedAccess>
+			<GrantedAccess condition="is">0x1FFFFF</GrantedAccess>
 		</ProcessAccess>
 	</RuleGroup>
 

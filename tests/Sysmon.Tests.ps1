@@ -27,6 +27,15 @@ Describe 'The Sysmon configuration LazyVM ships' {
         $text | Should -Match 'Creative Commons Attribution 4.0'
     }
 
+    It 'records a process opening LSASS with the access that reads its memory, and nothing else it opens (event 10, which the security scan reads, #290)' {
+        $group = ([xml]$text).SelectSingleNode('//RuleGroup[ProcessAccess]')
+
+        $group.groupRelation | Should -Be 'and'
+        $group.ProcessAccess.onmatch | Should -Be 'include'
+        $group.SelectSingleNode('ProcessAccess/TargetImage').InnerText | Should -Be '\lsass.exe'
+        @($group.SelectNodes('ProcessAccess/GrantedAccess') | ForEach-Object InnerText) | Should -Be @('0x1010', '0x1410', '0x1438', '0x143A', '0x1FFFFF')
+    }
+
     It 'leaves out the build noise of <What>' -ForEach @(
         @{ What = 'Visual Studio and its MSBuild'; Rule = 'C:\Program Files\Microsoft Visual Studio\' }
         @{ What = 'the Visual Studio Installer'; Rule = 'C:\Program Files (x86)\Microsoft Visual Studio\' }
@@ -85,6 +94,17 @@ Describe 'Set-GuestSysmon' {
         InModuleScope $module { Set-GuestSysmon -VM ([VMContext]::new(@{ VMName = 'Alpha'; GuestSysmon = $true })) }
 
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { $ArgumentList[-1] -eq 'C:\Program Files\LazyVM\Staging' }
+    }
+
+    It 'sizes its event log with the helper the event logging step uses, so it is at least the size and circular and a bigger log is never shrunk (#298)' {
+        Mock -ModuleName $module Invoke-GuestScript { }
+
+        InModuleScope $module { Set-GuestSysmon -VM ([VMContext]::new(@{ VMName = 'Alpha'; GuestSysmon = $true })) }
+
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
+            "$ScriptBlock" -match 'Set-GuestEventLogMinimum -Name ''Microsoft-Windows-Sysmon/Operational'' -MinimumSizeInBytes \$eventLogSizeBytes' -and
+            "$ScriptBlock" -notmatch 'SaveChanges'
+        }
     }
 
     It 'sizes its event log from the constant PowerShell''s Operational log uses too (#291)' {

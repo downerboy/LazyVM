@@ -12,7 +12,10 @@
 # someone turned on is never turned off. The work in the guest is in
 # Data\Guest.Helpers.ps1.
 
-# The smallest size of each log. The Sysmon log is Set-GuestSysmon's (#236).
+# The smallest size of each log. The Sysmon log is Set-GuestSysmon's (#236),
+# which sizes it by the same rule (Set-GuestEventLogMinimum). A log the guest
+# does not have, such as PowerShell 7's where it is not installed, is left
+# out of what the guest reports, so nothing is done for it.
 $script:GuestEventLogMinimumSize = [ordered]@{
     # The baseline's "Specify the maximum log file size (KB)": 32768, 196608 and 32768.
     'Application'                              = 32MB
@@ -20,9 +23,11 @@ $script:GuestEventLogMinimumSize = [ordered]@{
     'System'                                   = 32MB
     # The baseline sets no size for the PowerShell logs. The engine log gets
     # the size of Application and System; script block logging fills the
-    # Operational log, so it is sized as Sysmon's.
+    # Operational logs, Windows PowerShell's and PowerShell 7's (#297), so
+    # they are sized as Sysmon's.
     'Windows PowerShell'                       = 32MB
     'Microsoft-Windows-PowerShell/Operational' = $script:GuestBusyEventLogSize
+    'PowerShellCore/Operational'               = $script:GuestBusyEventLogSize
 }
 
 # The baseline's advanced audit policy (its audit.csv), by subcategory GUID,
@@ -69,6 +74,9 @@ $script:GuestLoggingPolicyValues = @(
     @{ What = 'command lines in process creation events (4688)'; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Audit'; Name = 'ProcessCreationIncludeCmdLine_Enabled'; Value = 1 }
     # "Turn on PowerShell Script Block Logging": Enabled, without invocation events (also CIS 18.10.88.1, DISA STIG WN11-CC-000326).
     @{ What = 'PowerShell script block logging (4104)'; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging'; Name = 'EnableScriptBlockLogging'; Value = 1 }
+    # The same for PowerShell 7 (#297), which has policy keys of its own and logs to PowerShellCore/Operational,
+    # where it is installed: the guest reports that log only then (Log).
+    @{ What = 'PowerShell 7 script block logging (4104)'; Path = 'HKLM:\SOFTWARE\Policies\Microsoft\PowerShellCore\ScriptBlockLogging'; Name = 'EnableScriptBlockLogging'; Value = 1; Log = 'PowerShellCore/Operational' }
 )
 
 function Get-EventLogSizeFix {
@@ -133,13 +141,20 @@ function Get-LoggingPolicyValueFix {
     <#
       The policy values to set, from what the guest reports ($Value: Path,
       Name, Value, $null when missing): each one of LazyVM's that differs.
-      Each fix has the Path, Name, Value and Text for the log.
+      A value that belongs to a log (PowerShell 7's) is only set when the
+      guest reported that log ($Log: Name, ...), as it does where the
+      program that writes it is installed. Each fix has the Path, Name,
+      Value and Text for the log.
     #>
     [OutputType([pscustomobject[]])]
-    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Value)
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Value,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Log
+    )
 
     $fixes = [System.Collections.Generic.List[pscustomobject]]::new()
     foreach ($wanted in $script:GuestLoggingPolicyValues) {
+        if ($wanted.ContainsKey('Log') -and $wanted.Log -notin @($Log | ForEach-Object { $_.Name })) { continue }
         $current = @($Value | Where-Object { $_.Path -eq $wanted.Path -and $_.Name -eq $wanted.Name }) | Select-Object -First 1
         if ($current -and $current.Value -eq $wanted.Value) { continue }
         $fixes.Add([pscustomobject]@{ Path = $wanted.Path; Name = $wanted.Name; Value = $wanted.Value; Text = "turned on $($wanted.What)" })
@@ -176,7 +191,7 @@ function Set-GuestEventLogging {
 
         $logFixes = @(Get-EventLogSizeFix -Log @($state.Logs))
         $auditFixes = @(Get-AuditPolicyFix -Audit $state.Audit)
-        $valueFixes = @(Get-LoggingPolicyValueFix -Value @($state.Values))
+        $valueFixes = @(Get-LoggingPolicyValueFix -Value @($state.Values) -Log @($state.Logs))
         $fixes = @($logFixes) + @($auditFixes) + @($valueFixes)
         if ($fixes.Count -eq 0) {
             Write-LogEntry 'Event logging: already at LazyVM''s settings' 'INFO'

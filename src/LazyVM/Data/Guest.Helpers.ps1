@@ -2173,7 +2173,7 @@ function ConvertFrom-AuditPolicyBackup {
 
 function Get-GuestLoggingState {
     <#
-      The size and mode of each log in $LogName, the audit policy (by
+      The size and mode of each log in $LogName that is there, the audit policy (by
       subcategory GUID) and the value of each registry value in
       $PolicyValue (Path, Name), $null when it is missing. auditpol backs
       the policy up to a file of its own in $Folder, the staging folder,
@@ -2186,7 +2186,14 @@ function Get-GuestLoggingState {
     )
 
     $logs = foreach ($name in $LogName) {
-        $log = New-Object -TypeName System.Diagnostics.Eventing.Reader.EventLogConfiguration -ArgumentList $name
+        try { $log = New-Object -TypeName System.Diagnostics.Eventing.Reader.EventLogConfiguration -ArgumentList $name }
+        catch {
+            # A log that is not there, such as PowerShell 7's where it is not installed (#297): New-Object
+            # wraps the EventLogNotFoundException in a MethodInvocationException. Anything else is a failure.
+            $thrown = @($_.Exception, $_.Exception.InnerException) | Where-Object { $_ }
+            if (@($thrown | Where-Object { $_.GetType().Name -eq 'EventLogNotFoundException' -or $_.Message -match 'EventLogNotFoundException' }).Count -gt 0) { continue }
+            throw
+        }
         [pscustomobject]@{ Name = $name; MaximumSizeInBytes = $log.MaximumSizeInBytes; LogMode = "$($log.LogMode)" }
     }
 
@@ -2218,6 +2225,27 @@ function Set-GuestEventLogSize {
     $log.MaximumSizeInBytes = $MaximumSizeInBytes
     $log.LogMode = [System.Diagnostics.Eventing.Reader.EventLogMode]::Circular
     $log.SaveChanges()
+}
+
+function Set-GuestEventLogMinimum {
+    <#
+      Gives the log $Name at least $MinimumSizeInBytes, overwriting its
+      oldest events when full: a bigger log keeps its size, and a log that
+      is big enough and circular is not touched. The rule of the event
+      logging step (Get-EventLogSizeFix) for a log the guest sets up itself,
+      such as Sysmon's. Returns whether it changed the log.
+    #>
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][long]$MinimumSizeInBytes
+    )
+
+    $log = New-Object -TypeName System.Diagnostics.Eventing.Reader.EventLogConfiguration -ArgumentList $Name
+    $size = [math]::Max([long]$log.MaximumSizeInBytes, $MinimumSizeInBytes)
+    if ($size -eq $log.MaximumSizeInBytes -and "$($log.LogMode)" -eq 'Circular') { return $false }
+    Set-GuestEventLogSize -Name $Name -MaximumSizeInBytes $size
+    return $true
 }
 
 function Enable-GuestAuditSubcategory {
