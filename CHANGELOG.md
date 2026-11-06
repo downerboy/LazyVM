@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.7.2](https://github.com/downerboy/LazyVM/compare/v6.7.1...v6.7.2) (2026-11-06)
+
+
+### Bug Fixes
+
+* read the scan's events in the guest's local time, speed up a script-block pattern, ignore task GUIDs ([#345](https://github.com/downerboy/LazyVM/issues/345)) ([d4c88c5](https://github.com/downerboy/LazyVM/commit/d4c88c5ab1df7dd542661e07d1ed4738d000f218))
+
 ## [6.7.1](https://github.com/downerboy/LazyVM/compare/v6.7.0...v6.7.1) (2026-11-06)
 
 
