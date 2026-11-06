@@ -594,7 +594,8 @@ function Save-GuestWindowsState {
     }
     $zip = Invoke-GuestScript -VM $VM -Activity 'Windows capture archive' -TimeoutMinutes 15 -ArgumentList @($staging, ($summary | ConvertTo-Json -Depth 8), $stagingFolder) -ScriptBlock {
         param($staging, $summaryJson, $stagingFolder)
-        Set-Content -Path (Join-Path $staging 'environment.json') -Value $summaryJson -Encoding UTF8
+        # UTF-8 without a byte order mark (#332), which Windows PowerShell's Set-Content -Encoding UTF8 adds.
+        [IO.File]::WriteAllText((Join-Path $staging 'environment.json'), $summaryJson, (New-Object System.Text.UTF8Encoding $false))
         $zip = Join-Path $stagingFolder 'winstate.zip'
         New-GuestZip -Source $staging -Destination $zip
         return $zip

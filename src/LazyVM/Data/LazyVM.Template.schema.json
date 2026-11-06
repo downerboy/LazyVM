@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "LazyVM config template",
   "description": "A named starting point for a new VM: New-LazyVM -ConfigTemplate <Name> or Build-LazyVM -ConfigTemplate <Name> applies its Settings over the shared template (the defaults and LazyVM.Settings.json). The built-in templates are in the module's Data\\Templates folder, your own in <Root>\\Shared\\Templates.",

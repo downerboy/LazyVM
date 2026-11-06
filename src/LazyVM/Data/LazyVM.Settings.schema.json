@@ -1,4 +1,4 @@
-﻿{
+{
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/downerboy/LazyVM/LazyVM.Settings.schema.json",
   "title": "LazyVM settings",
