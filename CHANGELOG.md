@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.7.3](https://github.com/downerboy/LazyVM/compare/v6.7.2...v6.7.3) (2026-11-07)
+
+
+### Bug Fixes
+
+* turn GuestEventLogging on explicitly in the templates ([#348](https://github.com/downerboy/LazyVM/issues/348)) ([c28de1d](https://github.com/downerboy/LazyVM/commit/c28de1d96f999a657fc98cbeb70c72c3d676d339)), closes [#347](https://github.com/downerboy/LazyVM/issues/347)
+
 ## [6.7.2](https://github.com/downerboy/LazyVM/compare/v6.7.1...v6.7.2) (2026-11-06)
 
 
