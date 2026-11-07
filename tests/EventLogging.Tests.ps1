@@ -383,4 +383,10 @@ Describe 'The GuestEventLogging setting' {
         $schema.properties['GuestEventLogging']['type'] | Should -Be 'boolean'
         $schema.properties['GuestEventLogging']['default'] | Should -BeTrue
     }
+
+    It 'is on in the <Template> template' -ForEach @(@{ Template = 'Developer' }, @{ Template = 'PlainWindows' }) {
+        $template = Get-Content -LiteralPath (Join-Path -Path $script:LazyVMModuleDir -ChildPath "Data\Templates\$Template.json") -Raw | ConvertFrom-Json
+
+        $template.Settings.GuestEventLogging | Should -BeTrue
+    }
 }
