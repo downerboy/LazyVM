@@ -6,6 +6,7 @@
     "InstallSqlServer": true,
     "UseDevDrive": true,
     "GuestDeveloperMode": true,
+    "GuestEventLogging": true,
     "GuestSecurityScan": true
   }
 }

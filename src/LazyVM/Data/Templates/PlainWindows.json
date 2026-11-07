@@ -6,6 +6,7 @@
     "InstallSqlServer": false,
     "UseDevDrive": false,
     "GuestDeveloperMode": false,
+    "GuestEventLogging": true,
     "GuestSecurityScan": true,
     "Tooling": {
       "Version": 1,
