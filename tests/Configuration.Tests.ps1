@@ -944,20 +944,21 @@ Describe 'The built-in config templates' {
         @($template.Settings.Keys | Where-Object { $perVM -contains $_ }) | Should -BeNullOrEmpty
     }
 
-    It 'Developer turns on Visual Studio, SQL Server and its SQL drive, the Dev Drive, Developer Mode and the security scan, whatever LazyVM.Settings.json says' {
+    It 'Developer turns on Visual Studio, SQL Server and its SQL drive, the Dev Drive, Developer Mode, event logging and the security scan, whatever LazyVM.Settings.json says' {
         $values = InModuleScope $module { Read-VMTemplate -Root '' -Name 'Developer' }
 
-        @($values.Keys | Sort-Object) | Should -Be @('GuestDeveloperMode', 'GuestSecurityScan', 'InstallSqlServer', 'InstallVisualStudio', 'UseDevDrive')
+        @($values.Keys | Sort-Object) | Should -Be @('GuestDeveloperMode', 'GuestEventLogging', 'GuestSecurityScan', 'InstallSqlServer', 'InstallVisualStudio', 'UseDevDrive')
         foreach ($setting in $values.Keys) { $values[$setting] | Should -BeTrue -Because $setting }
     }
 
-    It 'PlainWindows has no Visual Studio, no SQL Server or SQL drive, no Dev Drive, no Developer Mode and no tooling, and the security scan' {
+    It 'PlainWindows has no Visual Studio, no SQL Server or SQL drive, no Dev Drive, no Developer Mode and no tooling, and event logging and the security scan' {
         $values = InModuleScope $module { Read-VMTemplate -Root '' -Name 'PlainWindows' }
 
         $values.InstallVisualStudio | Should -BeFalse
         $values.InstallSqlServer | Should -BeFalse
         $values.UseDevDrive | Should -BeFalse
         $values.GuestDeveloperMode | Should -BeFalse
+        $values.GuestEventLogging | Should -BeTrue
         $values.GuestSecurityScan | Should -BeTrue
         @($values.Tooling.Products) | Should -BeNullOrEmpty
         @($values.Tooling.WingetPackages) | Should -BeNullOrEmpty
