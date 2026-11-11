@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.7.5](https://github.com/downerboy/LazyVM/compare/v6.7.4...v6.7.5) (2026-11-11)
+
+
+### Bug Fixes
+
+* run the previous version of Windows Setup, which follows the answer file ([#355](https://github.com/downerboy/LazyVM/issues/355)) ([089405e](https://github.com/downerboy/LazyVM/commit/089405e6e22dec4182802bb896a302f5a74815fd)), closes [#354](https://github.com/downerboy/LazyVM/issues/354)
+
 ## [6.7.4](https://github.com/downerboy/LazyVM/compare/v6.7.3...v6.7.4) (2026-11-11)
 
 
