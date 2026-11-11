@@ -111,7 +111,8 @@ Describe 'The settings schema' {
     It 'rejects a mapped drive in GuestEnvironment that is not a letter and a share' {
         $path = New-TestFile -Text '{ "GuestEnvironment": { "MappedDrives": [ { "Letter": "ZZ", "Path": "C:\\not-a-share" } ] } }'
 
-        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+        # Whatever the PowerShell patch: 7.6.10's Test-Json gives no reason for a problem inside a nested list (#350).
+        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage "*2 problem*'GuestEnvironment, MappedDrives, item 1, Letter'*'GuestEnvironment, MappedDrives, item 1, Path'*"
     }
 
     It 'accepts a GuestFirewallRules list' {
