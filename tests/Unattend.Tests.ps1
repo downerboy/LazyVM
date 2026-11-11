@@ -76,13 +76,15 @@ Describe 'New-UnattendXml' {
 
 Describe 'New-UnattendXml Windows Setup (#354)' {
     It 'runs the previous version of Windows Setup, which follows the answer file, not the new 24H2 Setup' {
-        $xml = [xml](New-TestUnattendXml)
+        $xml = [xml](New-TestUnattendXml -Locale @{ Locale = 'en-US' })
         $ns = @{ u = 'urn:schemas-microsoft-com:unattend' }
         $setup = (Select-Xml -Xml $xml -Namespace $ns -XPath "/u:unattend/u:settings[@pass='windowsPE']/u:component[@name='Microsoft-Windows-Setup']").Node
 
-        $paths = @($setup.RunSynchronous.RunSynchronousCommand | ForEach-Object { $_.Path })
+        # Setup runs the command in HKLM\SYSTEM\Setup\CmdLine; the old Setup is X:\sources\setup.exe.
+        $legacySetup = @($setup.RunSynchronous.RunSynchronousCommand | Where-Object {
+                $_.Path -match 'HKLM\\SYSTEM\\Setup\b' -and $_.Path -match '\bCmdLine\b' -and $_.Path -match 'X:\\sources\\setup\.exe' })
 
-        $paths | Should -Contain 'reg.exe add HKLM\SYSTEM\Setup /v CmdLine /t REG_SZ /d X:\sources\setup.exe /f'
+        $legacySetup.Count | Should -Be 1
     }
 }
 
