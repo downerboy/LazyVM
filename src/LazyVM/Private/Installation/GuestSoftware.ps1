@@ -100,6 +100,11 @@ function Install-GuestSoftware {
         catch { Write-LogError 'Windows updates failed (non-fatal); maintenance tries again tonight' $_ }
     }
 
+    # The settings VM.json records, once the applications they belong to are
+    # installed: a VM built from a config template starts with them (#325).
+    try { $null = Restore-GuestRecordedAppSetting -VM $VM }
+    catch { Write-LogError 'Application settings could not be put back (non-fatal)' $_ }
+
     Initialize-VMTooling -VM $VM
     $toolingComplete = Write-ToolingReinstallReport -VM $VM -Tooling $tooling
     if ($seedDiskLeft -or -not $toolingComplete) { return [BuildOutcome]::CompleteWithProblems }

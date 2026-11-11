@@ -263,6 +263,8 @@ function Invoke-DailyMaintenance {
     catch { Write-LogError 'SQL logins, settings and Agent check failed (non-fatal)' $_ }
     try { $null = Update-GuestAppSettingRecord -VM $VM }
     catch { Write-LogError 'Application settings check failed (non-fatal)' $_ }
+    try { $null = Update-GuestAppSettingFileRecord -VM $VM }
+    catch { Write-LogError 'Application settings files check failed (non-fatal)' $_ }
 
     # Every user database checked with DBCC CHECKDB and, when it passes, backed up: one good backup of each (#133).
     try { $null = Backup-GuestUserDatabase -VM $VM }

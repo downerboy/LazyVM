@@ -176,7 +176,7 @@ Describe 'Install-GuestSoftware when the answer-file disc cannot be deleted' {
         foreach ($step in 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk', 'Connect-Guest', 'Expand-GuestSystemDrive',
             'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
             'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization', 'Set-GuestSysmon', 'Set-GuestEventLogging',
-            'Install-SqlServerIfMissing', 'Initialize-VMTooling') {
+            'Install-SqlServerIfMissing', 'Restore-GuestRecordedAppSetting', 'Initialize-VMTooling') {
             Mock -ModuleName $module $step { }
         }
         $tooling = InModuleScope $module { [ToolingRecord]::new() }

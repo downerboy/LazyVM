@@ -87,6 +87,22 @@ function ConvertTo-GuestAppSettingRecord {
     return [pscustomobject]@{ Record = @($record); Secrets = $secrets }
 }
 
+function Select-ShareableGuestAppSetting {
+    <#
+      VM.json's GuestAppSettings as a config template or a VM copied with
+      -From takes it (#325): each key without its SecretValues, whose data
+      is in this VM's credential store alone.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Record)
+
+    return @(foreach ($key in @($Record | Where-Object { $_ })) {
+            $copy = [ordered]@{}
+            foreach ($name in $key.Keys) { $copy[$name] = $key[$name] }
+            $copy['SecretValues'] = @()
+            $copy
+        })
+}
+
 function Read-GuestAppSettingSecret {
     <# The VM's secret application setting values (Name\Path\ValueName -> Kind, Data); empty when none are stored. #>
     [OutputType([hashtable])]

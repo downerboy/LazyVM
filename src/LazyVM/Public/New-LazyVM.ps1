@@ -13,7 +13,9 @@
     list, so it is built the same way with the same tools. Settings that
     belong to one VM (file locations, the computer name, the maintenance
     time, its disks and what LazyVM recorded inside it) come from the
-    shared template instead.
+    shared template instead, but for the application and Windows settings
+    it recorded (AppSettings, AppSettingFiles), which the new VM starts
+    with, without their secret values.
 
     With -ConfigTemplate, the new VM starts from a config template, applied
     over the shared template: a built-in one (Developer, the full developer

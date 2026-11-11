@@ -76,15 +76,24 @@ $script:GuestScheduledTaskSettingName = 'GuestScheduledTasks'
 $script:GuestSqlSettingName = 'GuestSql'
 # The setting in VM.json that holds the values under the AppSettings keys (GuestAppSetting.ps1).
 $script:GuestAppSettingName = 'GuestAppSettings'
+# The setting in VM.json that holds the files AppSettingFiles lists (GuestAppSettingFile.ps1, #325).
+$script:GuestAppSettingFileName = 'GuestAppSettingFiles'
+# The largest file AppSettingFiles records, in bytes: it is kept in VM.json as Base64.
+$script:AppSettingFileMaxBytes = 1MB
+# AppSettings as LazyVM shipped it before #325. A VM.json that still lists
+# exactly this was never changed by its user, so it is given the new default.
+$script:AppSettingsDefaultBefore325 = @(@{ Name = 'WinMerge'; RegistryKey = 'HKCU\Software\Thingamahoochie\WinMerge' })
 # What LazyVM records from inside a VM: it belongs to that VM alone (and the
 # VM that replaces it on a rebuild), so it is never copied to another VM or
 # put in a config template. GuestSql holds logins with password hashes.
+# The application settings are the exception (#325): they are the look and
+# feel the user chose, which a VM copied from this one or built from its
+# template should start with. Their secret values stay with this VM.
 $script:RecordedGuestStateSettings = @(
     $script:GuestEnvironmentSettingName
     $script:GuestFirewallSettingName
     $script:GuestScheduledTaskSettingName
     $script:GuestSqlSettingName
-    $script:GuestAppSettingName
 )
 
 # Environment variables Windows sets itself: a fresh install has its own, so

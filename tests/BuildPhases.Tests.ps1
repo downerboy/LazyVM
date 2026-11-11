@@ -135,7 +135,7 @@ Describe 'Install-GuestSoftware' {
         foreach ($step in 'Wait-GuestReady', 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk', 'Connect-Guest',
             'Expand-GuestSystemDrive', 'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
             'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization', 'Set-GuestSysmon', 'Set-GuestEventLogging',
-            'Wait-GuestNetwork', 'Install-SqlServerIfMissing', 'Initialize-VMTooling') {
+            'Wait-GuestNetwork', 'Install-SqlServerIfMissing', 'Restore-GuestRecordedAppSetting', 'Initialize-VMTooling') {
             Mock -ModuleName $module $step { }
         }
         # Classes defined in a module are only visible inside it.
@@ -156,7 +156,7 @@ Describe 'Install-GuestSoftware' {
         foreach ($step in 'Wait-GuestReady', 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk', 'Connect-Guest',
             'Expand-GuestSystemDrive', 'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
             'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization',
-            'Wait-GuestNetwork', 'Install-SqlServerIfMissing', 'Initialize-VMTooling') {
+            'Wait-GuestNetwork', 'Install-SqlServerIfMissing', 'Restore-GuestRecordedAppSetting', 'Initialize-VMTooling') {
             Mock -ModuleName $module $step { }
         }
         $script:order = [System.Collections.Generic.List[string]]::new()
@@ -187,7 +187,7 @@ Describe 'Install-GuestSoftware Windows updates (#234)' {
         foreach ($step in 'Wait-GuestReady', 'Remove-UnattendSeedDisk', 'Add-SqlDataDisk', 'Add-DevDriveDisk', 'Add-UserDataDisk',
             'Connect-Guest', 'Expand-GuestSystemDrive', 'Unlock-GuestDataDisk', 'Initialize-GuestSqlDisk', 'Initialize-GuestDevDrive', 'Initialize-GuestUserDisk',
             'Protect-GuestPersistentDisk', 'Enable-GuestEnhancedSession', 'Set-GuestCustomization', 'Set-GuestSysmon', 'Set-GuestEventLogging', 'Install-ToolingProduct',
-            'Install-SqlServerIfMissing', 'Install-WingetPackage', 'Install-OfficialInstaller', 'Initialize-VMTooling') {
+            'Install-SqlServerIfMissing', 'Install-WingetPackage', 'Install-OfficialInstaller', 'Restore-GuestRecordedAppSetting', 'Initialize-VMTooling') {
             Mock -ModuleName $module $step { }
         }
         Mock -ModuleName $module Get-BuildTooling { $emptyTooling }
@@ -227,6 +227,26 @@ Describe 'Install-GuestSoftware Windows updates (#234)' {
 
     It 'carries on when Windows updates fail, without failing the phase' {
         Mock -ModuleName $module Update-GuestWindows { throw 'Windows Update is broken' }
+
+        $outcome = @(InModuleScope $module -Parameters @{ VM = $buildVM } { param($VM) Install-GuestSoftware -VM $VM })
+
+        $outcome.Count | Should -Be 0
+        Should -Invoke -ModuleName $module Write-LogError -Times 1 -Exactly
+    }
+
+    It 'puts back the application settings VM.json records once the applications and updates are in, so a VM built from a template starts with them (#325)' {
+        $script:order = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName $module Update-GuestWindows { $script:order.Add('updates'); $false }
+        Mock -ModuleName $module Restore-GuestRecordedAppSetting { $script:order.Add('app settings'); $true }
+        Mock -ModuleName $module Initialize-VMTooling { $script:order.Add('tooling record') }
+
+        $null = InModuleScope $module -Parameters @{ VM = $buildVM } { param($VM) Install-GuestSoftware -VM $VM }
+
+        $script:order -join ',' | Should -Be 'updates,app settings,tooling record'
+    }
+
+    It 'carries on when the application settings cannot be put back, without failing the phase (#325)' {
+        Mock -ModuleName $module Restore-GuestRecordedAppSetting { throw 'the guest went away' }
 
         $outcome = @(InModuleScope $module -Parameters @{ VM = $buildVM } { param($VM) Install-GuestSoftware -VM $VM })
 

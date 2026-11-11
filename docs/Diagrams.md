@@ -263,8 +263,8 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
    - Reads D25, install discs: Shared\ISO\  <VM>\Disks\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
    - Writes D26, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
    - Writes D27, new VM: VM <VM> (created, not started yet)
-18. `Install-GuestSoftware` (Installation, called by Invoke-BuildPhase): phase 7: starts the VM, waits for Setup and deletes the answer-file disc; attaches and prepares D:, W: and U: and puts the personal folders on U:; extends C:; BitLocker; Enhanced Session; removes built-in apps and applies the appearance and Developer Mode; Sysmon; then the tooling list: Visual Studio Installer products, SQL Server, winget packages, official installers; Windows updates, and after their restart waits for the guest to settle (no further restart, automatic sign-in done); records the tooling list
-   - Also runs `Test-SeedDiskAttached`, `Assert-GuestCredential`, `Start-VMFromInstallMedia`, `Wait-GuestReady`, `Remove-UnattendSeedDisk`, `Add-SqlDataDisk`, `Add-DevDriveDisk`, `Add-UserDataDisk`, `Connect-Guest`, `Expand-GuestSystemDrive`, `Unlock-GuestDataDisk`, `Initialize-GuestSqlDisk`, `Initialize-GuestDevDrive`, `Initialize-GuestUserDisk`, `Protect-GuestPersistentDisk`, `Enable-GuestEnhancedSession`, `Set-GuestCustomization`, `Set-GuestSysmon`, `Set-GuestEventLogging`, `Get-BuildTooling`, `Wait-GuestNetwork`, `Install-ToolingProduct`, `Install-SqlServerIfMissing`, `Install-WingetPackage`, `Install-OfficialInstaller`, `Update-GuestWindows`, `Wait-GuestSettled`, `Initialize-VMTooling`, `Write-ToolingReinstallReport`
+18. `Install-GuestSoftware` (Installation, called by Invoke-BuildPhase): phase 7: starts the VM, waits for Setup and deletes the answer-file disc; attaches and prepares D:, W: and U: and puts the personal folders on U:; extends C:; BitLocker; Enhanced Session; removes built-in apps and applies the appearance and Developer Mode; Sysmon; then the tooling list: Visual Studio Installer products, SQL Server, winget packages, official installers; Windows updates, and after their restart waits for the guest to settle (no further restart, automatic sign-in done); puts back the application and Windows settings VM.json records, such as those a config template brings; records the tooling list
+   - Also runs `Test-SeedDiskAttached`, `Assert-GuestCredential`, `Start-VMFromInstallMedia`, `Wait-GuestReady`, `Remove-UnattendSeedDisk`, `Add-SqlDataDisk`, `Add-DevDriveDisk`, `Add-UserDataDisk`, `Connect-Guest`, `Expand-GuestSystemDrive`, `Unlock-GuestDataDisk`, `Initialize-GuestSqlDisk`, `Initialize-GuestDevDrive`, `Initialize-GuestUserDisk`, `Protect-GuestPersistentDisk`, `Enable-GuestEnhancedSession`, `Set-GuestCustomization`, `Set-GuestSysmon`, `Set-GuestEventLogging`, `Get-BuildTooling`, `Wait-GuestNetwork`, `Install-ToolingProduct`, `Install-SqlServerIfMissing`, `Install-WingetPackage`, `Install-OfficialInstaller`, `Update-GuestWindows`, `Wait-GuestSettled`, `Restore-GuestRecordedAppSetting`, `Initialize-VMTooling`, `Write-ToolingReinstallReport`
    - Reads D28, tooling list: <VM>\Config\ (VM.json, its Tooling,, or the shared template's)
    - Reads D29, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
    - Reads D30, updates and packages: Internet (VS bootstrappers, Marketplace,, winget, Windows Update)
@@ -329,9 +329,9 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM, with -Ro
    - Writes D19, checkpoint, only on a change: <VM>\Checkpoints\ (checkpoint "Tooling <stamp>", oldest pruned past ToolingCheckpointsToKeep (3))
    - Writes D20, new tooling version, only on a change: <VM>\Config\ (VM.json, History\VM-<stamp>.json)
 12. `Update-GuestEnvironmentRecord` (Capture, called by Invoke-DailyMaintenance): environment variables, PATH, hosts entries and mapped drives; then the same for the other records
-   - Also runs `Update-GuestFirewallRecord`, `Update-GuestScheduledTaskRecord`, `Update-GuestSqlRecord`, `Update-GuestAppSettingRecord`
-   - Reads D21, guest settings: Running guest (environment, firewall rules, scheduled tasks, SQL logins, settings, Agent jobs, AppSettings registry values)
-   - Writes D22, records, only on a change: <VM>\Config\ (VM.json  GuestEnvironment, GuestFirewallRules,, GuestScheduledTasks, GuestSql, GuestAppSettings)
+   - Also runs `Update-GuestFirewallRecord`, `Update-GuestScheduledTaskRecord`, `Update-GuestSqlRecord`, `Update-GuestAppSettingRecord`, `Update-GuestAppSettingFileRecord`
+   - Reads D21, guest settings: Running guest (environment, firewall rules, scheduled tasks, SQL logins, settings, Agent jobs, AppSettings registry values, AppSettingFiles files)
+   - Writes D22, records, only on a change: <VM>\Config\ (VM.json  GuestEnvironment, GuestFirewallRules,, GuestScheduledTasks, GuestSql, GuestAppSettings,, GuestAppSettingFiles)
    - Writes D23, secret values: Credential store (<VM>\Credentials\)
 13. `Backup-GuestUserDatabase` (Capture, called by Invoke-DailyMaintenance): DBCC CHECKDB each user database and, only when it passes, backs it up: one good backup of each
    - Reads D24, databases: SQL Server (online, writable user databases)
@@ -580,9 +580,9 @@ Copies to the host what a rebuild must keep and the VM's records do not, into a 
    - Reads D12, certificates: Running guest (certificate stores)
    - Writes D13, Windows archive: <VM>\State\Captures\<stamp>\ (windows\winstate.zip)
    - Writes D14, certificate password: <VM>\Credentials\ (certs.cred)
-9. `Save-GuestAppSetting` (Capture, called by Save-GuestState): records the AppSettings keys in VM.json; nothing goes into the capture itself
-   - Reads D15, registry values: AppSettings keys (HKCU\Software\...)
-   - Writes D16, application settings: <VM>\Config\ (VM.json  GuestAppSettings)
+9. `Save-GuestAppSetting` (Capture, called by Save-GuestState): records the AppSettings keys and AppSettingFiles files in VM.json; nothing goes into the capture itself
+   - Reads D15, registry values, files: AppSettings, AppSettingFiles (HKCU\Software\..., %LOCALAPPDATA%\...)
+   - Writes D16, application settings: <VM>\Config\ (VM.json  GuestAppSettings,, GuestAppSettingFiles)
    - Writes D17, secret values: Credential store (<VM>\Credentials\)
 10. `Get-GuestStateFingerprint` (Capture, called by Save-GuestState): certificate thumbprints and the Visual Studio settings hash, which nightly maintenance compares
    - Reads D18, fingerprint: Running guest (certificates, VS settings)
@@ -625,10 +625,10 @@ Puts the newest capture and the VM's records back into the VM. A rebuild runs th
    - Reads D12, SQL records: <VM>\Config\ (VM.json  GuestSql)
    - Reads D13, database files and backups: D: data disk (D:\SQLData\, D:\SQLBackup\<database>.bak)
    - Writes D14, SQL restored: SQL Server (settings, logins, databases, Agent jobs, operators, alerts)
-9. `Restore-GuestAppSetting` (Restore, called by Restore-GuestState): 10e: the application settings VM.json records
-   - Reads D15, app settings: <VM>\Config\ (VM.json  GuestAppSettings)
+9. `Restore-GuestAppSetting` (Restore, called by Restore-GuestState): 10e: the application settings and files VM.json records
+   - Reads D15, app settings: <VM>\Config\ (VM.json  GuestAppSettings,, GuestAppSettingFiles)
    - Reads D16, secret values: Credential store (<VM>\Credentials\)
-   - Writes D17, app settings restored: New guest (registry values written)
+   - Writes D17, app settings restored: New guest (registry values, files written)
 10. `Restore-GuestVisualStudioSetting` (Installation): imports the Visual Studio settings; when it cannot, nightly maintenance does
    - Reads D18, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
    - Writes D19, VS settings: Visual Studio (imported, or pending)

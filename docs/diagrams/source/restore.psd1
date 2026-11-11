@@ -76,12 +76,12 @@
             Function = 'Restore-GuestAppSetting'
             Area     = 'Restore'
             Caller   = 'Restore-GuestState'
-            Note     = '10e: the application settings VM.json records'
+            Note     = '10e: the application settings and files VM.json records'
             Reads    = @(
-                @{ Label = 'app settings'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json  GuestAppSettings') }
+                @{ Label = 'app settings'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json  GuestAppSettings,', 'GuestAppSettingFiles') }
                 @{ Label = 'secret values'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\') }
             )
-            Writes   = @(@{ Label = 'app settings restored'; Kind = 'guest'; Store = 'New guest'; Items = @('registry values written') })
+            Writes   = @(@{ Label = 'app settings restored'; Kind = 'guest'; Store = 'New guest'; Items = @('registry values, files written') })
         }
         @{
             Function = 'Restore-GuestVisualStudioSetting'

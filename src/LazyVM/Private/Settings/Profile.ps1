@@ -286,7 +286,11 @@ function Get-ShareableSetting {
 }
 
 function Select-ShareableSetting {
-    <# $Settings without the ones each VM has its own of (Get-PerVMSettingName). #>
+    <#
+      $Settings without the ones each VM has its own of (Get-PerVMSettingName),
+      and with the recorded application settings' secret values left out,
+      as those stay with the VM (#325).
+    #>
     [OutputType([hashtable])]
     param([Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.IDictionary]$Settings)
 
@@ -294,6 +298,9 @@ function Select-ShareableSetting {
     $shareable = @{}
     foreach ($key in $Settings.Keys) {
         if ($perVM -notcontains $key) { $shareable[$key] = $Settings[$key] }
+    }
+    if ($null -ne $shareable[$script:GuestAppSettingName]) {
+        $shareable[$script:GuestAppSettingName] = @(Select-ShareableGuestAppSetting -Record @($shareable[$script:GuestAppSettingName]))
     }
     return $shareable
 }
@@ -436,6 +443,8 @@ function Sync-VMProfile {
           them for a profile made before VM.json held every setting, or a
           setting added by a newer LazyVM;
         * removes any setting LazyVM no longer uses (#273);
+        * gives an AppSettings still at the default before #325 the new
+          default, which adds the Windows personalization keys;
         * keeps a copy of it as VM.Template.json the first time, written once
           and never changed afterwards.
       A VM.json that cannot be read is never written over: the run goes on
@@ -461,6 +470,10 @@ function Sync-VMProfile {
     }
     # Its own, never one the shared template names (#292).
     if (-not $current[$script:ProfileIdSettingName]) { $missing[$script:ProfileIdSettingName] = New-ProfileId }
+    # A VM whose AppSettings is still the default before #325 gets the new one, with the Windows settings (#325).
+    if ($current.ContainsKey('AppSettings') -and (ConvertTo-ComparableJson $current['AppSettings']) -eq (ConvertTo-ComparableJson $script:AppSettingsDefaultBefore325)) {
+        $missing['AppSettings'] = (Get-DefaultSetting)['AppSettings']
+    }
     # Writes nothing unless a setting was missing or one LazyVM no longer uses is still there (#273).
     $null = Update-VMProfile -Root $root -Name $name -Change $missing -Reason 'brought up to date with the shared template'
 

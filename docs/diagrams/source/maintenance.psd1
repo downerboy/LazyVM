@@ -109,10 +109,10 @@
             Area     = 'Capture'
             Caller   = 'Invoke-DailyMaintenance'
             Note     = 'environment variables, PATH, hosts entries and mapped drives; then the same for the other records'
-            Includes = @('Update-GuestFirewallRecord', 'Update-GuestScheduledTaskRecord', 'Update-GuestSqlRecord', 'Update-GuestAppSettingRecord')
-            Reads    = @(@{ Label = 'guest settings'; Kind = 'guest'; Store = 'Running guest'; Items = @('environment, firewall rules', 'scheduled tasks', 'SQL logins, settings, Agent jobs', 'AppSettings registry values') })
+            Includes = @('Update-GuestFirewallRecord', 'Update-GuestScheduledTaskRecord', 'Update-GuestSqlRecord', 'Update-GuestAppSettingRecord', 'Update-GuestAppSettingFileRecord')
+            Reads    = @(@{ Label = 'guest settings'; Kind = 'guest'; Store = 'Running guest'; Items = @('environment, firewall rules', 'scheduled tasks', 'SQL logins, settings, Agent jobs', 'AppSettings registry values', 'AppSettingFiles files') })
             Writes   = @(
-                @{ Label = 'records, only on a change'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json  GuestEnvironment, GuestFirewallRules,', 'GuestScheduledTasks, GuestSql, GuestAppSettings') }
+                @{ Label = 'records, only on a change'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json  GuestEnvironment, GuestFirewallRules,', 'GuestScheduledTasks, GuestSql, GuestAppSettings,', 'GuestAppSettingFiles') }
                 @{ Label = 'secret values'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\') }
             )
         }
