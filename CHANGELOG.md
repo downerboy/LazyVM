@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.7.4](https://github.com/downerboy/LazyVM/compare/v6.7.3...v6.7.4) (2026-11-11)
+
+
+### Bug Fixes
+
+* name every problem deep inside a setting, whatever Test-Json explains ([#351](https://github.com/downerboy/LazyVM/issues/351)) ([21430f3](https://github.com/downerboy/LazyVM/commit/21430f3acec346a8a50f18ec77434b4593e33eb2)), closes [#350](https://github.com/downerboy/LazyVM/issues/350)
+
 ## [6.7.3](https://github.com/downerboy/LazyVM/compare/v6.7.2...v6.7.3) (2026-11-07)
 
 
