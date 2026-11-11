@@ -134,6 +134,62 @@ function Format-SchemaProblem {
     return $text
 }
 
+function Resolve-SchemaPart {
+    <# The part of the settings schema that $Part's "$ref" points to, or $Part itself when it has none. #>
+    [OutputType([System.Collections.IDictionary])]
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Part)
+
+    if ($Part.Contains('$ref') -and $Part['$ref'] -match '^#/definitions/(?<name>.+)$') {
+        return (Get-SettingsSchema).definitions[$Matches.name]
+    }
+    return $Part
+}
+
+function Get-ListItemProblem {
+    <#
+      Some PowerShell 7.6 patches report only top-level problems: one inside
+      a list item fails the check without saying why (#350). So each list
+      item, at any depth (lists inside a setting's table too), is also
+      checked against its own part of the schema, where its problems are
+      top-level. $Where is $Value's place in the file, such as
+      /GuestEnvironment/MappedDrives; the problems name it.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Part,
+        [AllowNull()]$Value,
+        [Parameter(Mandatory)][string]$Where
+    )
+
+    $resolved = Resolve-SchemaPart -Part $Part
+    if ($Value -is [System.Collections.IDictionary] -and $resolved['properties'] -is [System.Collections.IDictionary]) {
+        foreach ($key in $Value.Keys) {
+            if ($resolved['properties'].Contains($key)) {
+                Get-ListItemProblem -Part $resolved['properties'][$key] -Value $Value[$key] -Where "$Where/$key"
+            }
+        }
+        return
+    }
+    if ($Value -isnot [System.Collections.IList] -or $resolved['items'] -isnot [System.Collections.IDictionary]) { return }
+
+    # The item's own schema, with the definitions its "$ref"s point to.
+    $schema = Get-SettingsSchema
+    $items = Resolve-SchemaPart -Part $resolved['items']
+    $itemSchema = [ordered]@{ '$schema' = $schema['$schema']; definitions = $schema['definitions'] }
+    foreach ($key in $items.Keys) { $itemSchema[$key] = $items[$key] }
+    $itemSchemaJson = ConvertTo-Json -InputObject $itemSchema -Depth 20
+
+    for ($i = 0; $i -lt $Value.Count; $i++) {
+        $itemErrors = $null
+        $null = Test-Json -Json (ConvertTo-Json -InputObject $Value[$i] -Depth 20) -Schema $itemSchemaJson -ErrorVariable itemErrors -ErrorAction SilentlyContinue
+        foreach ($itemError in @($itemErrors)) {
+            # at '/Letter' -> at '/GuestEnvironment/MappedDrives/0/Letter'
+            Format-SchemaProblem -Message ($itemError.Exception.Message -replace " at '([^']*)'$", " at '$Where/$i`$1'")
+        }
+        Get-ListItemProblem -Part $items -Value $Value[$i] -Where "$Where/$i"
+    }
+}
+
 function Get-SchemaProblem {
     <# Every schema problem in a table of settings, in plain words. #>
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Values)
@@ -147,26 +203,10 @@ function Get-SchemaProblem {
         $problems.Add((Format-SchemaProblem -Message $schemaError.Exception.Message))
     }
 
-    # PowerShell 7.6 reports only top-level problems: one inside a list item
-    # fails the check without saying why. So each list item is also checked
-    # against its own part of the schema, where its problems are top-level.
     foreach ($name in $Values.Keys) {
         if (-not $schema.properties.Contains($name)) { continue }
-        $items = $schema.properties[$name]['items']
-        if (-not $items -or $Values[$name] -isnot [System.Collections.IList]) { continue }
-
-        $itemSchema = [ordered]@{ '$schema' = $schema['$schema'] }
-        foreach ($key in $items.Keys) { $itemSchema[$key] = $items[$key] }
-        $itemSchemaJson = ConvertTo-Json -InputObject $itemSchema -Depth 20
-
-        for ($i = 0; $i -lt $Values[$name].Count; $i++) {
-            $itemErrors = $null
-            $null = Test-Json -Json (ConvertTo-Json -InputObject $Values[$name][$i] -Depth 20) -Schema $itemSchemaJson -ErrorVariable itemErrors -ErrorAction SilentlyContinue
-            foreach ($itemError in @($itemErrors)) {
-                # at '/Extra' -> at '/AppSettings/0/Extra'
-                $message = $itemError.Exception.Message -replace " at '([^']*)'$", " at '/$name/$i`$1'"
-                $problems.Add((Format-SchemaProblem -Message $message))
-            }
+        foreach ($problem in @(Get-ListItemProblem -Part $schema.properties[$name] -Value $Values[$name] -Where "/$name")) {
+            $problems.Add($problem)
         }
     }
 
