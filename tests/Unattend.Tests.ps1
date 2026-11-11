@@ -74,6 +74,18 @@ Describe 'New-UnattendXml' {
     }
 }
 
+Describe 'New-UnattendXml Windows Setup (#354)' {
+    It 'runs the previous version of Windows Setup, which follows the answer file, not the new 24H2 Setup' {
+        $xml = [xml](New-TestUnattendXml)
+        $ns = @{ u = 'urn:schemas-microsoft-com:unattend' }
+        $setup = (Select-Xml -Xml $xml -Namespace $ns -XPath "/u:unattend/u:settings[@pass='windowsPE']/u:component[@name='Microsoft-Windows-Setup']").Node
+
+        $paths = @($setup.RunSynchronous.RunSynchronousCommand | ForEach-Object { $_.Path })
+
+        $paths | Should -Contain 'reg.exe add HKLM\SYSTEM\Setup /v CmdLine /t REG_SZ /d X:\sources\setup.exe /f'
+    }
+}
+
 Describe 'New-UnattendXml automatic sign-in (#278)' {
     BeforeAll {
         $xml = [xml](New-TestUnattendXml -Locale @{ Locale = 'en-US' })
