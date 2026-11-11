@@ -62,6 +62,25 @@ BeforeAll {
     # A small tooling list, as it appears in Tooling.json or VM.json's Tooling section.
     $toolingJson = '{ "Version": 1, "RecordedAt": "2026-10-08T19:30:00.0000000-07:00", "Products": [], "WingetPackages": [ { "Id": "Git.Git", "Source": "winget" } ], "Programs": [] }'
 
+    function Get-TestSettingsProblem {
+        <#
+          The message Read-SettingsFile throws for a settings file holding
+          $Text, or $null when it accepts the file. Tests look for the place
+          each problem names, not the count or Test-Json's wording, which
+          change between PowerShell patches and even between runs (#350).
+        #>
+        param([Parameter(Mandatory)][string]$Text)
+
+        $path = New-TestFile -Text $Text
+        try {
+            $null = InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path }
+            return $null
+        }
+        catch {
+            return $_.Exception.Message
+        }
+    }
+
     function Get-TestWingetId {
         <# The winget ids in a profile's Tooling section. #>
         param([Parameter(Mandatory)][System.Collections.IDictionary]$Settings)
@@ -97,9 +116,9 @@ Describe 'The settings schema' {
     }
 
     It 'rejects a Tooling section with a misspelled part' {
-        $path = New-TestFile -Text '{ "Tooling": { "Version": 1, "Product": [] } }'
+        $message = Get-TestSettingsProblem -Text '{ "Tooling": { "Version": 1, "Product": [] } }'
 
-        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+        $message | Should -BeLike "*'Tooling, Product'*"
     }
 
     It 'accepts a GuestEnvironment section with a mapped drive' {
@@ -109,9 +128,10 @@ Describe 'The settings schema' {
     }
 
     It 'rejects a mapped drive in GuestEnvironment that is not a letter and a share' {
-        $path = New-TestFile -Text '{ "GuestEnvironment": { "MappedDrives": [ { "Letter": "ZZ", "Path": "C:\\not-a-share" } ] } }'
+        $message = Get-TestSettingsProblem -Text '{ "GuestEnvironment": { "MappedDrives": [ { "Letter": "ZZ", "Path": "C:\\not-a-share" } ] } }'
 
-        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+        $message | Should -BeLike "*'GuestEnvironment, MappedDrives, item 1, Letter'*"
+        $message | Should -BeLike "*'GuestEnvironment, MappedDrives, item 1, Path'*"
     }
 
     It 'accepts a GuestFirewallRules list' {
@@ -127,9 +147,9 @@ Describe 'The settings schema' {
     }
 
     It 'rejects a scheduled task whose definition is not XML' {
-        $path = New-TestFile -Text '{ "GuestScheduledTasks": [ { "Name": "Nightly build", "Xml": "not xml" } ] }'
+        $message = Get-TestSettingsProblem -Text '{ "GuestScheduledTasks": [ { "Name": "Nightly build", "Xml": "not xml" } ] }'
 
-        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+        $message | Should -BeLike "*'GuestScheduledTasks, item 1, Xml'*"
     }
 
     It 'accepts a GuestSql record of instance settings and logins' {
@@ -145,18 +165,18 @@ Describe 'The settings schema' {
     }
 
     It 'rejects a SQL Agent job step without a command' {
-        $path = New-TestFile -Text '{ "GuestSql": { "Configs": [], "Logins": [], "Agent": { "Operators": [], "Alerts": [], "Jobs": [ { "Name": "Nightly ETL", "Enabled": true, "Description": "", "Category": "", "Owner": "", "StartStepId": 1, "NotifyLevelEventLog": 2, "NotifyLevelEmail": 0, "NotifyEmailOperator": "", "DeleteLevel": 0, "Schedules": [], "Steps": [ { "Id": 1, "Name": "Load", "Subsystem": "TSQL", "Database": "Sales", "OnSuccessAction": 1, "OnSuccessStepId": 0, "OnFailAction": 2, "OnFailStepId": 0, "RetryAttempts": 0, "RetryInterval": 0, "OutputFile": "", "Flags": 0, "Proxy": "" } ] } ] } } }'
+        $message = Get-TestSettingsProblem -Text '{ "GuestSql": { "Configs": [], "Logins": [], "Agent": { "Operators": [], "Alerts": [], "Jobs": [ { "Name": "Nightly ETL", "Enabled": true, "Description": "", "Category": "", "Owner": "", "StartStepId": 1, "NotifyLevelEventLog": 2, "NotifyLevelEmail": 0, "NotifyEmailOperator": "", "DeleteLevel": 0, "Schedules": [], "Steps": [ { "Id": 1, "Name": "Load", "Subsystem": "TSQL", "Database": "Sales", "OnSuccessAction": 1, "OnSuccessStepId": 0, "OnFailAction": 2, "OnFailStepId": 0, "RetryAttempts": 0, "RetryInterval": 0, "OutputFile": "", "Flags": 0, "Proxy": "" } ] } ] } } }'
 
-        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+        $message | Should -BeLike "*'GuestSql, Agent, Jobs, item 1, Steps, item 1'*Command*"
     }
 
     It 'rejects a SQL login whose <Field> is not hexadecimal, since restore writes it into SQL as it is' -ForEach @(
         @{ Field = 'SidHex'; SidHex = '0x1A; DROP LOGIN x'; HashHex = '0x02' }
         @{ Field = 'HashHex'; SidHex = '0x1A'; HashHex = 'secret' }
     ) {
-        $path = New-TestFile -Text ('{ "GuestSql": { "Configs": [], "Logins": [ { "Name": "app", "TypeDesc": "SQL_LOGIN", "IsDisabled": false, "DefaultDb": "master", "DefaultLang": "us_english", "SidHex": "' + $SidHex + '", "HashHex": "' + $HashHex + '", "PolicyChecked": true, "ExpirationChecked": false, "ServerRoles": [] } ] } }')
+        $message = Get-TestSettingsProblem -Text ('{ "GuestSql": { "Configs": [], "Logins": [ { "Name": "app", "TypeDesc": "SQL_LOGIN", "IsDisabled": false, "DefaultDb": "master", "DefaultLang": "us_english", "SidHex": "' + $SidHex + '", "HashHex": "' + $HashHex + '", "PolicyChecked": true, "ExpirationChecked": false, "ServerRoles": [] } ] } }')
 
-        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+        $message | Should -BeLike "*'GuestSql, Logins, item 1, $Field'*"
     }
 
     It 'accepts a GuestAppSettings list' {
@@ -166,15 +186,15 @@ Describe 'The settings schema' {
     }
 
     It 'rejects an application setting value of a kind the registry restore cannot write' {
-        $path = New-TestFile -Text '{ "GuestAppSettings": [ { "Name": "WinMerge", "RegistryKey": "HKCU\\Software\\WinMerge", "Values": [ { "Path": "", "Name": "Font", "Kind": "Link", "Data": "x" } ], "SecretValues": [] } ] }'
+        $message = Get-TestSettingsProblem -Text '{ "GuestAppSettings": [ { "Name": "WinMerge", "RegistryKey": "HKCU\\Software\\WinMerge", "Values": [ { "Path": "", "Name": "Font", "Kind": "Link", "Data": "x" } ], "SecretValues": [] } ] }'
 
-        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+        $message | Should -BeLike "*'GuestAppSettings, item 1, Values, item 1, Kind'*"
     }
 
     It 'rejects a firewall rule whose direction is neither Inbound nor Outbound' {
-        $path = New-TestFile -Text '{ "GuestFirewallRules": [ { "DisplayName": "Dev API", "Direction": "Sideways", "Action": "Allow", "Protocol": "TCP", "LocalPort": [ "5000" ], "RemoteAddress": [ "Any" ], "Profile": "Any" } ] }'
+        $message = Get-TestSettingsProblem -Text '{ "GuestFirewallRules": [ { "DisplayName": "Dev API", "Direction": "Sideways", "Action": "Allow", "Protocol": "TCP", "LocalPort": [ "5000" ], "RemoteAddress": [ "Any" ], "Profile": "Any" } ] }'
 
-        { InModuleScope $module -Parameters @{ Path = $path } { param($Path) Read-SettingsFile -Path $Path } } | Should -Throw -ExpectedMessage '*1 problem*'
+        $message | Should -BeLike "*'GuestFirewallRules, item 1, Direction'*"
     }
 
     It 'accepts all its own defaults' {

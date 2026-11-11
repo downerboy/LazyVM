@@ -134,6 +134,75 @@ function Format-SchemaProblem {
     return $text
 }
 
+function Resolve-SchemaPart {
+    <# The part of the settings schema that $Part's "$ref" points to, or $Part itself when it has none. #>
+    [OutputType([System.Collections.IDictionary])]
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Part)
+
+    if ($Part.Contains('$ref') -and $Part['$ref'] -match '^#/definitions/(?<name>.+)$') {
+        return (Get-SettingsSchema).definitions[$Matches.name]
+    }
+    return $Part
+}
+
+function Get-SchemaPartJson {
+    <# $Part as a schema of its own, with the definitions its "$ref"s point to. Made once per part. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Part)
+
+    # Keyed by the part itself: a table is its own key.
+    if (-not $script:SchemaPartJson.ContainsKey($Part)) {
+        $schema = Get-SettingsSchema
+        $own = [ordered]@{ '$schema' = $schema['$schema']; definitions = $schema['definitions'] }
+        foreach ($key in $Part.Keys) { $own[$key] = $Part[$key] }
+        $script:SchemaPartJson[$Part] = ConvertTo-Json -InputObject $own -Depth 20
+    }
+    return $script:SchemaPartJson[$Part]
+}
+
+function Get-NestedSchemaProblem {
+    <#
+      Test-Json does not always say why a value deep inside a setting is
+      wrong: the same PowerShell has reported a bad mapped drive with
+      reasons on one run and without on another (#350). So every table and
+      every list item inside a setting is also checked against its own part
+      of the schema, where its problems are top-level and always explained.
+      $Where is $Value's place in the file, such as
+      /GuestEnvironment/MappedDrives/0; the problems name it.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Part,
+        [AllowNull()]$Value,
+        [Parameter(Mandatory)][string]$Where,
+        # A list item is checked whatever it is; any other value only when it is a table.
+        [switch]$ListItem
+    )
+
+    $resolved = Resolve-SchemaPart -Part $Part
+    if ($ListItem -or $Value -is [System.Collections.IDictionary]) {
+        $partErrors = $null
+        $null = Test-Json -Json (ConvertTo-Json -InputObject $Value -Depth 20) -Schema (Get-SchemaPartJson -Part $resolved) -ErrorVariable partErrors -ErrorAction SilentlyContinue
+        foreach ($partError in @($partErrors)) {
+            # at '/Letter' -> at '/GuestEnvironment/MappedDrives/0/Letter'
+            Format-SchemaProblem -Message ($partError.Exception.Message -replace " at '([^']*)'$", " at '$Where`$1'")
+        }
+    }
+
+    if ($Value -is [System.Collections.IDictionary] -and $resolved['properties'] -is [System.Collections.IDictionary]) {
+        foreach ($key in $Value.Keys) {
+            if ($resolved['properties'].Contains($key)) {
+                Get-NestedSchemaProblem -Part $resolved['properties'][$key] -Value $Value[$key] -Where "$Where/$key"
+            }
+        }
+    }
+    elseif ($Value -is [System.Collections.IList] -and $resolved['items'] -is [System.Collections.IDictionary]) {
+        for ($i = 0; $i -lt $Value.Count; $i++) {
+            Get-NestedSchemaProblem -Part $resolved['items'] -Value $Value[$i] -Where "$Where/$i" -ListItem
+        }
+    }
+}
+
 function Get-SchemaProblem {
     <# Every schema problem in a table of settings, in plain words. #>
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Values)
@@ -147,26 +216,10 @@ function Get-SchemaProblem {
         $problems.Add((Format-SchemaProblem -Message $schemaError.Exception.Message))
     }
 
-    # PowerShell 7.6 reports only top-level problems: one inside a list item
-    # fails the check without saying why. So each list item is also checked
-    # against its own part of the schema, where its problems are top-level.
     foreach ($name in $Values.Keys) {
         if (-not $schema.properties.Contains($name)) { continue }
-        $items = $schema.properties[$name]['items']
-        if (-not $items -or $Values[$name] -isnot [System.Collections.IList]) { continue }
-
-        $itemSchema = [ordered]@{ '$schema' = $schema['$schema'] }
-        foreach ($key in $items.Keys) { $itemSchema[$key] = $items[$key] }
-        $itemSchemaJson = ConvertTo-Json -InputObject $itemSchema -Depth 20
-
-        for ($i = 0; $i -lt $Values[$name].Count; $i++) {
-            $itemErrors = $null
-            $null = Test-Json -Json (ConvertTo-Json -InputObject $Values[$name][$i] -Depth 20) -Schema $itemSchemaJson -ErrorVariable itemErrors -ErrorAction SilentlyContinue
-            foreach ($itemError in @($itemErrors)) {
-                # at '/Extra' -> at '/AppSettings/0/Extra'
-                $message = $itemError.Exception.Message -replace " at '([^']*)'$", " at '/$name/$i`$1'"
-                $problems.Add((Format-SchemaProblem -Message $message))
-            }
+        foreach ($problem in @(Get-NestedSchemaProblem -Part $schema.properties[$name] -Value $Values[$name] -Where "/$name")) {
+            $problems.Add($problem)
         }
     }
 
