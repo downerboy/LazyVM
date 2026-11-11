@@ -150,10 +150,7 @@ function Get-SchemaPartJson {
     [OutputType([string])]
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Part)
 
-    if (-not $script:SchemaPartJson) {
-        # Keyed by the part itself: a table is its own key.
-        $script:SchemaPartJson = [System.Collections.Generic.Dictionary[object, string]]::new()
-    }
+    # Keyed by the part itself: a table is its own key.
     if (-not $script:SchemaPartJson.ContainsKey($Part)) {
         $schema = Get-SettingsSchema
         $own = [ordered]@{ '$schema' = $schema['$schema']; definitions = $schema['definitions'] }

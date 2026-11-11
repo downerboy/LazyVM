@@ -20,6 +20,9 @@ $script:DataDir = Join-Path -Path $PSScriptRoot -ChildPath 'Data'
 $script:SettingsSchema = $null
 $script:GuestHelperText = $null
 
+# Each part of the settings schema as a schema of its own, made on first use (Get-SchemaPartJson).
+$script:SchemaPartJson = [System.Collections.Generic.Dictionary[object, string]]::new()
+
 # ── Functions ────────────────────────────────────────────────────────────────
 # Classes first, in their numbered order, because the functions use them.
 foreach ($folder in 'Classes', 'Private', 'Public') {
