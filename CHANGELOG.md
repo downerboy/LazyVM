@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.8.1](https://github.com/downerboy/LazyVM/compare/v6.8.0...v6.8.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* keep recording tooling changes when only one tooling checkpoint exists ([#365](https://github.com/downerboy/LazyVM/issues/365)) ([619bda0](https://github.com/downerboy/LazyVM/commit/619bda0e5ba11eb87d753a74acd78b8b739a7965))
+
 ## [6.8.0](https://github.com/downerboy/LazyVM/compare/v6.7.5...v6.8.0) (2026-11-12)
 
 
