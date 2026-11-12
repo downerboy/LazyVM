@@ -10,6 +10,11 @@
 # attached as a second DVD drive. The image is built with IMAPI2, which is
 # part of Windows: no Windows ADK or oscdimg needed, and the Windows ISO is
 # never modified.
+#
+# From 24H2 the Windows ISO starts a new Setup that does not reliably follow
+# an answer file: it has stopped after copying Windows, before making the
+# disk bootable, and has stopped on its own pages (#354). The windowsPE pass
+# therefore switches to the previous version of Setup (X:\sources\setup.exe).
 
 function New-UnattendXml {
     param(
@@ -70,6 +75,13 @@ function New-UnattendXml {
         <FullName>@@USER@@</FullName>
         <Organization>LazyVM</Organization>
       </UserData>
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>Use the previous version of Windows Setup, which follows this answer file (#354)</Description>
+          <Path>reg.exe add HKLM\SYSTEM\Setup /v CmdLine /t REG_SZ /d X:\sources\setup.exe /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
     </component>
   </settings>
   <settings pass="specialize">
