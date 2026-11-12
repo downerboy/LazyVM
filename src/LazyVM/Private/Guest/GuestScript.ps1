@@ -328,14 +328,33 @@ function Receive-GuestTaskOutputFile {
         [Parameter(Mandatory)][string]$Destination
     )
 
+    $data = Get-GuestTaskOutputFileData -VM $VM -TaskName $TaskName -Name $Name -MaximumBytes $MaximumBytes
+    New-Folder -Path (Split-Path -Path $Destination -Parent)
+    Assert-NoReparsePoint -Path $Destination
+    [IO.File]::WriteAllBytes($Destination, [Convert]::FromBase64String($data))
+}
+
+function Get-GuestTaskOutputFileData {
+    <#
+      The file $Name that guest task $TaskName wrote in its Output folder,
+      of at most $MaximumBytes, as Base64. The guest checks and reads it on
+      one handle, never through a link (Read-GuestTaskOutputFile in
+      Guest.Helpers.ps1). Throws when it cannot.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$TaskName,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][long]$MaximumBytes
+    )
+
     $read = @(Invoke-GuestScript -VM $VM -Activity "reading $Name" -TimeoutMinutes 5 -ArgumentList @($TaskName, $Name, $MaximumBytes) -ScriptBlock {
             param($taskName, $name, $maximumBytes)
             [Convert]::ToBase64String((Read-GuestTaskOutputFile -TaskName $taskName -Name $name -MaximumBytes $maximumBytes))
         })
     if ($read.Count -ne 1 -or $read[0] -isnot [string]) { throw "the guest did not give $Name back as one piece of text" }
-    New-Folder -Path (Split-Path -Path $Destination -Parent)
-    Assert-NoReparsePoint -Path $Destination
-    [IO.File]::WriteAllBytes($Destination, [Convert]::FromBase64String($read[0]))
+    return $read[0]
 }
 
 function Copy-ToGuest {

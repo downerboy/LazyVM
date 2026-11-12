@@ -252,14 +252,15 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="335" y1="1469" x2="640" y2="1469"/>
 <g class="sn"><circle cx="351" cy="1453" r="10"/><text x="351" y="1457" text-anchor="middle">9</text></g>
 <text class="at" x="345" y="1484">called by Restore-GuestState</text>
-<text class="at" x="345" y="1501">10e: the application settings VM.json</text>
-<text class="at" x="345" y="1518">records</text>
+<text class="at" x="345" y="1501">10e: the application settings and files</text>
+<text class="at" x="345" y="1518">VM.json records</text>
 </g>
 <g class="bx-store"><rect x="20" y="1432" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="1446" text-anchor="middle">«file»</text>
 <text class="nm" x="147.5" y="1462" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="20" y1="1469" x2="275" y2="1469"/>
-<text class="at" x="30" y="1484">VM.json GuestAppSettings</text>
+<text class="at" x="30" y="1484">VM.json GuestAppSettings,</text>
+<text class="at" x="30" y="1501">GuestAppSettingFiles</text>
 </g>
 <g class="bx-store"><rect x="20" y="1528" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="1542" text-anchor="middle">«file»</text>
@@ -271,7 +272,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="875" y="1446" text-anchor="middle">«guest»</text>
 <text class="nm" x="875" y="1462" text-anchor="middle">New guest</text>
 <line class="div" x1="740" y1="1469" x2="1010" y2="1469"/>
-<text class="at" x="750" y="1484">registry values written</text>
+<text class="at" x="750" y="1484">registry values, files written</text>
 </g>
 <g class="bx-mod"><rect x="335" y="1640" width="305" height="84" rx="3"/>
 <text class="st" x="500.5" y="1654" text-anchor="middle">«Installation»</text>

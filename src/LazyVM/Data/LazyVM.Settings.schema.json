@@ -861,9 +861,45 @@
         {
           "Name": "WinMerge",
           "RegistryKey": "HKCU\\Software\\Thingamahoochie\\WinMerge"
+        },
+        {
+          "Name": "7-Zip",
+          "RegistryKey": "HKCU\\Software\\7-Zip"
+        },
+        {
+          "Name": "Windows theme",
+          "RegistryKey": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+        },
+        {
+          "Name": "Windows accent color",
+          "RegistryKey": "HKCU\\Software\\Microsoft\\Windows\\DWM"
+        },
+        {
+          "Name": "Windows accent palette",
+          "RegistryKey": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Accent"
+        },
+        {
+          "Name": "Desktop",
+          "RegistryKey": "HKCU\\Control Panel\\Desktop"
+        },
+        {
+          "Name": "Taskbar, Start and File Explorer",
+          "RegistryKey": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"
+        },
+        {
+          "Name": "Taskbar position",
+          "RegistryKey": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StuckRects3"
+        },
+        {
+          "Name": "Taskbar search",
+          "RegistryKey": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Search"
+        },
+        {
+          "Name": "Start menu",
+          "RegistryKey": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Start"
         }
       ],
-      "description": "Application settings carried across a rebuild: each registry key is exported by a capture and imported by a restore, after the application has been reinstalled.",
+      "description": "Application and Windows settings kept in the registry, carried across a rebuild and into the VM's config templates: the values under each key are recorded in VM.json whenever they change and put back after the applications are reinstalled, and a VM built from a template made from this one starts with them. The default covers WinMerge, 7-Zip and the Windows theme, colors, desktop, taskbar, Start menu and File Explorer options. Listing this setting replaces the whole list, so copy it and add to it.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -881,6 +917,42 @@
             "type": "string",
             "pattern": "^(HKCU|HKLM)\\\\",
             "description": "The registry key to carry across, starting HKCU\\ or HKLM\\."
+          }
+        }
+      }
+    },
+    "AppSettingFiles": {
+      "type": "array",
+      "default": [
+        {
+          "Name": "Start menu pins",
+          "File": "%LOCALAPPDATA%\\Packages\\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\\LocalState\\start2.bin",
+          "StopProcess": "StartMenuExperienceHost"
+        }
+      ],
+      "description": "Settings an application keeps in a file rather than the registry, carried across a rebuild and into the VM's config templates like AppSettings: each file is recorded in VM.json whenever it changes and put back after the applications are reinstalled. Up to 1 MB each. A file is kept as it is, so list none that holds a password or token. The default covers the apps pinned to the Start menu. Listing this setting replaces the whole list, so copy it and add to it.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "Name",
+          "File"
+        ],
+        "properties": {
+          "Name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A name for the application."
+          },
+          "File": {
+            "type": "string",
+            "pattern": "^%(LOCALAPPDATA|APPDATA|USERPROFILE)%\\\\(?!(.*\\\\)?\\.\\.?(\\\\|$))[^:*?\"<>|]+$",
+            "description": "The file in the guest user's profile, starting %LOCALAPPDATA%\\, %APPDATA%\\ or %USERPROFILE%\\, with no . or .. folder."
+          },
+          "StopProcess": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "description": "A process to stop before the file is put back, so it reads the file again when it restarts. Without .exe."
           }
         }
       }
@@ -1087,7 +1159,7 @@
     "GuestAppSettings": {
       "type": ["array", "null"],
       "default": null,
-      "description": "The values under each AppSettings registry key in the guest, recorded by LazyVM whenever they change and put back by a rebuild. A value whose name looks secret is listed by name only; its data is kept encrypted in Credentials\\appsettings.cred. Empty until first recorded.",
+      "description": "The values under each AppSettings registry key in the guest, recorded by LazyVM whenever they change and put back by a rebuild, or by a build from a config template that holds them. A value whose name looks secret is listed by name only; its data is kept encrypted in Credentials\\appsettings.cred and never goes into a template. Empty until first recorded.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -1121,6 +1193,21 @@
               }
             }
           }
+        }
+      }
+    },
+    "GuestAppSettingFiles": {
+      "type": ["array", "null"],
+      "default": null,
+      "description": "The files AppSettingFiles lists, as they are in the guest, recorded by LazyVM whenever they change and put back by a rebuild, or by a build from a config template that holds them. Empty until first recorded.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["Name", "File", "Data"],
+        "properties": {
+          "Name": { "type": "string", "minLength": 1 },
+          "File": { "type": "string", "minLength": 1 },
+          "Data": { "type": "string", "description": "The file's content, as Base64." }
         }
       }
     },

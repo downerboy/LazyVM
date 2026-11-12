@@ -661,13 +661,15 @@ function Save-GuestCertificate {
 
 function Save-GuestAppSetting {
     <#
-      Records the values under the AppSettings keys in VM.json
-      (GuestAppSetting.ps1). Nothing goes into the capture itself, so the
-      manifest's AppSettings stays empty.
+      Records the values under the AppSettings keys and the AppSettingFiles
+      files in VM.json (GuestAppSetting.ps1, GuestAppSettingFile.ps1).
+      Nothing goes into the capture itself, so the manifest's AppSettings
+      stays empty.
     #>
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $null = Update-GuestAppSettingRecord -VM $VM
+    $null = Update-GuestAppSettingFileRecord -VM $VM
     Write-LogEntry '  application settings: recorded in VM.json' 'OK'
     return $null
 }

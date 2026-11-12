@@ -735,9 +735,26 @@ Describe 'New-VMProfile' {
         }
         $vmProfile = Read-TestJson -Path $path
 
-        foreach ($setting in 'GuestSql', 'GuestAppSettings', 'GuestEnvironment', 'GuestScheduledTasks', 'GuestFirewallRules') {
+        foreach ($setting in 'GuestSql', 'GuestEnvironment', 'GuestScheduledTasks', 'GuestFirewallRules') {
             $vmProfile[$setting] | Should -BeNullOrEmpty -Because "-From must not copy $setting"
         }
+    }
+
+    It 'with -From, copies the source VM''s application settings and files, without its secret values (#325)' {
+        $root = New-TestRoot -Profiles @{
+            Alpha = '{ "GuestAppSettings": [ { "Name": "WinMerge", "RegistryKey": "HKCU\\Software\\Thingamahoochie\\WinMerge", "Values": [ { "Path": "", "Name": "Font", "Kind": "String", "Data": "Consolas" } ], "SecretValues": [ { "Path": "", "Name": "SyncPassword" } ] } ],
+                       "GuestAppSettingFiles": [ { "Name": "Start menu pins", "File": "%LOCALAPPDATA%\\x\\start2.bin", "Data": "AAE=" } ] }'
+        }
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -Root $Root -Name 'Beta' -From 'Alpha'
+        }
+        $vmProfile = Read-TestJson -Path $path
+
+        $vmProfile.GuestAppSettings[0].Values[0].Data | Should -Be 'Consolas'
+        @($vmProfile.GuestAppSettings[0].SecretValues) | Should -BeNullOrEmpty
+        $vmProfile.GuestAppSettingFiles[0].Data | Should -Be 'AAE='
     }
 
     It 'with -From, first folds an older source VM''s Tooling.json into its VM.json' {
@@ -1010,8 +1027,8 @@ Describe 'Export-VMTemplate (#250)' {
         Get-TestWingetId -Settings $template.Settings | Should -Be @('Git.Git')
         $perVM = InModuleScope $module { Get-PerVMSettingName }
         @($template.Settings.Keys | Where-Object { $perVM -contains $_ }) | Should -BeNullOrEmpty
-        # What was recorded inside the VM belongs to it alone.
-        foreach ($setting in 'GuestSql', 'GuestAppSettings', 'GuestEnvironment', 'GuestScheduledTasks', 'GuestFirewallRules') {
+        # What was recorded inside the VM belongs to it alone, but for its application settings (#325).
+        foreach ($setting in 'GuestSql', 'GuestEnvironment', 'GuestScheduledTasks', 'GuestFirewallRules') {
             $template.Settings.Keys | Should -Not -Contain $setting
         }
         Join-Path -Path $root -ChildPath 'Shared/Config/LazyVM.Template.schema.json' | Should -Exist
@@ -1029,6 +1046,28 @@ Describe 'Export-VMTemplate (#250)' {
         }
 
         Get-TestWingetId -Settings (Read-TestJson -Path $path).Settings | Should -Be @('Git.Git')
+    }
+
+    It 'carries the VM''s application settings and files into the template, without their secret values, so new VMs start with them (#325)' {
+        $json = '{ "MemMaxGB": 32,
+                   "GuestAppSettings": [ { "Name": "Windows theme", "RegistryKey": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "Values": [ { "Path": "", "Name": "AppsUseLightTheme", "Kind": "DWord", "Data": 1 } ], "SecretValues": [ { "Path": "", "Name": "SyncPassword" } ] } ],
+                   "GuestAppSettingFiles": [ { "Name": "Start menu pins", "File": "%LOCALAPPDATA%\\x\\start2.bin", "Data": "AAE=" } ] }'
+        $root = New-TestRoot -Profiles @{ Alpha = $json }
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            $template = Export-VMTemplate -Root $Root -Name 'Alpha' -TemplateName 'WebDev'
+            $null = New-VMProfile -Root $Root -Name 'Beta' -ConfigTemplate 'WebDev'
+            $template
+        }
+        $template = Read-TestJson -Path $path
+        $beta = Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Beta/Config/VM.json')
+
+        $template.Settings.GuestAppSettings[0].Values[0].Data | Should -Be 1
+        @($template.Settings.GuestAppSettings[0].SecretValues) | Should -BeNullOrEmpty
+        $template.Settings.GuestAppSettingFiles[0].Data | Should -Be 'AAE='
+        $beta.GuestAppSettings[0].Values[0].Name | Should -Be 'AppsUseLightTheme'
+        $beta.GuestAppSettingFiles[0].Name | Should -Be 'Start menu pins'
     }
 
     It 'makes a template that new VMs are built from, without its Name' {
@@ -1515,6 +1554,25 @@ Describe 'Sync-VMProfile' {
         $vmProfile.Contains('GuestProjectPaths') | Should -BeFalse
         $vmProfile.Contains('MaxProjectCaptureGB') | Should -BeFalse
         @(Get-ChildItem -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/History') -Filter 'VM-*.json').Count | Should -BeGreaterThan 0
+    }
+
+    It 'gives an AppSettings still at the default before #325 the new default, with the Windows settings (#325)' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2, "AppSettings": [ { "Name": "WinMerge", "RegistryKey": "HKCU\\Software\\Thingamahoochie\\WinMerge" } ] }' }
+
+        Invoke-Sync -Root $root
+
+        $names = @((Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).AppSettings.Name)
+        $names | Should -Contain 'WinMerge'
+        $names | Should -Contain '7-Zip'
+        $names | Should -Contain 'Windows theme'
+    }
+
+    It 'leaves an AppSettings its user changed as it is (#325)' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 2, "AppSettings": [ { "Name": "Git", "RegistryKey": "HKCU\\Software\\Git" } ] }' }
+
+        Invoke-Sync -Root $root
+
+        @((Read-TestJson -Path (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json')).AppSettings.Name) | Should -Be @('Git')
     }
 
     It 'is no longer affected by the shared template once complete' {
@@ -2613,6 +2671,126 @@ Describe 'Get-GuestAppSettingRestore (#131)' {
         $restore = Invoke-TestRestore -Root $root -Keys @($listed, $planted)
 
         @($restore.Keys).Name | Should -Be @('WinMerge')
+    }
+}
+
+Describe 'AppSettings and AppSettingFiles defaults (#325)' {
+    It 'records the Windows theme, colors, desktop, taskbar, Start menu and File Explorer options, WinMerge and 7-Zip' {
+        $defaults = InModuleScope $module { Get-DefaultSetting }
+
+        $keys = @($defaults.AppSettings | ForEach-Object { $_['RegistryKey'] })
+        foreach ($key in 'HKCU\Software\Thingamahoochie\WinMerge', 'HKCU\Software\7-Zip', 'HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize',
+            'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced', 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3') {
+            $keys | Should -Contain $key
+        }
+        $defaults.AppSettingFiles[0].File | Should -BeLike '*\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState\start2.bin'
+        $defaults.AppSettingFiles[0].StopProcess | Should -Be 'StartMenuExperienceHost'
+    }
+
+    It 'lets a VM''s application settings and files go into a template, but none of its other records' {
+        $perVM = InModuleScope $module { Get-PerVMSettingName }
+
+        $perVM | Should -Not -Contain 'GuestAppSettings'
+        $perVM | Should -Not -Contain 'GuestAppSettingFiles'
+        $perVM | Should -Contain 'GuestSql'
+    }
+
+    It 'refuses an AppSettingFiles file <Case>' -ForEach @(
+        @{ Case = 'outside the user''s profile folders'; File = 'C:\\Windows\\win.ini' }
+        @{ Case = 'in the temporary folder'; File = '%TEMP%\\x.json' }
+        @{ Case = 'that climbs out with ..'; File = '%APPDATA%\\..\\..\\x.json' }
+    ) {
+        $message = Get-TestSettingsProblem -Text "{ `"AppSettingFiles`": [ { `"Name`": `"X`", `"File`": `"$File`" } ] }"
+
+        $message | Should -BeLike "*'AppSettingFiles, item 1, File'*"
+    }
+}
+
+Describe 'Update-GuestAppSettingFileRecord (#325)' {
+    BeforeAll {
+        function Invoke-TestFileRecord {
+            <# Records Alpha's application settings files under $Root, with the guest reading $Files and failing on $Failed. Returns whether anything changed. #>
+            param([string]$Root, [object[]]$Files, [string[]]$Failed = @())
+
+            InModuleScope $module -Parameters @{ Root = $Root; Files = $Files; Failed = $Failed } {
+                param($Root, $Files, $Failed)
+                Mock Write-LogEntry {}
+                Mock Write-GuestNote {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                $reported = [pscustomobject]@{ Files = @($Files); Failed = @($Failed); Notes = @() }
+                Mock Get-GuestAppSettingFileSnapshot { $reported }.GetNewClosure()
+                $vm = [VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings)
+                Update-GuestAppSettingFileRecord -VM $vm
+            }
+        }
+        function New-TestFile {
+            param([string]$Data = 'AAE=')
+            [pscustomobject]@{ Name = 'Start menu pins'; File = '%LOCALAPPDATA%\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState\start2.bin'; Data = $Data }
+        }
+        function Get-TestRecordedFile {
+            param([string]$Root)
+            @((Read-TestJson -Path (Join-Path -Path $Root -ChildPath 'Alpha/Config/VM.json')).GuestAppSettingFiles)
+        }
+    }
+
+    It 'writes the file into VM.json, then nothing the second time when it did not change' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        Invoke-TestFileRecord -Root $root -Files @(New-TestFile) | Should -BeTrue
+        Invoke-TestFileRecord -Root $root -Files @(New-TestFile) | Should -BeFalse
+
+        (Get-TestRecordedFile -Root $root).Data | Should -Be @('AAE=')
+    }
+
+    It 'records a change to the file' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestFileRecord -Root $root -Files @(New-TestFile)
+
+        Invoke-TestFileRecord -Root $root -Files @(New-TestFile -Data 'AAI=') | Should -BeTrue
+
+        (Get-TestRecordedFile -Root $root).Data | Should -Be @('AAI=')
+    }
+
+    It 'keeps what it had for a file that could not be read this time' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $null = Invoke-TestFileRecord -Root $root -Files @(New-TestFile)
+
+        Invoke-TestFileRecord -Root $root -Files @() -Failed @('Start menu pins') | Should -BeFalse
+
+        (Get-TestRecordedFile -Root $root).Data | Should -Be @('AAE=')
+    }
+}
+
+Describe 'Get-GuestAppSettingFileRestore (#325)' {
+    BeforeAll {
+        function Invoke-TestFileRestore {
+            param([string]$Root, [object[]]$Files)
+
+            InModuleScope $module -Parameters @{ Root = $Root; Files = $Files } {
+                param($Root, $Files)
+                Mock Write-LogEntry {}
+                Mock Get-ToolingCheckpointStamp { , @() }
+                if ($null -ne $Files) { $null = Update-VMProfile -Root $Root -Name 'Alpha' -Change @{ GuestAppSettingFiles = $Files } -Reason 'a test' }
+                Get-GuestAppSettingFileRestore -VM ([VMContext]::new((Read-VMSetting -Root $Root -VMName 'Alpha').Settings))
+            }
+        }
+    }
+
+    It 'returns nothing for a VM whose files were never recorded' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+
+        Invoke-TestFileRestore -Root $root -Files $null | Should -BeNullOrEmpty
+    }
+
+    It 'returns each listed file with the process AppSettingFiles stops first, and leaves out one it does not list' {
+        $root = New-TestRoot -Profiles @{ Alpha = '{ "vCPU": 4 }' }
+        $listed = [ordered]@{ Name = 'Start menu pins'; File = '%localappdata%\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState\start2.bin'; Data = 'AAE=' }
+        $planted = [ordered]@{ Name = 'Startup'; File = '%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\evil.cmd'; Data = 'AAE=' }
+
+        $restore = @(Invoke-TestFileRestore -Root $root -Files @($listed, $planted))
+
+        $restore.Name | Should -Be @('Start menu pins')
+        $restore[0].StopProcess | Should -Be 'StartMenuExperienceHost'
     }
 }
 

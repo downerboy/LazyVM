@@ -8,7 +8,8 @@ function Save-LazyVMState {
     own in the VM's State folder on the host, keeping the newest three:
     Visual Studio settings and files, and certificates. Every user database
     is backed up to the SQL data disk, which a rebuild keeps, and the
-    application settings listed in AppSettings are recorded in VM.json.
+    application settings listed in AppSettings and AppSettingFiles are
+    recorded in VM.json.
 
     The environment, firewall rules, scheduled tasks and SQL logins,
     settings and Agent jobs need no capture: the daily maintenance records

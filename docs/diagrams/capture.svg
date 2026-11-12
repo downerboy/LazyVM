@@ -256,20 +256,23 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="335" y1="1407" x2="640" y2="1407"/>
 <g class="sn"><circle cx="351" cy="1391" r="10"/><text x="351" y="1395" text-anchor="middle">9</text></g>
 <text class="at" x="345" y="1422">called by Save-GuestState</text>
-<text class="at" x="345" y="1439">records the AppSettings keys in VM.json;</text>
-<text class="at" x="345" y="1456">nothing goes into the capture itself</text>
+<text class="at" x="345" y="1439">records the AppSettings keys and</text>
+<text class="at" x="345" y="1456">AppSettingFiles files in VM.json;</text>
+<text class="at" x="345" y="1473">nothing goes into the capture itself</text>
 </g>
 <g class="bx-store"><rect x="20" y="1370" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="1384" text-anchor="middle">«guest»</text>
-<text class="nm" x="147.5" y="1400" text-anchor="middle">AppSettings keys</text>
+<text class="nm" x="147.5" y="1400" text-anchor="middle">AppSettings, AppSettingFiles</text>
 <line class="div" x1="20" y1="1407" x2="275" y2="1407"/>
 <text class="at" x="30" y="1422">HKCU\Software\...</text>
+<text class="at" x="30" y="1439">%LOCALAPPDATA%\...</text>
 </g>
 <g class="bx-store"><rect x="740" y="1370" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="1384" text-anchor="middle">«file»</text>
 <text class="nm" x="875" y="1400" text-anchor="middle">&lt;VM&gt;\Config\</text>
 <line class="div" x1="740" y1="1407" x2="1010" y2="1407"/>
-<text class="at" x="750" y="1422">VM.json GuestAppSettings</text>
+<text class="at" x="750" y="1422">VM.json GuestAppSettings,</text>
+<text class="at" x="750" y="1439">GuestAppSettingFiles</text>
 </g>
 <g class="bx-store"><rect x="740" y="1466" width="270" height="84" rx="3"/>
 <text class="st" x="875" y="1480" text-anchor="middle">«file»</text>

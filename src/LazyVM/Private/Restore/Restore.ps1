@@ -553,21 +553,16 @@ function Restore-GuestSqlLogin {
 
 function Restore-GuestAppSetting {
     <#
-      Writes the application settings VM.json records into the guest's
-      registry, the secret values from the credential store. A VM whose
-      settings were never recorded gets the .reg files its capture has
-      instead.
+      Writes the application settings and files VM.json records into the
+      guest (Restore-GuestRecordedAppSetting). A VM whose registry settings
+      were never recorded gets the .reg files its capture has instead.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
         [Parameter(Mandatory)][CaptureManifest]$Manifest
     )
 
-    $recorded = Get-GuestAppSettingRestore -VM $VM
-    if ($recorded) {
-        Write-GuestNote -Notes @(Restore-GuestAppSettingValue -VM $VM -Recorded $recorded)
-        return
-    }
+    if (Restore-GuestRecordedAppSetting -VM $VM) { return }
 
     $saved = @($Manifest.AppSettings | Where-Object { $_ })
     if ($saved.Count -eq 0) {
@@ -591,6 +586,27 @@ function Restore-GuestAppSetting {
         if ($imported) { Write-LogEntry "  restored $($entry.Name) settings" 'OK' }
         else { Write-LogEntry "  $($entry.Name) settings import failed" 'WARN' }
     }
+}
+
+function Restore-GuestRecordedAppSetting {
+    <#
+      Writes the application settings VM.json records into the guest: the
+      registry values, the secret ones from the credential store, and the
+      files (#325). A build runs it once the applications are installed, so
+      a VM built from a config template that holds them starts with them; a
+      restore runs it too. Returns whether VM.json records registry values
+      at all: when it does not, a restore uses an older capture's instead.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $files = Get-GuestAppSettingFileRestore -VM $VM
+    if ($files) { Write-GuestNote -Notes @(Restore-GuestAppSettingFile -VM $VM -Recorded @($files)) }
+
+    $recorded = Get-GuestAppSettingRestore -VM $VM
+    if (-not $recorded) { return $false }
+    Write-GuestNote -Notes @(Restore-GuestAppSettingValue -VM $VM -Recorded $recorded)
+    return $true
 }
 
 function Restore-GuestAppSettingValue {

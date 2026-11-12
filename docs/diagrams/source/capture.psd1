@@ -76,10 +76,10 @@
             Function = 'Save-GuestAppSetting'
             Area     = 'Capture'
             Caller   = 'Save-GuestState'
-            Note     = 'records the AppSettings keys in VM.json; nothing goes into the capture itself'
-            Reads    = @(@{ Label = 'registry values'; Kind = 'guest'; Store = 'AppSettings keys'; Items = @('HKCU\Software\...') })
+            Note     = 'records the AppSettings keys and AppSettingFiles files in VM.json; nothing goes into the capture itself'
+            Reads    = @(@{ Label = 'registry values, files'; Kind = 'guest'; Store = 'AppSettings, AppSettingFiles'; Items = @('HKCU\Software\...', '%LOCALAPPDATA%\...') })
             Writes   = @(
-                @{ Label = 'application settings'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json  GuestAppSettings') }
+                @{ Label = 'application settings'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json  GuestAppSettings,', 'GuestAppSettingFiles') }
                 @{ Label = 'secret values'; Kind = 'file'; Store = 'Credential store'; Items = @('<VM>\Credentials\') }
             )
         }

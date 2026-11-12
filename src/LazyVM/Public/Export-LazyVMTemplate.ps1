@@ -8,8 +8,11 @@
     <Root>\Shared\Templates. New VMs can then start from it with
     Build-LazyVM -ConfigTemplate or New-LazyVM -ConfigTemplate. Settings that
     must differ between VMs (file locations, the computer name, the
-    maintenance time and the recorded identity of its disks) are left out,
-    as New-LazyVM -From leaves them out.
+    maintenance time, the recorded identity of its disks and what LazyVM
+    recorded inside it) are left out, as New-LazyVM -From leaves them out.
+    The application and Windows settings it recorded (AppSettings,
+    AppSettingFiles) go in, without their secret values, so a VM built
+    from the template starts with them.
 
     A typical workflow: build a VM from the PlainWindows template, install
     and set up the apps you want, export it, and build new VMs from it.

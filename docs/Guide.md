@@ -802,7 +802,8 @@ Most settings are applied when a VM is built: changing `vCPU` or `MemMaxGB` in i
 | `MaintenanceTime` | 02:00 | When the VM's daily maintenance runs. Run `Register-LazyVMMaintenance` after changing it. |
 | `ToolingCheckpointsToKeep` | 3 | How many tooling checkpoints to keep. |
 | `ToolingWingetExclude` | Windows built-ins | winget packages never recorded. Your list replaces the default, so copy it and add to it. |
-| `AppSettings` | WinMerge | Registry keys whose values are recorded in `VM.json` each night and written back by a restore, so an application's settings survive a rebuild ([Application settings](#application-settings)). |
+| `AppSettings` | WinMerge, 7-Zip, Windows look and feel | Registry keys whose values are recorded in `VM.json` each night and written back by a rebuild, or by a build from a template, so settings survive ([Application settings](#application-settings)). |
+| `AppSettingFiles` | Start menu pins | Files kept the same way, for settings an application keeps in a file rather than the registry ([Application settings](#application-settings)). |
 | `InstallerBootstrappers` | 5 channels | The bootstrapper for each Visual Studio Installer channel. Add one if a tooling list uses a channel not listed. |
 | `UnsignedExtensions` | none | Marketplace extensions, by item name (`Publisher.Name`), that may be installed even though they are not signed. Any other unsigned extension is refused by the installer and named in the log; Visual Studio and its other extensions install anyway. |
 | `vCPU`, `MemStartGB`, `MemMaxGB` | 4, 8, 16 | VM sizing, applied when the VM is built. 8 GB to start is the Dev Drive minimum. |
@@ -924,7 +925,15 @@ A VM set up before LazyVM kept the list in `VM.json` has it in `Tooling.json`, `
 
 ### Application settings
 
-Reinstalling an application does not bring back its settings. For one that keeps them in the registry, add its key to `AppSettings`: the key's values, subkeys included, are recorded in `VM.json` as `GuestAppSettings` whenever they change, and a restore writes them back after the application is back. A value whose name looks secret, such as `SyncPassword`, is kept encrypted in `Credentials\appsettings.cred` instead. WinMerge is included by default.
+Reinstalling Windows or an application does not bring back its settings. For one that keeps them in the registry, add its key to `AppSettings`: the key's values, subkeys included, are recorded in `VM.json` as `GuestAppSettings` whenever they change, and a rebuild writes them back after the application is back. A value whose name looks secret, such as `SyncPassword`, is kept encrypted in `Credentials\appsettings.cred` instead.
+
+By default this covers WinMerge, 7-Zip and how Windows looks and behaves: light or dark mode, transparency, the accent color, the desktop, the taskbar (alignment, search box, auto-hide), the Start menu's options and File Explorer's options.
+
+For settings kept in a file, add the file to `AppSettingFiles`, starting `%LOCALAPPDATA%\`, `%APPDATA%\` or `%USERPROFILE%\`. Each file, up to 1 MB, is recorded in `VM.json` as `GuestAppSettingFiles` and written back the same way. `StopProcess` names a process to stop first, so it reads the file again when it restarts. The apps pinned to the Start menu are included by default. A file is kept as it is, so list none that holds a password or token. The files are read and written as you, never as an administrator, so you need to be signed in, as automatic sign-in does after each start; when you are not, the last recorded copy is kept.
+
+The recorded settings also go into the VM's config templates, its automatic `<VM>-latest` one included, and to a VM copied from it with `-From`, without the secret values. A VM built from one gets them once its applications are installed, so you do not have to set things up again. Windows applies most of them the next time you sign in.
+
+A VM made before LazyVM recorded the Windows settings has only WinMerge in its `AppSettings`; it is given the new default the next time a command runs on it. A list you changed yourself is left as it is.
 
 ### Going back to an earlier version
 
@@ -989,7 +998,7 @@ Each template is a JSON file with a `Name`, which is what `-ConfigTemplate` take
 
 The `$schema` line points VS Code at the copy of the template schema LazyVM keeps in `Shared\Config`, so it completes and checks the settings as it does in `LazyVM.Settings.json`.
 
-`Name` belongs to the template: it is never written into a VM's `VM.json`. A template cannot hold the settings each VM has its own of: file locations, the computer name, the maintenance time, the recorded identity of its disks, and what LazyVM recorded inside a VM (`GuestEnvironment`, `GuestFirewallRules`, `GuestScheduledTasks`, `GuestSql`, `GuestAppSettings`). A template that lists one is refused, with the setting named.
+`Name` belongs to the template: it is never written into a VM's `VM.json`. A template cannot hold the settings each VM has its own of: file locations, the computer name, the maintenance time, the recorded identity of its disks, and what LazyVM recorded inside a VM (`GuestEnvironment`, `GuestFirewallRules`, `GuestScheduledTasks`, `GuestSql`). A template that lists one is refused, with the setting named. The recorded application settings (`GuestAppSettings`, `GuestAppSettingFiles`) are the exception: they go into a template, without their secret values, so new VMs start with them ([Application settings](#application-settings)).
 
 One of your own templates with the same `Name` as a built-in one replaces it, as `LazyVM.Settings.json` replaces the defaults; Tab lists the name once. If two of your own have the same `Name`, LazyVM refuses to choose between them and names both files. A template file that cannot be read is left out of the list, and the error for a template that is not found says why.
 
