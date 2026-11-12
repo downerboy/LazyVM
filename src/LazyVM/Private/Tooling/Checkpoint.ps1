@@ -112,7 +112,8 @@ function New-ToolingCheckpoint {
     <#
       Takes a checkpoint, then removes the oldest tooling checkpoints beyond
       ToolingCheckpointsToKeep. Throws if the checkpoint cannot be taken, so
-      the caller records nothing without one.
+      the caller records nothing without one. A failure to remove older ones
+      is only a warning: the checkpoint was taken, and the next run prunes.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -138,15 +139,20 @@ function New-ToolingCheckpoint {
     Write-LogEntry "Checkpoint taken: '$Name'" 'OK'
     if ($SkipPrune) { return }
 
-    $tooling = Get-ToolingCheckpoint -VM $VM
-    $surplus = $tooling.Count - [int]$VM.Settings.ToolingCheckpointsToKeep
-    foreach ($old in @($tooling | Select-Object -First ([math]::Max($surplus, 0)))) {
-        try {
-            Remove-VMSnapshot -VMSnapshot $old -Confirm:$false -ErrorAction Stop
-            Write-LogEntry "  removed the older checkpoint '$($old.Name)'" 'INFO'
+    try {
+        # @() keeps a single checkpoint a list: a function's returned array
+        # is unrolled, and StrictMode rejects .Count on one object (#357).
+        $tooling = @(Get-ToolingCheckpoint -VM $VM)
+        $surplus = $tooling.Count - [int]$VM.Settings.ToolingCheckpointsToKeep
+        foreach ($old in @($tooling | Select-Object -First ([math]::Max($surplus, 0)))) {
+            try {
+                Remove-VMSnapshot -VMSnapshot $old -Confirm:$false -ErrorAction Stop
+                Write-LogEntry "  removed the older checkpoint '$($old.Name)'" 'INFO'
+            }
+            catch { Write-LogEntry "  could not remove the checkpoint '$($old.Name)': $($_.Exception.Message)" 'WARN' }
         }
-        catch { Write-LogEntry "  could not remove the checkpoint '$($old.Name)': $($_.Exception.Message)" 'WARN' }
     }
+    catch { Write-LogEntry "  could not remove the older checkpoints; the next run tries again: $($_.Exception.Message)" 'WARN' }
 }
 
 function Get-ToolingRestorePoint {

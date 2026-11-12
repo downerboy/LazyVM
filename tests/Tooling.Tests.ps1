@@ -731,3 +731,66 @@ Describe 'New-ToolingCheckpoint when the checkpoint fails (#182)' {
         Should -Invoke -ModuleName $module Resume-VM -Times 0 -Exactly
     }
 }
+
+Describe 'New-ToolingCheckpoint pruning (#357)' {
+    BeforeAll {
+        class TestCheckpoint {
+            [string]$Name
+            [datetime]$CreationTime
+        }
+    }
+
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry {}
+        Mock -ModuleName $module Enable-ToolingCheckpoint {}
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
+        Mock -ModuleName $module Checkpoint-VM {}
+        # Hyper-V's own Remove-VMSnapshot accepts only a real VMSnapshot.
+        Mock -ModuleName $module Remove-VMSnapshot {} -RemoveParameterType VMSnapshot
+        $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; ToolingCheckpointsToKeep = 2 }) }
+
+        function New-TestCheckpoint {
+            <#
+              A typed object, as Hyper-V's VMSnapshot is: PowerShell gives a
+              pscustomobject a Count, which would hide the bug in #357.
+            #>
+            param([string]$Stamp, [int]$DaysAgo)
+
+            $checkpoint = [TestCheckpoint]::new()
+            $checkpoint.Name = "Tooling $Stamp"
+            $checkpoint.CreationTime = (Get-Date).AddDays(-$DaysAgo)
+            return $checkpoint
+        }
+    }
+
+    It 'keeps the only tooling checkpoint, without failing the checkpoint' {
+        $script:checkpoints = @(New-TestCheckpoint -Stamp '20261111-020149' -DaysAgo 0)
+        Mock -ModuleName $module Get-VMSnapshot { $script:checkpoints }
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) New-ToolingCheckpoint -VM $VM -Name 'Tooling 20261111-020149' } } | Should -Not -Throw
+
+        Should -Invoke -ModuleName $module Remove-VMSnapshot -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly -ParameterFilter { $Level -eq 'WARN' }
+    }
+
+    It 'removes the oldest tooling checkpoints beyond ToolingCheckpointsToKeep' {
+        $script:checkpoints = @(
+            New-TestCheckpoint -Stamp '20261111-020149' -DaysAgo 0
+            New-TestCheckpoint -Stamp '20261109-020149' -DaysAgo 2
+            New-TestCheckpoint -Stamp '20261110-020149' -DaysAgo 1
+        )
+        Mock -ModuleName $module Get-VMSnapshot { $script:checkpoints }
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) New-ToolingCheckpoint -VM $VM -Name 'Tooling 20261111-020149' }
+
+        Should -Invoke -ModuleName $module Remove-VMSnapshot -Times 1 -Exactly -ParameterFilter { $VMSnapshot.Name -eq 'Tooling 20261109-020149' }
+    }
+
+    It 'does not fail a checkpoint that was taken when pruning fails' {
+        Mock -ModuleName $module Get-VMSnapshot { throw 'The Hyper-V service is not responding.' }
+
+        { InModuleScope $module -Parameters @{ VM = $vm } { param($VM) New-ToolingCheckpoint -VM $VM -Name 'Tooling 20261111-020149' } } | Should -Not -Throw
+
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 1 -Exactly -ParameterFilter { $Level -eq 'WARN' -and $Message -like '*older checkpoints*' }
+    }
+}
