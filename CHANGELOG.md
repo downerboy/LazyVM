@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.8.0](https://github.com/downerboy/LazyVM/compare/v6.7.5...v6.8.0) (2026-11-12)
+
+
+### Features
+
+* record Windows personalization and Start pins, and carry them into templates ([#353](https://github.com/downerboy/LazyVM/issues/353)) ([84f24ce](https://github.com/downerboy/LazyVM/commit/84f24ce72c90bb8127e0b227382341edf25b8f1e))
+
 ## [6.7.5](https://github.com/downerboy/LazyVM/compare/v6.7.4...v6.7.5) (2026-11-11)
 
 
