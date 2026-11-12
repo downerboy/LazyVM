@@ -745,7 +745,8 @@ Describe 'New-ToolingCheckpoint pruning (#357)' {
         Mock -ModuleName $module Enable-ToolingCheckpoint {}
         Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running' } }
         Mock -ModuleName $module Checkpoint-VM {}
-        Mock -ModuleName $module Remove-VMSnapshot {}
+        # Hyper-V's own Remove-VMSnapshot accepts only a real VMSnapshot.
+        Mock -ModuleName $module Remove-VMSnapshot {} -RemoveParameterType VMSnapshot
         $vm = InModuleScope $module { [VMContext]::new(@{ VMName = 'Alpha'; ToolingCheckpointsToKeep = 2 }) }
 
         function New-TestCheckpoint {
