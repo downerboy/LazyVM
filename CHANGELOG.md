@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.8.3](https://github.com/downerboy/LazyVM/compare/v6.8.2...v6.8.3) (2026-11-13)
+
+
+### Bug Fixes
+
+* use the winget id of the OLE DB driver that exists ([#371](https://github.com/downerboy/LazyVM/issues/371)) ([2335de5](https://github.com/downerboy/LazyVM/commit/2335de56f1170cf48ea7bffd8f129448016e8210)), closes [#358](https://github.com/downerboy/LazyVM/issues/358)
+
 ## [6.8.2](https://github.com/downerboy/LazyVM/compare/v6.8.1...v6.8.2) (2026-11-13)
 
 
