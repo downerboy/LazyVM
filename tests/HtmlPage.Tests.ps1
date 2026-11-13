@@ -49,7 +49,7 @@ Describe 'New-HtmlPage (#375)' {
 
         $html = Get-TestPage -WithCopyScript
 
-        $html | Should -BeLike '*</main>*<script>*button[data-copy]*</script>*'
+        $html | Should -Match '(?s)</main>.*<script>.*button\[data-copy\].*</script>'
     }
 
     It 'ends its lines with CRLF only, so it is written the same on every host' {
