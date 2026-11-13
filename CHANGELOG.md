@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.9.0](https://github.com/downerboy/LazyVM/compare/v6.8.3...v6.9.0) (2026-11-13)
+
+
+### Features
+
+* show the guest security findings as a web page with copy buttons ([#373](https://github.com/downerboy/LazyVM/issues/373)) ([8e5a6e2](https://github.com/downerboy/LazyVM/commit/8e5a6e2bde17e32a2b71842f800e068e44777b52)), closes [#367](https://github.com/downerboy/LazyVM/issues/367)
+
 ## [6.8.3](https://github.com/downerboy/LazyVM/compare/v6.8.2...v6.8.3) (2026-11-13)
 
 
