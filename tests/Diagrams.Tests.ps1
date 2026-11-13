@@ -127,6 +127,25 @@ Describe 'ConvertTo-DiagramDocument' {
         $document.IndexOf('## See a sample') | Should -BeLessThan $document.IndexOf('## See another')
         $document | Should -Match '(?s)---\n\nGenerated\.\n$'
     }
+
+    It 'puts the logo above the title when the index has one, and nothing above it otherwise' {
+        $diagram = New-TestDiagram
+        $index = @{
+            Title     = 'Diagrams'
+            Logo      = '<img src="logo.svg">'
+            Intro     = 'One per thing.'
+            HowToRead = @('Blue is calls.')
+            Groups    = @(@{ Name = 'Check'; Diagrams = @('sample') })
+            Footer    = 'Generated.'
+        }
+
+        $with = ConvertTo-DiagramDocument -Index $index -Diagrams @($diagram)
+        $index.Remove('Logo')
+        $without = ConvertTo-DiagramDocument -Index $index -Diagrams @($diagram)
+
+        $with | Should -Match '(?s)^<img src="logo\.svg">\n\n# Diagrams\n\nOne per thing\.'
+        $without | Should -Match '(?s)^# Diagrams\n'
+    }
 }
 
 Describe 'ConvertTo-DiagramSvg' {

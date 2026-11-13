@@ -1,3 +1,5 @@
+<p align="center"><img src="images/logo.svg" alt="LazyVM logo" width="240"></p>
+
 # LazyVM diagrams
 
 One diagram per thing you do with LazyVM. Each shows the calls in order down the middle, data read on the left and data written on the right. Every diagram is followed by the same information as a numbered list.
