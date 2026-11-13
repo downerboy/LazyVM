@@ -29,6 +29,12 @@ Describe 'New-HtmlPage (#375)' {
         $html | Should -BeLike '*<header>*<h1>A page</h1>*<p class="subtitle">Scanned today.</p>*</header>*<main>*<p>One</p>*<p>Two</p>*</main>*'
     }
 
+    It 'ends with the copyright notice of LICENSE.md, after the main content' {
+        $html = Get-TestPage
+
+        $html | Should -BeLike '*</main>*<footer><p>Copyright (c) 2026 Massokissed</p></footer>*</body>*'
+    }
+
     It 'has no subtitle line when it has no subtitle' {
         (Get-TestPage) | Should -Not -Match 'class="subtitle"'
     }

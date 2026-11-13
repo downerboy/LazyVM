@@ -32,6 +32,7 @@ header > * { max-width: 60rem; margin-left: auto; margin-right: auto; }
 h1 { font-size: 1.75rem; font-weight: 700; line-height: 1.25; margin: 0; }
 .subtitle { color: #C9D6E5; margin-top: 0.25rem; margin-bottom: 0; }
 main { max-width: 60rem; margin: 0 auto; padding: 1.5rem; }
+footer { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem 1.5rem 1.5rem; color: var(--lv-ink-muted); font-size: 0.875rem; }
 h2 { font-size: 1.25rem; font-weight: 700; line-height: 1.25; margin: 0 0 1rem 0; }
 .summary { background: var(--lv-tint); border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; }
 .summary > :first-child { margin-top: 0; }
@@ -150,6 +151,7 @@ function New-HtmlPage {
     $html.Add('<main>')
     $html.AddRange($Body)
     $html.Add('</main>')
+    $html.Add('<footer><p>Copyright (c) 2026 Massokissed</p></footer>')
     if ($WithCopyScript) { $html.Add("<script>`n$script:HtmlPageCopyScript`n</script>") }
     $html.Add('</body>')
     $html.Add('</html>')
