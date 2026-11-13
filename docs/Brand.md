@@ -176,3 +176,4 @@ The logo is the word "LazyVM" in bold sans-serif, cut from inside the supplied b
 3. Don't recolor, stretch, rotate or add effects.
 4. Use it on light backgrounds. A dark-theme version is not made yet.
 5. It was cut from a small screenshot (about 60 px wide), so it is soft when enlarged. A sharp vector version (SVG) is still to be made.
+6. Mark the first or most prominent use of the name with ™ (the README title does). Do not use ® unless the name is registered. The README's "Name and logo" section says what the license does and does not cover.
