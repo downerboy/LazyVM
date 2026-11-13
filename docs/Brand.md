@@ -1,4 +1,4 @@
-<p align="center"><img src="images/logo.png" alt="LazyVM logo" width="240"></p>
+<p align="center"><img src="images/logo.svg" alt="LazyVM logo" width="240"></p>
 
 # LazyVM Brand and UI Theme — v1
 
@@ -169,11 +169,11 @@ The text prefix is always printed, so screen readers and logs keep the meaning.
 
 ## 11. Logo
 
-The logo is the word "LazyVM" in bold sans-serif, cut from inside the supplied border and centered: `docs/images/logo.png` (transparent background, dark text, 576×224 px).
+The logo is the word "LazyVM" in bold sans-serif, centered: `docs/images/logo.svg`, a vector drawing (transparent background, brand navy `#0B2E59` text, scales without going soft). It is drawn as outlines from Selawik Bold, an open-licensed font (SIL Open Font License 1.1, Copyright 2015 Microsoft Corporation), so there is no font license to worry about. `docs/images/logo.png` is the earlier bitmap, cut from the first supplied image, and is no longer used.
 
 1. Show it centered at the top of the README and each docs page, 240px wide (`width="240"`), with the alt text "LazyVM logo". Keep the page's h1 under it.
 2. Keep clear space around it of at least the height of the letter "L".
-3. Don't recolor, stretch, rotate or add effects.
+3. Keep it navy (`--lv-navy`). Don't recolor, stretch, rotate or add effects.
 4. Use it on light backgrounds. A dark-theme version is not made yet.
-5. It was cut from a small screenshot (about 60 px wide), so it is soft when enlarged. A sharp vector version (SVG) is still to be made.
+5. Use the SVG wherever the format is accepted. Use the PNG only where SVG isn't accepted, and not above 240 px wide.
 6. Mark the first or most prominent use of the name with ™ (the README title does). Do not use ® unless the name is registered. The README's "Name and logo" section says what the license does and does not cover.

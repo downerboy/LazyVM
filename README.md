@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/images/logo.png" alt="LazyVM logo" width="240"></p>
+<p align="center"><img src="docs/images/logo.svg" alt="LazyVM logo" width="240"></p>
 
 # LazyVM™
 
