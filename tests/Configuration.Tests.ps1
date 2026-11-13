@@ -115,6 +115,14 @@ Describe 'The settings schema' {
         $defaults.Tooling.RecordedAt | Should -BeOfType ([string])
     }
 
+    It 'lists the OLE DB driver by an id winget still has (#358)' {
+        $shipped = Read-TestJson -Path (Join-Path -Path $script:LazyVMModuleDir -ChildPath 'Data/Tooling.Default.json')
+        $ids = @($shipped.WingetPackages | ForEach-Object { $_.Id })
+
+        $ids | Should -Not -Contain 'Microsoft.SQLServer.OLEDBDriver' -Because 'winget replaced it with one id for each major version'
+        $ids | Should -Contain 'Microsoft.SQLServer.OLEDBDriver.19'
+    }
+
     It 'rejects a Tooling section with a misspelled part' {
         $message = Get-TestSettingsProblem -Text '{ "Tooling": { "Version": 1, "Product": [] } }'
 
