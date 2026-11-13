@@ -1,3 +1,5 @@
+<p align="center"><img src="images/logo.png" alt="LazyVM logo" width="240"></p>
+
 # LazyVM use cases
 
 UML use case diagrams for the LazyVM module, drawn from the code in `src/`, not from the plans. Each diagram is followed by the same information as text.

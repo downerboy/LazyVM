@@ -1,4 +1,6 @@
-# LazyVM
+<p align="center"><img src="docs/images/logo.png" alt="LazyVM logo" width="240"></p>
+
+# LazyVM™
 
 > **Notice.** When this project hits beta, frequency of updates will drastically drop to, hopefully, weekly at most and the code release will not be releasing code breakage e.g. something moves some cheese, deletes some cheese, renames some cheeze and similar cheesy behavior.
 > **Alpha.** LazyVM works, and I use it myself, but much of its behaviour is still being worked on.
@@ -163,3 +165,7 @@ Each flow diagram in `docs/Diagrams.md` is drawn from one source, `docs/diagrams
 ## License
 
 LazyVM is free for personal and other noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Using it for a commercial purpose needs a separate commercial license; contact the author through GitHub.
+
+### Name and logo
+
+LazyVM™ and the LazyVM logo are unregistered trademarks of Massokissed. The license above covers the software only. It gives no right to use the LazyVM name or logo for your own product or fork, other than to say truthfully that your work is based on, or works with, LazyVM.
