@@ -1,5 +1,13 @@
 # Changelog
 
+## [6.8.2](https://github.com/downerboy/LazyVM/compare/v6.8.1...v6.8.2) (2026-11-13)
+
+
+### Bug Fixes
+
+* retry guest downloads after a transient network failure ([#368](https://github.com/downerboy/LazyVM/issues/368)) ([5081317](https://github.com/downerboy/LazyVM/commit/50813176159b72b948938112728d095dc97aa63a)), closes [#359](https://github.com/downerboy/LazyVM/issues/359)
+* start the first security scan at the end of the build ([#369](https://github.com/downerboy/LazyVM/issues/369)) ([41fd1e2](https://github.com/downerboy/LazyVM/commit/41fd1e2cc02ca1283d9d84aa3db419023241d8b8)), closes [#360](https://github.com/downerboy/LazyVM/issues/360)
+
 ## [6.8.1](https://github.com/downerboy/LazyVM/compare/v6.8.0...v6.8.1) (2026-11-12)
 
 
