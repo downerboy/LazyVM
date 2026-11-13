@@ -24,6 +24,38 @@ function New-GuestFolder {
     if (-not (Test-Path -LiteralPath $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null }
 }
 
+# ── Downloads ────────────────────────────────────────────────────────────────
+
+# How many times a download is tried, and how long it pauses between tries.
+# Right after the guest's network comes up a name can fail to resolve for a
+# moment (#359).
+$script:GuestDownloadAttempts = 4
+$script:GuestDownloadRetrySeconds = 15
+
+function Save-GuestDownload {
+    <#
+      Downloads $Uri to $OutFile and returns the response. A failure is tried
+      again after a pause, up to $script:GuestDownloadAttempts times in all,
+      except when the server answered that the request is wrong (a 4xx status
+      such as 404), which another try cannot fix. The last error is thrown.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][string]$OutFile,
+        [Parameter(Mandatory)][int]$TimeoutSec
+    )
+
+    for ($attempt = 1; ; $attempt++) {
+        try { return Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing -TimeoutSec $TimeoutSec -PassThru }
+        catch {
+            $status = $null
+            if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+            if ($attempt -ge $script:GuestDownloadAttempts -or ($status -ge 400 -and $status -lt 500)) { throw }
+            Start-Sleep -Seconds $script:GuestDownloadRetrySeconds
+        }
+    }
+}
+
 # ── Zip archives ─────────────────────────────────────────────────────────────
 
 function New-GuestZip {

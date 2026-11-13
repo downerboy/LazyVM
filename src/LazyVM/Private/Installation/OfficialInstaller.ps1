@@ -139,7 +139,7 @@ function Install-OfficialInstallerItem {
             New-GuestPrivateFolder -Path $folder
             try {
                 $download = Join-Path $folder 'download'
-                $response = Invoke-WebRequest -Uri $url -OutFile $download -UseBasicParsing -TimeoutSec 1800 -PassThru
+                $response = Save-GuestDownload -Uri $url -OutFile $download -TimeoutSec 1800
                 # .NET never follows a redirect from HTTPS to HTTP; checked all the same.
                 if ($response.BaseResponse.ResponseUri.Scheme -ne 'https') { throw "the download ended up at $($response.BaseResponse.ResponseUri), not HTTPS" }
 

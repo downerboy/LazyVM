@@ -191,7 +191,7 @@ function Install-ToolingProduct {
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
                 $bootstrapper = Join-Path $folder $bootstrapperName
-                Invoke-WebRequest -Uri $url -OutFile $bootstrapper -UseBasicParsing -TimeoutSec 600
+                $null = Save-GuestDownload -Uri $url -OutFile $bootstrapper -TimeoutSec 600
 
                 # Without a byte-order mark: the installer reads it as JSON.
                 $configPath = Join-Path $folder "$bootstrapperName.vsconfig"
