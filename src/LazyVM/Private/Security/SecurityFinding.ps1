@@ -485,11 +485,82 @@ function Format-SecurityFindingCount {
     return "$($Finding.Count) ${noun}: $(& $count 'New') new, $(& $count 'Still open') still open, $(& $count 'Resolved') resolved."
 }
 
+# The look and the copy buttons of LazyVM Findings.html (#367). Findings
+# alternate dark and light blue; every colour pair has a contrast of at
+# least 7:1. The script copies the text of the <code> a button names, and
+# says what it copied in the status line, which a screen reader reads out.
+$script:SecurityFindingReportStyle = @'
+body { font-family: "Segoe UI", sans-serif; font-size: 1.05rem; line-height: 1.5; margin: 0; padding: 1rem 2rem; color: #10233f; background: #ffffff; }
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.25rem; margin-top: 0; }
+.finding { border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0; }
+.finding.dark { background: #0b2e59; color: #ffffff; }
+.finding.light { background: #dcebfa; color: #10233f; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; margin: 0 0 1rem 0; }
+dt { font-weight: 600; }
+dd { margin: 0; }
+code { font-family: Consolas, monospace; background: #ffffff; color: #10233f; padding: 0.15rem 0.35rem; border-radius: 3px; word-break: break-all; }
+button { font: inherit; padding: 0.3rem 0.9rem; margin-left: 0.5rem; border-radius: 4px; border: 2px solid #10233f; background: #ffd75e; color: #10233f; cursor: pointer; }
+button:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
+#copied { font-weight: 600; min-height: 1.5em; }
+'@
+
+$script:SecurityFindingReportScript = @'
+(function () {
+    var status = document.getElementById('copied');
+    function selectAndCopy(code) {
+        var range = document.createRange();
+        range.selectNodeContents(code);
+        var selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        var copied = document.execCommand('copy');
+        selection.removeAllRanges();
+        return copied;
+    }
+    function say(text, copied) {
+        status.textContent = copied ? 'Copied: ' + text : 'Could not copy. Select the command and press Ctrl+C: ' + text;
+    }
+    var buttons = document.querySelectorAll('button[data-copy]');
+    for (var i = 0; i < buttons.length; i++) {
+        buttons[i].addEventListener('click', function (e) {
+            var code = document.getElementById(e.currentTarget.getAttribute('data-copy'));
+            var text = code.textContent;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () { say(text, true); }, function () { say(text, selectAndCopy(code)); });
+            }
+            else {
+                say(text, selectAndCopy(code));
+            }
+        });
+    }
+}());
+'@
+
+function ConvertTo-HtmlText {
+    <# $Text as HTML text: the characters markup is made of are written as entities, so text from the VM is shown, never run. #>
+    [OutputType([string])]
+    param([AllowEmptyString()][AllowNull()][string]$Text)
+
+    return [System.Net.WebUtility]::HtmlEncode($Text)
+}
+
+function ConvertTo-PowerShellQuotedString {
+    <# $Text as a single-quoted PowerShell string, so a command made with it runs with $Text as it is. #>
+    [OutputType([string])]
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+
+    return "'" + $Text.Replace("'", "''") + "'"
+}
+
 function Format-SecurityFindingReport {
     <#
-      The text of LazyVM Findings.txt on the guest's desktop: what it is,
-      when the scan ran, then each finding one field to a line, with a blank
-      line between, files by name only, and Windows line endings for Notepad.
+      LazyVM Findings.html on the guest's desktop (#367): what it is, when
+      the scan ran, then each finding in a section of its own under a
+      heading, alternately dark and light blue, its fields as a list, files
+      by name only. An open finding has the host command that approves it,
+      with a button that copies it. Every value is HTML-encoded, and the
+      page's policy lets it load nothing from anywhere.
     #>
     [OutputType([string])]
     param(
@@ -498,26 +569,73 @@ function Format-SecurityFindingReport {
         [Parameter(Mandatory)][datetimeoffset]$ScannedAt
     )
 
-    $lines = [System.Collections.Generic.List[string]]::new()
-    $lines.Add("LazyVM security findings for $VMName")
-    $lines.Add("Scanned on $(Format-SecurityFindingTime -Time $ScannedAt).")
-    $lines.Add('LazyVM only reports what it finds. It changed nothing in this VM.')
-    $lines.Add('This file is replaced after every nightly scan.')
-    $lines.Add('')
+    $title = ConvertTo-HtmlText "LazyVM security findings for $VMName"
+    $name = ConvertTo-PowerShellQuotedString -Text $VMName
+    $html = [System.Collections.Generic.List[string]]::new()
+    $html.Add('<!DOCTYPE html>')
+    $html.Add('<html lang="en">')
+    $html.Add('<head>')
+    $html.Add('<meta charset="utf-8">')
+    $html.Add("<meta http-equiv=`"Content-Security-Policy`" content=`"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'`">")
+    $html.Add("<title>$title</title>")
+    $html.Add("<style>`n$script:SecurityFindingReportStyle`n</style>")
+    $html.Add('</head>')
+    $html.Add('<body>')
+    $html.Add('<main>')
+    $html.Add("<h1>$title</h1>")
+    $html.Add("<p>Scanned on $(Format-SecurityFindingTime -Time $ScannedAt).</p>")
+    $html.Add('<p>LazyVM only reports what it finds. It changed nothing in this VM. This page is replaced after every nightly scan.</p>')
     if ($Finding.Count -eq 0) {
-        $lines.Add('No security findings. Everything LazyVM checks looks right.')
+        $html.Add('<p>No security findings. Everything LazyVM checks looks right.</p>')
     }
     else {
-        $lines.Add((Format-SecurityFindingCount -Finding $Finding))
-        $lines.Add("On the host, see them with: Get-LazyVMSecurityFinding -Name $VMName")
-        $lines.Add("To stop reporting one you expect, approve it on the host: Approve-LazyVMSecurityFinding -Name $VMName -Id <its Id>")
+        $html.Add("<p>$(ConvertTo-HtmlText (Format-SecurityFindingCount -Finding $Finding))</p>")
+        $html.Add('<p>The commands on this page run on the host, in PowerShell, not in this VM. Copy one here, then paste it on the host.</p>')
+        $html.Add("<p>To see the findings on the host: <code id=`"list`">Get-LazyVMSecurityFinding -Name $(ConvertTo-HtmlText $name)</code><button type=`"button`" data-copy=`"list`" aria-label=`"Copy the command that lists the findings`">Copy</button></p>")
+        $html.Add('<p id="copied" role="status" aria-live="polite"></p>')
         for ($i = 0; $i -lt $Finding.Count; $i++) {
-            $lines.Add('')
-            $lines.Add("Finding $($i + 1) of $($Finding.Count)")
-            foreach ($line in (Format-SecurityFinding -Finding $Finding[$i] -NamesOnly)) { $lines.Add($line) }
+            $html.Add((Format-SecurityFindingSection -Finding $Finding[$i] -Number ($i + 1) -Count $Finding.Count -VMName $VMName))
         }
     }
-    return ($lines -join "`r`n") + "`r`n"
+    $html.Add('</main>')
+    if ($Finding.Count -gt 0) { $html.Add("<script>`n$script:SecurityFindingReportScript`n</script>") }
+    $html.Add('</body>')
+    $html.Add('</html>')
+    return (($html -join "`n") + "`n").Replace("`r`n", "`n").Replace("`n", "`r`n")
+}
+
+function Format-SecurityFindingSection {
+    <# One finding of LazyVM Findings.html: Format-SecurityFindingReport. #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][SecurityFinding]$Finding,
+        [Parameter(Mandatory)][int]$Number,
+        [Parameter(Mandatory)][int]$Count,
+        [Parameter(Mandatory)][string]$VMName
+    )
+
+    $shade = if ($Number % 2 -eq 1) { 'dark' } else { 'light' }
+    $where = @($Finding.Where | ForEach-Object { Split-Path -Path $_ -Leaf })
+    $fields = [ordered]@{ 'Id' = $Finding.Id; 'Severity' = $Finding.Severity; 'What we found' = $Finding.WhatWeFound }
+    if ($where.Count -gt 0) { $fields['Where'] = $where -join '; ' }
+    $fields['Why it matters'] = $Finding.WhyItMatters
+    $fields['How to fix'] = $Finding.HowToFix
+    $fields['First seen'] = Format-SecurityFindingTime -Time $Finding.FirstSeen
+    $fields['Status'] = $Finding.Status
+
+    $html = [System.Collections.Generic.List[string]]::new()
+    $html.Add("<section class=`"finding $shade`" aria-labelledby=`"finding-$Number`">")
+    $html.Add("<h2 id=`"finding-$Number`">Finding $Number of ${Count}: $(ConvertTo-HtmlText $Finding.Severity) - $(ConvertTo-HtmlText $Finding.Title)</h2>")
+    $html.Add('<dl>')
+    foreach ($field in $fields.GetEnumerator()) { $html.Add("<dt>$($field.Key)</dt><dd>$(ConvertTo-HtmlText $field.Value)</dd>") }
+    $html.Add('</dl>')
+    if ($Finding.Status -ne 'Resolved') {
+        $command = "Approve-LazyVMSecurityFinding -Name $(ConvertTo-PowerShellQuotedString -Text $VMName) -Id $(ConvertTo-PowerShellQuotedString -Text $Finding.Id)"
+        $html.Add('<p>If you expect this, approve it on the host, so it is no longer reported:</p>')
+        $html.Add("<p><code id=`"approve-$Number`">$(ConvertTo-HtmlText $command)</code><button type=`"button`" data-copy=`"approve-$Number`" aria-label=`"Copy the command that approves finding $Number`">Copy</button></p>")
+    }
+    $html.Add('</section>')
+    return $html -join "`n"
 }
 
 function Get-SecurityFindingReminderMessage {

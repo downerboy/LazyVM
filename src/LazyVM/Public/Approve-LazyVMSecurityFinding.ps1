@@ -16,7 +16,7 @@ function Approve-LazyVMSecurityFinding {
     finds an approved finding, its approval ends.
 
     The finding is left out of Get-LazyVMSecurityFinding and the reminder
-    straight away. LazyVM Findings.txt in the VM still lists it until the
+    straight away. LazyVM Findings.html in the VM still lists it until the
     next nightly scan replaces the file.
 
     Only an open finding of the last scan can be approved. It asks first,

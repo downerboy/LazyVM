@@ -371,7 +371,7 @@ Called by: `LazyVM-Maintain-<VM>` (daily at MaintenanceTime, as SYSTEM, with -Ro
    - Reads D46, baseline and approvals: <VM>\Config\ (SecurityBaseline.json)
    - Writes D47, findings: <VM>\Logs\ (SecurityFindings.json, <VM>.log  (each finding))
    - Writes D48, baseline, approvals still found: <VM>\Config\ (SecurityBaseline.json)
-   - Writes D49, findings file, sign-in opener: Running guest (Public Desktop\LazyVM Findings.txt, task LazyVM-SecurityFindings (sign-in, connect, unlock), HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert)
+   - Writes D49, findings file, sign-in opener: Running guest (Public Desktop\LazyVM Findings.html, task LazyVM-SecurityFindings (sign-in, connect, unlock), HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert)
 25. `Get-GuestLicenseStatus` (Maintenance, called by Invoke-DailyMaintenance): days left, rearms left
    - Reads D50, license status: Running guest (SoftwareLicensingProduct, SoftwareLicensingService)
 26. `Get-MaintenanceDecision` (Maintenance, called by Invoke-DailyMaintenance): more than the threshold left, or no countdown: none; rearms left: rearm; otherwise: rebuild

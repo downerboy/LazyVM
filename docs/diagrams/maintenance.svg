@@ -771,7 +771,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="875" y="4071" text-anchor="middle">«guest»</text>
 <text class="nm" x="875" y="4087" text-anchor="middle">Running guest</text>
 <line class="div" x1="740" y1="4094" x2="1010" y2="4094"/>
-<text class="at" x="750" y="4109">Public Desktop\LazyVM Findings.txt</text>
+<text class="at" x="750" y="4109">Public Desktop\LazyVM Findings.html</text>
 <text class="at" x="750" y="4126">task LazyVM-SecurityFindings</text>
 <text class="at" x="750" y="4143">(sign-in, connect, unlock)</text>
 <text class="at" x="750" y="4160">HKLM:\SOFTWARE\LazyVM</text>

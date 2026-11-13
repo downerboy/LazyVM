@@ -21,7 +21,7 @@ function Get-LazyVMSecurityFinding {
     subscriptions, local users and Administrators) with the known-good
     baseline recorded after the build, and reports each change.
 
-    The same findings are in the VM's log and in LazyVM Findings.txt on the
+    The same findings are in the VM's log and in LazyVM Findings.html on the
     VM's desktop. A finding approved with Approve-LazyVMSecurityFinding is
     left out; -Approved lists the approvals instead. Reads only what the
     last scan and the approvals kept; it does not start or scan the VM.

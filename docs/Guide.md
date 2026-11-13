@@ -407,7 +407,7 @@ Status: New
 Where you see the findings:
 
 - **On the host:** every finding is in the VM's log, and kept in `Logs\SecurityFindings.json` in the VM's folder. `Get-LazyVMSecurityFinding -Name DevBox` lists them. While findings of a severity that alerts are open, the first command you run on the VM reminds you in one line, with how many of each severity: `3 security finding(s) on DevBox need attention (1 High, 1 Low, 1 Info).`
-- **In the VM:** `LazyVM Findings.txt` on the desktop, replaced after every scan. When a scan finds something **new** of a severity that alerts (every severity, unless `GuestSecurityScanAlertSeverity` says otherwise), the file opens in Notepad the next time you sign in, connect (at the console, in VMConnect or by Remote Desktop) or unlock the VM, once for that scan; it does not open again until a later scan finds something new, and a scan that finds nothing new does not stop it opening. A scheduled task in the VM, `LazyVM-SecurityFindings`, does this, in your own session with your normal rights; what it runs is in the task itself, not in a file anyone could change. There is no notification.
+- **In the VM:** `LazyVM Findings.html` on the desktop, a page replaced after every scan. Each finding has a section of its own, under a heading with its number, severity and title, and the sections alternate dark and light blue. Each open finding shows the command that approves it on the host, with a **Copy** button; paste it into PowerShell on the host, not in the VM. The page loads nothing from anywhere. When a scan finds something **new** of a severity that alerts (every severity, unless `GuestSecurityScanAlertSeverity` says otherwise), the page opens in Microsoft Edge the next time you sign in, connect (at the console, in VMConnect or by Remote Desktop) or unlock the VM, once for that scan; it does not open again until a later scan finds something new, and a scan that finds nothing new does not stop it opening. A scheduled task in the VM, `LazyVM-SecurityFindings`, does this, in your own session with your normal rights; what it runs is in the task itself, not in a file anyone could change. There is no notification.
 
 ```powershell
 Get-LazyVMSecurityFinding -Name DevBox
@@ -498,7 +498,7 @@ Revoke-LazyVMSecurityFinding -Name DevBox -Id 'Service:MySvc:3f9a1c2b7d4e8f0a6b5
 - An approved **setting or persistence item** is not reported while the scan finds it with the same Id. When it changes, its Id changes, so the change is reported, and the approval ends.
 - An approved **event**, such as a Defender detection, covers that one occurrence. Another one has an Id of its own and is reported.
 - Once a scan no longer finds an approved finding, because it changed, was fixed or is over, its approval ends; the log says so. An approval of an area the guest could not read that night is kept.
-- The finding leaves `Get-LazyVMSecurityFinding` and the reminder at once. `LazyVM Findings.txt` in the VM still lists it until the next scan replaces the file. The log of each scan says how many approved findings it left out.
+- The finding leaves `Get-LazyVMSecurityFinding` and the reminder at once. `LazyVM Findings.html` in the VM still lists it until the next scan replaces the page. The log of each scan says how many approved findings it left out.
 - A rebuild keeps the approvals. An approved persistence item the rebuilt VM still has keeps its approval.
 - `Revoke-LazyVMSecurityFinding` undoes an approval. The next scan reports the finding again, as new, if it still finds it.
 
@@ -606,7 +606,7 @@ The module itself is installed in `%ProgramFiles%\LazyVM\Modules\LazyVM`. Nothin
 | `U:` | The User disk: `Documents`, `Desktop` and `Downloads` are redirected here, and `%USERPROFILE%\.ssh` and `%USERPROFILE%\source\repos` are links to folders here. |
 | `C:\Program Files\LazyVM\Staging` | Where LazyVM stages the files it copies in and out of the VM: installers, setup files, capture and restore archives. Only administrators and SYSTEM can change or read it. |
 | `C:\Program Files\LazyVM\Tasks` | A folder for each of LazyVM's scheduled tasks, with the script it runs and the files it is given, and an `Output` folder with its result and transcript (`<task>.log`). Only administrators and SYSTEM can change them. A task that runs as the guest account, not elevated, lets that account read its folder and change only its `Output`. |
-| `C:\Users\Public\Desktop\LazyVM Findings.txt` | The last security scan's findings, on every user's desktop ([The nightly security scan](#the-nightly-security-scan)). |
+| `C:\Users\Public\Desktop\LazyVM Findings.html` | The last security scan's findings, on every user's desktop ([The nightly security scan](#the-nightly-security-scan)). |
 
 LazyVM checks that `C:\Program Files\LazyVM` and its `Tasks` folder can be changed only by administrators, SYSTEM and TrustedInstaller, and stops, changing nothing, when they can be changed by anyone else. A staging or task folder that is not as LazyVM made it is moved aside, never deleted, and made again; the log says so.
 
@@ -1175,7 +1175,7 @@ Get-Service MSSQLSERVER | Select-Object Name, Status
 - **Check `Get-LazyVMLicense` occasionally**, so the rearm count is never a surprise.
 - **Export the recovery passwords when LazyVM reminds you**, to a USB drive kept offline: `Export-LazyVMRecoveryKey -Path E:\LazyVM-recovery-keys.txt -Force`. Without them, a lost credential store means lost disks.
 - **Install tools inside the VM, the normal way.** The daily run records them, so they come back after a rebuild. `Save-LazyVMTooling` records them at once.
-- **Read the security findings when LazyVM reminds you**, with `Get-LazyVMSecurityFinding`, or in `LazyVM Findings.txt` on the VM's desktop. Each one says how to fix it. Approve the ones you expect, such as a service you installed, with `Approve-LazyVMSecurityFinding`, so the next real change stands out.
+- **Read the security findings when LazyVM reminds you**, with `Get-LazyVMSecurityFinding`, or in `LazyVM Findings.html` on the VM's desktop. Each one says how to fix it. Approve the ones you expect, such as a service you installed, with `Approve-LazyVMSecurityFinding`, so the next real change stands out.
 - **Push before you revert.** A revert takes every disk back, the Dev Drive included.
 - **Take a checkpoint before risky work.** Tooling changes get one automatically; take your own before anything else risky.
 

@@ -498,7 +498,7 @@ Describe 'Invoke-GuestSecurityScan with the persistence baseline and approvals' 
         $kept = @(Get-KeptFinding)
         $kept.Id | Should -Be @('ScheduledTask:\Updater:123456789abc')
         $kept[0].Status | Should -Be 'New'
-        Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -and $Text -like '*New scheduled task: \Updater*' }
+        Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -and $Html -like '*New scheduled task: \Updater*' }
     }
 
     It 'records an area the guest could not read at the first scan the next time it can' {
@@ -595,7 +595,7 @@ Describe 'The alert severity setting (GuestSecurityScanAlertSeverity)' {
 
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
 
-        Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -eq '' -and $Text -like '*Id: VBS:Status:NotRunning*' }
+        Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -eq '' -and $Html -like '*<dd>VBS:Status:NotRunning</dd>*' }
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Id: VBS:Status:NotRunning*' -and $Level -eq 'INFO' }
     }
 

@@ -218,7 +218,7 @@
             Writes   = @(
                 @{ Label = 'findings'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('SecurityFindings.json', '<VM>.log  (each finding)') }
                 @{ Label = 'baseline, approvals still found'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('SecurityBaseline.json') }
-                @{ Label = 'findings file, sign-in opener'; Kind = 'guest'; Store = 'Running guest'; Items = @('Public Desktop\LazyVM Findings.txt', 'task LazyVM-SecurityFindings (sign-in, connect, unlock)', 'HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert') }
+                @{ Label = 'findings file, sign-in opener'; Kind = 'guest'; Store = 'Running guest'; Items = @('Public Desktop\LazyVM Findings.html', 'task LazyVM-SecurityFindings (sign-in, connect, unlock)', 'HKLM:\SOFTWARE\LazyVM  SecurityFindingsAlert') }
             )
         }
         @{

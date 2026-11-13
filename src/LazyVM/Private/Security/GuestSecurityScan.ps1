@@ -374,24 +374,25 @@ $script:GuestSecurityScanWork = {
     return (ConvertTo-Json -InputObject @{ CollectedAt = $collectedAt; Notes = @($notes); Checks = $checks } -Depth 6 -Compress)
 }
 
-# The sign-in opener: opens LazyVM Findings.txt on the public desktop in
-# Notepad when a scan asked for it (the stamp under HKLM:\SOFTWARE\LazyVM,
+# The sign-in opener: opens LazyVM Findings.html on the public desktop in
+# Microsoft Edge, by its full path so no file association can change what
+# runs (#367), when a scan asked for it (the stamp under HKLM:\SOFTWARE\LazyVM,
 # $script:GuestSecurityAlertValueName) and it has not been opened for that
 # stamp yet (the user's own HKCU:\SOFTWARE\LazyVM). The stamp is recorded
-# before Notepad starts, so it never opens twice for one scan. It runs as
+# before Edge starts, so it never opens twice for one scan. It runs as
 # the task's -Command, one statement to a line joined with '; '
 # (Get-SecurityFindingOpenerArgument), so there is no script file anyone
 # could change; hence no comments or double quotes inside it. Each value is
 # read so that one not set yet, or its key, is $null, under StrictMode too.
 $script:SecurityFindingOpener = {
     $alert = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\LazyVM' -Name 'SecurityFindingsAlert' -ErrorAction SilentlyContinue
-    $file = [System.IO.Path]::Combine([Environment]::GetFolderPath('CommonDesktopDirectory'), 'LazyVM Findings.txt')
+    $file = [System.IO.Path]::Combine([Environment]::GetFolderPath('CommonDesktopDirectory'), 'LazyVM Findings.html')
     if (-not $alert -or -not (Test-Path -LiteralPath $file)) { return }
     $userKey = 'HKCU:\SOFTWARE\LazyVM'
     if ((Get-ItemPropertyValue -Path $userKey -Name 'SecurityFindingsOpened' -ErrorAction SilentlyContinue) -eq $alert) { return }
     if (-not (Test-Path -LiteralPath $userKey)) { New-Item -Path $userKey -Force | Out-Null }
     Set-ItemProperty -Path $userKey -Name 'SecurityFindingsOpened' -Value $alert
-    Start-Process -FilePath ([System.IO.Path]::Combine([Environment]::GetFolderPath('System'), 'notepad.exe')) -ArgumentList ([string][char]34 + $file + [char]34)
+    Start-Process -FilePath ([System.IO.Path]::Combine([Environment]::GetFolderPath('ProgramFilesX86'), 'Microsoft', 'Edge', 'Application', 'msedge.exe')) -ArgumentList ([string][char]34 + $file + [char]34)
 }
 
 function Get-SecurityFindingOpenerArgument {
