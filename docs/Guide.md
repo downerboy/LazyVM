@@ -1,3 +1,5 @@
+<p align="center"><img src="images/logo.png" alt="LazyVM logo" width="240"></p>
+
 # LazyVM guide
 
 Automated build, maintenance and 90-day rebuild of Hyper-V development VMs, one or more per host.
