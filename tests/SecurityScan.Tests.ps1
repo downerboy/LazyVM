@@ -572,14 +572,14 @@ Describe 'Invoke-GuestSecurityScan' {
         [datetimeoffset]::Parse(@($record.Findings)[0].FirstSeen) | Should -Be ([datetimeoffset]$script:collectedAt)
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Id: SMBv1:Server:On*' -and $Level -eq 'WARN' }
         Should -Invoke -ModuleName $module Install-GuestSecurityFindingOpener -Times 1 -Exactly
-        Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -match '^\d{8}-\d{6}$' -and $Text -like '*Id: SMBv1:Server:On*' }
+        Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -match '^\d{8}-\d{6}$' -and $Html -like '*SMBv1:Server:On*' }
 
         # The next night finds the same: still open, so the file is not asked to open again.
         $script:collectedAt = '2026-11-03T10:40:00.0000000Z'
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
 
         @((Get-Content -LiteralPath $vm.Settings.SecurityFindingsFile -Raw | ConvertFrom-Json).Findings)[0].Status | Should -Be 'Still open'
-        Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -eq '' -and $Text -like '*Status: Still open*' }
+        Should -Invoke -ModuleName $module Publish-GuestSecurityFinding -Times 1 -Exactly -ParameterFilter { $AlertScanId -eq '' -and $Html -like '*Still open*' }
     }
 
     It 'keeps nothing when the findings did not reach the guest, so the next night they are still new' {
@@ -692,7 +692,7 @@ Describe 'Publish-GuestSecurityFinding' {
     It 'writes the file through the guest session, with the stamp of the scan it is to open for' {
         $vm = New-TestVM -Root (New-TestRoot)
 
-        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Publish-GuestSecurityFinding -VM $VM -Text 'the findings' -AlertScanId '20261102-024000' }
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Publish-GuestSecurityFinding -VM $VM -Html 'the findings' -AlertScanId '20261102-024000' }
 
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
             $ArgumentList[0] -eq 'the findings' -and $ArgumentList[1] -eq 'LazyVM Findings.txt' -and $ArgumentList[2] -eq 'HKLM:\SOFTWARE\LazyVM' -and
