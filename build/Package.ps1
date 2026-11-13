@@ -1,7 +1,7 @@
 ﻿# Package.ps1 - Zips the built module for a GitHub release. Dot-sourced by the scripts at the repository root.
 
 function New-ReleasePackage {
-    <# Zips the built module with Install.ps1, the README and the licence into out\release\<ModuleName>-<version>.zip. #>
+    <# Zips the built module with Install.ps1, the README, the logo the README shows and the licence into out\release\<ModuleName>-<version>.zip. #>
     param(
         [Parameter(Mandatory)][string]$Root,
         [Parameter(Mandatory)][string]$ModuleName
@@ -25,6 +25,10 @@ function New-ReleasePackage {
     foreach ($file in 'src/Install.ps1', 'README.md', 'LICENSE.md') {
         Copy-Item -LiteralPath (Join-Path -Path $Root -ChildPath $file) -Destination $staging
     }
+    # The README shows the logo from this path, so it goes in the zip at the same path.
+    $logoFolder = Join-Path -Path $staging -ChildPath 'docs/images'
+    New-Item -ItemType Directory -Path $logoFolder -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path -Path $Root -ChildPath 'docs/images/logo.svg') -Destination $logoFolder
 
     $zip = Join-Path -Path $releaseDir -ChildPath "$ModuleName-$releaseVersion.zip"
     Compress-Archive -Path (Join-Path -Path $staging -ChildPath '*') -DestinationPath $zip
