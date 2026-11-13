@@ -411,7 +411,7 @@ Describe 'Format-SecurityFindingReport (#367)' {
         $html = Get-TestReport -Finding $findings
 
         $html | Should -BeLike '*2 findings: 1 new, 1 still open, 0 resolved.*'
-        ([regex]::Matches($html, '<section ')).Count | Should -Be 2
+        ([regex]::Matches($html, '<section class="finding ')).Count | Should -Be 2
         $html | Should -BeLike '*<h2 id="finding-1">Finding 1 of 2: <span class="badge high">*High</span> Title of Firewall:Public:Off</h2>*'
         $html | Should -BeLike '*<h2 id="finding-2">Finding 2 of 2: <span class="badge info">*Info</span> Title of AutoLogon:Winlogon:On</h2>*'
     }
