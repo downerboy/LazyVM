@@ -46,6 +46,21 @@ function Read-SecurityBaseline {
     }
 }
 
+function Get-SecurityBaselineRecordedAt {
+    <#
+      When the baseline $Baseline (Read-SecurityBaseline's Persistence) was
+      recorded: the latest time of any of its areas, which is the end of the
+      build for the baseline recorded after it (#360). $null when no area
+      has been recorded.
+    #>
+    [OutputType([nullable[datetimeoffset]])]
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Baseline)
+
+    $times = @($Baseline.Values | ForEach-Object { [datetimeoffset]$_.RecordedAt })
+    if ($times.Count -eq 0) { return $null }
+    return ($times | Measure-Object -Maximum).Maximum
+}
+
 function Update-SecurityBaseline {
     <#
       The one way to write the baseline. Under an exclusive lock on

@@ -470,6 +470,32 @@ Describe 'Invoke-GuestSecurityScan' {
         Should -Invoke -ModuleName $module Get-GuestSecurityFact -Times 1 -Exactly -ParameterFilter { $null -ne $Since -and ([datetimeoffset]$Since) -eq [datetimeoffset]'2026-11-02T10:40:00Z' }
     }
 
+    It 'has the guest read the first scan from when the build recorded the baseline, so LazyVM''s own set-up is not reported (#360)' {
+        $vm = New-TestVM -Root (New-TestRoot)
+        $builtAt = [datetimeoffset]::new(2026, 11, 10, 23, 30, 0, [timespan]::FromHours(-8))
+        InModuleScope $module -Parameters @{ VM = $vm; Item = [pscustomobject]$script:noPersistence; BuiltAt = $builtAt } {
+            param($VM, $Item, $BuiltAt)
+            Update-SecurityBaseline -VM $VM -Change { param($record) Add-PersistenceBaselineArea -Record $record -Baseline (New-PersistenceBaseline -Item $Item -RecordedAt $BuiltAt) }
+        }
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
+
+        Should -Invoke -ModuleName $module Get-GuestSecurityFact -Times 1 -Exactly -ParameterFilter { $null -ne $Since -and ([datetimeoffset]$Since) -eq $builtAt }
+    }
+
+    It 'still treats the scan after the build as the first, so every detection Defender lists is reported (#360)' {
+        $vm = New-TestVM -Root (New-TestRoot)
+        InModuleScope $module -Parameters @{ VM = $vm; Item = [pscustomobject]$script:noPersistence } {
+            param($VM, $Item)
+            Update-SecurityBaseline -VM $VM -Change { param($record) Add-PersistenceBaselineArea -Record $record -Baseline (New-PersistenceBaseline -Item $Item -RecordedAt ([datetimeoffset]::new(2026, 11, 10, 23, 30, 0, [timespan]::FromHours(-8)))) }
+        }
+        Mock -ModuleName $module ConvertTo-SecurityFinding { @() }
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
+
+        Should -Invoke -ModuleName $module ConvertTo-SecurityFinding -Times 1 -Exactly -ParameterFilter { $null -eq $Since }
+    }
+
     It 'keeps the findings, logs each one, and asks the guest to open the desktop file for new High ones, once' {
         $vm = New-TestVM -Root (New-TestRoot)
         $script:check.SMBv1.Enabled = $true
