@@ -472,23 +472,20 @@ Describe 'Invoke-GuestSecurityScan' {
 
     It 'has the guest read the first scan from when the build recorded the baseline, so LazyVM''s own set-up is not reported (#360)' {
         $vm = New-TestVM -Root (New-TestRoot)
-        $builtAt = [datetimeoffset]::new(2026, 11, 10, 23, 30, 0, [timespan]::FromHours(-8))
-        InModuleScope $module -Parameters @{ VM = $vm; Item = [pscustomobject]$script:noPersistence; BuiltAt = $builtAt } {
-            param($VM, $Item, $BuiltAt)
-            Update-SecurityBaseline -VM $VM -Change { param($record) Add-PersistenceBaselineArea -Record $record -Baseline (New-PersistenceBaseline -Item $Item -RecordedAt $BuiltAt) }
-        }
+        $before = [datetimeoffset]::Now
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Save-GuestPersistenceBaseline -VM $VM }
+        $after = [datetimeoffset]::Now
 
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
 
-        Should -Invoke -ModuleName $module Get-GuestSecurityFact -Times 1 -Exactly -ParameterFilter { $null -ne $Since -and ([datetimeoffset]$Since) -eq $builtAt }
+        Should -Invoke -ModuleName $module Get-GuestSecurityFact -Times 1 -Exactly -ParameterFilter {
+            $null -ne $Since -and ([datetimeoffset]$Since) -ge $before -and ([datetimeoffset]$Since) -le $after
+        }
     }
 
     It 'still treats the scan after the build as the first, so every detection Defender lists is reported (#360)' {
         $vm = New-TestVM -Root (New-TestRoot)
-        InModuleScope $module -Parameters @{ VM = $vm; Item = [pscustomobject]$script:noPersistence } {
-            param($VM, $Item)
-            Update-SecurityBaseline -VM $VM -Change { param($record) Add-PersistenceBaselineArea -Record $record -Baseline (New-PersistenceBaseline -Item $Item -RecordedAt ([datetimeoffset]::new(2026, 11, 10, 23, 30, 0, [timespan]::FromHours(-8)))) }
-        }
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Save-GuestPersistenceBaseline -VM $VM }
         Mock -ModuleName $module ConvertTo-SecurityFinding { @() }
 
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
