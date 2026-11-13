@@ -234,7 +234,7 @@
       "Source": "winget"
     },
     {
-      "Id": "Microsoft.SQLServer.OLEDBDriver",
+      "Id": "Microsoft.SQLServer.OLEDBDriver.19",
       "Source": "winget"
     },
     {
