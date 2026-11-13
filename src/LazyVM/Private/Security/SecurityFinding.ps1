@@ -485,66 +485,6 @@ function Format-SecurityFindingCount {
     return "$($Finding.Count) ${noun}: $(& $count 'New') new, $(& $count 'Still open') still open, $(& $count 'Resolved') resolved."
 }
 
-# The look and the copy buttons of LazyVM Findings.html (#367). Findings
-# alternate dark and light blue; every colour pair has a contrast of at
-# least 7:1. The script copies the text of the <code> a button names, and
-# says what it copied in the status line, which a screen reader reads out.
-$script:SecurityFindingReportStyle = @'
-body { font-family: "Segoe UI", sans-serif; font-size: 1.05rem; line-height: 1.5; margin: 0; padding: 1rem 2rem; color: #10233f; background: #ffffff; }
-h1 { font-size: 1.6rem; }
-h2 { font-size: 1.25rem; margin-top: 0; }
-.finding { border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0; }
-.finding.dark { background: #0b2e59; color: #ffffff; }
-.finding.light { background: #dcebfa; color: #10233f; }
-dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; margin: 0 0 1rem 0; }
-dt { font-weight: 600; }
-dd { margin: 0; }
-code { font-family: Consolas, monospace; background: #ffffff; color: #10233f; padding: 0.15rem 0.35rem; border-radius: 3px; word-break: break-all; }
-button { font: inherit; padding: 0.3rem 0.9rem; margin-left: 0.5rem; border-radius: 4px; border: 2px solid #10233f; background: #ffd75e; color: #10233f; cursor: pointer; }
-button:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
-#copied { font-weight: 600; min-height: 1.5em; }
-'@
-
-$script:SecurityFindingReportScript = @'
-(function () {
-    var status = document.getElementById('copied');
-    function selectAndCopy(code) {
-        var range = document.createRange();
-        range.selectNodeContents(code);
-        var selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        var copied = document.execCommand('copy');
-        selection.removeAllRanges();
-        return copied;
-    }
-    function say(text, copied) {
-        status.textContent = copied ? 'Copied: ' + text : 'Could not copy. Select the command and press Ctrl+C: ' + text;
-    }
-    var buttons = document.querySelectorAll('button[data-copy]');
-    for (var i = 0; i < buttons.length; i++) {
-        buttons[i].addEventListener('click', function (e) {
-            var code = document.getElementById(e.currentTarget.getAttribute('data-copy'));
-            var text = code.textContent;
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(function () { say(text, true); }, function () { say(text, selectAndCopy(code)); });
-            }
-            else {
-                say(text, selectAndCopy(code));
-            }
-        });
-    }
-}());
-'@
-
-function ConvertTo-HtmlText {
-    <# $Text as HTML text: the characters markup is made of are written as entities, so text from the VM is shown, never run. #>
-    [OutputType([string])]
-    param([AllowEmptyString()][AllowNull()][string]$Text)
-
-    return [System.Net.WebUtility]::HtmlEncode($Text)
-}
-
 function ConvertTo-PowerShellQuotedString {
     <# $Text as a single-quoted PowerShell string, so a command made with it runs with $Text as it is. #>
     [OutputType([string])]
@@ -569,39 +509,24 @@ function Format-SecurityFindingReport {
         [Parameter(Mandatory)][datetimeoffset]$ScannedAt
     )
 
-    $title = ConvertTo-HtmlText "LazyVM security findings for $VMName"
+    $title = "LazyVM security findings for $VMName"
     $name = ConvertTo-PowerShellQuotedString -Text $VMName
-    $html = [System.Collections.Generic.List[string]]::new()
-    $html.Add('<!DOCTYPE html>')
-    $html.Add('<html lang="en">')
-    $html.Add('<head>')
-    $html.Add('<meta charset="utf-8">')
-    $html.Add("<meta http-equiv=`"Content-Security-Policy`" content=`"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'`">")
-    $html.Add("<title>$title</title>")
-    $html.Add("<style>`n$script:SecurityFindingReportStyle`n</style>")
-    $html.Add('</head>')
-    $html.Add('<body>')
-    $html.Add('<main>')
-    $html.Add("<h1>$title</h1>")
-    $html.Add("<p>Scanned on $(Format-SecurityFindingTime -Time $ScannedAt).</p>")
-    $html.Add('<p>LazyVM only reports what it finds. It changed nothing in this VM. This page is replaced after every nightly scan.</p>')
+    $body = [System.Collections.Generic.List[string]]::new()
+    $body.Add("<p>Scanned on $(Format-SecurityFindingTime -Time $ScannedAt).</p>")
+    $body.Add('<p>LazyVM only reports what it finds. It changed nothing in this VM. This page is replaced after every nightly scan.</p>')
     if ($Finding.Count -eq 0) {
-        $html.Add('<p>No security findings. Everything LazyVM checks looks right.</p>')
+        $body.Add('<p>No security findings. Everything LazyVM checks looks right.</p>')
     }
     else {
-        $html.Add("<p>$(ConvertTo-HtmlText (Format-SecurityFindingCount -Finding $Finding))</p>")
-        $html.Add('<p>The commands on this page run on the host, in PowerShell, not in this VM. Copy one here, then paste it on the host.</p>')
-        $html.Add("<p>To see the findings on the host: <code id=`"list`">Get-LazyVMSecurityFinding -Name $(ConvertTo-HtmlText $name)</code><button type=`"button`" data-copy=`"list`" aria-label=`"Copy the command that lists the findings`">Copy</button></p>")
-        $html.Add('<p id="copied" role="status" aria-live="polite"></p>')
+        $body.Add("<p>$(ConvertTo-HtmlText (Format-SecurityFindingCount -Finding $Finding))</p>")
+        $body.Add('<p>The commands on this page run on the host, in PowerShell, not in this VM. Copy one here, then paste it on the host.</p>')
+        $body.Add("<p>To see the findings on the host: <code id=`"list`">Get-LazyVMSecurityFinding -Name $(ConvertTo-HtmlText $name)</code><button type=`"button`" data-copy=`"list`" aria-label=`"Copy the command that lists the findings`">Copy</button></p>")
+        $body.Add('<p id="copied" role="status" aria-live="polite"></p>')
         for ($i = 0; $i -lt $Finding.Count; $i++) {
-            $html.Add((Format-SecurityFindingSection -Finding $Finding[$i] -Number ($i + 1) -Count $Finding.Count -VMName $VMName))
+            $body.Add((Format-SecurityFindingSection -Finding $Finding[$i] -Number ($i + 1) -Count $Finding.Count -VMName $VMName))
         }
     }
-    $html.Add('</main>')
-    if ($Finding.Count -gt 0) { $html.Add("<script>`n$script:SecurityFindingReportScript`n</script>") }
-    $html.Add('</body>')
-    $html.Add('</html>')
-    return (($html -join "`n") + "`n").Replace("`r`n", "`n").Replace("`n", "`r`n")
+    return New-HtmlPage -Title $title -Body $body -WithCopyScript:($Finding.Count -gt 0)
 }
 
 function Format-SecurityFindingSection {
