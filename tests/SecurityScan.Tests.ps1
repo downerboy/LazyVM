@@ -412,16 +412,24 @@ Describe 'Format-SecurityFindingReport (#367)' {
 
         $html | Should -BeLike '*2 findings: 1 new, 1 still open, 0 resolved.*'
         ([regex]::Matches($html, '<section ')).Count | Should -Be 2
-        $html | Should -BeLike '*<h2 id="finding-1">Finding 1 of 2: High - Title of Firewall:Public:Off</h2>*'
-        $html | Should -BeLike '*<h2 id="finding-2">Finding 2 of 2: Info - Title of AutoLogon:Winlogon:On</h2>*'
+        $html | Should -BeLike '*<h2 id="finding-1">Finding 1 of 2: <span class="badge high">*High</span> Title of Firewall:Public:Off</h2>*'
+        $html | Should -BeLike '*<h2 id="finding-2">Finding 2 of 2: <span class="badge info">*Info</span> Title of AutoLogon:Winlogon:On</h2>*'
     }
 
-    It 'alternates the sections between dark and light blue' {
-        $findings = @((New-TestFinding -Id 'A:1'), (New-TestFinding -Id 'A:2'), (New-TestFinding -Id 'A:3'))
+    It 'gives each section the stripe and the badge, shape and word, of its severity' {
+        $findings = @((New-TestFinding -Id 'A:1' -Severity 'High'), (New-TestFinding -Id 'A:2' -Severity 'Medium'), (New-TestFinding -Id 'A:3' -Severity 'Low'), (New-TestFinding -Id 'A:4' -Severity 'Info'))
 
-        $classes = @([regex]::Matches((Get-TestReport -Finding $findings), '<section class="finding (\w+)"') | ForEach-Object { $_.Groups[1].Value })
+        $html = Get-TestReport -Finding $findings
 
-        $classes | Should -Be @('dark', 'light', 'dark')
+        @([regex]::Matches($html, '<section class="finding (\w+)"') | ForEach-Object { $_.Groups[1].Value }) | Should -Be @('high', 'medium', 'low', 'info')
+        $shapes = @([regex]::Matches($html, '<span class="badge \w+"><span aria-hidden="true">(&#\d+;)</span>') | ForEach-Object { $_.Groups[1].Value })
+        $shapes | Should -Be @('&#9650;', '&#9670;', '&#9679;', '&#9632;')
+    }
+
+    It 'puts the counts, the note that commands run on the host and the list command in a summary panel' {
+        $html = Get-TestReport -Finding @(New-TestFinding)
+
+        $html | Should -BeLike '*<section class="summary"*1 finding: 1 new, 0 still open, 0 resolved.*On the host*Get-LazyVMSecurityFinding*</section>*<section class="finding *'
     }
 
     It 'lists every field of a finding, files by name only' {
@@ -429,18 +437,25 @@ Describe 'Format-SecurityFindingReport (#367)' {
 
         foreach ($field in @(
                 @('Id', 'Firewall:Public:Off'), @('Severity', 'High'), @('What we found', 'found'), @('Where', 'x.exe'),
-                @('Why it matters', 'why'), @('How to fix', 'fix'), @('First seen', (Format-TestTime -Time '2026-11-01T02:40:00-08:00')), @('Status', 'New'))) {
+                @('Why it matters', 'why'), @('How to fix', 'fix'), @('First seen', (Format-TestTime -Time '2026-11-01T02:40:00-08:00')), @('Status', '<span class="chip new">New</span>'))) {
             $html | Should -BeLike "*<dt>$($field[0])</dt><dd>$($field[1])</dd>*" -Because $field[0]
         }
         $html | Should -Not -BeLike '*Downloads*'
+    }
+
+    It 'shows the status as a chip named for it' {
+        $html = Get-TestReport -Finding @((New-TestFinding -Id 'A:1' -Status 'Still open'), (New-TestFinding -Id 'A:2' -Status 'Resolved'))
+
+        $html | Should -BeLike '*<span class="chip still-open">Still open</span>*'
+        $html | Should -BeLike '*<span class="chip resolved">Resolved</span>*'
     }
 
     It 'gives each open finding the host command that approves it, with a button that copies it' {
         $html = Get-TestReport -Finding @(New-TestFinding -Id 'Firewall:Public:Off')
 
         $html | Should -BeLike "*<code id=`"approve-1`">Approve-LazyVMSecurityFinding -Name &#39;Alpha&#39; -Id &#39;Firewall:Public:Off&#39;</code>*"
-        $html | Should -BeLike '*<button type="button" data-copy="approve-1" aria-label="Copy the command that approves finding 1">Copy</button>*'
-        $html | Should -BeLike '*on the host*'
+        $html | Should -BeLike '*<button type="button" data-copy="approve-1" aria-label="Copy approve command for finding 1">Copy</button>*'
+        $html | Should -BeLike '*On the host*'
     }
 
     It 'gives a resolved finding nothing to approve' {
@@ -453,7 +468,7 @@ Describe 'Format-SecurityFindingReport (#367)' {
         $html = Get-TestReport -Finding @(New-TestFinding)
 
         $html | Should -BeLike "*<code id=`"list`">Get-LazyVMSecurityFinding -Name &#39;Alpha&#39;</code>*"
-        $html | Should -BeLike '*data-copy="list"*'
+        $html | Should -BeLike '*data-copy="list" aria-label="Copy list command"*'
         $html | Should -BeLike '*role="status"*'
     }
 
