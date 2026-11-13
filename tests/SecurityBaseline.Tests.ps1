@@ -1176,3 +1176,21 @@ Describe 'A program in ProgramData, judged by its folder''s access (#334)' {
         $facts.Items.ScheduledTask[0].InUserFolder | Should -Be $Expected
     }
 }
+
+Describe 'Get-SecurityBaselineRecordedAt (#360)' {
+    It 'is the latest time an area of the baseline was recorded' {
+        $early = [datetimeoffset]::new(2026, 11, 10, 22, 0, 0, [timespan]::FromHours(-8))
+        $late = [datetimeoffset]::new(2026, 11, 10, 23, 30, 0, [timespan]::FromHours(-8))
+        $baseline = [ordered]@{ ScheduledTask = @{ RecordedAt = $early; Items = @{} }; Service = @{ RecordedAt = $late; Items = @{} } }
+
+        $recorded = InModuleScope $module -Parameters @{ Baseline = $baseline } { param($Baseline) Get-SecurityBaselineRecordedAt -Baseline $Baseline }
+
+        $recorded | Should -Be $late
+    }
+
+    It 'is $null when no area has been recorded' {
+        $recorded = InModuleScope $module { Get-SecurityBaselineRecordedAt -Baseline ([ordered]@{}) }
+
+        $recorded | Should -BeNullOrEmpty
+    }
+}

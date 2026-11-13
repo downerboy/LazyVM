@@ -62,12 +62,15 @@ function Invoke-GuestSecurityScan {
         $previousFindings = $previous.Findings
         $previouslyUnchecked = $previous.Unchecked
     }
-    $facts = Get-GuestSecurityFact -VM $VM -Since $since
+    $baseline = Read-SecurityBaseline -VM $VM
+    # The guest's first scan reads the events from when the build recorded the baseline, not a day back, which would report LazyVM's own set-up (accounts, services, tasks) as new (#360). It is still the first scan below ($since is $null), so every detection Defender lists is reported.
+    $readFrom = $since
+    if ($null -eq $readFrom) { $readFrom = Get-SecurityBaselineRecordedAt -Baseline $baseline.Persistence }
+    $facts = Get-GuestSecurityFact -VM $VM -Since $readFrom
     # Registered before the persistence is read, so the opener's task is as LazyVM leaves it.
     Install-GuestSecurityFindingOpener -VM $VM
     $persistence = Get-GuestPersistenceItem -VM $VM
     $scannedAt = [datetimeoffset]::Parse([string]$facts.CollectedAt, [cultureinfo]::InvariantCulture).ToLocalTime()
-    $baseline = Read-SecurityBaseline -VM $VM
     if (-not $baseline.Readable) { $persistence = $null }
     $upgraded = @(Update-LegacyPersistenceBaseline -Baseline $baseline.Persistence -Item $persistence)
     foreach ($area in $upgraded) {
@@ -251,10 +254,11 @@ function Get-GuestSecurityFact {
       and some of the settings need, within its time budget, and logs what
       it reports about itself, such as an area it could not read. Returns
       its facts: CollectedAt, Notes, and Checks by area. Its arguments are
-      the quick scan's time limit, when the last scan collected ($Since,
-      $null for the first scan: the events and crash files since then are
-      read), the patterns script blocks are tested against and how many
-      hours the first scan reads back; nothing secret is passed.
+      the quick scan's time limit, where the events and crash files are read
+      from ($Since: when the last scan collected, or for the first scan when
+      the build recorded the baseline; $null when neither is known), the
+      patterns script blocks are tested against and how many hours that
+      case reads back; nothing secret is passed.
     #>
     [OutputType([pscustomobject])]
     param(

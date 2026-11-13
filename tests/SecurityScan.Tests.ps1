@@ -470,6 +470,29 @@ Describe 'Invoke-GuestSecurityScan' {
         Should -Invoke -ModuleName $module Get-GuestSecurityFact -Times 1 -Exactly -ParameterFilter { $null -ne $Since -and ([datetimeoffset]$Since) -eq [datetimeoffset]'2026-11-02T10:40:00Z' }
     }
 
+    It 'has the guest read the first scan from when the build recorded the baseline, so LazyVM''s own set-up is not reported (#360)' {
+        $vm = New-TestVM -Root (New-TestRoot)
+        $before = [datetimeoffset]::Now
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Save-GuestPersistenceBaseline -VM $VM }
+        $after = [datetimeoffset]::Now
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
+
+        Should -Invoke -ModuleName $module Get-GuestSecurityFact -Times 1 -Exactly -ParameterFilter {
+            $null -ne $Since -and ([datetimeoffset]$Since) -ge $before -and ([datetimeoffset]$Since) -le $after
+        }
+    }
+
+    It 'still treats the scan after the build as the first, so every detection Defender lists is reported (#360)' {
+        $vm = New-TestVM -Root (New-TestRoot)
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Save-GuestPersistenceBaseline -VM $VM }
+        Mock -ModuleName $module ConvertTo-SecurityFinding { @() }
+
+        InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Invoke-GuestSecurityScan -VM $VM }
+
+        Should -Invoke -ModuleName $module ConvertTo-SecurityFinding -Times 1 -Exactly -ParameterFilter { $null -eq $Since }
+    }
+
     It 'keeps the findings, logs each one, and asks the guest to open the desktop file for new High ones, once' {
         $vm = New-TestVM -Root (New-TestRoot)
         $script:check.SMBv1.Enabled = $true
