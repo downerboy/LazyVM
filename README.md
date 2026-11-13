@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/logo.png" alt="LazyVM logo" width="240"></p>
+
 # LazyVM
 
 > **Notice.** When this project hits beta, frequency of updates will drastically drop to, hopefully, weekly at most and the code release will not be releasing code breakage e.g. something moves some cheese, deletes some cheese, renames some cheeze and similar cheesy behavior.

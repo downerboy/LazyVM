@@ -1,3 +1,5 @@
+<p align="center"><img src="images/logo.png" alt="LazyVM logo" width="240"></p>
+
 # LazyVM Brand and UI Theme — v1
 
 Status: Draft. Based on the security findings page (2026-11-12).
@@ -164,3 +166,13 @@ The text prefix is always printed, so screen readers and logs keep the meaning.
   }
 }
 ```
+
+## 11. Logo
+
+The logo is the word "LazyVM" in bold sans-serif, cut from inside the supplied border and centered: `docs/images/logo.png` (transparent background, dark text, 576×224 px).
+
+1. Show it centered at the top of the README and each docs page, 240px wide (`width="240"`), with the alt text "LazyVM logo". Keep the page's h1 under it.
+2. Keep clear space around it of at least the height of the letter "L".
+3. Don't recolor, stretch, rotate or add effects.
+4. Use it on light backgrounds. A dark-theme version is not made yet.
+5. It was cut from a small screenshot (about 60 px wide), so it is soft when enlarged. A sharp vector version (SVG) is still to be made.
