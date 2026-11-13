@@ -2,6 +2,7 @@
     # The page docs\Diagrams.md: its introduction and the order of the
     # diagrams. Each diagram's own source is <id>.psd1 beside this file.
     # After changing any of them, run ./Update-Diagram.ps1.
+    Logo      = '<p align="center"><img src="images/logo.svg" alt="LazyVM logo" width="240"></p>'
     Title     = 'LazyVM diagrams'
     Intro     = 'One diagram per thing you do with LazyVM. Each shows the calls in order down the middle, data read on the left and data written on the right. Every diagram is followed by the same information as a numbered list.'
     HowToRead = @(

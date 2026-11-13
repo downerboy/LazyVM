@@ -149,7 +149,7 @@ function ConvertTo-DiagramMarkdown {
 }
 
 function ConvertTo-DiagramDocument {
-    <# The whole of docs\Diagrams.md: the introduction, the contents by group, then each diagram. #>
+    <# The whole of docs\Diagrams.md: the logo if the index has one, the introduction, the contents by group, then each diagram. #>
     [OutputType([string])]
     param(
         [Parameter(Mandatory)][hashtable]$Index,
@@ -160,6 +160,10 @@ function ConvertTo-DiagramDocument {
     foreach ($diagram in $Diagrams) { $byId[$diagram.Id] = $diagram }
 
     $out = [System.Collections.Generic.List[string]]::new()
+    if ($Index.ContainsKey('Logo')) {
+        $out.Add($Index.Logo)
+        $out.Add('')
+    }
     $out.Add("# $($Index.Title)")
     $out.Add('')
     $out.Add($Index.Intro)
