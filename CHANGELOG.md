@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.10.0](https://github.com/downerboy/LazyVM/compare/v6.9.0...v6.10.0) (2026-11-13)
+
+
+### Features
+
+* style the guest security findings page to the LazyVM brand ([#380](https://github.com/downerboy/LazyVM/issues/380)) ([65a1ee5](https://github.com/downerboy/LazyVM/commit/65a1ee5b5ac856e984cd1e547123c4c70e8e78a2)), closes [#377](https://github.com/downerboy/LazyVM/issues/377)
+
 ## [6.9.0](https://github.com/downerboy/LazyVM/compare/v6.8.3...v6.9.0) (2026-11-13)
 
 
