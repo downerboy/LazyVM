@@ -9,24 +9,49 @@ BeforeAll {
     $module = 'LazyVM'
 
     function Get-TestPage {
-        param([string]$Title = 'A page', [string[]]$Body = @('<p>Hello</p>'), [switch]$WithCopyScript)
-        InModuleScope $module -Parameters @{ Title = $Title; Body = $Body; WithCopyScript = $WithCopyScript } {
-            param($Title, $Body, $WithCopyScript)
-            New-HtmlPage -Title $Title -Body $Body -WithCopyScript:$WithCopyScript
+        param([string]$Title = 'A page', [string]$Subtitle = '', [string[]]$Body = @('<p>Hello</p>'), [switch]$WithCopyScript)
+        InModuleScope $module -Parameters @{ Title = $Title; Subtitle = $Subtitle; Body = $Body; WithCopyScript = $WithCopyScript } {
+            param($Title, $Subtitle, $Body, $WithCopyScript)
+            New-HtmlPage -Title $Title -Subtitle $Subtitle -Body $Body -WithCopyScript:$WithCopyScript
         }
     }
 }
 
 Describe 'New-HtmlPage (#375)' {
-    It 'is a page in English with a title, one h1 and the body inside main' {
-        $html = Get-TestPage -Title 'A page' -Body @('<p>One</p>', '<p>Two</p>')
+    It 'is a page in English with a title, one h1 in a header bar and the body inside main' {
+        $html = Get-TestPage -Title 'A page' -Subtitle 'Scanned today.' -Body @('<p>One</p>', '<p>Two</p>')
 
         $html | Should -BeLike '<!DOCTYPE html>*'
         $html | Should -BeLike '*<html lang="en">*'
         $html | Should -BeLike '*<meta charset="utf-8">*'
         $html | Should -BeLike '*<title>A page</title>*'
         ([regex]::Matches($html, '<h1>')).Count | Should -Be 1
-        $html | Should -BeLike '*<main>*<h1>A page</h1>*<p>One</p>*<p>Two</p>*</main>*'
+        $html | Should -BeLike '*<header>*<h1>A page</h1>*<p class="subtitle">Scanned today.</p>*</header>*<main>*<p>One</p>*<p>Two</p>*</main>*'
+    }
+
+    It 'ends with the copyright notice of LICENSE.md, after the main content' {
+        $html = Get-TestPage
+
+        $html | Should -BeLike '*</main>*<footer><p>Copyright (c) 2026 Massokissed</p></footer>*</body>*'
+    }
+
+    It 'has no subtitle line when it has no subtitle' {
+        (Get-TestPage) | Should -Not -Match 'class="subtitle"'
+    }
+
+    It 'has a light and a dark theme, and respects reduced motion and forced colours' {
+        $html = Get-TestPage
+
+        $html | Should -Match 'prefers-color-scheme: dark'
+        $html | Should -Match 'prefers-reduced-motion'
+        $html | Should -Match 'forced-colors: active'
+    }
+
+    It 'has one yellow button style with a visible focus outline' {
+        $html = Get-TestPage
+
+        $html | Should -Match '(?s)button \{[^}]*--lv-accent'
+        $html | Should -Match 'button:focus-visible'
     }
 
     It 'loads nothing from anywhere: its policy allows only its own style and script' {

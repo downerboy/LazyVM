@@ -493,6 +493,11 @@ function ConvertTo-PowerShellQuotedString {
     return "'" + $Text.Replace("'", "''") + "'"
 }
 
+# The shape each severity has in LazyVM Findings.html, as HTML entities (a
+# triangle, a diamond, a circle, a square), so a severity is told apart
+# without its colour.
+$script:SecuritySeverityIcon = @{ High = '&#9650;'; Medium = '&#9670;'; Low = '&#9679;'; Info = '&#9632;' }
+
 function Format-SecurityFindingReport {
     <#
       LazyVM Findings.html on the guest's desktop (#367): what it is, when
@@ -512,21 +517,25 @@ function Format-SecurityFindingReport {
     $title = "LazyVM security findings for $VMName"
     $name = ConvertTo-PowerShellQuotedString -Text $VMName
     $body = [System.Collections.Generic.List[string]]::new()
-    $body.Add("<p>Scanned on $(Format-SecurityFindingTime -Time $ScannedAt).</p>")
-    $body.Add('<p>LazyVM only reports what it finds. It changed nothing in this VM. This page is replaced after every nightly scan.</p>')
+    $body.Add('<section class="summary" aria-label="Summary">')
     if ($Finding.Count -eq 0) {
         $body.Add('<p>No security findings. Everything LazyVM checks looks right.</p>')
     }
     else {
         $body.Add("<p>$(ConvertTo-HtmlText (Format-SecurityFindingCount -Finding $Finding))</p>")
-        $body.Add('<p>The commands on this page run on the host, in PowerShell, not in this VM. Copy one here, then paste it on the host.</p>')
-        $body.Add("<p>To see the findings on the host: <code id=`"list`">Get-LazyVMSecurityFinding -Name $(ConvertTo-HtmlText $name)</code><button type=`"button`" data-copy=`"list`" aria-label=`"Copy the command that lists the findings`">Copy</button></p>")
-        $body.Add('<p id="copied" role="status" aria-live="polite"></p>')
-        for ($i = 0; $i -lt $Finding.Count; $i++) {
-            $body.Add((Format-SecurityFindingSection -Finding $Finding[$i] -Number ($i + 1) -Count $Finding.Count -VMName $VMName))
-        }
     }
-    return New-HtmlPage -Title $title -Body $body -WithCopyScript:($Finding.Count -gt 0)
+    $body.Add('<p>LazyVM only reports what it finds. It changed nothing in this VM. This page is replaced after every nightly scan.</p>')
+    if ($Finding.Count -gt 0) {
+        $body.Add('<p>The commands on this page run on the host, in PowerShell, not in this VM. Copy one here, then paste it on the host.</p>')
+        $body.Add('<p>On the host, to see the findings:</p>')
+        $body.Add("<p class=`"command`"><code id=`"list`">Get-LazyVMSecurityFinding -Name $(ConvertTo-HtmlText $name)</code><button type=`"button`" data-copy=`"list`" aria-label=`"Copy list command`">Copy</button></p>")
+        $body.Add('<p id="copied" role="status" aria-live="polite"></p>')
+    }
+    $body.Add('</section>')
+    for ($i = 0; $i -lt $Finding.Count; $i++) {
+        $body.Add((Format-SecurityFindingSection -Finding $Finding[$i] -Number ($i + 1) -Count $Finding.Count -VMName $VMName))
+    }
+    return New-HtmlPage -Title $title -Subtitle "Scanned on $(Format-SecurityFindingTime -Time $ScannedAt)." -Body $body -WithCopyScript:($Finding.Count -gt 0)
 }
 
 function Format-SecurityFindingSection {
@@ -539,25 +548,28 @@ function Format-SecurityFindingSection {
         [Parameter(Mandatory)][string]$VMName
     )
 
-    $shade = if ($Number % 2 -eq 1) { 'dark' } else { 'light' }
+    $severity = $Finding.Severity.ToLowerInvariant()
+    $icon = $script:SecuritySeverityIcon[$Finding.Severity]
+    $status = $Finding.Status.ToLowerInvariant().Replace(' ', '-')
     $where = @($Finding.Where | ForEach-Object { Split-Path -Path $_ -Leaf })
-    $fields = [ordered]@{ 'Id' = $Finding.Id; 'Severity' = $Finding.Severity; 'What we found' = $Finding.WhatWeFound }
-    if ($where.Count -gt 0) { $fields['Where'] = $where -join '; ' }
-    $fields['Why it matters'] = $Finding.WhyItMatters
-    $fields['How to fix'] = $Finding.HowToFix
-    $fields['First seen'] = Format-SecurityFindingTime -Time $Finding.FirstSeen
-    $fields['Status'] = $Finding.Status
+    # Every value is HTML by the time it is a field's, so the list is written as it is.
+    $fields = [ordered]@{ 'Id' = (ConvertTo-HtmlText $Finding.Id); 'Severity' = (ConvertTo-HtmlText $Finding.Severity); 'What we found' = (ConvertTo-HtmlText $Finding.WhatWeFound) }
+    if ($where.Count -gt 0) { $fields['Where'] = ConvertTo-HtmlText ($where -join '; ') }
+    $fields['Why it matters'] = ConvertTo-HtmlText $Finding.WhyItMatters
+    $fields['How to fix'] = ConvertTo-HtmlText $Finding.HowToFix
+    $fields['First seen'] = ConvertTo-HtmlText (Format-SecurityFindingTime -Time $Finding.FirstSeen)
+    $fields['Status'] = "<span class=`"chip $(ConvertTo-HtmlText $status)`">$(ConvertTo-HtmlText $Finding.Status)</span>"
 
     $html = [System.Collections.Generic.List[string]]::new()
-    $html.Add("<section class=`"finding $shade`" aria-labelledby=`"finding-$Number`">")
-    $html.Add("<h2 id=`"finding-$Number`">Finding $Number of ${Count}: $(ConvertTo-HtmlText $Finding.Severity) - $(ConvertTo-HtmlText $Finding.Title)</h2>")
+    $html.Add("<section class=`"finding $severity`" aria-labelledby=`"finding-$Number`">")
+    $html.Add("<h2 id=`"finding-$Number`">Finding $Number of ${Count}: <span class=`"badge $severity`"><span aria-hidden=`"true`">$icon</span> $(ConvertTo-HtmlText $Finding.Severity)</span> $(ConvertTo-HtmlText $Finding.Title)</h2>")
     $html.Add('<dl>')
-    foreach ($field in $fields.GetEnumerator()) { $html.Add("<dt>$($field.Key)</dt><dd>$(ConvertTo-HtmlText $field.Value)</dd>") }
+    foreach ($field in $fields.GetEnumerator()) { $html.Add("<dt>$($field.Key)</dt><dd>$($field.Value)</dd>") }
     $html.Add('</dl>')
     if ($Finding.Status -ne 'Resolved') {
         $command = "Approve-LazyVMSecurityFinding -Name $(ConvertTo-PowerShellQuotedString -Text $VMName) -Id $(ConvertTo-PowerShellQuotedString -Text $Finding.Id)"
-        $html.Add('<p>If you expect this, approve it on the host, so it is no longer reported:</p>')
-        $html.Add("<p><code id=`"approve-$Number`">$(ConvertTo-HtmlText $command)</code><button type=`"button`" data-copy=`"approve-$Number`" aria-label=`"Copy the command that approves finding $Number`">Copy</button></p>")
+        $html.Add('<p>If you expect this, approve it on the host (in PowerShell), so it is no longer reported:</p>')
+        $html.Add("<p class=`"command`"><code id=`"approve-$Number`">$(ConvertTo-HtmlText $command)</code><button type=`"button`" data-copy=`"approve-$Number`" aria-label=`"Copy approve command for finding $Number`">Copy</button></p>")
     }
     $html.Add('</section>')
     return $html -join "`n"
