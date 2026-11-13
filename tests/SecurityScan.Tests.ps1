@@ -695,8 +695,8 @@ Describe 'Publish-GuestSecurityFinding' {
         InModuleScope $module -Parameters @{ VM = $vm } { param($VM) Publish-GuestSecurityFinding -VM $VM -Html 'the findings' -AlertScanId '20261102-024000' }
 
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter {
-            $ArgumentList[0] -eq 'the findings' -and $ArgumentList[1] -eq 'LazyVM Findings.txt' -and $ArgumentList[2] -eq 'HKLM:\SOFTWARE\LazyVM' -and
-            $ArgumentList[3] -eq 'SecurityFindingsAlert' -and $ArgumentList[4] -eq '20261102-024000'
+            $ArgumentList[0] -eq 'the findings' -and $ArgumentList[1] -eq 'LazyVM Findings.html' -and $ArgumentList[2] -eq 'LazyVM Findings.txt' -and
+            $ArgumentList[3] -eq 'HKLM:\SOFTWARE\LazyVM' -and $ArgumentList[4] -eq 'SecurityFindingsAlert' -and $ArgumentList[5] -eq '20261102-024000'
         }
     }
 
