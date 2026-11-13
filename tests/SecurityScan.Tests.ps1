@@ -378,41 +378,106 @@ Describe 'Test-SecurityFindingAlert' {
     }
 }
 
-Describe 'Format-SecurityFindingReport' {
-    It 'says what it is, that LazyVM changed nothing, then each finding one field per line' {
-        $findings = @((New-TestFinding -Id 'Firewall:Public:Off' -Where 'C:\Users\dev\Downloads\x.exe'), (New-TestFinding -Id 'AutoLogon:Winlogon:On' -Severity 'Info' -Status 'Still open'))
-
-        $text = InModuleScope $module -Parameters @{ Finding = $findings; ScannedAt = $scannedAt } { param($Finding, $ScannedAt) Format-SecurityFindingReport -Finding $Finding -VMName 'Alpha' -ScannedAt $ScannedAt }
-        $lines = $text -split "`r`n"
-
-        $lines[0] | Should -Be 'LazyVM security findings for Alpha'
-        $lines | Should -Contain "Scanned on $(Format-TestTime -Time $scannedAt.ToString('o'))."
-        $lines | Should -Contain 'LazyVM only reports what it finds. It changed nothing in this VM.'
-        $lines | Should -Contain '2 findings: 1 new, 1 still open, 0 resolved.'
-        $lines | Should -Contain 'Finding 1 of 2'
-        $lines | Should -Contain 'Id: Firewall:Public:Off'
-        $lines | Should -Contain 'Severity: High'
-        $lines | Should -Contain 'Title: Title of Firewall:Public:Off'
-        $lines | Should -Contain 'What we found: found'
-        $lines | Should -Contain 'Where: x.exe'
-        $lines | Should -Contain 'Why it matters: why'
-        $lines | Should -Contain 'How to fix: fix'
-        $lines | Should -Contain "First seen: $(Format-TestTime -Time '2026-11-01T02:40:00-08:00')"
-        $lines | Should -Contain 'Status: New'
-        $text | Should -Not -Match "(?<!`r)`n"
-        $text | Should -Not -BeLike '*Downloads*'
+Describe 'Format-SecurityFindingReport (#367)' {
+    BeforeAll {
+        function Get-TestReport {
+            param([object[]]$Finding = @())
+            InModuleScope $module -Parameters @{ Finding = $Finding; ScannedAt = $scannedAt } { param($Finding, $ScannedAt) Format-SecurityFindingReport -Finding $Finding -VMName 'Alpha' -ScannedAt $ScannedAt }
+        }
     }
 
+    It 'is a web page that says what it is, when the scan ran, and that LazyVM changed nothing' {
+        $html = Get-TestReport -Finding @(New-TestFinding)
+
+        $html | Should -BeLike '<!DOCTYPE html>*'
+        $html | Should -BeLike '*<html lang="en">*'
+        $html | Should -BeLike '*<meta charset="utf-8">*'
+        $html | Should -BeLike '*<title>LazyVM security findings for Alpha</title>*'
+        $html | Should -BeLike '*<h1>LazyVM security findings for Alpha</h1>*'
+        $html | Should -BeLike "*Scanned on $(Format-TestTime -Time $scannedAt.ToString('o')).*"
+        $html | Should -BeLike '*LazyVM only reports what it finds. It changed nothing in this VM.*'
+    }
+
+    It 'loads nothing from anywhere: its policy allows only its own style and script' {
+        $html = Get-TestReport -Finding @(New-TestFinding)
+
+        $html | Should -BeLike "*<meta http-equiv=`"Content-Security-Policy`" content=`"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'`">*"
+        $html | Should -Not -Match '(src|href)="(https?:)?//'
+    }
+
+    It 'puts each finding in a section of its own, under a heading with its number, severity and title' {
+        $findings = @((New-TestFinding -Id 'Firewall:Public:Off'), (New-TestFinding -Id 'AutoLogon:Winlogon:On' -Severity 'Info' -Status 'Still open'))
+
+        $html = Get-TestReport -Finding $findings
+
+        $html | Should -BeLike '*2 findings: 1 new, 1 still open, 0 resolved.*'
+        ([regex]::Matches($html, '<section ')).Count | Should -Be 2
+        $html | Should -BeLike '*<h2 id="finding-1">Finding 1 of 2: High - Title of Firewall:Public:Off</h2>*'
+        $html | Should -BeLike '*<h2 id="finding-2">Finding 2 of 2: Info - Title of AutoLogon:Winlogon:On</h2>*'
+    }
+
+    It 'alternates the sections between dark and light blue' {
+        $findings = @((New-TestFinding -Id 'A:1'), (New-TestFinding -Id 'A:2'), (New-TestFinding -Id 'A:3'))
+
+        $classes = @([regex]::Matches((Get-TestReport -Finding $findings), '<section class="finding (\w+)"') | ForEach-Object { $_.Groups[1].Value })
+
+        $classes | Should -Be @('dark', 'light', 'dark')
+    }
+
+    It 'lists every field of a finding, files by name only' {
+        $html = Get-TestReport -Finding @(New-TestFinding -Where 'C:\Users\dev\Downloads\x.exe')
+
+        foreach ($field in @(
+                @('Id', 'Firewall:Public:Off'), @('Severity', 'High'), @('What we found', 'found'), @('Where', 'x.exe'),
+                @('Why it matters', 'why'), @('How to fix', 'fix'), @('First seen', (Format-TestTime -Time '2026-11-01T02:40:00-08:00')), @('Status', 'New'))) {
+            $html | Should -BeLike "*<dt>$($field[0])</dt><dd>$($field[1])</dd>*" -Because $field[0]
+        }
+        $html | Should -Not -BeLike '*Downloads*'
+    }
+
+    It 'gives each open finding the host command that approves it, with a button that copies it' {
+        $html = Get-TestReport -Finding @(New-TestFinding -Id 'Firewall:Public:Off')
+
+        $html | Should -BeLike "*<code id=`"approve-1`">Approve-LazyVMSecurityFinding -Name &#39;Alpha&#39; -Id &#39;Firewall:Public:Off&#39;</code>*"
+        $html | Should -BeLike '*<button type="button" data-copy="approve-1" aria-label="Copy the command that approves finding 1">Copy</button>*'
+        $html | Should -BeLike '*on the host*'
+    }
+
+    It 'gives a resolved finding nothing to approve' {
+        $html = Get-TestReport -Finding @(New-TestFinding -Status 'Resolved')
+
+        $html | Should -Not -BeLike '*Approve-LazyVMSecurityFinding*'
+    }
+
+    It 'gives the command that lists the findings on the host, with a button, and a place that says what was copied' {
+        $html = Get-TestReport -Finding @(New-TestFinding)
+
+        $html | Should -BeLike "*<code id=`"list`">Get-LazyVMSecurityFinding -Name &#39;Alpha&#39;</code>*"
+        $html | Should -BeLike '*data-copy="list"*'
+        $html | Should -BeLike '*role="status"*'
+    }
+
+    It 'shows text from the VM as text, never as markup, and quotes it for PowerShell in a command' {
+        $html = Get-TestReport -Finding @(New-TestFinding -Id "Task:<script>alert('x')</script>&")
+
+        $html | Should -Not -BeLike "*<script>alert*"
+        $html | Should -BeLike "*Task:&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;&amp;*"
+        $html | Should -BeLike "*-Id &#39;Task:&lt;script&gt;alert(&#39;&#39;x&#39;&#39;)&lt;/script&gt;&amp;&#39;</code>*"
+    }
+
+    It 'says so when there is nothing to report, with no buttons' {
+        $html = Get-TestReport
+
+        $html | Should -BeLike '*No security findings. Everything LazyVM checks looks right.*'
+        $html | Should -Not -BeLike '*<button*'
+    }
+}
+
+Describe 'Format-SecurityFinding' {
     It 'lists the full paths in the log' {
         $lines = InModuleScope $module -Parameters @{ Finding = (New-TestFinding -Where 'C:\Users\dev\Downloads\x.exe') } { param($Finding) Format-SecurityFinding -Finding $Finding }
 
         $lines | Should -Contain 'Where: C:\Users\dev\Downloads\x.exe'
-    }
-
-    It 'says so when there is nothing to report' {
-        $text = InModuleScope $module -Parameters @{ ScannedAt = $scannedAt } { param($ScannedAt) Format-SecurityFindingReport -Finding @() -VMName 'Alpha' -ScannedAt $ScannedAt }
-
-        $text | Should -BeLike '*No security findings. Everything LazyVM checks looks right.*'
     }
 }
 
@@ -955,16 +1020,16 @@ Describe 'The sign-in opener' {
         $argument | Should -Not -Match ' -File '
         $command | Should -Not -BeNullOrEmpty
         $command | Should -Not -Match "[`"`r`n]"
-        $command | Should -BeLike "*GetFolderPath('System')*'notepad.exe'*"
+        $command | Should -BeLike "*GetFolderPath('ProgramFilesX86')*'msedge.exe'*"
     }
 
-    It 'opens the file in Notepad, by its full path, and records it, when a scan asked for it and it was not opened for that scan' {
+    It 'opens the page in Microsoft Edge, both by their full paths, and records it, when a scan asked for it and it was not opened for that scan (#367)' {
         Mock Get-ItemPropertyValue { if ("$Path" -like 'HKLM:*') { '20261102-024000' } else { '20261101-024000' } }
 
         & ([scriptblock]::Create($command))
 
         Should -Invoke Set-ItemProperty -Times 1 -Exactly -ParameterFilter { $Name -eq 'SecurityFindingsOpened' -and $Value -eq '20261102-024000' }
-        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $FilePath -eq [IO.Path]::Combine([Environment]::GetFolderPath('System'), 'notepad.exe') -and "$ArgumentList" -like '"*LazyVM Findings.txt"' }
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $FilePath -eq [IO.Path]::Combine([Environment]::GetFolderPath('ProgramFilesX86'), 'Microsoft', 'Edge', 'Application', 'msedge.exe') -and "$ArgumentList" -like '"*LazyVM Findings.html"' }
     }
 
     It 'leaves it closed when <Case>' -ForEach @(

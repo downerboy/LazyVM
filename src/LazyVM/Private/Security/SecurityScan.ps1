@@ -7,11 +7,11 @@
 # facts each settings check needs, and $script:GuestPersistenceWork, the
 # places a program can start itself again. The host turns them into findings
 # (SecurityFinding.ps1, Persistence.ps1), leaves out the approved ones
-# (SecurityApproval.ps1), logs each one, writes them to LazyVM Findings.txt
+# (SecurityApproval.ps1), logs each one, writes them to LazyVM Findings.html
 # on the guest's desktop, and keeps them in <VM>\Logs\SecurityFindings.json.
 # When the scan found something new of a severity that alerts
-# (GuestSecurityScanAlertSeverity, every one by default), the file opens in
-# Notepad the next time someone signs in, connects or unlocks, once for that
+# (GuestSecurityScanAlertSeverity, every one by default), the page opens in
+# Microsoft Edge the next time someone signs in, connects or unlocks, once for that
 # scan for each user. The scan only reports: it changes nothing in the guest
 # but that file and what opens it.
 
@@ -24,7 +24,9 @@ $script:SecurityQuickScanMinutes = 15
 # something new that is High or Medium sets the alert value under the
 # guest's LazyVM key to its stamp; the opener records in the user's own key
 # the stamp it opened the file for.
-$script:GuestSecurityFindingsFileName = 'LazyVM Findings.txt'
+$script:GuestSecurityFindingsFileName = 'LazyVM Findings.html'
+# The findings file before #367, removed when the page is written.
+$script:GuestSecurityFindingsTextFileName = 'LazyVM Findings.txt'
 $script:GuestSecurityFindingsTaskName = "${script:TaskPrefix}SecurityFindings"
 $script:GuestSecurityAlertValueName = 'SecurityFindingsAlert'
 # Besides sign-in, the opener runs when a session is connected at the
@@ -94,7 +96,7 @@ function Invoke-GuestSecurityScan {
         Write-LogEntry "Security scan: $approvedCount approved finding(s) not reported. List them with: Get-LazyVMSecurityFinding -Name $($VM.Name) -Approved" 'INFO'
     }
     $alertScanId = if (Test-SecurityFindingAlert -Finding $findings -AlertSeverity $alertSeverity) { $scannedAt.ToString($script:StampFormat) } else { '' }
-    Publish-GuestSecurityFinding -VM $VM -Text (Format-SecurityFindingReport -Finding $findings -VMName $VM.Name -ScannedAt $scannedAt) -AlertScanId $alertScanId
+    Publish-GuestSecurityFinding -VM $VM -Html (Format-SecurityFindingReport -Finding $findings -VMName $VM.Name -ScannedAt $scannedAt) -AlertScanId $alertScanId
     Save-SecurityFindingRecord -VM $VM -ScannedAt $scannedAt -Finding $findings -Unchecked $unchecked
     if (-not $baseline.Readable) {
         Write-LogEntry 'Security scan: the security baseline could not be read, so it was left as it is. Approving or revoking a finding moves it aside; then the next scan records a new one.' 'WARN'
@@ -326,25 +328,27 @@ function Install-GuestSecurityFindingOpener {
 
 function Publish-GuestSecurityFinding {
     <#
-      Writes $Text to LazyVM Findings.txt on the guest's public desktop,
-      which every user's desktop shows. With an $AlertScanId, records it as
+      Writes $Html to LazyVM Findings.html on the guest's public desktop,
+      which every user's desktop shows, and removes LazyVM Findings.txt,
+      which it replaced (#367). With an $AlertScanId, records it as
       the scan the file is to open for; without one the stamp is left as it
       is, so a file not opened yet still opens.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][string]$Text,
+        [Parameter(Mandatory)][string]$Html,
         [Parameter(Mandatory)][AllowEmptyString()][string]$AlertScanId
     )
 
-    $arguments = @($Text, $script:GuestSecurityFindingsFileName, $script:GuestMarkerKey, $script:GuestSecurityAlertValueName, $AlertScanId)
+    $arguments = @($Html, $script:GuestSecurityFindingsFileName, $script:GuestSecurityFindingsTextFileName, $script:GuestMarkerKey, $script:GuestSecurityAlertValueName, $AlertScanId)
     $null = Invoke-GuestScript -VM $VM -Activity 'security findings file' -TimeoutMinutes 5 -ArgumentList $arguments -ScriptBlock {
-        param($text, $fileName, $markerKey, $alertName, $alertScanId)
+        param($html, $fileName, $textFileName, $markerKey, $alertName, $alertScanId)
         $ErrorActionPreference = 'Stop'
 
-        # With a byte order mark, so Notepad reads it as UTF-8.
-        $file = Join-Path -Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) -ChildPath $fileName
-        [System.IO.File]::WriteAllText($file, $text, (New-Object System.Text.UTF8Encoding $true))
+        $desktop = [Environment]::GetFolderPath('CommonDesktopDirectory')
+        [System.IO.File]::WriteAllText((Join-Path -Path $desktop -ChildPath $fileName), $html, (New-Object System.Text.UTF8Encoding $false))
+        $textFile = Join-Path -Path $desktop -ChildPath $textFileName
+        if (Test-Path -LiteralPath $textFile) { Remove-Item -LiteralPath $textFile -Force }
         if ($alertScanId) {
             if (-not (Test-Path -LiteralPath $markerKey)) { New-Item -Path $markerKey -Force | Out-Null }
             Set-ItemProperty -LiteralPath $markerKey -Name $alertName -Value $alertScanId
