@@ -19,7 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DownerBoy.LazyVM.UI.Wpf\DownerBoy.LazyVM.UI.Wpf.csproj" />
-    <ProjectReference Include="..\DownerBoy.LazyVM.Api\DownerBoy.LazyVM.Api.csproj" />
+    <ProjectReference Include="..\DownerBoy.LazyVM.Api\LazyVM.Api.csproj" />
   </ItemGroup>
 
 </Project>

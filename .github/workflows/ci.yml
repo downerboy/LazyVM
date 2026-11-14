@@ -70,7 +70,7 @@ jobs:
     permissions:
       contents: read
     env:
-      SOLUTION: src/DownerBoy.LazyVM.slnx
+      SOLUTION: src/LazyVM.slnx
       DOTNET_NOLOGO: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
     defaults:

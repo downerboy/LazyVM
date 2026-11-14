@@ -1,8 +1,8 @@
-﻿using System.Configuration;
+using System.Configuration;
 using System.Data;
 using System.Windows;
 
-namespace DownerBoy.LazyVM.UI.Wpf;
+namespace LazyVM.UI.Wpf;
 
 /// <summary>
 /// Interaction logic for App.xaml

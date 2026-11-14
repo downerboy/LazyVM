@@ -18,7 +18,7 @@ A desktop window that shows every LazyVM VM on this host in one place, so you ca
 | Network | None. No listener, no web service | LazyVM is per-user. A port on the host would be reachable by other users. |
 | Look | The [brand spec](Brand.md), mapped to XAML (section 6) | One look across the findings page, console and GUI. |
 
-WinUI 3 stays possible later: only `DownerBoy.LazyVM.UI.Wpf` depends on WPF.
+WinUI 3 stays possible later: only `LazyVM.UI.Wpf` depends on WPF.
 
 ## 3. What the dashboard shows
 
@@ -48,36 +48,36 @@ Not yet available: the name of the config template a VM was first created from. 
 
 ## 4. Architecture
 
-Two projects. `DownerBoy.LazyVM.Api` is a layered class library: business objects, a data layer, and a service layer on top that holds the business logic. `DownerBoy.LazyVM.UI.Wpf` is the window: a thin wrapper that knows the business objects and calls only the service layer. Another presentation layer (WinUI 3, a web front end) can replace it without touching the library.
+Two projects. `LazyVM.Api` is a layered class library: business objects, a data layer, and a service layer on top that holds the business logic. `LazyVM.UI.Wpf` is the window: a thin wrapper that knows the business objects and calls only the service layer. Another presentation layer (WinUI 3, a web front end) can replace it without touching the library.
 
 ```
-DownerBoy.LazyVM.UI.Wpf        Views (XAML), view models          calls the service layer only
+LazyVM.UI.Wpf        Views (XAML), view models          calls the service layer only
         │
         ▼
-DownerBoy.LazyVM.Api
-  DownerBoy.LazyVM.Services    DashboardService, LazyVMDashboardService     ← top layer
-  DownerBoy.LazyVM             VmSummary, DiskSummary, and any class PowerShell consumes
-  DownerBoy.LazyVM.Data        VmInventory, PowerShellVmInventory           → LazyVM module
+LazyVM.Api
+  LazyVM.Services    DashboardService, LazyVMDashboardService     ← top layer
+  LazyVM             VmSummary, DiskSummary, and any class PowerShell consumes
+  LazyVM.Data        VmInventory, PowerShellVmInventory           → LazyVM module
 ```
 
-- **Business objects** (`DownerBoy.LazyVM`): immutable records such as `VmSummary` and `DiskSummary`. Classes written later for PowerShell to consume go in this namespace too.
-- **Data layer** (`DownerBoy.LazyVM.Data`): `VmInventory` (abstract) and `PowerShellVmInventory`, which runs `Get-LazyVMDashboard` in-process and maps its output to business objects. A fake subclass stands in for it in tests.
-- **Service layer** (`DownerBoy.LazyVM.Services`): `DashboardService` (abstract) and `LazyVMDashboardService`. `GetVmsAsync(CancellationToken)` returns the VMs. The business rules live here, such as whether a VM needs attention (failed maintenance, open findings, a `Problems` entry).
-- **UI** (`DownerBoy.LazyVM.UI.Wpf`): XAML views with bindings and styles, and view models for the list, sorting, selection, refresh and error state. `ViewModelBase` (abstract) implements `INotifyPropertyChanged` once. The view models take a `DashboardService` through their constructor; they never see PowerShell.
+- **Business objects** (`LazyVM`): immutable records such as `VmSummary` and `DiskSummary`. Classes written later for PowerShell to consume go in this namespace too.
+- **Data layer** (`LazyVM.Data`): `VmInventory` (abstract) and `PowerShellVmInventory`, which runs `Get-LazyVMDashboard` in-process and maps its output to business objects. A fake subclass stands in for it in tests.
+- **Service layer** (`LazyVM.Services`): `DashboardService` (abstract) and `LazyVMDashboardService`. `GetVmsAsync(CancellationToken)` returns the VMs. The business rules live here, such as whether a VM needs attention (failed maintenance, open findings, a `Problems` entry).
+- **UI** (`LazyVM.UI.Wpf`): XAML views with bindings and styles, and view models for the list, sorting, selection, refresh and error state. `ViewModelBase` (abstract) implements `INotifyPropertyChanged` once. The view models take a `DashboardService` through their constructor; they never see PowerShell.
 - **Abstract classes, not interfaces**, for the project's own seams. Framework interfaces (`INotifyPropertyChanged`, `ICommand`, `IDisposable`) are implemented once, in the base classes. Members a test replaces are `abstract` or `virtual`.
 - **Hosting PowerShell**: `PowerShellVmInventory` opens one runspace and imports the installed LazyVM module from `%ProgramFiles%\LazyVM\Modules`. Calls use `PowerShell.InvokeAsync()`; Cancel uses `StopAsync()`. A runspace runs one pipeline at a time, so a second refresh waits for the first. The PowerShell version the app ships must be one the module supports, and the release build checks it.
-- **Loaded by PowerShell too**: because PowerShell will load `DownerBoy.LazyVM.Api` for its own classes, the library references `System.Management.Automation` for compiling only. The WPF app brings the PowerShell SDK it runs on. Inside `pwsh`, PowerShell's own copy is used, so the two never clash.
+- **Loaded by PowerShell too**: because PowerShell will load `LazyVM.Api` for its own classes, the library references `System.Management.Automation` for compiling only. The WPF app brings the PowerShell SDK it runs on. Inside `pwsh`, PowerShell's own copy is used, so the two never clash.
 - Calls run off the UI thread and can be cancelled. A failure on one VM shows on that VM's row and does not blank the list.
 - Refresh on open, on a Refresh button and on F5. No background polling in version 1.
 
 ### Solution layout
 
 ```
-src/DownerBoy.LazyVM.slnx
-src/DownerBoy.LazyVM.Api/              class library: business objects, Data, Services
-src/DownerBoy.LazyVM.UI.Wpf/           WPF app, namespace DownerBoy.LazyVM.UI.Wpf
-src/DownerBoy.LazyVM.Api.Tests/        xUnit: mapping and service rules, against a fake VmInventory
-src/DownerBoy.LazyVM.UI.Wpf.Tests/     xUnit: view models against a fake DashboardService, no window
+src/LazyVM.slnx
+src/LazyVM.Api/              class library: business objects, Data, Services
+src/LazyVM.UI.Wpf/           WPF app, namespace LazyVM.UI.Wpf
+src/LazyVM.Api.Tests/        xUnit: mapping and service rules, against a fake VmInventory
+src/LazyVM.UI.Wpf.Tests/     xUnit: view models against a fake DashboardService, no window
 ```
 
 Every project of the solution, tests included, sits in `src`. The repository's `tests` folder keeps only the module's Pester tests.
@@ -142,8 +142,8 @@ The module is per-user by design. Any multi-user mode must be an explicit, admin
 
 1. This spec.
 2. `Get-LazyVMDashboard` in the module, with tests, help, diagram and guide. Done.
-3. `DownerBoy.LazyVM.Api`: business objects, `VmInventory`, `DashboardService` and its rules, tests against a fake inventory.
+3. `LazyVM.Api`: business objects, `VmInventory`, `DashboardService` and its rules, tests against a fake inventory.
 4. `PowerShellVmInventory` with mapping tests.
-5. `DownerBoy.LazyVM.UI.Wpf`: theme dictionaries, window, grid, details panel, view-model tests.
+5. `LazyVM.UI.Wpf`: theme dictionaries, window, grid, details panel, view-model tests.
 6. Accessibility pass and zoom/High Contrast checks.
 7. Packaging: the release zip, `Install.ps1` and the per-user Start menu shortcut.
