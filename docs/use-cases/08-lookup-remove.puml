@@ -8,6 +8,7 @@ Admin --|> User
 
 rectangle "LazyVM" {
   usecase "List VMs\n<size:10>Get-LazyVM</size>" as List
+  usecase "See the dashboard data\n<size:10>Get-LazyVMDashboard</size>" as Dash
   usecase "View settings\n<size:10>Get-LazyVMSetting</size>" as Set
   usecase "View the guest account\n<size:10>Get-LazyVMCredential</size>" as CredV
   usecase "Check the license\n<size:10>Get-LazyVMLicense</size>" as Lic
@@ -22,6 +23,7 @@ actor "Task Scheduler" as TS <<system>>
 actor "Guest Windows" as Guest <<system>>
 
 User --> List
+User --> Dash
 User --> Set
 Admin --> CredV
 Admin --> Lic
@@ -33,6 +35,9 @@ Rem ..> Plan : <<include>>
 
 List --> HV
 List --> TS
+Dash ..> List : <<include>>
+Dash --> HV
+Dash --> TS
 Lic --> Guest
 Test --> HV
 Test --> TS
