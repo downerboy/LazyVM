@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.11.0](https://github.com/downerboy/LazyVM/compare/v6.10.0...v6.11.0) (2026-11-14)
+
+
+### Features
+
+* add Get-LazyVMDashboard for the GUI dashboard ([#391](https://github.com/downerboy/LazyVM/issues/391)) ([cd063ce](https://github.com/downerboy/LazyVM/commit/cd063ce07272a01ae959c0fc2e1bb6273b2e648f))
+
 ## [6.10.0](https://github.com/downerboy/LazyVM/compare/v6.9.0...v6.10.0) (2026-11-13)
 
 
