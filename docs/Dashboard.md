@@ -73,7 +73,7 @@ DownerBoy.LazyVM.Api
 ### Solution layout
 
 ```
-src/DownerBoy.LazyVM.sln
+src/DownerBoy.LazyVM.slnx
 src/DownerBoy.LazyVM.Api/              class library: business objects, Data, Services
 src/DownerBoy.LazyVM.UI.Wpf/           WPF app, namespace DownerBoy.LazyVM.UI.Wpf
 src/DownerBoy.LazyVM.Api.Tests/        xUnit: mapping and service rules, against a fake VmInventory
