@@ -18,6 +18,7 @@
         'Export-LazyVMTemplate'
         'Get-LazyVM'
         'Get-LazyVMCredential'
+        'Get-LazyVMDashboard'
         'Get-LazyVMLicense'
         'Get-LazyVMRestorePoint'
         'Get-LazyVMSecurityFinding'

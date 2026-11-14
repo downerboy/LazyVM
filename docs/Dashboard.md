@@ -2,7 +2,7 @@
 
 # LazyVM Dashboard — specification
 
-Status: Draft for discussion. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). Nothing here is built yet.
+Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built; the window is not.
 
 ## 1. Purpose
 
@@ -12,59 +12,81 @@ A desktop window that shows every LazyVM VM on this host in one place, so you ca
 
 | Decision | Choice | Why |
 |---|---|---|
-| UI framework | WPF on current LTS .NET, C# | Visual Studio XAML designer, built-in `DataGrid`, UI Automation support, and a fit for data-driven dashboards. WinUI 3 has no designer or first-party `DataGrid`. |
+| UI framework | WPF on .NET 10 (LTS), C# | Visual Studio XAML designer, built-in `DataGrid`, UI Automation support, and a fit for data-driven dashboards. WinUI 3 has no designer or first-party `DataGrid`. |
 | Pattern | MVVM, constructor injection, no code-behind logic | Testable without a window (TDD, SOLID). |
-| Data source | The LazyVM PowerShell module, called from C# | The module stays the single source of truth. The GUI never reads `VM.json` or Hyper-V on its own. |
+| Data source | The LazyVM PowerShell module, run in-process through the PowerShell SDK | The module stays the single source of truth. The GUI never reads `VM.json` or Hyper-V on its own. |
 | Network | None. No listener, no web service | LazyVM is per-user. A port on the host would be reachable by other users. |
 | Look | The [brand spec](Brand.md), mapped to XAML (section 6) | One look across the findings page, console and GUI. |
 
-WinUI 3 stays possible later because the view models and data layer do not depend on WPF.
+WinUI 3 stays possible later: only `DownerBoy.LazyVM.UI.Wpf` depends on WPF.
 
 ## 3. What the dashboard shows
 
 One row per VM. Details open in a panel beside or below the list.
 
-| Field | Source today | Gap |
-|---|---|---|
-| VM name | `Get-LazyVM` → `Name` | None |
-| State (Running, Off, Not built…) | `Get-LazyVM` → `State` | None |
-| Maintenance schedule and task registered | `Get-LazyVM` → `MaintenanceTime`, `MaintenanceTask` | None |
-| Settings problem | `Get-LazyVM` → `Settings` | None |
-| Last maintenance run and its result | Maintenance log | Needs a command that returns it |
-| Creation date | Profile or first-build record | Needs a command that returns it |
-| Attached disks (Dev Drive, SQL data, User) | Hyper-V and `VM.json` | Needs a command that returns it |
-| Memory in use | Hyper-V (`Get-VM`) | Only meaningful while the VM runs; show "Off" otherwise |
-| Total disk space used | Hyper-V (VHDX file size and maximum) | Needs a command that returns it |
-| Template it was built from | `VM.Template.json` | Needs a command that returns it |
-| Latest template ("green template") | `Shared\Templates\<VM>-latest.json` | Meaning to confirm (section 9) |
-| Open security findings | `Get-LazyVMSecurityFinding` | None |
+`Get-LazyVMDashboard` returns all of it as one `LazyVM.Dashboard` object per VM, so the GUI makes one call, not many. It only reads.
 
-The module gains one read-only command that returns all of the above as one object per VM (working name `Get-LazyVMDashboard`), so the GUI makes one call, not many. It follows the module's own rules: help, tests, diagram and guide updates in the same pull request.
+| Field | Property | Source |
+|---|---|---|
+| VM name | `Name` | The VM's profile |
+| State (Running, Off, Not built…) | `State` | Hyper-V |
+| When it was created | `Created` | Hyper-V `CreationTime`. A rebuild makes a new VM, so this is when the current one was built. |
+| Memory in use | `MemoryAssigned` (bytes) | Hyper-V. 0 while the VM is off. |
+| Attached disks | `Disks`: `Name`, `Path`, `Used`, `Maximum` (bytes) | Hyper-V. `Used` includes the disk's checkpoint files. |
+| Total disk space used | `DiskSpaceUsed` (bytes) | The sum of `Disks.Used` |
+| Maintenance schedule and task | `MaintenanceTime`, `MaintenanceTask` | The VM's settings, Task Scheduler |
+| Last maintenance run and result | `LastMaintenance`, `LastMaintenanceResult` (Succeeded, Failed (0x…), Not run yet) | Task Scheduler. Runs started by hand are not counted. |
+| Last security scan, findings still open | `LastSecurityScan`, `OpenFindings` | `Logs\SecurityFindings.json`, less approved and resolved findings |
+| Configuration it was first built from | `OriginalConfig` | `Config\VM.Template.json` |
+| Green template | `GreenTemplate`, `GreenTemplateUpdated` | `Shared\Templates\<VM>-latest.json` |
+| Settings problem | `Settings` | The VM's settings files |
+| What could not be read | `Problems` | One line per part that failed, such as `Disks: access denied` |
+
+The green template is the config template LazyVM keeps up to date every time the VM changes (#292), so there is always a template to build another VM just like it. "Green" as in evergreen.
+
+Not yet available: the name of the config template a VM was first created from. `VM.json` does not record it. `OriginalConfig` gives the configuration itself.
 
 ## 4. Architecture
 
+Two projects. `DownerBoy.LazyVM.Api` is a layered class library: business objects, a data layer, and a service layer on top that holds the business logic. `DownerBoy.LazyVM.UI.Wpf` is the window: a thin wrapper that knows the business objects and calls only the service layer. Another presentation layer (WinUI 3, a web front end) can replace it without touching the library.
+
 ```
-Views (XAML)  →  ViewModels  →  IVmInventory  →  PowerShellVmInventory  →  LazyVM module
+DownerBoy.LazyVM.UI.Wpf        Views (XAML), view models          calls the service layer only
+        │
+        ▼
+DownerBoy.LazyVM.Api
+  DownerBoy.LazyVM.Services    DashboardService, LazyVMDashboardService     ← top layer
+  DownerBoy.LazyVM             VmSummary, DiskSummary, and any class PowerShell consumes
+  DownerBoy.LazyVM.Data        VmInventory, PowerShellVmInventory           → LazyVM module
 ```
 
-- **Views**: XAML only. Bindings and styles, no logic.
-- **ViewModels**: list, sorting, selection, refresh state, error state. No reference to WPF types.
-- **`IVmInventory`**: `Task<IReadOnlyList<VmSummary>> GetAllAsync(CancellationToken)`. The only seam to the outside.
-- **`PowerShellVmInventory`**: runs the module command and maps its output to `VmSummary` records. A fake `IVmInventory` stands in for it in tests.
+- **Business objects** (`DownerBoy.LazyVM`): immutable records such as `VmSummary` and `DiskSummary`. Classes written later for PowerShell to consume go in this namespace too.
+- **Data layer** (`DownerBoy.LazyVM.Data`): `VmInventory` (abstract) and `PowerShellVmInventory`, which runs `Get-LazyVMDashboard` in-process and maps its output to business objects. A fake subclass stands in for it in tests.
+- **Service layer** (`DownerBoy.LazyVM.Services`): `DashboardService` (abstract) and `LazyVMDashboardService`. `GetVmsAsync(CancellationToken)` returns the VMs. The business rules live here, such as whether a VM needs attention (failed maintenance, open findings, a `Problems` entry).
+- **UI** (`DownerBoy.LazyVM.UI.Wpf`): XAML views with bindings and styles, and view models for the list, sorting, selection, refresh and error state. `ViewModelBase` (abstract) implements `INotifyPropertyChanged` once. The view models take a `DashboardService` through their constructor; they never see PowerShell.
+- **Abstract classes, not interfaces**, for the project's own seams. Framework interfaces (`INotifyPropertyChanged`, `ICommand`, `IDisposable`) are implemented once, in the base classes. Members a test replaces are `abstract` or `virtual`.
+- **Hosting PowerShell**: `PowerShellVmInventory` opens one runspace and imports the installed LazyVM module from `%ProgramFiles%\LazyVM\Modules`. Calls use `PowerShell.InvokeAsync()`; Cancel uses `StopAsync()`. A runspace runs one pipeline at a time, so a second refresh waits for the first. The PowerShell version the app ships must be one the module supports, and the release build checks it.
+- **Loaded by PowerShell too**: because PowerShell will load `DownerBoy.LazyVM.Api` for its own classes, the library references `System.Management.Automation` for compiling only. The WPF app brings the PowerShell SDK it runs on. Inside `pwsh`, PowerShell's own copy is used, so the two never clash.
 - Calls run off the UI thread and can be cancelled. A failure on one VM shows on that VM's row and does not blank the list.
 - Refresh on open, on a Refresh button and on F5. No background polling in version 1.
 
-### Projects
+### Solution layout
 
 ```
-src/LazyVM.Dashboard/             WPF app (Views, App.xaml)
-src/LazyVM.Dashboard.Core/        ViewModels, IVmInventory, VmSummary
-tests/LazyVM.Dashboard.Tests/     xUnit, view-model and mapping tests, no UI
+src/DownerBoy.LazyVM.sln
+src/DownerBoy.LazyVM.Api/              class library: business objects, Data, Services
+src/DownerBoy.LazyVM.UI.Wpf/           WPF app, namespace DownerBoy.LazyVM.UI.Wpf
+src/DownerBoy.LazyVM.Api.Tests/        xUnit: mapping and service rules, against a fake VmInventory
+src/DownerBoy.LazyVM.UI.Wpf.Tests/     xUnit: view models against a fake DashboardService, no window
 ```
+
+Every project of the solution, tests included, sits in `src`. The repository's `tests` folder keeps only the module's Pester tests.
+
+Names follow the .NET guidelines: two-letter acronyms in capitals (`UI`), longer ones in Pascal case (`Api`, `Wpf`).
 
 ## 5. Security
 
-1. Runs as the signed-in user and is installed to that user's profile, like the module.
+1. Runs as the signed-in user. Its files sit beside the module in `%ProgramFiles%\LazyVM`, with the same access rule: only the user who installed LazyVM can read them.
 2. No listener, no named pipe, no remote calls.
 3. Runs the module through the user's own PowerShell. It adds no privileges. A user without Hyper-V rights sees State as "Unknown", as `Get-LazyVM` already reports.
 4. Shows no credentials, recovery keys or findings commands' secrets. It can say where to find them.
@@ -96,7 +118,8 @@ Mapped from the [brand spec](Brand.md); that document stays the source for value
 
 Not in version 1. Version 1 leaves the seams for them.
 
-- **Remote hosts**: another `IVmInventory` that calls the module through PowerShell remoting, so one dashboard shows several Hyper-V hosts.
+- **Remote hosts**: another `VmInventory` subclass that calls the module through PowerShell remoting, so one dashboard shows several Hyper-V hosts.
+- **Live numbers**: an abstract `VmMetrics` in the data layer, with a `CimVmMetrics` that reads memory use, processor load, uptime and heartbeat straight from Hyper-V's WMI namespace (`root\virtualization\v2`, `GetSummaryInformation`) through `Microsoft.Management.Infrastructure`, many VMs per call. It refreshes on its own timer, apart from F5. It reads only numbers Hyper-V owns, so it holds no LazyVM logic and cannot drift from the module. It needs the same Hyper-V rights as `Get-LazyVM`.
 - **Roles**: viewer and operator, from Windows groups.
 - **Central view**: an optional collector service. It would be a separate component with its own security design. It is not part of the per-user app.
 - **Actions**: build, rebuild, remove and approve from the window. They need confirmation steps and `-WhatIf` support, and get their own specification.
@@ -104,20 +127,23 @@ Not in version 1. Version 1 leaves the seams for them.
 
 The module is per-user by design. Any multi-user mode must be an explicit, administrator-controlled opt-in, never the default.
 
-## 9. Open questions
+## 9. Installing and starting it
 
-1. What exactly is the "green template"? The latest template that follows the VM (`<VM>-latest.json`), or a template that has passed a check?
-2. How is the GUI hosted against the module: in-process through the PowerShell SDK, or by starting `pwsh` and reading JSON? In-process is faster; out-of-process isolates crashes and module versions.
-3. Where does it install and ship: in the existing release zip beside the module, or as its own download?
-4. Is memory shown as current use only, or with the assigned maximum?
-5. Does version 1 include any action, even "Open VM connection"?
+- It ships in the same release zip as the module, and `Install.ps1` installs both.
+- `Install.ps1` adds a **LazyVM Dashboard** shortcut to the installing user's own Start menu (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\LazyVM`), not the all-users one. Uninstalling removes it.
+
+### Open questions
+
+1. Is memory shown as current use only, or with the assigned maximum?
+2. Does version 1 include any action, even "Open VM connection"?
+3. Should LazyVM record which config template a VM was created from, so the dashboard can name it?
 
 ## 10. Delivery plan (TDD, small pull requests)
 
 1. This spec.
-2. `Get-LazyVMDashboard` in the module, with tests, help, diagram and guide.
-3. `Dashboard.Core`: `VmSummary`, `IVmInventory`, view models, tests against a fake.
+2. `Get-LazyVMDashboard` in the module, with tests, help, diagram and guide. Done.
+3. `DownerBoy.LazyVM.Api`: business objects, `VmInventory`, `DashboardService` and its rules, tests against a fake inventory.
 4. `PowerShellVmInventory` with mapping tests.
-5. WPF shell: theme dictionaries, window, grid, details panel.
+5. `DownerBoy.LazyVM.UI.Wpf`: theme dictionaries, window, grid, details panel, view-model tests.
 6. Accessibility pass and zoom/High Contrast checks.
-7. Packaging and release integration.
+7. Packaging: the release zip, `Install.ps1` and the per-user Start menu shortcut.

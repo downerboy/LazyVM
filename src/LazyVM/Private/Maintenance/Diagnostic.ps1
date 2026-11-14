@@ -223,8 +223,7 @@ function Get-LazyVMDiagnostic {
         return
     }
     $info = Get-ScheduledTaskInfo -TaskName $settings.ScheduleTaskName -ErrorAction Stop
-    # 0x41303 (267011): the task has not run yet.
-    $taskStatus = switch ([long]$info.LastTaskResult) { 0 { 'OK' } 267011 { 'INFO' } default { 'FAIL' } }
+    $taskStatus = switch ([long]$info.LastTaskResult) { 0 { 'OK' } $script:TaskNotRunYetResult { 'INFO' } default { 'FAIL' } }
     $last = if ($taskStatus -eq 'INFO') { 'has not run yet' } else { "last ran $($info.LastRunTime), result 0x$('{0:X}' -f [long]$info.LastTaskResult)" }
     New-DiagnosticCheck -Name $vmName -Area Schedule -Check 'Maintenance task' -Status $taskStatus -Detail "$last; next run $($info.NextRunTime)"
 }

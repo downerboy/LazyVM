@@ -305,7 +305,7 @@ Describe 'Get-LazyVMSetting' {
 
 Describe 'Pipeline input' {
     It '<_> takes Name from the pipeline, by value and by property name' -ForEach @(
-        'Build-LazyVM', 'Get-LazyVM', 'Get-LazyVMCredential', 'Get-LazyVMLicense', 'Get-LazyVMRestorePoint',
+        'Build-LazyVM', 'Get-LazyVM', 'Get-LazyVMCredential', 'Get-LazyVMDashboard', 'Get-LazyVMLicense', 'Get-LazyVMRestorePoint',
         'Get-LazyVMSetting', 'Get-LazyVMTooling', 'Invoke-LazyVMMaintenance', 'Invoke-LazyVMRebuild',
         'Register-LazyVMMaintenance', 'Remove-LazyVM', 'Restore-LazyVMState', 'Save-LazyVMState',
         'Save-LazyVMTooling', 'Set-LazyVMCredential'

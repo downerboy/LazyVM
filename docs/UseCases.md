@@ -12,7 +12,7 @@ UML use case diagrams for the LazyVM module, drawn from the code in `src/`, not 
 - An **oval** is a use case. Where one is a command, its name is underneath.
 - **«include»** points to a use case that always runs as part of another.
 - **«extend»** points from a use case that runs only sometimes. The condition is in square brackets.
-- **Administrator** is a Host user with an elevated PowerShell (the hollow arrow). Every command needs one except `Show-LazyVM`, `Get-LazyVM`, `Get-LazyVMSetting`, `New-LazyVM` and `Export-LazyVMTemplate`.
+- **Administrator** is a Host user with an elevated PowerShell (the hollow arrow). Every command needs one except `Show-LazyVM`, `Get-LazyVM`, `Get-LazyVMDashboard`, `Get-LazyVMSetting`, `New-LazyVM` and `Export-LazyVMTemplate`.
 
 ## Contents
 
@@ -32,7 +32,7 @@ UML use case diagrams for the LazyVM module, drawn from the code in `src/`, not 
 
 Actors: Host user, Administrator (a Host user), Task Scheduler running as SYSTEM.
 
-- Host user: Show LazyVM and its commands (`Show-LazyVM`, or just `LazyVM`), List VMs (`Get-LazyVM`), View settings (`Get-LazyVMSetting`), Create a VM profile (`New-LazyVM`), Save a VM as a config template (`Export-LazyVMTemplate`).
+- Host user: Show LazyVM and its commands (`Show-LazyVM`, or just `LazyVM`), List VMs (`Get-LazyVM`), See the dashboard data (`Get-LazyVMDashboard`), View settings (`Get-LazyVMSetting`), Create a VM profile (`New-LazyVM`), Save a VM as a config template (`Export-LazyVMTemplate`).
 - Administrator, also:
   - Look up: Check the license (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`), Check a VM end to end (`Test-LazyVM`).
   - Set up: Choose the LazyVM folder (`Set-LazyVMRoot`), Store the guest account (`Set-LazyVMCredential`), Move an install made for every user to your account (`Convert-LazyVMInstallation`).
@@ -151,7 +151,7 @@ Actors: Host user, Administrator.
 
 Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Windows.
 
-- List VMs (`Get-LazyVM`) and View settings (`Get-LazyVMSetting`), by any Host user. List VMs reads VM state from Hyper-V and the task from Task Scheduler.
+- List VMs (`Get-LazyVM`), See the dashboard data (`Get-LazyVMDashboard`) and View settings (`Get-LazyVMSetting`), by any Host user. List VMs reads VM state from Hyper-V and the task from Task Scheduler. See the dashboard data includes List VMs, and also reads each VM's disks and memory from Hyper-V, its last maintenance run from Task Scheduler, and its findings and templates from its files.
 - View the guest account (`Get-LazyVMCredential`).
 - Check the license (`Get-LazyVMLicense`) reads the license inside the guest. Extended by **Start the VM** when the VM is off.
 - See the security findings (`Get-LazyVMSecurityFinding`), or the approved ones (`-Approved`). Read-only.

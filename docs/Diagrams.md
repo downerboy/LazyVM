@@ -9,7 +9,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMDashboard`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
@@ -22,7 +22,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - State: [Capture state](#capture), [Restore state](#restore)
 - Templates: [Save a VM as a config template](#export-template)
 - Remove: [Remove a VM](#remove)
-- Check: [List VMs](#status), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [Export the recovery passwords](#recovery-key-export), [See the security findings](#security-finding), [Approve a security finding](#security-approve), [Revoke a security finding approval](#security-revoke), [Check a VM end to end](#test)
+- Check: [List VMs](#status), [See the dashboard data](#dashboard), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [Export the recovery passwords](#recovery-key-export), [See the security findings](#security-finding), [Approve a security finding](#security-approve), [Revoke a security finding approval](#security-revoke), [Check a VM end to end](#test)
 
 <a id="install-from-repo"></a>
 
@@ -709,6 +709,38 @@ Lists the VMs in the LazyVM folder with their state and maintenance. No administ
    - Also runs `Get-MaintenanceTaskName`
    - Reads D5, task registered?: Task Scheduler (LazyVM-Maintain-<VM>)
    - Writes D6, VM list: Pipeline (LazyVM.VM per VM)
+
+<a id="dashboard"></a>
+
+## See the dashboard data
+
+`Get-LazyVMDashboard` `-Name  (wildcards, default *)`
+
+Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's disks, memory, last maintenance, open findings and templates. Only reads. No administrator rights needed.
+
+![See the dashboard data: call order and data flow](diagrams/dashboard.svg)
+
+1. `Resolve-LazyVMRoot` (Settings): the LazyVM folder
+   - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root)
+2. `Get-LazyVM` (command): every VM matching -Name, with its state and maintenance task (see List VMs)
+   - Reads D2, profiles, state, task: Get-LazyVM (<VM>\Config\VM.json, Hyper-V, Task Scheduler)
+3. `New-DashboardEntry` (Dashboard): per VM; a part it cannot read goes in Problems
+4. `Get-VM` (Hyper-V, called by New-DashboardEntry): built VMs only: when created, memory in use
+   - Reads D3, created, memory: Hyper-V (CreationTime, MemoryAssigned)
+5. `Get-VMDiskUsage` (Dashboard, called by New-DashboardEntry): built VMs only: each disk, with its checkpoint files (Get-VMHardDiskDrive, Get-VHD)
+   - Reads D4, disks: Hyper-V (attached disks, file and maximum sizes)
+6. `Read-VMSetting` (Settings, called by New-DashboardEntry): read-only; when the settings are OK
+   - Reads D5, settings: Settings files (Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json)
+7. `Get-MaintenanceRunSummary` (Dashboard, called by New-DashboardEntry): when the task is registered: last run and result (Get-ScheduledTaskInfo)
+   - Reads D6, last run: Task Scheduler (LazyVM-Maintain-<VM>)
+8. `Get-SecurityFindingSummary` (Dashboard, called by New-DashboardEntry): last scan, and findings neither approved nor resolved
+   - Also runs `Read-SecurityFindingRecord`, `Read-SecurityBaseline`, `Select-UnapprovedSecurityFinding`
+   - Reads D7, last findings: <VM>\Logs\ (SecurityFindings.json)
+   - Reads D8, approvals: <VM>\Config\ (SecurityBaseline.json)
+9. `Get-VMTemplateSummary` (Dashboard, called by New-DashboardEntry): the configuration first built from, and the green template
+   - Also runs `Get-VMAsBuiltProfilePath`, `Get-AutomaticTemplateName`, `Get-UserTemplatePath`
+   - Reads D9, templates: Templates (<VM>\Config\VM.Template.json, Shared\Templates\<VM>-latest.json)
+   - Writes D10, dashboard rows: Pipeline (LazyVM.Dashboard per VM)
 
 <a id="settings"></a>
 

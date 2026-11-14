@@ -203,6 +203,8 @@ $script:TaskPrefix = 'LazyVM-'
 # maintenance, and the build that carries on after a host restart.
 $script:MaintenanceTaskPrefix = "${script:TaskPrefix}Maintain-"
 $script:ResumeTaskPrefix = "${script:TaskPrefix}ResumeAfterReboot-"
+# A scheduled task's LastTaskResult before its first run: 0x41303.
+$script:TaskNotRunYetResult = 267011
 
 # In <Root>\<Name>\Config while a build waits to carry on after a host
 # restart: the phase it carries on from (HyperV.ps1). In the VM's own
