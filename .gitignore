@@ -10,3 +10,9 @@ src/LazyVM/Data/LazyVM.Config.psd1
 
 # build.ps1 output: the built module and test results.
 out/
+
+# .NET build output and Visual Studio's per-user state.
+bin/
+obj/
+.vs/
+*.user

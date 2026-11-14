@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="DownerBoy.LazyVM.Api.Tests/DownerBoy.LazyVM.Api.Tests.csproj" />
+  <Project Path="DownerBoy.LazyVM.Api/DownerBoy.LazyVM.Api.csproj" />
+  <Project Path="DownerBoy.LazyVM.UI.Wpf.Tests/DownerBoy.LazyVM.UI.Wpf.Tests.csproj" />
+  <Project Path="DownerBoy.LazyVM.UI.Wpf/DownerBoy.LazyVM.UI.Wpf.csproj" />
+</Solution>
