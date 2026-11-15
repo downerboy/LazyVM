@@ -2,27 +2,33 @@
 
 # LazyVM Dashboard — specification
 
-Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built; the window is not.
+Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built; the window is not. Updated 2026-11-14 to the design decided for the first step.
 
 ## 1. Purpose
 
-A desktop window that shows every LazyVM VM on this host in one place, so you can see at a glance which ones are healthy, which need attention and what each one holds. It reads and reports. In its first version it changes nothing in any VM.
+A desktop window for people who are not comfortable with the command line. It shows every LazyVM VM on this host in one place, so you can see at a glance which ones are healthy, which need attention and what each one holds, and it builds, restores and disposes of VMs, runs maintenance, shows credentials and recovery keys, and shows and approves security findings. It wraps the module's commands: anything the window does, the command line does too.
+
+The settings editor, upgrade and migration, and import of existing VMs (#303) come in later versions (section 8).
 
 ## 2. Decisions
 
 | Decision | Choice | Why |
 |---|---|---|
 | UI framework | WPF on .NET 10 (LTS), C# | Visual Studio XAML designer, built-in `DataGrid`, UI Automation support, and a fit for data-driven dashboards. WinUI 3 has no designer or first-party `DataGrid`. |
+| Structure | One WPF project, `LazyVM.UI.Wpf`, that wraps the module's commands, and one test project, `LazyVM.UI.Wpf.Tests`, with unit tests for the behavior | A wrapper needs no extra layers. No business-object, data or service layers and no abstract-class seams. |
 | Pattern | MVVM, constructor injection, no code-behind logic | Testable without a window (TDD, SOLID). |
-| Data source | The LazyVM PowerShell module, run in-process through the PowerShell SDK | The module stays the single source of truth. The GUI never reads `VM.json` or Hyper-V on its own. |
+| Commands first | A feature ships as a command in the module first, then gets a screen | The module stays the single source of truth. The GUI never reads `VM.json` or Hyper-V on its own. |
+| Running the commands | In-process through the PowerShell SDK for reads and short actions; each build in its own elevated `pwsh` process | A build outlives the window. |
+| Permissions | The app runs elevated (a UAC prompt when it opens) | Hyper-V actions need administrator rights, as the commands do today. See section 5. |
 | Network | None. No listener, no web service | LazyVM is per-user. A port on the host would be reachable by other users. |
 | Look | The [brand spec](Brand.md), mapped to XAML (section 6) | One look across the findings page, console and GUI. |
+| Accessibility target | Narrator | The screen reader the author uses. See section 7. |
 
 WinUI 3 stays possible later: only `LazyVM.UI.Wpf` depends on WPF.
 
 ## 3. What the dashboard shows
 
-One row per VM. Details open in a panel beside or below the list.
+One row per VM in the main list. The details open in the VM's own window.
 
 `Get-LazyVMDashboard` returns all of it as one `LazyVM.Dashboard` object per VM, so the GUI makes one call, not many. It only reads.
 
@@ -46,51 +52,57 @@ The green template is the config template LazyVM keeps up to date every time the
 
 Not yet available: the name of the config template a VM was first created from. `VM.json` does not record it. `OriginalConfig` gives the configuration itself.
 
-## 4. Architecture
 
-Two projects. `LazyVM.Api` is a layered class library: business objects, a data layer, and a service layer on top that holds the business logic. `LazyVM.UI.Wpf` is the window: a thin wrapper that knows the business objects and calls only the service layer. Another presentation layer (WinUI 3, a web front end) can replace it without touching the library.
+## 4. What the window does
 
-```
-LazyVM.UI.Wpf        Views (XAML), view models          calls the service layer only
-        │
-        ▼
-LazyVM.Api
-  LazyVM.Services    DashboardService, LazyVMDashboardService     ← top layer
-  LazyVM             VmSummary, DiskSummary, and any class PowerShell consumes
-  LazyVM.Data        VmInventory, PowerShellVmInventory           → LazyVM module
-```
+### Step 1 scope
 
-- **Business objects** (`LazyVM`): immutable records such as `VmSummary` and `DiskSummary`. Classes written later for PowerShell to consume go in this namespace too.
-- **Data layer** (`LazyVM.Data`): `VmInventory` (abstract) and `PowerShellVmInventory`, which runs `Get-LazyVMDashboard` in-process and maps its output to business objects. A fake subclass stands in for it in tests.
-- **Service layer** (`LazyVM.Services`): `DashboardService` (abstract) and `LazyVMDashboardService`. `GetVmsAsync(CancellationToken)` returns the VMs. The business rules live here, such as whether a VM needs attention (failed maintenance, open findings, a `Problems` entry).
-- **UI** (`LazyVM.UI.Wpf`): XAML views with bindings and styles, and view models for the list, sorting, selection, refresh and error state. `ViewModelBase` (abstract) implements `INotifyPropertyChanged` once. The view models take a `DashboardService` through their constructor; they never see PowerShell.
-- **Abstract classes, not interfaces**, for the project's own seams. Framework interfaces (`INotifyPropertyChanged`, `ICommand`, `IDisposable`) are implemented once, in the base classes. Members a test replaces are `abstract` or `virtual`.
-- **Hosting PowerShell**: `PowerShellVmInventory` opens one runspace and imports the installed LazyVM module from `%ProgramFiles%\LazyVM\Modules`. Calls use `PowerShell.InvokeAsync()`; Cancel uses `StopAsync()`. A runspace runs one pipeline at a time, so a second refresh waits for the first. The PowerShell version the app ships must be one the module supports, and the release build checks it.
-- **Loaded by PowerShell too**: because PowerShell will load `LazyVM.Api` for its own classes, the library references `System.Management.Automation` for compiling only. The WPF app brings the PowerShell SDK it runs on. Inside `pwsh`, PowerShell's own copy is used, so the two never clash.
+1. **App shell.** The VM list; the Windows evaluation expiry date and renewals left; first-run checks (`Test-LazyVM`) with plain-language fixes; a log viewer; Connect. Buttons are disabled, with an explanation, while maintenance or another build is running.
+2. **Build.** A form with the VM name, the template (Developer, PlainWindows, saved templates such as `DevEnv-latest`) and an optional user name. Progress by phase, cancel, and run from phase N after a failure. A manual "run maintenance now". A build keeps running if the window closes.
+3. **Dispose and restore.** Dispose asks "Do you really want to delete this VM?" with Yes and No, and No is the default. Restore shows the last backups and puts one back.
+4. **Credentials.** Recovery key export and a "keys not exported" notice. The guest password is hidden by default, revealed only on request, never written to a log, and the clipboard is cleared a short time after a copy.
+5. **Security findings.** View, approve and revoke.
+
+### Windows
+
+- **Main window:** the list of VMs, one per row: name, state, open findings, last maintenance and result. Enter or a double-click opens the VM's window. A **Build new VM** button sits in the header.
+- **VM window:** one per VM, with the full details (section 3) and every action for that VM. Opening a VM whose window is already open brings that window to the front. When an action finishes, the main list updates.
+- **Dialogs:** first-run checks, build, build progress, restore, recovery keys and password, log, security findings, delete confirmation.
+
+### Behavior
+
+- **Needs attention.** The open-findings badges, plus a "Needs attention" marker in the State column when the last maintenance failed or a settings problem exists. Every badge and marker has text for screen readers, for example "High 1 open finding" and "Needs attention: last maintenance failed".
+- **Refresh.** On open, on F5 or a Refresh button, and after any action. No live polling in this step; a running build updates its own progress.
+- **Builds.** Each build runs in its own elevated `pwsh` process and the window shows its progress from the VM's log, so closing or crashing the window never stops a build. Other actions run in-process.
 - Calls run off the UI thread and can be cancelled. A failure on one VM shows on that VM's row and does not blank the list.
-- Refresh on open, on a Refresh button and on F5. No background polling in version 1.
 
-### Solution layout
+### Structure
 
 ```
 src/LazyVM.slnx
-src/LazyVM.Api/              class library: business objects, Data, Services
-src/LazyVM.UI.Wpf/           WPF app, namespace LazyVM.UI.Wpf
-src/LazyVM.Api.Tests/        xUnit: mapping and service rules, against a fake VmInventory
-src/LazyVM.UI.Wpf.Tests/     xUnit: view models against a fake DashboardService, no window
+src/LazyVM.UI.Wpf/           WPF app: views (XAML), view models, one small class that runs the module's commands
+src/LazyVM.UI.Wpf.Tests/     xUnit: view-model behavior against a fake command runner, no window
 ```
 
-Every project of the solution, tests included, sits in `src`. The repository's `tests` folder keeps only the module's Pester tests.
+- View models take the command-runner class through their constructor and never see PowerShell. Members a test replaces are `virtual`.
+- `ViewModelBase` implements `INotifyPropertyChanged` once. Other framework interfaces are implemented once, in base classes.
+- **Hosting PowerShell.** The runner opens one runspace and imports the installed module by full path from `%ProgramFiles%\LazyVM\Modules`. Calls use `PowerShell.InvokeAsync()`; Cancel uses `StopAsync()`. A runspace runs one pipeline at a time, so a second refresh waits for the first. The PowerShell version the app ships must be one the module supports, and the release build checks it.
+- `LazyVM.Api` and `LazyVM.Api.Tests` hold the module's own C# classes and belong to the module, not to the window. The window does not depend on them.
+- Every project of the solution, tests included, sits in `src`. The repository's `tests` folder keeps only the module's Pester tests.
+- Names follow the .NET guidelines: two-letter acronyms in capitals (`UI`), longer ones in Pascal case (`Api`, `Wpf`).
 
-Names follow the .NET guidelines: two-letter acronyms in capitals (`UI`), longer ones in Pascal case (`Api`, `Wpf`).
 
 ## 5. Security
 
-1. Runs as the signed-in user. Its files sit beside the module in `%ProgramFiles%\LazyVM`, with the same access rule: only the user who installed LazyVM can read them.
-2. No listener, no named pipe, no remote calls.
-3. Runs the module through the user's own PowerShell. It adds no privileges. A user without Hyper-V rights sees State as "Unknown", as `Get-LazyVM` already reports.
-4. Shows no credentials, recovery keys or findings commands' secrets. It can say where to find them.
-5. The module call is a fixed command with fixed parameters. No user text is put into script text.
+The app runs elevated, because the commands it runs need administrator rights. It adds no privilege the user does not already use in an administrator PowerShell, and it must not give a non-administrator a way to run code as an administrator:
+
+1. The app and every DLL it loads sit in `%ProgramFiles%\LazyVM\App`, with the module's access rule: administrators and SYSTEM can change them, and only the user who installed LazyVM can read and run them. `Assert-TrustedCode` checks that folder too.
+2. The module is imported by full path from `%ProgramFiles%\LazyVM\Modules`, never found through `PSModulePath`. No PowerShell profile scripts run.
+3. The data folder in `%USERPROFILE%\LazyVM` is untrusted: any process running as the user can change it. Settings are read through the module's checks (`Read-TrustedVMSetting`) and never become script text. Commands are fixed commands with fixed parameters.
+4. No listener, no named pipe, no remote calls.
+5. No secrets on disk or in logs. The password is hidden until asked for, and the clipboard is cleared after a copy. A recovery key export warns when the chosen folder is inside OneDrive.
+6. The Start menu shortcut is in a place only administrators can change, so no other program can repoint a shortcut that then asks for elevation.
+7. A user without Hyper-V rights sees State as "Unknown", as `Get-LazyVM` already reports.
 
 ## 6. Look and feel
 
@@ -108,42 +120,54 @@ Mapped from the [brand spec](Brand.md); that document stays the source for value
 ## 7. Accessibility
 
 1. Every control has an `AutomationProperties.Name`. The grid exposes row and column headers to UI Automation.
-2. Full keyboard use: Tab order matches reading order, arrow keys move in the grid, Enter opens details, F5 refreshes, Esc closes details.
-3. Narrator and NVDA: each row reads as one sentence, for example "DevBox, Running, last maintenance succeeded 12 November, 2 findings".
+2. Full keyboard use: Tab order matches reading order, arrow keys move in the grid, Enter opens a VM's window, F5 refreshes, Esc closes a window or dialog.
+3. Narrator is the test target. Each row reads as one sentence, for example "DevBox, Running, last maintenance succeeded 12 November, 2 findings".
 4. State changes (refresh finished, error) are announced through a live-region automation event.
 5. No animation. Respect the Windows "show animations" setting.
 6. Tested at 200% and 400% zoom and in High Contrast, as the brand spec requires for the findings page.
 
-## 8. Enterprise and later phases
 
-Not in version 1. Version 1 leaves the seams for them.
+## 8. Later versions
 
-- **Remote hosts**: another `VmInventory` subclass that calls the module through PowerShell remoting, so one dashboard shows several Hyper-V hosts.
-- **Live numbers**: an abstract `VmMetrics` in the data layer, with a `CimVmMetrics` that reads memory use, processor load, uptime and heartbeat straight from Hyper-V's WMI namespace (`root\virtualization\v2`, `GetSummaryInformation`) through `Microsoft.Management.Infrastructure`, many VMs per call. It refreshes on its own timer, apart from F5. It reads only numbers Hyper-V owns, so it holds no LazyVM logic and cannot drift from the module. It needs the same Hyper-V rights as `Get-LazyVM`.
-- **Roles**: viewer and operator, from Windows groups.
-- **Central view**: an optional collector service. It would be a separate component with its own security design. It is not part of the per-user app.
-- **Actions**: build, rebuild, remove and approve from the window. They need confirmation steps and `-WhatIf` support, and get their own specification.
-- **Packaging**: MSIX or MSI, and policy-driven settings.
+Not in the first step. The first step leaves the seams for them.
+
+- **Settings editor.** View and change a VM's settings before a build, with validation at each field (the schema already names each problem's place).
+- **Upgrade and migration.** Updating LazyVM from the window, and `Convert-LazyVMInstallation`.
+- **Import of existing VMs** (#303), once the command exists.
+- **Remote hosts.** Calling the module through PowerShell remoting, so one window shows several Hyper-V hosts.
+- **Live numbers.** Memory use, processor load, uptime and heartbeat read straight from Hyper-V's WMI namespace (`root\virtualization\v2`, `GetSummaryInformation`) through `Microsoft.Management.Infrastructure`, many VMs per call, refreshed on a timer apart from F5. It reads only numbers Hyper-V owns, so it holds no LazyVM logic and cannot drift from the module. It needs the same Hyper-V rights as `Get-LazyVM`.
+- **Roles.** Viewer and operator, from Windows groups.
+- **Central view.** An optional collector service. It would be a separate component with its own security design, not part of the per-user app.
+- **Installer.** A signed setup program, and policy-driven settings.
 
 The module is per-user by design. Any multi-user mode must be an explicit, administrator-controlled opt-in, never the default.
 
 ## 9. Installing and starting it
 
-- It ships in the same release zip as the module, and `Install.ps1` installs both.
-- `Install.ps1` adds a **LazyVM Dashboard** shortcut to the installing user's own Start menu (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\LazyVM`), not the all-users one. Uninstalling removes it.
+- It ships in the same release zip as the module, and `Install.ps1` installs both: the module in `%ProgramFiles%\LazyVM\Modules` and the app in `%ProgramFiles%\LazyVM\App`.
+- The zip includes a double-click **Install LazyVM** launcher that runs `Install.ps1` elevated, so a user never opens a console. `Install-FromRepository.cmd` stays the developer's shortcut.
+- `Install.ps1` adds a **LazyVM** shortcut in a Start menu folder that only administrators can change (section 5, rule 6). Uninstalling removes it.
+- Updating means installing the newer release the same way. The app does not update itself in the first step.
+- Code signing (#4) is deferred until the first beta release. Until then Windows SmartScreen warns about the app.
 
 ### Open questions
 
 1. Is memory shown as current use only, or with the assigned maximum?
-2. Does version 1 include any action, even "Open VM connection"?
-3. Should LazyVM record which config template a VM was created from, so the dashboard can name it?
+2. Should LazyVM record which config template a VM was created from, so the window can name it?
+3. How long does a copied password stay on the clipboard before it is cleared?
+4. The names and number of the build phases shown on the progress screen (the mockup uses placeholders).
 
 ## 10. Delivery plan (TDD, small pull requests)
 
+Each screen needs its command first. Where a command is missing (for example the evaluation expiry or recovery key status), a module pull request comes before the screen.
+
 1. This spec.
 2. `Get-LazyVMDashboard` in the module, with tests, help, diagram and guide. Done.
-3. `LazyVM.Api`: business objects, `VmInventory`, `DashboardService` and its rules, tests against a fake inventory.
-4. `PowerShellVmInventory` with mapping tests.
-5. `LazyVM.UI.Wpf`: theme dictionaries, window, grid, details panel, view-model tests.
-6. Accessibility pass and zoom/High Contrast checks.
-7. Packaging: the release zip, `Install.ps1` and the per-user Start menu shortcut.
+3. `LazyVM.UI.Wpf`: the command-runner class, theme dictionaries, the main list and the VM window (read-only), view-model tests first.
+4. First-run checks and the log viewer.
+5. Build, build progress and cancel, with each build in its own `pwsh` process; run from phase N; run maintenance now.
+6. Dispose and restore.
+7. Recovery keys and the password.
+8. Security findings: view, approve, revoke.
+9. Accessibility pass with Narrator, and zoom and High Contrast checks.
+10. Packaging: the release zip, `Install.ps1`, the launcher and the Start menu shortcut.
