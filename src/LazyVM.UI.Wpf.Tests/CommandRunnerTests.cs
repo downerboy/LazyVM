@@ -98,6 +98,43 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
+    public void ToDashboard_DatesWithAnOffset_AreReadAsLocalTime()
+    {
+        // LastSecurityScan comes from the scan record as a DateTimeOffset.
+        var scanned = new DateTimeOffset(2026, 11, 15, 2, 6, 10, TimeSpan.FromHours(-8));
+
+        var vm = CommandRunner.ToDashboard(Entry(
+            ("Name", "DevBox"),
+            ("Created", scanned),
+            ("LastMaintenance", scanned),
+            ("LastSecurityScan", PSObject.AsPSObject(scanned)),
+            ("GreenTemplateUpdated", scanned)));
+
+        Assert.Equal(scanned.LocalDateTime, vm.Created);
+        Assert.Equal(scanned.LocalDateTime, vm.LastMaintenance);
+        Assert.Equal(scanned.LocalDateTime, vm.LastSecurityScan);
+        Assert.Equal(scanned.LocalDateTime, vm.GreenTemplateUpdated);
+        Assert.Empty(vm.Problems);
+    }
+
+    [Fact]
+    public void ToDashboard_AValueThatCannotBeRead_IsLeftEmptyAndNamedInProblems()
+    {
+        // One odd value must not fail the whole refresh: the rest of the VM still shows.
+        var vm = CommandRunner.ToDashboard(Entry(
+            ("Name", "DevBox"),
+            ("State", "Running"),
+            ("LastSecurityScan", "not a date"),
+            ("OpenFindings", 2),
+            ("Problems", new[] { "Disks: access denied" })));
+
+        Assert.Equal("Running", vm.State);
+        Assert.Null(vm.LastSecurityScan);
+        Assert.Equal(2, vm.OpenFindings);
+        Assert.Equal(["Disks: access denied", "Last security scan: could not be read"], vm.Problems);
+    }
+
+    [Fact]
     public void ThrowIfFailed_IgnoresErrorsTheCommandSilenced_WhenItReturnedVMs()
     {
         // Get-LazyVM asks Hyper-V for each VM with -ErrorAction SilentlyContinue;
