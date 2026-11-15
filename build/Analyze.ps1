@@ -13,7 +13,12 @@ function Invoke-Analyze {
     $job = Start-Job -ScriptBlock {
         param($Root, $Version)
         Import-Module -Name PSScriptAnalyzer -RequiredVersion $Version
-        Invoke-ScriptAnalyzer -Path (Join-Path -Path $Root -ChildPath 'src') -Recurse -Settings (Join-Path -Path $Root -ChildPath 'PSScriptAnalyzerSettings.psd1')
+        # Not the .NET build output: the PowerShell SDK the window hosts copies
+        # its own modules into bin, and those are not ours to analyze.
+        $settings = Join-Path -Path $Root -ChildPath 'PSScriptAnalyzerSettings.psd1'
+        Get-ChildItem -Path (Join-Path -Path $Root -ChildPath 'src') -Recurse -File -Include '*.ps1', '*.psm1', '*.psd1' |
+            Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
+            ForEach-Object { Invoke-ScriptAnalyzer -Path $_.FullName -Settings $settings }
         Invoke-ScriptAnalyzer -Path (Join-Path -Path $Root -ChildPath 'tests') -Recurse -Settings (Join-Path -Path $Root -ChildPath 'tests/PSScriptAnalyzerSettings.psd1')
     } -ArgumentList $Root, $Version
     $findings = @(Receive-Job -Job $job -Wait -AutoRemoveJob -ErrorAction Stop)

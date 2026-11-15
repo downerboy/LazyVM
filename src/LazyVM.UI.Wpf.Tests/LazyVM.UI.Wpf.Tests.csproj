@@ -19,7 +19,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LazyVM.UI.Wpf\LazyVM.UI.Wpf.csproj" />
-    <ProjectReference Include="..\LazyVM.Api\LazyVM.Api.csproj" />
   </ItemGroup>
 
 </Project>

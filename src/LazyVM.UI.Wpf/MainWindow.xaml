@@ -4,9 +4,115 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:LazyVM.UI.Wpf"
+        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
         mc:Ignorable="d"
-        Title="LazyVM Dashboard" Height="450" Width="800">
-    <Grid>
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        Title="LazyVM" Width="1100" Height="600" MinWidth="320"
+        Style="{StaticResource LvWindow}">
+    <Window.InputBindings>
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
+    </Window.InputBindings>
 
-    </Grid>
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
+            <DockPanel>
+                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Content="Refresh" Command="{Binding RefreshCommand}"
+                            AutomationProperties.Name="Refresh the list (F5)" />
+                    <Button Content="Cancel refresh" Command="{Binding CancelRefreshCommand}" Margin="8,0,0,0"
+                            Visibility="{Binding IsRefreshing, Converter={StaticResource VisibleWhenTrue}}" />
+                </WrapPanel>
+                <TextBlock Text="LazyVM" Style="{StaticResource LvTitle}" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24" Padding="24,16">
+            <StackPanel>
+                <TextBlock Text="Activity" Style="{StaticResource LvHeading}" />
+                <TextBlock Text="{Binding Status}" Style="{StaticResource LvStatus}"
+                           AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource LvPanel}" Margin="24">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Your virtual machines" Style="{StaticResource LvHeading}" />
+                <TextBlock DockPanel.Dock="Top" Text="Press Enter on a VM to open its window." Style="{StaticResource LvMuted}" Margin="0,0,0,16" />
+                <DataGrid ItemsSource="{Binding VMs}" SelectedItem="{Binding SelectedVM}"
+                          AutomationProperties.Name="Your virtual machines">
+                    <DataGrid.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding OpenVMCommand}" />
+                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenVMCommand}" />
+                    </DataGrid.InputBindings>
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+                        </Style>
+                    </DataGrid.RowStyle>
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="Name" Width="*">
+                            <DataGridTemplateColumn.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding NameCellText}" />
+                                </Style>
+                            </DataGridTemplateColumn.CellStyle>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate DataType="vm:VMRowViewModel">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding ProblemText, TargetNullValue=''}" Style="{StaticResource LvOptionalText}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="State" Width="*">
+                            <DataGridTemplateColumn.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding StateCellText}" />
+                                </Style>
+                            </DataGridTemplateColumn.CellStyle>
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate DataType="vm:VMRowViewModel">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding State}" TextWrapping="Wrap" />
+                                        <Border Style="{StaticResource LvAttentionBadge}"
+                                                Visibility="{Binding NeedsAttention, Converter={StaticResource VisibleWhenTrue}}">
+                                            <TextBlock Foreground="{DynamicResource LvOnSev}" TextWrapping="Wrap"
+                                                       AutomationProperties.Name="{Binding AttentionText}">
+                                                <Run Text="&#x25C6;" /> <Run Text="Needs attention" />
+                                            </TextBlock>
+                                        </Border>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Open findings" Binding="{Binding OpenFindingsText}" Width="*">
+                            <DataGridTextColumn.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding OpenFindingsText}" />
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Last maintenance" Binding="{Binding LastMaintenanceText}" Width="*">
+                            <DataGridTextColumn.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding LastMaintenanceText}" />
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Border>
+    </DockPanel>
 </Window>
