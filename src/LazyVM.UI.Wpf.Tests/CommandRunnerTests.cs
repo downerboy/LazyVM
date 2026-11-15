@@ -98,6 +98,35 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
+    public void ThrowIfFailed_IgnoresErrorsTheCommandSilenced_WhenItReturnedVMs()
+    {
+        // Get-LazyVM asks Hyper-V for each VM with -ErrorAction SilentlyContinue;
+        // in a hosted runspace those errors still reach the error stream.
+        var errors = new[] { Error("Hyper-V was unable to find a virtual machine with name 'NewBox'.") };
+
+        CommandRunner.ThrowIfFailed([PSObject.AsPSObject("an entry")], errors);
+    }
+
+    [Fact]
+    public void ThrowIfFailed_WithErrorsAndNothingReturned_Throws()
+    {
+        var errors = new[] { Error("The LazyVM folder was not found.") };
+
+        var failure = Assert.Throws<InvalidOperationException>(() => CommandRunner.ThrowIfFailed([], errors));
+
+        Assert.Equal("The LazyVM folder was not found.", failure.Message);
+    }
+
+    [Fact]
+    public void ThrowIfFailed_WithNoVMsAndNoErrors_DoesNotThrow()
+    {
+        CommandRunner.ThrowIfFailed([], []);
+    }
+
+    private static ErrorRecord Error(string message) =>
+        new(new InvalidOperationException(message), "Test", ErrorCategory.NotSpecified, null);
+
+    [Fact]
     public void Constructor_DoesNotStartPowerShell()
     {
         // A fake runner, or the window before its first refresh, must not need the module installed.

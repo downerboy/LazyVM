@@ -118,6 +118,24 @@ public sealed class VMRowViewModelTests : IDisposable
     }
 
     [Fact]
+    public void NameCell_ReadsTheNameAndWhatCouldNotBeRead()
+    {
+        Assert.Equal("DevBox", new VMRowViewModel(Sample.VM()).NameCellText);
+        Assert.Equal(
+            "DevBox, could not read: Disks: access denied",
+            new VMRowViewModel(Sample.VM() with { Problems = ["Disks: access denied"] }).NameCellText);
+    }
+
+    [Fact]
+    public void StateCell_ReadsTheStateAndWhatNeedsAttention()
+    {
+        Assert.Equal("Running", new VMRowViewModel(Sample.VM()).StateCellText);
+        Assert.Equal(
+            "Off, needs attention: last maintenance failed",
+            new VMRowViewModel(Sample.VM(state: "Off") with { LastMaintenanceResult = "Failed (0x1)" }).StateCellText);
+    }
+
+    [Fact]
     public void Update_TellsTheViewEverythingChanged()
     {
         var row = new VMRowViewModel(Sample.VM());

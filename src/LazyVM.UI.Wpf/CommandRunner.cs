@@ -105,15 +105,26 @@ public class CommandRunner : IDisposable
                 }
             }
             cancellationToken.ThrowIfCancellationRequested();
-            if (shell.Streams.Error.Count > 0)
-            {
-                throw new InvalidOperationException(shell.Streams.Error[0].ToString());
-            }
+            ThrowIfFailed(output, shell.Streams.Error);
             return [.. output];
         }
         finally
         {
             oneAtATime.Release();
+        }
+    }
+
+    /// <summary>
+    /// A terminating error already threw. Non-terminating errors count only
+    /// when the command returned nothing: the error stream also holds errors a
+    /// command silenced with -ErrorAction SilentlyContinue, and the module
+    /// reports each VM's own failures in its Problems.
+    /// </summary>
+    internal static void ThrowIfFailed(IList<PSObject> output, IList<ErrorRecord> errors)
+    {
+        if (output.Count == 0 && errors.Count > 0)
+        {
+            throw new InvalidOperationException(errors[0].ToString());
         }
     }
 

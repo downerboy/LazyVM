@@ -39,6 +39,12 @@ public sealed class VMRowViewModel(VMDashboard entry) : ViewModelBase
     /// <summary>What could not be read for this VM, such as "Could not read: Disks: access denied"; empty when everything was read.</summary>
     public string? ProblemText => Entry.Problems.Count == 0 ? null : "Could not read: " + string.Join("; ", Entry.Problems);
 
+    /// <summary>The Name cell for a screen reader: the name, and what could not be read.</summary>
+    public string NameCellText => ProblemText is { } problem ? $"{Name}, {DashboardText.InSentence(problem)}" : Name;
+
+    /// <summary>The State cell for a screen reader: the state, and what needs attention.</summary>
+    public string StateCellText => AttentionText is { } attention ? $"{State}, {DashboardText.InSentence(attention)}" : State;
+
     /// <summary>The row as one sentence for a screen reader.</summary>
     public string AutomationName
     {
