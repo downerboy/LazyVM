@@ -30,19 +30,21 @@ public sealed class VMViewModel : ViewModelBase
 
     private static List<VMDetail> ReadDetails(VMDashboard vm)
     {
+        // Hyper-V has nothing to say about a VM that is not built yet; say why.
+        var missing = vm.State == "Not built" ? "Not built yet" : DashboardText.NotKnown;
         var details = new List<VMDetail>
         {
             new("State", vm.State),
-            new("Created", vm.Created is { } created ? DashboardText.When(created) : DashboardText.NotKnown),
+            new("Created", vm.Created is { } created ? DashboardText.When(created) : missing),
             new("Memory in use", vm.MemoryAssigned switch
             {
-                null => DashboardText.NotKnown,
+                null => missing,
                 0 => "None",
                 { } bytes => DashboardText.Size(bytes),
             }),
             new("Disk space used", vm.DiskSpaceUsed is { } used
                 ? $"{DashboardText.Size(used)} on {vm.Disks.Count} {(vm.Disks.Count == 1 ? "disk" : "disks")}"
-                : DashboardText.NotKnown),
+                : missing),
         };
 
         details.AddRange(vm.Disks.Select(disk => new VMDetail(

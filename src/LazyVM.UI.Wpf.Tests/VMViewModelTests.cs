@@ -107,6 +107,16 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void AVMNotBuiltYet_SaysSoInsteadOfNotKnown()
+    {
+        var vm = new VMViewModel(new VMDashboard { Name = "TestBox", State = "Not built" });
+
+        Assert.Equal("Not built yet", Detail(vm, "Created"));
+        Assert.Equal("Not built yet", Detail(vm, "Memory in use"));
+        Assert.Equal("Not built yet", Detail(vm, "Disk space used"));
+    }
+
+    [Fact]
     public void WhatCouldNotBeRead_IsListed()
     {
         var vm = new VMViewModel(Sample.VM() with { Problems = ["Hyper-V: access denied", "Disks: access denied"] });
