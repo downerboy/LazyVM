@@ -69,31 +69,42 @@ public class CommandRunner : IDisposable
         disposed = true;
     }
 
-    /// <summary>Reads one <c>LazyVM.Dashboard</c> object.</summary>
-    internal static VMDashboard ToDashboard(PSObject entry) => new()
+    /// <summary>
+    /// Reads one <c>LazyVM.Dashboard</c> object. A value that cannot be read
+    /// is left empty and named in the VM's Problems, so one odd value never
+    /// fails the whole refresh.
+    /// </summary>
+    internal static VMDashboard ToDashboard(PSObject entry)
     {
-        Name = Read<string>(entry, "Name") ?? string.Empty,
-        State = Read<string>(entry, "State") ?? "Unknown",
-        Created = Read<DateTime?>(entry, "Created"),
-        MemoryAssigned = Read<long?>(entry, "MemoryAssigned"),
-        Disks = ReadList(entry, "Disks").Select(disk => new VMDisk(
-            Read<string>(disk, "Name") ?? string.Empty,
-            Read<string>(disk, "Path") ?? string.Empty,
-            Read<long?>(disk, "Used") ?? 0,
-            Read<long?>(disk, "Maximum") ?? 0)).ToList(),
-        DiskSpaceUsed = Read<long?>(entry, "DiskSpaceUsed"),
-        MaintenanceTime = Read<string>(entry, "MaintenanceTime"),
-        MaintenanceTask = Read<string>(entry, "MaintenanceTask"),
-        LastMaintenance = Read<DateTime?>(entry, "LastMaintenance"),
-        LastMaintenanceResult = Read<string>(entry, "LastMaintenanceResult"),
-        LastSecurityScan = Read<DateTime?>(entry, "LastSecurityScan"),
-        OpenFindings = Read<int?>(entry, "OpenFindings"),
-        OriginalConfig = Read<string>(entry, "OriginalConfig"),
-        GreenTemplate = Read<string>(entry, "GreenTemplate"),
-        GreenTemplateUpdated = Read<DateTime?>(entry, "GreenTemplateUpdated"),
-        Settings = Read<string>(entry, "Settings") ?? "Not known",
-        Problems = ReadList(entry, "Problems").Select(problem => problem.BaseObject.ToString() ?? string.Empty).ToList(),
-    };
+        var problems = ReadList(entry, "Problems").Select(problem => problem.BaseObject.ToString() ?? string.Empty).ToList();
+        T? Value<T>(PSObject source, string name, string label) => Read<T>(source, name, label, problems);
+        DateTime? Date(string name, string label) => ReadDate(entry, name, label, problems);
+
+        return new()
+        {
+            Name = Value<string>(entry, "Name", "Name") ?? string.Empty,
+            State = Value<string>(entry, "State", "State") ?? "Unknown",
+            Created = Date("Created", "Created"),
+            MemoryAssigned = Value<long?>(entry, "MemoryAssigned", "Memory in use"),
+            Disks = ReadList(entry, "Disks").Select(disk => new VMDisk(
+                Value<string>(disk, "Name", "Disk name") ?? string.Empty,
+                Value<string>(disk, "Path", "Disk path") ?? string.Empty,
+                Value<long?>(disk, "Used", "Disk space used") ?? 0,
+                Value<long?>(disk, "Maximum", "Disk size") ?? 0)).ToList(),
+            DiskSpaceUsed = Value<long?>(entry, "DiskSpaceUsed", "Disk space used"),
+            MaintenanceTime = Value<string>(entry, "MaintenanceTime", "Maintenance time"),
+            MaintenanceTask = Value<string>(entry, "MaintenanceTask", "Maintenance task"),
+            LastMaintenance = Date("LastMaintenance", "Last maintenance"),
+            LastMaintenanceResult = Value<string>(entry, "LastMaintenanceResult", "Last maintenance result"),
+            LastSecurityScan = Date("LastSecurityScan", "Last security scan"),
+            OpenFindings = Value<int?>(entry, "OpenFindings", "Open findings"),
+            OriginalConfig = Value<string>(entry, "OriginalConfig", "Original configuration"),
+            GreenTemplate = Value<string>(entry, "GreenTemplate", "Green template"),
+            GreenTemplateUpdated = Date("GreenTemplateUpdated", "Green template updated"),
+            Settings = Value<string>(entry, "Settings", "Settings") ?? "Not known",
+            Problems = problems,
+        };
+    }
 
     private async Task<IReadOnlyList<PSObject>> InvokeAsync(string command, CancellationToken cancellationToken)
     {
@@ -177,11 +188,29 @@ public class CommandRunner : IDisposable
         }
     }
 
-    private static T? Read<T>(PSObject source, string name)
+    private static T? Read<T>(PSObject source, string name, string label, List<string> problems)
     {
         var value = Unwrap(source.Properties[name]?.Value);
-        return value is null ? default : LanguagePrimitives.ConvertTo<T>(value);
+        if (value is null)
+        {
+            return default;
+        }
+        try
+        {
+            return LanguagePrimitives.ConvertTo<T>(value);
+        }
+        catch (PSInvalidCastException)
+        {
+            problems.Add($"{label}: could not be read");
+            return default;
+        }
     }
+
+    /// <summary>A date, in local time. The module gives some as DateTimeOffset, such as the security scan time.</summary>
+    private static DateTime? ReadDate(PSObject source, string name, string label, List<string> problems) =>
+        Unwrap(source.Properties[name]?.Value) is DateTimeOffset offset
+            ? offset.LocalDateTime
+            : Read<DateTime?>(source, name, label, problems);
 
     private static IEnumerable<PSObject> ReadList(PSObject source, string name)
     {
