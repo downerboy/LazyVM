@@ -19,4 +19,17 @@
     <InternalsVisibleTo Include="LazyVM.UI.Wpf.Tests" />
   </ItemGroup>
 
+  <!-- A publish for one runtime (win-x64) puts System.Management.Automation.dll
+       in the app folder, but leaves PowerShell's built-in modules under
+       runtimes\win\lib\<tfm>\Modules. PowerShell looks for them in Modules next
+       to that DLL ($PSHOME), so without this copy no command such as Join-Path
+       loads. A build without a runtime keeps the two together already. -->
+  <Target Name="CopyPowerShellBuiltInModules" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
+    <ItemGroup>
+      <PowerShellBuiltInModule Include="$(PublishDir)runtimes\win\lib\$(TargetFramework.Split('-')[0])\Modules\**\*" />
+    </ItemGroup>
+    <Error Condition="'@(PowerShellBuiltInModule)' == ''" Text="PowerShell's built-in modules were not found under $(PublishDir)runtimes\win\lib. The app would fail to run any command." />
+    <Copy SourceFiles="@(PowerShellBuiltInModule)" DestinationFiles="@(PowerShellBuiltInModule->'$(PublishDir)Modules\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>
