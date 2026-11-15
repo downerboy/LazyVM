@@ -15,12 +15,12 @@
         <Setter Property="FontSize" Value="16" />
     </Style>
 
-    <!-- 3px navy focus outline, 2px outside the control. Never removed. -->
+    <!-- 3px focus outline, 2px outside the control: navy, yellow in the dark theme. Never removed. -->
     <Style x:Key="LvFocusVisual">
         <Setter Property="Control.Template">
             <Setter.Value>
                 <ControlTemplate>
-                    <Rectangle Margin="-5" Stroke="{DynamicResource LvNavy}" StrokeThickness="3" SnapsToDevicePixels="True" />
+                    <Rectangle Margin="-5" Stroke="{DynamicResource LvFocus}" StrokeThickness="3" SnapsToDevicePixels="True" />
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

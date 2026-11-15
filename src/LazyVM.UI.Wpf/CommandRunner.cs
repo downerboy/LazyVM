@@ -11,7 +11,8 @@ namespace LazyVM.UI.Wpf;
 /// <remarks>
 /// One runspace, opened on the first call, with the installed module
 /// imported by full path from %ProgramFiles%\LazyVM\Modules, never found
-/// through PSModulePath, and no profile scripts. Commands are fixed commands
+/// through PSModulePath, no profile scripts, and a module search path of
+/// folders only administrators control. Commands are fixed commands
 /// with fixed parameters, never script text. A runspace runs one pipeline at
 /// a time, so a second call waits for the first.
 /// </remarks>
@@ -24,6 +25,19 @@ public class CommandRunner : IDisposable
     /// <summary>The installed module: %ProgramFiles%\LazyVM\Modules\LazyVM, which only administrators can change.</summary>
     internal static string ModulePath { get; } = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LazyVM", "Modules", "LazyVM");
+
+    /// <summary>
+    /// Where the hosted PowerShell finds the modules it loads: only folders
+    /// administrators control. The app runs elevated, so a module the user
+    /// could change, such as one in Documents\PowerShell\Modules, must never
+    /// load into it. LazyVM's folder comes first, then the Windows modules
+    /// (Hyper-V, ScheduledTasks), then the modules shipped with the app.
+    /// </summary>
+    internal static string ModuleSearchPath { get; } = string.Join(
+        System.IO.Path.PathSeparator,
+        System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LazyVM", "Modules"),
+        System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "Modules"),
+        System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(PSObject).Assembly.Location)!, "Modules"));
 
     /// <summary>True once PowerShell has started and the module is imported.</summary>
     internal bool IsStarted => runspace is not null;
@@ -135,12 +149,32 @@ public class CommandRunner : IDisposable
         // powershell.config.json would otherwise be Restricted and refuse to
         // load the module. Group Policy still wins over this.
         state.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.RemoteSigned;
-        state.ThrowOnRunspaceOpenError = true;
-        state.ImportPSModule(ModulePath);
 
         var opened = RunspaceFactory.CreateRunspace(state);
-        opened.Open();
-        return opened;
+        try
+        {
+            opened.Open();
+            // Opening puts the user's own module folders back in front, so the
+            // search path is set after it, and the module imported only then.
+            Environment.SetEnvironmentVariable("PSModulePath", ModuleSearchPath);
+            using var import = PowerShell.Create(opened);
+            import.AddCommand("Import-Module").AddParameter("Name", ModulePath).AddParameter("ErrorAction", "Stop");
+            try
+            {
+                import.Invoke();
+            }
+            catch (ActionPreferenceStopException stopped)
+            {
+                // Say why the import failed, not that -ErrorAction Stop stopped it.
+                throw new InvalidOperationException(stopped.ErrorRecord.Exception.Message, stopped);
+            }
+            return opened;
+        }
+        catch
+        {
+            opened.Dispose();
+            throw;
+        }
     }
 
     private static T? Read<T>(PSObject source, string name)

@@ -132,6 +132,8 @@ Severity badges use dark text (`#0A1628`) in the dark theme. White text is too f
 
 The accent and button styles are unchanged. The command box becomes `#0A1628` with `--lv-ink` text.
 
+The focus outline is yellow (`--lv-accent`, `#FFD75E`) in the dark theme: navy is too faint on the dark page to see.
+
 ## 9. Console (PowerShell) theme
 
 Use `$PSStyle` and fall back to plain text when `$PSStyle.OutputRendering` is `PlainText`.

@@ -2,6 +2,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <SolidColorBrush x:Key="LvNavy" Color="#0B2E59" />
+    <SolidColorBrush x:Key="LvFocus" Color="#0B2E59" />
     <SolidColorBrush x:Key="LvInk" Color="#13223F" />
     <SolidColorBrush x:Key="LvInkMuted" Color="#475467" />
     <SolidColorBrush x:Key="LvPage" Color="#F5F8FC" />
