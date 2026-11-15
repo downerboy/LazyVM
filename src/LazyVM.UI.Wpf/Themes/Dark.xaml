@@ -1,0 +1,19 @@
+<!-- The brand's color tokens (docs/Brand.md section 8), dark theme. The accent and buttons are unchanged. -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="LvNavy" Color="#0B2E59" />
+    <SolidColorBrush x:Key="LvInk" Color="#E6EDF5" />
+    <SolidColorBrush x:Key="LvInkMuted" Color="#A9B8CC" />
+    <SolidColorBrush x:Key="LvPage" Color="#0A1628" />
+    <SolidColorBrush x:Key="LvCard" Color="#10223D" />
+    <SolidColorBrush x:Key="LvCardBorder" Color="#2A4468" />
+    <SolidColorBrush x:Key="LvTint" Color="#16304F" />
+    <SolidColorBrush x:Key="LvAccent" Color="#FFD75E" />
+    <SolidColorBrush x:Key="LvAccentHover" Color="#FFC929" />
+    <SolidColorBrush x:Key="LvOnAccent" Color="#0B2E59" />
+    <SolidColorBrush x:Key="LvSevMedium" Color="#FDB022" />
+    <SolidColorBrush x:Key="LvOnSev" Color="#0A1628" />
+    <SolidColorBrush x:Key="LvHeader" Color="#0B2E59" />
+    <SolidColorBrush x:Key="LvOnHeader" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="LvOnHeaderMuted" Color="#C9D6E5" />
+</ResourceDictionary>

@@ -1,0 +1,57 @@
+<Window x:Class="LazyVM.UI.Wpf.VMWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:VMViewModel}"
+        Title="{Binding Title}" Width="760" Height="820" MinWidth="320"
+        Style="{StaticResource LvWindow}">
+    <Window.CommandBindings>
+        <CommandBinding Command="Close" Executed="CloseWindow" />
+    </Window.CommandBindings>
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="Close" />
+    </Window.InputBindings>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
+            <StackPanel>
+                <TextBlock Text="{Binding Name}" Style="{StaticResource LvTitle}" />
+                <TextBlock Text="{Binding State}" Style="{StaticResource LvSubtitle}" />
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource LvPanel}" Margin="24">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Details" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
+                <!-- A list, so the arrow keys move from one detail to the next and Narrator reads each one. -->
+                <ListBox ItemsSource="{Binding Details}" AutomationProperties.Name="Details"
+                         Grid.IsSharedSizeScope="True" BorderThickness="0"
+                         Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+                            <Setter Property="Padding" Value="0,4" />
+                            <Setter Property="FocusVisualStyle" Value="{StaticResource LvFocusVisual}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:VMDetail">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="0,0,12,0" TextWrapping="Wrap" />
+                                <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+    </DockPanel>
+</Window>

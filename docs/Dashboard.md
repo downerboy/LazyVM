@@ -2,7 +2,7 @@
 
 # LazyVM Dashboard — specification
 
-Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built; the window is not. Updated 2026-11-14 to the design decided for the first step.
+Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list and the VM window, read-only (delivery plan step 3); the rest is not built yet. Updated 2026-11-14 to the design decided for the first step.
 
 ## 1. Purpose
 
