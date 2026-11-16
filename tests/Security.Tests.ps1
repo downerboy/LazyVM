@@ -266,7 +266,8 @@ Describe 'The code the tasks run (#284)' {
         $check = InModuleScope $module { Get-TrustedCodeCheck -Name 'Alpha' }
 
         $check.Status | Should -Be 'FAIL'
-        $check.Detail | Should -BeLike '*S-1-5-32-545*Install.ps1*'
+        $check.Detail | Should -BeLike '*S-1-5-32-545*'
+        $check.Fix | Should -Be 'Install LazyVM with Install.ps1, as administrator.'
     }
 
     It 'is installed in Program Files, where only administrators can change it' {

@@ -2,7 +2,12 @@
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 
 function New-DiagnosticCheck {
-    <# One line of the report. Status is OK, INFO, WARN or FAIL. #>
+    <#
+      One line of the report. Status is OK, INFO, WARN or FAIL. Detail says
+      what was found; Fix, when there is a known one, what to do about it, as
+      a sentence ending with the command (#305). The GUI shows Fix under the
+      check, apart from Detail.
+    #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Makes a value; changes nothing.')]
     param(
         # The VM, or empty for a host check made without one.
@@ -10,10 +15,11 @@ function New-DiagnosticCheck {
         [Parameter(Mandatory)][ValidateSet('Host', 'VM', 'Guest', 'Schedule')][string]$Area,
         [Parameter(Mandatory)][string]$Check,
         [Parameter(Mandatory)][ValidateSet('OK', 'INFO', 'WARN', 'FAIL')][string]$Status,
-        [string]$Detail = ''
+        [string]$Detail = '',
+        [string]$Fix = ''
     )
 
-    return [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = $Name; Area = $Area; Check = $Check; Status = $Status; Detail = $Detail }
+    return [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = $Name; Area = $Area; Check = $Check; Status = $Status; Detail = $Detail; Fix = $Fix }
 }
 
 function Get-IsoCheck {
@@ -58,7 +64,7 @@ function Get-RootAccessCheck {
     if ($problems.Count -eq 0) {
         return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status OK -Detail 'only you and SYSTEM'
     }
-    return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status WARN -Detail "$($problems -join '; '). Lock it again with: Set-LazyVMRoot -Path $Root"
+    return New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder access' -Status WARN -Detail ($problems -join '; ') -Fix "Lock it to you and SYSTEM again with: Set-LazyVMRoot -Path $Root"
 }
 
 function Get-TrustedCodeCheck {
@@ -67,7 +73,7 @@ function Get-TrustedCodeCheck {
 
     try { Assert-TrustedCode }
     catch {
-        return New-DiagnosticCheck -Name $Name -Area Host -Check 'Code the tasks run' -Status FAIL -Detail "$($_.Exception.Message) Install LazyVM with Install.ps1, as administrator."
+        return New-DiagnosticCheck -Name $Name -Area Host -Check 'Code the tasks run' -Status FAIL -Detail $_.Exception.Message -Fix 'Install LazyVM with Install.ps1, as administrator.'
     }
     return New-DiagnosticCheck -Name $Name -Area Host -Check 'Code the tasks run' -Status OK -Detail "only administrators can change it ($(Get-ModuleImportPath))"
 }
@@ -87,7 +93,7 @@ function Get-CloudSyncCheck {
     if ($synced.Count -eq 0) {
         return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status OK -Detail 'the LazyVM folder and the module are outside OneDrive'
     }
-    return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status WARN -Detail "$($synced -join ' and ') in OneDrive: files there can be online-only while the tasks run, and are copied to the cloud. Install the module with Install.ps1, and move the LazyVM folder outside OneDrive."
+    return New-DiagnosticCheck -Name $Name -Area Host -Check 'OneDrive' -Status WARN -Detail "$($synced -join ' and ') in OneDrive: files there can be online-only while the tasks run, and are copied to the cloud" -Fix 'Install the module with Install.ps1, and move the LazyVM folder outside OneDrive.'
 }
 
 function Get-ModuleShadowCheck {
@@ -105,7 +111,7 @@ function Get-ModuleShadowCheck {
     $copies = @(Get-Module -Name LazyVM -ListAvailable)
     $self = $copies | Where-Object { Test-SamePath -Path $_.ModuleBase -Other $running } | Select-Object -First 1
     if (-not $self) {
-        return New-DiagnosticCheck @check -Status WARN -Detail "$running is not on PSModulePath, so Import-Module LazyVM does not load it. Install LazyVM with Install.ps1, as administrator."
+        return New-DiagnosticCheck @check -Status WARN -Detail "$running is not on PSModulePath, so Import-Module LazyVM does not load it" -Fix 'Install LazyVM with Install.ps1, as administrator.'
     }
 
     $folder = Get-ParentFolder -Path $self.ModuleBase
@@ -121,7 +127,7 @@ function Get-ModuleShadowCheck {
     if ($shadowing.Count -eq 0) {
         return New-DiagnosticCheck @check -Status OK -Detail "Import-Module LazyVM loads this one ($running)"
     }
-    return New-DiagnosticCheck @check -Status WARN -Detail "Import-Module LazyVM loads $($shadowing -join ' and ') instead of $running, which comes later on PSModulePath or is an older version. Run Install.ps1 again, as administrator: it removes LazyVM's earlier copies and names any it cannot."
+    return New-DiagnosticCheck @check -Status WARN -Detail "Import-Module LazyVM loads $($shadowing -join ' and ') instead of $running, which comes later on PSModulePath or is an older version" -Fix "Run Install.ps1 again, as administrator: it removes LazyVM's earlier copies and names any it cannot."
 }
 
 function Get-RecoveryKeyCheck {
@@ -140,7 +146,7 @@ function Get-RecoveryKeyCheck {
         return New-DiagnosticCheck @check -Status INFO -Detail 'none stored yet; the build and the daily maintenance store them'
     }
     if ($unexported.Count -gt 0) {
-        return New-DiagnosticCheck @check -Status WARN -Detail "$($unexported.Count) of $($stored.Count) not exported yet: $(Get-RecoveryKeyExportCommand)"
+        return New-DiagnosticCheck @check -Status WARN -Detail "$($unexported.Count) of $($stored.Count) not exported yet" -Fix "Export them, and keep the file somewhere safe, with: $(Get-RecoveryKeyExportCommand)"
     }
     return New-DiagnosticCheck @check -Status OK -Detail "all $($stored.Count) exported, last on $($record.Exported)"
 }
@@ -186,7 +192,7 @@ function Get-LazyVMDiagnostic {
     Get-ModuleShadowCheck -Name $vmName
     if ($HostOnly) { return }
     if ($noVMs) {
-        New-DiagnosticCheck -Name '' -Area VM -Check 'VMs' -Status INFO -Detail 'none yet: create the first one with: New-LazyVM -Name <Name>'
+        New-DiagnosticCheck -Name '' -Area VM -Check 'VMs' -Status INFO -Detail 'none yet' -Fix 'Create the first one with: New-LazyVM -Name <Name>'
         return
     }
     if ($settingsError) {
@@ -201,17 +207,27 @@ function Get-LazyVMDiagnostic {
 
     $machine = Get-VM -Name $vmName -ErrorAction SilentlyContinue
     if (-not $machine) {
-        New-DiagnosticCheck -Name $vmName -Area VM -Check 'VM' -Status WARN -Detail "not built yet: Build-LazyVM -Name $vmName"
+        New-DiagnosticCheck -Name $vmName -Area VM -Check 'VM' -Status WARN -Detail 'not built yet' -Fix "Build it with: Build-LazyVM -Name $vmName"
     }
     else {
         $vmStatus = if ("$($machine.State)" -eq 'Running' -or "$($machine.State)" -eq 'Off') { 'OK' } else { 'WARN' }
         New-DiagnosticCheck -Name $vmName -Area VM -Check 'VM' -Status $vmStatus -Detail "$($machine.State), heartbeat $(if ($machine.Heartbeat) { $machine.Heartbeat } else { 'none' })"
     }
 
-    if ($machine -and "$($machine.State)" -eq 'Running') {
+    # The guest is checked only while the VM runs, and with a stored password.
+    $running = $machine -and "$($machine.State)" -eq 'Running'
+    $credential = $null
+    if ($running) {
         try {
             $credential = Get-StoredCredential -Path $settings.GuestCredFile
-            if (-not $credential) { throw "No credential is stored for '$vmName'. Store one with: Set-LazyVMCredential -Name $vmName" }
+            if (-not $credential) {
+                New-DiagnosticCheck -Name $vmName -Area Guest -Check 'PowerShell Direct' -Status FAIL -Detail 'no password is stored for the guest account' -Fix "Store the guest account's password with: Set-LazyVMCredential -Name $vmName"
+            }
+        }
+        catch { New-DiagnosticCheck -Name $vmName -Area Guest -Check 'PowerShell Direct' -Status FAIL -Detail $_.Exception.Message }
+    }
+    if ($credential) {
+        try {
             $guest = Invoke-Command -VMName $vmName -Credential $credential -ErrorAction Stop -ArgumentList $script:GuestMarkerKey -ScriptBlock {
                 param($markerKey)
                 $winlogon = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon' -ErrorAction SilentlyContinue
@@ -236,17 +252,18 @@ function Get-LazyVMDiagnostic {
             New-DiagnosticCheck -Name $vmName -Area Guest -Check 'PowerShell Direct' -Status FAIL -Detail $_.Exception.Message
         }
     }
-    elseif ($machine) {
+    elseif ($machine -and -not $running) {
         New-DiagnosticCheck -Name $vmName -Area Guest -Check 'PowerShell Direct' -Status INFO -Detail "not checked: the VM is $($machine.State), and Test-LazyVM starts nothing"
     }
 
     $task = Get-ScheduledTask -TaskName $settings.ScheduleTaskName -ErrorAction SilentlyContinue
     if (-not $task) {
-        New-DiagnosticCheck -Name $vmName -Area Schedule -Check 'Maintenance task' -Status WARN -Detail "not scheduled: Register-LazyVMMaintenance -Name $vmName"
+        New-DiagnosticCheck -Name $vmName -Area Schedule -Check 'Maintenance task' -Status WARN -Detail 'not scheduled' -Fix "Schedule it with: Register-LazyVMMaintenance -Name $vmName"
         return
     }
     $info = Get-ScheduledTaskInfo -TaskName $settings.ScheduleTaskName -ErrorAction Stop
     $taskStatus = switch ([long]$info.LastTaskResult) { 0 { 'OK' } $script:TaskNotRunYetResult { 'INFO' } default { 'FAIL' } }
     $last = if ($taskStatus -eq 'INFO') { 'has not run yet' } else { "last ran $($info.LastRunTime), result 0x$('{0:X}' -f [long]$info.LastTaskResult)" }
-    New-DiagnosticCheck -Name $vmName -Area Schedule -Check 'Maintenance task' -Status $taskStatus -Detail "$last; next run $($info.NextRunTime)"
+    $taskFix = if ($taskStatus -eq 'FAIL') { "Read what went wrong in the log with: Get-LazyVMLog -Name $vmName -Tail 50" } else { '' }
+    New-DiagnosticCheck -Name $vmName -Area Schedule -Check 'Maintenance task' -Status $taskStatus -Detail "$last; next run $($info.NextRunTime)" -Fix $taskFix
 }

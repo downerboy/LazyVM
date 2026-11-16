@@ -108,6 +108,48 @@ Describe 'Get-LazyVMDiagnostic' {
         (Get-TestCheck)['Maintenance task'].Status | Should -Be $Status
     }
 
+    Context 'what to do: Fix, apart from what is wrong in Detail (#305)' {
+        It 'gives no fix when all is well' {
+            @((Get-TestCheck).Values | Where-Object { $_.Fix }).Count | Should -Be 0
+        }
+
+        It 'says to build a VM that is not built yet' {
+            Mock -ModuleName $module Get-VM { }
+
+            $check = (Get-TestCheck)['VM']
+
+            $check.Detail | Should -Be 'not built yet'
+            $check.Fix | Should -Be 'Build it with: Build-LazyVM -Name Alpha'
+        }
+
+        It 'says to schedule a maintenance task that is not scheduled' {
+            Mock -ModuleName $module Get-ScheduledTask { }
+
+            $check = (Get-TestCheck)['Maintenance task']
+
+            $check.Detail | Should -Be 'not scheduled'
+            $check.Fix | Should -Be 'Schedule it with: Register-LazyVMMaintenance -Name Alpha'
+        }
+
+        It 'points to the log when the last maintenance run failed' {
+            Mock -ModuleName $module Get-ScheduledTaskInfo { [pscustomobject]@{ LastRunTime = [datetime]'2026-10-31 03:00'; LastTaskResult = 1; NextRunTime = [datetime]'2026-11-01 03:00' } }
+
+            (Get-TestCheck)['Maintenance task'].Fix | Should -Be 'Read what went wrong in the log with: Get-LazyVMLog -Name Alpha -Tail 50'
+        }
+
+        It 'fails PowerShell Direct with no guest password stored, saying how to store one, and still checks the rest' {
+            Mock -ModuleName $module Get-StoredCredential { }
+
+            $checks = Get-TestCheck
+
+            $checks['PowerShell Direct'].Status | Should -Be 'FAIL'
+            $checks['PowerShell Direct'].Detail | Should -Be 'no password is stored for the guest account'
+            $checks['PowerShell Direct'].Fix | Should -Be 'Store the guest account''s password with: Set-LazyVMCredential -Name Alpha'
+            Should -Invoke -ModuleName $module Invoke-Command -Times 0
+            $checks.ContainsKey('Maintenance task') | Should -BeTrue
+        }
+    }
+
     Context 'the host checks, which do not need a VM (#305)' {
         BeforeAll {
             $hostChecks = 'LazyVM folder', 'LazyVM folder access', 'OneDrive', 'Code the tasks run', 'Module copies'
@@ -129,7 +171,8 @@ Describe 'Get-LazyVMDiagnostic' {
 
             @($checks.Keys) | Should -Be (@($hostChecks) + 'VMs')
             $checks['VMs'].Status | Should -Be 'INFO'
-            $checks['VMs'].Detail | Should -BeLike '*none yet*New-LazyVM*'
+            $checks['VMs'].Detail | Should -Be 'none yet'
+            $checks['VMs'].Fix | Should -Be 'Create the first one with: New-LazyVM -Name <Name>'
             @($checks.Values | Where-Object Status -eq 'FAIL').Count | Should -Be 0
             Should -Invoke -ModuleName $module Read-VMSetting -Times 0
         }
@@ -198,8 +241,10 @@ Describe 'Get-ModuleShadowCheck (#311)' {
         $check = InModuleScope $module { Get-ModuleShadowCheck -Name 'Alpha' }
 
         $check.Status | Should -Be 'WARN'
-        $check.Detail | Should -BeLike '*PowerShell\Modules\LazyVM\5.2.0*PowerShell\Modules\LazyVM\5.1.0*Install.ps1*'
+        $check.Detail | Should -BeLike '*PowerShell\Modules\LazyVM\5.2.0*PowerShell\Modules\LazyVM\5.1.0*'
         $check.Detail | Should -Not -BeLike '*4.0.0*'
+        $check.Detail | Should -Not -BeLike '*Install.ps1*'
+        $check.Fix | Should -BeLike 'Run Install.ps1 again, as administrator*'
     }
 
     It 'warns with a higher version in the running module''s own folder, which Import-Module loads instead, whatever order it is listed in' {
@@ -228,6 +273,7 @@ Describe 'Get-ModuleShadowCheck (#311)' {
 
         $check.Status | Should -Be 'WARN'
         $check.Detail | Should -BeLike '*S:\Source\LazyVM\out\LazyVM\6.5.0 is not on PSModulePath*'
+        $check.Fix | Should -Be 'Install LazyVM with Install.ps1, as administrator.'
     }
 }
 
@@ -235,8 +281,8 @@ Describe 'Test-LazyVM' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }
         Mock -ModuleName $module Get-LazyVMDiagnostic {
-            [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'LazyVM folder'; Status = 'OK'; Detail = 'C:\LazyVM' }
-            [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Guest'; Check = 'PowerShell Direct'; Status = 'FAIL'; Detail = 'The credential is invalid.' }
+            [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'LazyVM folder'; Status = 'OK'; Detail = 'C:\LazyVM'; Fix = '' }
+            [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Guest'; Check = 'PowerShell Direct'; Status = 'FAIL'; Detail = 'The credential is invalid.'; Fix = 'Store the guest account''s password with: Set-LazyVMCredential -Name Alpha' }
         }
     }
 
@@ -257,6 +303,18 @@ Describe 'Test-LazyVM' {
         $text | Should -BeLike '*FAIL*PowerShell Direct*credential is invalid*'
     }
 
+    It 'puts each fix on its own line under its check in the report' {
+        $report = Join-Path $TestDrive 'Alpha-fix-report.txt'
+
+        $null = Test-LazyVM -Name Alpha -ReportPath $report
+
+        $lines = @(Get-Content -LiteralPath $report)
+        $failure = [array]::FindIndex($lines, [Predicate[string]] { param($line) $line -like 'FAIL*PowerShell Direct*' })
+        $lines[$failure] | Should -Not -BeLike '*Set-LazyVMCredential*'
+        $lines[$failure + 1] | Should -BeLike '*Fix: Store the guest account''s password with: Set-LazyVMCredential -Name Alpha'
+        @($lines | Where-Object { $_ -like '*Fix:*' }).Count | Should -Be 1
+    }
+
     It 'passes -HostOnly on' {
         $null = Test-LazyVM -HostOnly
 
@@ -265,7 +323,7 @@ Describe 'Test-LazyVM' {
 
     It 'names the host in the report when no VM is checked' {
         Mock -ModuleName $module Get-LazyVMDiagnostic {
-            [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = ''; Area = 'Host'; Check = 'LazyVM folder'; Status = 'OK'; Detail = 'C:\LazyVM' }
+            [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = ''; Area = 'Host'; Check = 'LazyVM folder'; Status = 'OK'; Detail = 'C:\LazyVM'; Fix = '' }
         }
         $report = Join-Path $TestDrive 'host-report.txt'
 

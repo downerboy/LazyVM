@@ -21,7 +21,7 @@
                 @{ Label = 'VM and task'; Kind = 'Hyper-V'; Store = 'Hyper-V and Task Scheduler'; Items = @('VM <VM>', 'LazyVM-Maintain-<VM>') }
                 @{ Label = 'guest set-up, if running'; Kind = 'guest'; Store = 'Running guest'; Items = @('PowerShell Direct, disks', 'automatic sign-in on or off') }
             )
-            Writes   = @(@{ Label = 'checks'; Kind = 'output'; Store = 'Pipeline'; Items = @('Status, Area, Check, Detail') })
+            Writes   = @(@{ Label = 'checks'; Kind = 'output'; Store = 'Pipeline'; Items = @('Status, Area, Check, Detail, Fix') })
         }
         @{
             Function = 'Set-Content'

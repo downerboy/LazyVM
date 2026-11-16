@@ -377,8 +377,9 @@ Describe 'Get-RecoveryKeyCheck' {
         $check = InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } { param($VM) Get-RecoveryKeyCheck -VM $VM }
 
         $check.Status | Should -Be 'WARN'
-        $check.Detail | Should -BeLike '*1 of 1*Export-LazyVMRecoveryKey -Path *'
-        $check.Detail | Should -Not -BeLike '*-Name*'
+        $check.Detail | Should -Be '1 of 1 not exported yet'
+        $check.Fix | Should -BeLike '*Export-LazyVMRecoveryKey -Path *'
+        $check.Fix | Should -Not -BeLike '*-Name*'
     }
 
     It 'is OK once every key is exported, decrypting the store once' {
