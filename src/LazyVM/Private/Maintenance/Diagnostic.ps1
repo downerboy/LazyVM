@@ -5,7 +5,8 @@ function New-DiagnosticCheck {
     <# One line of the report. Status is OK, INFO, WARN or FAIL. #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Makes a value; changes nothing.')]
     param(
-        [Parameter(Mandatory)][string]$Name,
+        # The VM, or empty for a host check made without one.
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Name,
         [Parameter(Mandatory)][ValidateSet('Host', 'VM', 'Guest', 'Schedule')][string]$Area,
         [Parameter(Mandatory)][string]$Check,
         [Parameter(Mandatory)][ValidateSet('OK', 'INFO', 'WARN', 'FAIL')][string]$Status,
@@ -43,7 +44,7 @@ function ConvertTo-AccountName {
 function Get-RootAccessCheck {
     <# Whether the LazyVM folder is open to the current user and SYSTEM only, as Initialize-RootFolder leaves it (#284). #>
     param(
-        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Name,
         [Parameter(Mandatory)][string]$Root
     )
 
@@ -62,7 +63,7 @@ function Get-RootAccessCheck {
 
 function Get-TrustedCodeCheck {
     <# Whether only administrators, SYSTEM and TrustedInstaller can change the code the scheduled tasks run (#284). #>
-    param([Parameter(Mandatory)][string]$Name)
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Name)
 
     try { Assert-TrustedCode }
     catch {
@@ -78,7 +79,7 @@ function Get-CloudSyncCheck {
       and are copied to the cloud.
     #>
     param(
-        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Name,
         [Parameter(Mandatory)][string]$Root
     )
 
@@ -97,7 +98,7 @@ function Get-ModuleShadowCheck {
       or it is a higher version in the same folder. A module that is not on
       PSModulePath at all, imported by its path, is reported on its own.
     #>
-    param([Parameter(Mandatory)][string]$Name)
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Name)
 
     $check = @{ Name = $Name; Area = 'Host'; Check = 'Module copies' }
     $running = Get-LazyVMModuleBase
@@ -151,27 +152,49 @@ function Get-LazyVMDiagnostic {
       automatic sign-in is read as on or off with its user name, never its
       password. A check that cannot be made is reported as FAIL, and the
       rest still run.
+
+      The host checks come first and need no VM (#305): with no VMs yet,
+      they are followed by a note that there are none; with several VMs and
+      none named, by the VM settings failure. -HostOnly stops after them,
+      touching no VM, for the GUI's check when it opens.
     #>
-    param([string]$Name)
+    param(
+        [string]$Name,
+        [switch]$HostOnly
+    )
 
     try { $root = Resolve-LazyVMRoot }
     catch {
         New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder' -Status FAIL -Detail $_.Exception.Message
         return
     }
-    try { $configuration = Read-VMSetting -Root $root.Path -VMName $Name -ReadOnly }
-    catch {
-        New-DiagnosticCheck -Name $Name -Area Host -Check 'LazyVM folder' -Status OK -Detail "$($root.Path) (from $($root.Source))"
-        New-DiagnosticCheck -Name $Name -Area Host -Check 'VM settings' -Status FAIL -Detail $_.Exception.Message
-        return
+
+    # Which VM, if any, before the host checks, so they carry its name.
+    $noVMs = -not $Name -and @(Get-VMProfileName -Root $root.Path).Count -eq 0
+    $configuration = $null
+    $settingsError = $null
+    if (-not $HostOnly -and -not $noVMs) {
+        try { $configuration = Read-VMSetting -Root $root.Path -VMName $Name -ReadOnly }
+        catch { $settingsError = $_.Exception.Message }
     }
-    $vmName = $configuration.VMName
-    $settings = $configuration.Settings
+    $vmName = if ($configuration) { $configuration.VMName } else { $Name }
+
     New-DiagnosticCheck -Name $vmName -Area Host -Check 'LazyVM folder' -Status OK -Detail "$($root.Path) (from $($root.Source))"
     Get-RootAccessCheck -Name $vmName -Root $root.Path
     Get-CloudSyncCheck -Name $vmName -Root $root.Path
     Get-TrustedCodeCheck -Name $vmName
     Get-ModuleShadowCheck -Name $vmName
+    if ($HostOnly) { return }
+    if ($noVMs) {
+        New-DiagnosticCheck -Name '' -Area VM -Check 'VMs' -Status INFO -Detail 'none yet: create the first one with: New-LazyVM -Name <Name>'
+        return
+    }
+    if ($settingsError) {
+        New-DiagnosticCheck -Name $vmName -Area Host -Check 'VM settings' -Status FAIL -Detail $settingsError
+        return
+    }
+
+    $settings = $configuration.Settings
     Get-IsoCheck -Name $vmName -Check 'Windows ISO' -Path $settings.ISOPath
     Get-IsoCheck -Name $vmName -Check 'SQL Server ISO' -Path $settings.SQLIsoPath -Downloadable
     Get-RecoveryKeyCheck -VM ([VMContext]::new($settings))

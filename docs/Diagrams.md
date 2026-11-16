@@ -906,14 +906,14 @@ Removes an approval, so the next nightly scan reports the finding again if it st
 
 ## Check a VM end to end
 
-`Test-LazyVM` `-Name <VM>` `-ReportPath <file>  (optional)`
+`Test-LazyVM` `-Name <VM>  (optional with one VM or none)` `-HostOnly  (optional)` `-ReportPath <file>  (optional)`
 
-Checks the LazyVM folder, the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest's set-up and the maintenance task, and says what to run to fix each. Reads only: a VM that is off is not started.
+Checks the LazyVM folder and its set-up on this host first, even before the first VM (-HostOnly stops there), then the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest's set-up and the maintenance task, and says what to run to fix each. Reads only: a VM that is off is not started.
 
 ![Check a VM end to end: call order and data flow](diagrams/test.svg)
 
-1. `Get-LazyVMDiagnostic` (Maintenance): every check in order; one that cannot be made is a FAIL and the rest still run
-   - Also runs `Resolve-LazyVMRoot`, `Read-VMSetting`, `Get-IsoCheck`, `Get-RecoveryKeyCheck`, `Get-StoredCredential`, `New-DiagnosticCheck`
+1. `Get-LazyVMDiagnostic` (Maintenance): the host checks first, then the VM's; one that cannot be made is a FAIL and the rest still run
+   - Also runs `Resolve-LazyVMRoot`, `Get-VMProfileName`, `Read-VMSetting`, `Get-IsoCheck`, `Get-RecoveryKeyCheck`, `Get-StoredCredential`, `New-DiagnosticCheck`
    - Reads D1, folder and settings: VM context sources (HKCU:\SOFTWARE\LazyVM  Root, <VM>\Config\VM.json)
    - Reads D2, media: Shared\ (ISO\Win11Ent_Eval.iso, Installers\SQLServer2025 ISO)
    - Reads D3, stored and exported keys: <VM>\ (Credentials\bitlocker.cred, Config\RecoveryKeyExport.json)

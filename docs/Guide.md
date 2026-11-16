@@ -201,7 +201,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Revoke-LazyVMSecurityFinding -Id <Id>` | Undoes an approval, so the next scan reports the finding again if it still finds it. |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
-| `Test-LazyVM` | Checks what a build or maintenance run depends on: the LazyVM folder, the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only. `-ReportPath` also writes a text report. |
+| `Test-LazyVM` | Checks what a build or maintenance run depends on: the LazyVM folder, the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only. The host checks run first and need no VM, so it is useful before the first VM too; `-HostOnly` runs only those. `-ReportPath` also writes a text report. |
 | `Save-LazyVMTooling` | Records tooling changes now, as the daily run does, with a checkpoint first. |
 | `Get-LazyVMRestorePoint` | The recorded tooling versions that can be returned to. |
 | `Restore-LazyVMTooling -RestorePoint 20261008-201746` | Returns the VM to a recorded tooling version. All its disks go back, the Dev Drive included. |

@@ -22,14 +22,28 @@ function Test-LazyVM {
     not running is not started, and its guest is not checked. Automatic
     sign-in is shown as on or off with its user name, never its password.
 
+    The host checks (the LazyVM folder, its access, OneDrive, the code the
+    tasks run and the module copies) come first and need no VM. Before the
+    first VM is created they still run, followed by a note that there are no
+    VMs yet. With several VMs and no -Name, they run and the VM settings
+    check fails, asking which VM.
+
     .PARAMETER Name
-    The VM. May be left out while there is only one.
+    The VM. May be left out while there is only one, or none yet.
+
+    .PARAMETER HostOnly
+    Run only the host checks, touching no VM.
 
     .PARAMETER ReportPath
     Also write the checks to this text file, for sharing or keeping.
 
     .EXAMPLE
     Test-LazyVM -Name DevBox
+
+    .EXAMPLE
+    Test-LazyVM -HostOnly
+
+    Checks only this host's LazyVM set-up, for example before the first VM.
 
     .EXAMPLE
     Test-LazyVM -Name DevBox -ReportPath .\DevBox-check.txt
@@ -43,15 +57,18 @@ function Test-LazyVM {
         [Parameter(Position = 0, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [string]$Name,
 
+        [switch]$HostOnly,
+
         [string]$ReportPath
     )
 
     process {
         Assert-Administrator
-        $checks = @(Get-LazyVMDiagnostic -Name $Name)
+        $checks = @(Get-LazyVMDiagnostic -Name $Name -HostOnly:$HostOnly)
 
         if ($ReportPath) {
-            $lines = @("LazyVM check of $(if ($checks) { $checks[0].Name } else { $Name }), $(Get-Date -Format 'yyyy-MM-dd HH:mm'), module $($MyInvocation.MyCommand.Module.Version)", '')
+            $subject = if ($checks -and $checks[0].Name) { $checks[0].Name } elseif ($Name) { $Name } else { $env:COMPUTERNAME }
+            $lines = @("LazyVM check of $subject, $(Get-Date -Format 'yyyy-MM-dd HH:mm'), module $($MyInvocation.MyCommand.Module.Version)", '')
             $lines += $checks | ForEach-Object { '{0,-5} {1,-9} {2,-20} {3}' -f $_.Status, $_.Area, $_.Check, $_.Detail }
             Set-Content -LiteralPath $ReportPath -Value $lines -Encoding utf8
         }
