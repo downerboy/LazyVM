@@ -104,6 +104,26 @@ Describe 'Invoke-BuildPhase when a phase fails' {
         Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly -ParameterFilter { $Message -like '*VM console*' }
     }
 
+    It 'deletes the answer-file disc when the build is stopped, as by Ctrl+C (#416)' {
+        # A stop runs finally blocks but no catch block. The build runs in a
+        # pipeline of its own, so the stop ends only that pipeline.
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 7; Name = 'Guest Provisioning'; Action = { throw [System.Management.Automation.PipelineStoppedException]::new() } } }
+        $stopped = [powershell]::Create('CurrentRunspace')
+        $null = $stopped.AddScript($build.ToString())
+
+        $null = $stopped.Invoke()
+
+        Should -Invoke -ModuleName $module Remove-UnattendSeedDisk -Times 1 -Exactly
+    }
+
+    It 'leaves the answer-file disc when the host restarts to turn on Hyper-V' {
+        Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 2; Name = 'Hyper-V Feature Installation'; Action = { [BuildOutcome]::RestartPending } } }
+
+        $null = & $build
+
+        Should -Invoke -ModuleName $module Remove-UnattendSeedDisk -Times 0 -Exactly
+    }
+
     It 'does not look for the answer-file disc in Hyper-V when there is none' {
         $disc.Exists = $false
         Mock -ModuleName $module Get-BuildPhase { [pscustomobject]@{ Number = 1; Name = 'Readiness'; Action = { throw 'Hyper-V is not available.' } } }

@@ -68,7 +68,7 @@
             Function = 'Invoke-BuildPhase'
             Area     = 'Host'
             Caller   = 'Invoke-VMBuild'
-            Note     = 'runs each phase of Get-BuildPhase in order (steps 7-18); when a phase throws, deletes the answer-file disc first'
+            Note     = 'runs each phase of Get-BuildPhase in order (steps 7-18); when a phase throws or the build is stopped, deletes the answer-file disc first'
             Includes = @('Get-BuildPhase', 'Remove-UnattendSeedDisk')
         }
         @{
