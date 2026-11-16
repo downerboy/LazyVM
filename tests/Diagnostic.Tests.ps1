@@ -22,6 +22,7 @@ BeforeAll {
 Describe 'Get-LazyVMDiagnostic' {
     BeforeEach {
         Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = 'C:\LazyVM'; Source = 'the registry' } }
+        Mock -ModuleName $module Get-VMProfileName { 'Alpha' }
         Mock -ModuleName $module Read-VMSetting {
             $settings = @{
                 ISOPath = 'C:\LazyVM\Shared\ISO\Win11.iso'; SQLIsoPath = 'C:\LazyVM\Shared\ISO\SQL.iso'
@@ -105,6 +106,61 @@ Describe 'Get-LazyVMDiagnostic' {
         Mock -ModuleName $module Get-ScheduledTaskInfo { [pscustomobject]@{ LastRunTime = $null; LastTaskResult = $Result; NextRunTime = [datetime]'2026-11-01 03:00' } }.GetNewClosure()
 
         (Get-TestCheck)['Maintenance task'].Status | Should -Be $Status
+    }
+
+    Context 'the host checks, which do not need a VM (#305)' {
+        BeforeAll {
+            $hostChecks = 'LazyVM folder', 'LazyVM folder access', 'OneDrive', 'Code the tasks run', 'Module copies'
+
+            function Get-UnnamedCheck {
+                <# Runs the diagnostic with no VM named, with -HostOnly when asked, and returns its checks keyed by name. #>
+                param([switch]$HostOnly)
+                $checks = @(InModuleScope $module -Parameters @{ HostOnly = $HostOnly } { param($HostOnly) Get-LazyVMDiagnostic -HostOnly:$HostOnly })
+                $byName = [ordered]@{}
+                foreach ($check in $checks) { $byName[$check.Check] = $check }
+                return $byName
+            }
+        }
+
+        It 'runs them when there are no VMs yet, and says so without failing' {
+            Mock -ModuleName $module Get-VMProfileName { }
+
+            $checks = Get-UnnamedCheck
+
+            @($checks.Keys) | Should -Be (@($hostChecks) + 'VMs')
+            $checks['VMs'].Status | Should -Be 'INFO'
+            $checks['VMs'].Detail | Should -BeLike '*none yet*New-LazyVM*'
+            @($checks.Values | Where-Object Status -eq 'FAIL').Count | Should -Be 0
+            Should -Invoke -ModuleName $module Read-VMSetting -Times 0
+        }
+
+        It 'runs them before failing the VM settings when there are several VMs and none is named' {
+            Mock -ModuleName $module Get-VMProfileName { 'Alpha'; 'Beta' }
+            Mock -ModuleName $module Read-VMSetting { throw 'This host has several VMs (Alpha, Beta). Say which one with -Name.' }
+
+            $checks = Get-UnnamedCheck
+
+            @($checks.Keys) | Should -Be (@($hostChecks) + 'VM settings')
+            $checks['VM settings'].Status | Should -Be 'FAIL'
+            $checks['VM settings'].Detail | Should -BeLike '*several VMs*'
+        }
+
+        It 'runs only them with -HostOnly, and touches no VM' {
+            $checks = Get-UnnamedCheck -HostOnly
+
+            @($checks.Keys) | Should -Be $hostChecks
+            @($checks.Values | Where-Object Area -ne 'Host').Count | Should -Be 0
+            Should -Invoke -ModuleName $module Read-VMSetting -Times 0
+            Should -Invoke -ModuleName $module Get-VM -Times 0
+            Should -Invoke -ModuleName $module Get-ScheduledTask -Times 0
+        }
+
+        It 'names the only VM on them when there is one' {
+            $checks = Get-UnnamedCheck
+
+            $checks['OneDrive'].Name | Should -Be 'Alpha'
+            $checks.Contains('Maintenance task') | Should -BeTrue
+        }
     }
 }
 
@@ -199,6 +255,23 @@ Describe 'Test-LazyVM' {
         $text = Get-Content -LiteralPath $report -Raw
         $text | Should -BeLike '*OK*LazyVM folder*C:\LazyVM*'
         $text | Should -BeLike '*FAIL*PowerShell Direct*credential is invalid*'
+    }
+
+    It 'passes -HostOnly on' {
+        $null = Test-LazyVM -HostOnly
+
+        Should -Invoke -ModuleName $module Get-LazyVMDiagnostic -Times 1 -ParameterFilter { $HostOnly }
+    }
+
+    It 'names the host in the report when no VM is checked' {
+        Mock -ModuleName $module Get-LazyVMDiagnostic {
+            [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = ''; Area = 'Host'; Check = 'LazyVM folder'; Status = 'OK'; Detail = 'C:\LazyVM' }
+        }
+        $report = Join-Path $TestDrive 'host-report.txt'
+
+        $null = Test-LazyVM -HostOnly -ReportPath $report
+
+        (Get-Content -LiteralPath $report -TotalCount 1) | Should -BeLike "LazyVM check of $env:COMPUTERNAME,*"
     }
 }
 

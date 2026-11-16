@@ -2,8 +2,8 @@
     Id         = 'test'
     Title      = 'Check a VM end to end'
     Command    = 'Test-LazyVM'
-    Parameters = @('-Name <VM>', '-ReportPath <file>  (optional)')
-    Summary    = 'Checks the LazyVM folder, the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest''s set-up and the maintenance task, and says what to run to fix each. Reads only: a VM that is off is not started.'
+    Parameters = @('-Name <VM>  (optional with one VM or none)', '-HostOnly  (optional)', '-ReportPath <file>  (optional)')
+    Summary    = 'Checks the LazyVM folder and its set-up on this host first, even before the first VM (-HostOnly stops there), then the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest''s set-up and the maintenance task, and says what to run to fix each. Reads only: a VM that is off is not started.'
     Covers     = @('Test-LazyVM')
     Omits      = @{
         'Assert-Administrator' = 'stops at once unless run as administrator'
@@ -12,8 +12,8 @@
         @{
             Function = 'Get-LazyVMDiagnostic'
             Area     = 'Maintenance'
-            Note     = 'every check in order; one that cannot be made is a FAIL and the rest still run'
-            Includes = @('Resolve-LazyVMRoot', 'Read-VMSetting', 'Get-IsoCheck', 'Get-RecoveryKeyCheck', 'Get-StoredCredential', 'New-DiagnosticCheck')
+            Note     = 'the host checks first, then the VM''s; one that cannot be made is a FAIL and the rest still run'
+            Includes = @('Resolve-LazyVMRoot', 'Get-VMProfileName', 'Read-VMSetting', 'Get-IsoCheck', 'Get-RecoveryKeyCheck', 'Get-StoredCredential', 'New-DiagnosticCheck')
             Reads    = @(
                 @{ Label = 'folder and settings'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKCU:\SOFTWARE\LazyVM  Root', '<VM>\Config\VM.json') }
                 @{ Label = 'media'; Kind = 'file'; Store = 'Shared\'; Items = @('ISO\Win11Ent_Eval.iso', 'Installers\SQLServer2025 ISO') }
