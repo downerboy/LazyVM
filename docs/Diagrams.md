@@ -9,7 +9,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMDashboard`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
@@ -22,7 +22,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - State: [Capture state](#capture), [Restore state](#restore)
 - Templates: [Save a VM as a config template](#export-template)
 - Remove: [Remove a VM](#remove)
-- Check: [List VMs](#status), [See the dashboard data](#dashboard), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [Export the recovery passwords](#recovery-key-export), [See the security findings](#security-finding), [Approve a security finding](#security-approve), [Revoke a security finding approval](#security-revoke), [Check a VM end to end](#test)
+- Check: [List VMs](#status), [See the dashboard data](#dashboard), [Read a VM's log](#log), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [Export the recovery passwords](#recovery-key-export), [See the security findings](#security-finding), [Approve a security finding](#security-approve), [Revoke a security finding approval](#security-revoke), [Check a VM end to end](#test)
 
 <a id="install-from-repo"></a>
 
@@ -741,6 +741,27 @@ Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's d
    - Also runs `Get-VMAsBuiltProfilePath`, `Get-AutomaticTemplateName`, `Get-UserTemplatePath`
    - Reads D9, templates: Templates (<VM>\Config\VM.Template.json, Shared\Templates\<VM>-latest.json)
    - Writes D10, dashboard rows: Pipeline (LazyVM.Dashboard per VM)
+
+<a id="log"></a>
+
+## Read a VM's log
+
+`Get-LazyVMLog` `-Name <VM>  (optional with one VM)` `-Tail <count>  (optional)`
+
+Reads the VM's log as entries: time, level (Info, OK, Warning, Error or Phase) and message. Only reads, without locking the log, so it works while a build is writing it. No administrator rights needed.
+
+![Read a VM's log: call order and data flow](diagrams/log.svg)
+
+1. `Resolve-LazyVMRoot` (Settings): the LazyVM folder
+   - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root)
+2. `Read-VMSetting` (Settings): read-only: where the VM's log is
+   - Reads D2, settings: Settings files (Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json)
+3. `Assert-NoReparsePoint` (Common): stops if the log or a folder above it is a link, as the logger does
+4. `Read-LogLine` (Logging): the lines, read without locking the file; none when there is no log yet
+   - Reads D3, log: <VM>\Logs\ (<VM>.log)
+5. `ConvertFrom-LogLine` (Logging): one entry per line written; a phase's two lines and a message's later lines join their entry
+   - Also runs `New-LogEntry`
+   - Writes D4, entries: Pipeline (LazyVM.LogEntry: Time, Level, Message, only the newest with -Tail)
 
 <a id="settings"></a>
 

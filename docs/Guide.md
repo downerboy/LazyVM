@@ -200,6 +200,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Approve-LazyVMSecurityFinding -Id <Id>` | Accepts a finding you expect, with an optional `-Reason`, so the nightly scan stops reporting it until it changes. Takes findings from the pipeline. See [Approving a finding](#approving-a-finding). |
 | `Revoke-LazyVMSecurityFinding -Id <Id>` | Undoes an approval, so the next scan reports the finding again if it still finds it. |
 | `Get-LazyVMLicense` | Evaluation days left, rearms left, and what maintenance will do. Read-only. |
+| `Get-LazyVMLog` | The VM's log as entries: time, level (Info, OK, Warning, Error or Phase) and message. `-Tail 50` gives only the newest. Read-only, and works while a build is still writing the log. |
 | `Get-LazyVMTooling` | What is installed in the VM, and what the next maintenance run would record. Read-only. |
 | `Test-LazyVM` | Checks what a build or maintenance run depends on: the LazyVM folder, the ISOs, whether the recovery passwords are exported, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only. The host checks run first and need no VM, so it is useful before the first VM too; `-HostOnly` runs only those. `-ReportPath` also writes a text report. |
 | `Save-LazyVMTooling` | Records tooling changes now, as the daily run does, with a checkpoint first. |
