@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.15.0](https://github.com/downerboy/LazyVM/compare/v6.14.0...v6.15.0) (2026-11-16)
+
+
+### Features
+
+* add the app's Checks and Log windows ([#412](https://github.com/downerboy/LazyVM/issues/412)) ([86f44fc](https://github.com/downerboy/LazyVM/commit/86f44fcdab9ebd2933f859dab1e7a57ba26fa33b))
+
 ## [6.14.0](https://github.com/downerboy/LazyVM/compare/v6.13.0...v6.14.0) (2026-11-16)
 
 
