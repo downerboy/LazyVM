@@ -414,17 +414,30 @@ function Get-DiagramOutput {
     foreach ($diagram in $Set.Diagrams) {
         $output["docs/diagrams/$($diagram.Id).svg"] = ConvertTo-DiagramSvg -Diagram $diagram
     }
+    # LF only (#406): this script is checked out with CRLF, so its here-strings,
+    # such as the SVG style block, would otherwise mix CRLF into the LF output.
+    foreach ($path in @($output.Keys)) {
+        $output[$path] = $output[$path].Replace("`r`n", "`n")
+    }
     return $output
 }
 
 function Update-Diagram {
-    <# Writes docs\Diagrams.md and every SVG from the sources, with LF line endings and no BOM. #>
+    <#
+      Writes docs\Diagrams.md and every SVG from the sources, with LF line
+      endings and no BOM. A file whose content is already right, line endings
+      aside, is left alone (#406): a clone checks it out with CRLF, and
+      rewriting it as LF would mark it as changed in git although it is not.
+    #>
     [CmdletBinding(SupportsShouldProcess)]
     param([Parameter(Mandatory)][string]$Root)
 
     $output = Get-DiagramOutput -Set (Import-DiagramSet -Root $Root)
     foreach ($path in $output.Keys) {
         $fullPath = Join-Path -Path $Root -ChildPath $path
+        if ((Test-Path -LiteralPath $fullPath) -and ([System.IO.File]::ReadAllText($fullPath).Replace("`r`n", "`n") -ceq $output[$path])) {
+            continue
+        }
         if ($PSCmdlet.ShouldProcess($fullPath, 'Write')) {
             [System.IO.File]::WriteAllText($fullPath, $output[$path], [System.Text.UTF8Encoding]::new($false))
         }
