@@ -30,11 +30,11 @@ Describe 'Get-LazyVMDiagnostic' {
             }
             [pscustomobject]@{ VMName = 'Alpha'; Settings = $settings }
         }
-        Mock -ModuleName $module Get-TrustedCodeCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Code the tasks run'; Status = 'OK'; Detail = '' } }
-        Mock -ModuleName $module Get-CloudSyncCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'OneDrive'; Status = 'OK'; Detail = '' } }
-        Mock -ModuleName $module Get-ModuleShadowCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Module copies'; Status = 'OK'; Detail = '' } }
-        Mock -ModuleName $module Get-RecoveryKeyCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Recovery keys'; Status = 'OK'; Detail = '' } }
-        Mock -ModuleName $module Get-RootAccessCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'LazyVM folder access'; Status = 'OK'; Detail = '' } }
+        Mock -ModuleName $module Get-TrustedCodeCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Code the tasks run'; Status = 'OK'; Detail = ''; Fix = '' } }
+        Mock -ModuleName $module Get-CloudSyncCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'OneDrive'; Status = 'OK'; Detail = ''; Fix = '' } }
+        Mock -ModuleName $module Get-ModuleShadowCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Module copies'; Status = 'OK'; Detail = ''; Fix = '' } }
+        Mock -ModuleName $module Get-RecoveryKeyCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'Recovery keys'; Status = 'OK'; Detail = ''; Fix = '' } }
+        Mock -ModuleName $module Get-RootAccessCheck { [pscustomobject]@{ PSTypeName = 'LazyVM.Check'; Name = 'Alpha'; Area = 'Host'; Check = 'LazyVM folder access'; Status = 'OK'; Detail = ''; Fix = '' } }
         Mock -ModuleName $module Test-IsoFile { $true }
         Mock -ModuleName $module Get-Item { [pscustomobject]@{ Length = 6GB } }
         Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; Heartbeat = 'OkApplicationsHealthy' } }
