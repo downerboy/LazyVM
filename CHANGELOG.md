@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.15.1](https://github.com/downerboy/LazyVM/compare/v6.15.0...v6.15.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* stop a failed refresh counting as no VMs ([#414](https://github.com/downerboy/LazyVM/issues/414)) ([abb1c45](https://github.com/downerboy/LazyVM/commit/abb1c45c95c73bb51f3611e2e10ae70eac4ff12f))
+
 ## [6.15.0](https://github.com/downerboy/LazyVM/compare/v6.14.0...v6.15.0) (2026-11-16)
 
 
