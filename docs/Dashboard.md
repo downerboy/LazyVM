@@ -87,9 +87,9 @@ src/LazyVM.UI.Wpf.Tests/     xUnit: view-model behavior against a fake command r
 - View models take the command-runner class through their constructor and never see PowerShell. Members a test replaces are `virtual`.
 - `ViewModelBase` implements `INotifyPropertyChanged` once. Other framework interfaces are implemented once, in base classes.
 - **Hosting PowerShell.** The runner opens one runspace and imports the installed module by full path from `%ProgramFiles%\LazyVM\Modules`. Calls use `PowerShell.InvokeAsync()`; Cancel uses `StopAsync()`. A runspace runs one pipeline at a time, so a second refresh waits for the first. The PowerShell version the app ships must be one the module supports, and the release build checks it.
-- `LazyVM.Api` and `LazyVM.Api.Tests` hold the module's own C# classes and belong to the module, not to the window. The window does not depend on them.
+- The module's own C# classes, such as `VMContext`, live in the module, in `src/LazyVM/Classes`, and are not part of the solution. The window does not depend on them.
 - Every project of the solution, tests included, sits in `src`. The repository's `tests` folder keeps only the module's Pester tests.
-- Names follow the .NET guidelines: two-letter acronyms in capitals (`UI`), longer ones in Pascal case (`Api`, `Wpf`).
+- Names follow the .NET guidelines: two-letter acronyms in capitals (`UI`), longer ones in Pascal case (`Wpf`).
 
 
 ## 5. Security
