@@ -14,6 +14,8 @@
     <SolidColorBrush x:Key="LvOnAccent" Color="{x:Static SystemColors.ControlTextColor}" />
     <SolidColorBrush x:Key="LvSevMedium" Color="{x:Static SystemColors.HighlightColor}" />
     <SolidColorBrush x:Key="LvOnSev" Color="{x:Static SystemColors.HighlightTextColor}" />
+    <SolidColorBrush x:Key="LvSelection" Color="{x:Static SystemColors.HighlightColor}" />
+    <SolidColorBrush x:Key="LvOnSelection" Color="{x:Static SystemColors.HighlightTextColor}" />
     <SolidColorBrush x:Key="LvHeader" Color="{x:Static SystemColors.WindowColor}" />
     <SolidColorBrush x:Key="LvOnHeader" Color="{x:Static SystemColors.WindowTextColor}" />
     <SolidColorBrush x:Key="LvOnHeaderMuted" Color="{x:Static SystemColors.WindowTextColor}" />

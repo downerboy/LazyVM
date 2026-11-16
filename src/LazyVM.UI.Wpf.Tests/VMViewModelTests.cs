@@ -57,6 +57,19 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ADiskWhoseCheckpointsTakeMoreThanItsSize_SaysWhy()
+    {
+        // Used counts the disk's checkpoint files too, so it can be more than the disk's size.
+        var vm = new VMViewModel(Sample.VM() with
+        {
+            DiskSpaceUsed = 148 * GB,
+            Disks = [new VMDisk("DevBox-OS.vhdx", @"D:\VMs\DevBox\DevBox-OS.vhdx", 148 * GB, 120 * GB)],
+        });
+
+        Assert.Equal(@"148 GB used with its checkpoints, disk size 120 GB, D:\VMs\DevBox\DevBox-OS.vhdx", Detail(vm, "Disk DevBox-OS.vhdx"));
+    }
+
+    [Fact]
     public void LastMaintenance_GivesResultDayAndTime()
     {
         var vm = new VMViewModel(Sample.VM());

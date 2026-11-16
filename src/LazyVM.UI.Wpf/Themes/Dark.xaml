@@ -15,6 +15,9 @@
     <SolidColorBrush x:Key="LvOnAccent" Color="#0B2E59" />
     <SolidColorBrush x:Key="LvSevMedium" Color="#FDB022" />
     <SolidColorBrush x:Key="LvOnSev" Color="#0A1628" />
+    <!-- The selected row of a list: the card border color with white text, about 9:1. -->
+    <SolidColorBrush x:Key="LvSelection" Color="#2A4468" />
+    <SolidColorBrush x:Key="LvOnSelection" Color="#FFFFFF" />
     <SolidColorBrush x:Key="LvHeader" Color="#0B2E59" />
     <SolidColorBrush x:Key="LvOnHeader" Color="#FFFFFF" />
     <SolidColorBrush x:Key="LvOnHeaderMuted" Color="#C9D6E5" />

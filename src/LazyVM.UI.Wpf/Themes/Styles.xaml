@@ -147,15 +147,62 @@
         <Setter Property="Padding" Value="12,8" />
     </Style>
 
+    <!-- The focus outline for an item inside a list: drawn on the item's edge, because the list would cut off one outside it. -->
+    <Style x:Key="LvItemFocusVisual">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Stroke="{DynamicResource LvFocus}" StrokeThickness="3" SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+      The selected row uses the theme's selection colors whether the window is
+      active or not: Windows' own are light grey in an inactive window, which
+      clashes with the dark theme. Keyboard focus sits on a cell, so the focus
+      outline is drawn on the cell's edge.
+    -->
+    <Style TargetType="DataGridRow" />
+
     <Style TargetType="DataGridCell">
         <Setter Property="Padding" Value="12" />
         <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LvItemFocusVisual}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="DataGridCell">
                     <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                         <ContentPresenter />
                     </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{DynamicResource LvSelection}" />
+                <Setter Property="Foreground" Value="{DynamicResource LvOnSelection}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- A list item: no Windows selection border; the theme's selection colors, and the focus outline on its edge. -->
+    <Style x:Key="LvListItem" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LvItemFocusVisual}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Row" Background="Transparent" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource LvSelection}" />
+                            <Setter Property="Foreground" Value="{DynamicResource LvOnSelection}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

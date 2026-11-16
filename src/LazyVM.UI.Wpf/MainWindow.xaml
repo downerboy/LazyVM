@@ -39,13 +39,14 @@
                 <TextBlock DockPanel.Dock="Top" Text="Your virtual machines" Style="{StaticResource LvHeading}" />
                 <TextBlock DockPanel.Dock="Top" Text="Press Enter on a VM to open its window." Style="{StaticResource LvMuted}" Margin="0,0,0,16" />
                 <DataGrid ItemsSource="{Binding VMs}" SelectedItem="{Binding SelectedVM}"
-                          AutomationProperties.Name="Your virtual machines">
+                          AutomationProperties.Name="Your virtual machines"
+                          GotKeyboardFocus="SelectFocusedRow">
                     <DataGrid.InputBindings>
                         <KeyBinding Key="Enter" Command="{Binding OpenVMCommand}" />
                         <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenVMCommand}" />
                     </DataGrid.InputBindings>
                     <DataGrid.RowStyle>
-                        <Style TargetType="DataGridRow">
+                        <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
                             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
                         </Style>
                     </DataGrid.RowStyle>
