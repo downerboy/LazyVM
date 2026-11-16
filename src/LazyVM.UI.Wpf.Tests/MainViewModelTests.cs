@@ -255,6 +255,21 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task HostChecks_AfterARefreshFailed_ChecksTheHostOnly()
+    {
+        // The empty list from before the failure no longer says there are no VMs.
+        runner.Returns();
+        runner.Throws(new InvalidOperationException("The LazyVM folder was not found."));
+        runner.ReturnsChecks(Sample.Check());
+        await main.RefreshAsync();
+        await main.RefreshAsync();
+
+        main.HostChecksCommand.Execute(null);
+
+        Assert.Equal([(null, true)], runner.CheckCalls);
+    }
+
+    [Fact]
     public async Task Refresh_UpdatesTheOpenVMWindows()
     {
         runner.Returns(Sample.VM("DevBox", "Running"));
