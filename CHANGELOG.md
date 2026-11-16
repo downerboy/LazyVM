@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.15.2](https://github.com/downerboy/LazyVM/compare/v6.15.1...v6.15.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* remove the answer-file disc when a build is stopped ([#417](https://github.com/downerboy/LazyVM/issues/417)) ([3d357c1](https://github.com/downerboy/LazyVM/commit/3d357c1fa5dd6b05349a270b6371e0b168c1f53d))
+
 ## [6.15.1](https://github.com/downerboy/LazyVM/compare/v6.15.0...v6.15.1) (2026-11-16)
 
 
