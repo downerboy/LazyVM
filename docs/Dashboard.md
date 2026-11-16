@@ -74,6 +74,8 @@ Not yet available: the name of the config template a VM was first created from. 
 - **Needs attention.** The open-findings badges, plus a "Needs attention" marker in the State column when the last maintenance failed or a settings problem exists. Every badge and marker has text for screen readers, for example "High 1 open finding" and "Needs attention: last maintenance failed".
 - **Refresh.** On open, on F5 or a Refresh button, and after any action. No live polling in this step; a running build updates its own progress.
 - **Builds.** Each build runs in its own elevated `pwsh` process and the window shows its progress from the VM's log, so closing or crashing the window never stops a build. Other actions run in-process.
+- **Checks.** On open, after the list, the app runs `Test-LazyVM -HostOnly`, or plain `Test-LazyVM` while there are no VMs, so the note on making the first one shows. The Checks window opens by itself only when there are no VMs, a check failed, or the checks could not run. A **Checks** button in the main window checks the host, and one in each VM window checks that VM. Each row reads as status, check, what was found, then the fix; Ctrl+C copies the fix.
+- **Log.** A **Log** button in each VM window shows the last 1000 entries of its log (`Get-LazyVMLog -Tail 1000`), oldest first, with the newest selected. Each entry reads as level, time, message. F8 and Shift+F8 go to the next and previous warning or error. The text is shown as plain text only, since the log is in the data folder.
 - Calls run off the UI thread and can be cancelled. A failure on one VM shows on that VM's row and does not blank the list.
 
 ### Structure
@@ -163,8 +165,8 @@ Each screen needs its command first. Where a command is missing (for example the
 
 1. This spec.
 2. `Get-LazyVMDashboard` in the module, with tests, help, diagram and guide. Done.
-3. `LazyVM.UI.Wpf`: the command-runner class, theme dictionaries, the main list and the VM window (read-only), view-model tests first.
-4. First-run checks and the log viewer.
+3. `LazyVM.UI.Wpf`: the command-runner class, theme dictionaries, the main list and the VM window (read-only), view-model tests first. Done.
+4. First-run checks and the log viewer. Done.
 5. Build, build progress and cancel, with each build in its own `pwsh` process; run from phase N; run maintenance now.
 6. Dispose and restore.
 7. Recovery keys and the password.

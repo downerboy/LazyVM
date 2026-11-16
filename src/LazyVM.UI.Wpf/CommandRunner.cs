@@ -45,8 +45,35 @@ public class CommandRunner : IDisposable
     /// <summary>Runs <c>Get-LazyVMDashboard</c>: one entry per VM.</summary>
     public virtual async Task<IReadOnlyList<VMDashboard>> GetDashboardAsync(CancellationToken cancellationToken)
     {
-        var output = await InvokeAsync("Get-LazyVMDashboard", cancellationToken).ConfigureAwait(false);
+        var output = await InvokeAsync("Get-LazyVMDashboard", [], cancellationToken).ConfigureAwait(false);
         return output.Select(ToDashboard).ToList();
+    }
+
+    /// <summary>
+    /// Runs <c>Test-LazyVM</c>: the checks of the VM <paramref name="name"/>,
+    /// or with no name, of the host and the only VM, if there is one.
+    /// <paramref name="hostOnly"/> checks the host alone.
+    /// </summary>
+    public virtual async Task<IReadOnlyList<VMCheck>> GetChecksAsync(string? name, bool hostOnly, CancellationToken cancellationToken)
+    {
+        var parameters = new List<(string, object)>();
+        if (name is not null)
+        {
+            parameters.Add(("Name", name));
+        }
+        if (hostOnly)
+        {
+            parameters.Add(("HostOnly", true));
+        }
+        var output = await InvokeAsync("Test-LazyVM", parameters, cancellationToken).ConfigureAwait(false);
+        return output.Select(ToCheck).ToList();
+    }
+
+    /// <summary>Runs <c>Get-LazyVMLog</c>: the last <paramref name="tail"/> entries of the VM's log, oldest first. None before there is a log.</summary>
+    public virtual async Task<IReadOnlyList<VMLogEntry>> GetLogAsync(string name, int tail, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMLog", [("Name", name), ("Tail", tail)], cancellationToken).ConfigureAwait(false);
+        return output.Select(ToLogEntry).ToList();
     }
 
     public void Dispose()
@@ -106,7 +133,23 @@ public class CommandRunner : IDisposable
         };
     }
 
-    private async Task<IReadOnlyList<PSObject>> InvokeAsync(string command, CancellationToken cancellationToken)
+    /// <summary>Reads one <c>LazyVM.Check</c> object.</summary>
+    internal static VMCheck ToCheck(PSObject check) => new(
+        Text(check, "Area"),
+        Text(check, "Check"),
+        Text(check, "Status"),
+        Text(check, "Detail"),
+        Text(check, "Fix"));
+
+    /// <summary>Reads one <c>LazyVM.LogEntry</c> object. A time that cannot be read is left empty.</summary>
+    internal static VMLogEntry ToLogEntry(PSObject entry) => new(
+        ReadDate(entry, "Time", "Time", []),
+        Text(entry, "Level"),
+        Text(entry, "Message"));
+
+    /// <summary>Runs <paramref name="command"/> with each parameter added by name, never as script text.</summary>
+    private async Task<IReadOnlyList<PSObject>> InvokeAsync(
+        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         await oneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -117,6 +160,10 @@ public class CommandRunner : IDisposable
 
             using var shell = PowerShell.Create(runspace);
             shell.AddCommand(command);
+            foreach (var (name, value) in parameters)
+            {
+                shell.AddParameter(name, value);
+            }
             PSDataCollection<PSObject> output;
             using (cancellationToken.Register(() => _ = shell.StopAsync(null, null)))
             {
@@ -222,6 +269,10 @@ public class CommandRunner : IDisposable
         var items = LanguagePrimitives.GetEnumerable(value);
         return items is null ? [PSObject.AsPSObject(value)] : items.Cast<object>().Select(PSObject.AsPSObject);
     }
+
+    /// <summary>A property as text; empty when it is missing or empty.</summary>
+    private static string Text(PSObject source, string name) =>
+        Unwrap(source.Properties[name]?.Value)?.ToString() ?? string.Empty;
 
     private static object? Unwrap(object? value) => value is PSObject wrapped ? wrapped.BaseObject : value;
 }

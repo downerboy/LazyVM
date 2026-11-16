@@ -1,15 +1,23 @@
 namespace LazyVM.UI.Wpf.ViewModels;
 
-/// <summary>A VM's own window: every detail the dashboard has about it. Read-only in this step.</summary>
+/// <summary>A VM's own window: every detail the dashboard has about it, and its checks and log.</summary>
 public sealed class VMViewModel : ViewModelBase
 {
     private VMDashboard entry;
 
-    public VMViewModel(VMDashboard entry)
+    public VMViewModel(VMDashboard entry, ToolWindows tools)
     {
         this.entry = entry;
         Details = ReadDetails(entry);
+        ChecksCommand = new RelayCommand(() => tools.OpenChecks(Name, hostOnly: false));
+        LogCommand = new RelayCommand(() => tools.OpenLog(Name));
     }
+
+    /// <summary>Opens the VM's checks (Test-LazyVM).</summary>
+    public RelayCommand ChecksCommand { get; }
+
+    /// <summary>Opens the VM's log.</summary>
+    public RelayCommand LogCommand { get; }
 
     public string Name => entry.Name;
 

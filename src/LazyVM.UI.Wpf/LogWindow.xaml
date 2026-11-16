@@ -1,0 +1,94 @@
+<Window x:Class="LazyVM.UI.Wpf.LogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:LazyVM.UI.Wpf"
+        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:LogViewModel}"
+        Title="{Binding Title}" Width="1000" Height="800" MinWidth="320"
+        Style="{StaticResource LvWindow}">
+    <Window.CommandBindings>
+        <CommandBinding Command="Close" Executed="CloseWindow" />
+    </Window.CommandBindings>
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="Close" />
+        <KeyBinding Key="F5" Command="{Binding ReloadCommand}" />
+        <KeyBinding Key="F8" Command="{Binding NextProblemCommand}" />
+        <KeyBinding Key="F8" Modifiers="Shift" Command="{Binding PreviousProblemCommand}" />
+    </Window.InputBindings>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
+            <DockPanel>
+                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Content="Previous problem" Command="{Binding PreviousProblemCommand}"
+                            AutomationProperties.Name="Previous warning or error (Shift+F8)" />
+                    <Button Content="Next problem" Command="{Binding NextProblemCommand}" Margin="8,0,0,0"
+                            AutomationProperties.Name="Next warning or error (F8)" />
+                    <Button Content="Read again" Command="{Binding ReloadCommand}" Margin="8,0,0,0"
+                            AutomationProperties.Name="Read the log again (F5)" />
+                </WrapPanel>
+                <TextBlock Text="{Binding Heading}" Style="{StaticResource LvTitle}" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24" Padding="24,16">
+            <StackPanel>
+                <TextBlock Text="Activity" Style="{StaticResource LvHeading}" />
+                <TextBlock Text="{Binding Status}" Style="{StaticResource LvStatus}"
+                           AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource LvPanel}" Margin="24">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Entries" Style="{StaticResource LvHeading}" />
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource LvMuted}" Margin="0,0,0,12"
+                           Text="Oldest first; the newest is selected. F8 goes to the next warning or error, Shift+F8 to the one before." />
+                <!-- A list, so the arrow keys move from one entry to the next and Narrator reads each: level, time, message. -->
+                <ListBox x:Name="List" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
+                         AutomationProperties.Name="Log entries" Grid.IsSharedSizeScope="True"
+                         BorderThickness="0" Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                         VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Item"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:LogEntryRowViewModel">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Level" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Time" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <!-- A warning or error on the attention color, with its level in words. -->
+                                <Border VerticalAlignment="Top" HorizontalAlignment="Left" Padding="6,0" CornerRadius="4" Margin="0,0,12,0">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsProblem}" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource LvSevMedium}" />
+                                                    <Setter Property="TextElement.Foreground" Value="{DynamicResource LvOnSev}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding Level}" FontWeight="SemiBold" />
+                                </Border>
+                                <TextBlock Grid.Column="1" Text="{Binding TimeText}" Margin="0,0,12,0" />
+                                <!-- Plain text only: the log is in the data folder, which is not trusted. -->
+                                <TextBlock Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap"
+                                           FontFamily="Cascadia Mono, Consolas" FontSize="15" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+    </DockPanel>
+</Window>
