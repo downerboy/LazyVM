@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.14.0](https://github.com/downerboy/LazyVM/compare/v6.13.0...v6.14.0) (2026-11-16)
+
+
+### Features
+
+* give each Test-LazyVM check a Fix, apart from what was found ([#410](https://github.com/downerboy/LazyVM/issues/410)) ([8f3c906](https://github.com/downerboy/LazyVM/commit/8f3c906a1839027c6479d86448506d72b86bec19))
+
 ## [6.13.0](https://github.com/downerboy/LazyVM/compare/v6.12.0...v6.13.0) (2026-11-16)
 
 
