@@ -6,12 +6,15 @@ public sealed class MainViewModelTests : IDisposable
 {
     private readonly CultureScope culture = new("en-GB");
     private readonly FakeCommandRunner runner = new();
-    private readonly FakeVMWindowManager windows = new();
+    private readonly FakeToolWindows tools;
+    private readonly FakeVMWindowManager windows;
     private readonly MainViewModel main;
 
     public MainViewModelTests()
     {
-        main = new MainViewModel(runner, windows, new FixedClock(new DateTimeOffset(2026, 11, 14, 14, 52, 0, TimeSpan.Zero)));
+        tools = new FakeToolWindows(runner);
+        windows = new FakeVMWindowManager(tools);
+        main = new MainViewModel(runner, windows, tools, new FixedClock(new DateTimeOffset(2026, 11, 14, 14, 52, 0, TimeSpan.Zero)));
     }
 
     public void Dispose() => culture.Dispose();
@@ -162,6 +165,93 @@ public sealed class MainViewModelTests : IDisposable
 
         Assert.Equal(2, windows.Shown.Count);
         Assert.Empty(windows.BroughtToFront);
+    }
+
+    [Fact]
+    public async Task Start_WithNoVMs_ShowsTheChecks_WithTheNoteOnTheFirstVM()
+    {
+        runner.Returns();
+        runner.ReturnsChecks(Sample.Check(), Sample.Check(VMCheck.Info, "VMs", "none yet", "Create the first one with: New-LazyVM -Name <Name>"));
+
+        await main.StartAsync();
+
+        // Without -HostOnly, Test-LazyVM adds the note that there are no VMs yet.
+        Assert.Equal([(null, false)], runner.CheckCalls);
+        Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown));
+    }
+
+    [Fact]
+    public async Task Start_WhenAHostCheckFails_ShowsTheChecks()
+    {
+        runner.Returns(Sample.VM("DevBox"));
+        runner.ReturnsChecks(Sample.Check(VMCheck.Failed, "Folder access", "others can change it"));
+
+        await main.StartAsync();
+
+        Assert.Equal([(null, true)], runner.CheckCalls);
+        Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown));
+    }
+
+    [Fact]
+    public async Task Start_WithVMsAndNoFailedCheck_ShowsNoChecks()
+    {
+        runner.Returns(Sample.VM("DevBox"));
+        runner.ReturnsChecks(Sample.Check(VMCheck.OK), Sample.Check(VMCheck.Info), Sample.Check(VMCheck.Warning));
+
+        await main.StartAsync();
+
+        Assert.Empty(tools.Shown);
+        Assert.Equal("Refreshed 1 VM at 14:52", main.Status);
+    }
+
+    [Fact]
+    public async Task Start_WhenTheRefreshFails_ChecksTheHostOnly()
+    {
+        // A failed refresh says nothing about whether there are VMs.
+        runner.Throws(new InvalidOperationException("The LazyVM folder was not found."));
+        runner.ReturnsChecks(Sample.Check(VMCheck.OK));
+
+        await main.StartAsync();
+
+        Assert.Equal([(null, true)], runner.CheckCalls);
+        Assert.Empty(tools.Shown);
+    }
+
+    [Fact]
+    public async Task Start_WhenTheChecksCannotRun_ShowsTheChecksSayingWhy()
+    {
+        runner.Returns(Sample.VM("DevBox"));
+        runner.ChecksThrow(new InvalidOperationException("Run LazyVM as administrator."));
+
+        await main.StartAsync();
+
+        var checks = Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown));
+        Assert.Equal("Checks could not run: Run LazyVM as administrator.", checks.Status);
+    }
+
+    [Fact]
+    public async Task HostChecks_WithVMs_ChecksTheHostOnly()
+    {
+        runner.Returns(Sample.VM("DevBox"));
+        runner.ReturnsChecks(Sample.Check());
+        await main.RefreshAsync();
+
+        main.HostChecksCommand.Execute(null);
+
+        Assert.Equal([(null, true)], runner.CheckCalls);
+        Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown));
+    }
+
+    [Fact]
+    public async Task HostChecks_WithNoVMs_AlsoSaysThereAreNone()
+    {
+        runner.Returns();
+        runner.ReturnsChecks(Sample.Check());
+        await main.RefreshAsync();
+
+        main.HostChecksCommand.Execute(null);
+
+        Assert.Equal([(null, false)], runner.CheckCalls);
     }
 
     [Fact]

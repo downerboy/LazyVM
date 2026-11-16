@@ -7,8 +7,40 @@ public sealed class VMViewModelTests : IDisposable
     private const long GB = 1024L * 1024 * 1024;
 
     private readonly CultureScope culture = new("en-GB");
+    private readonly FakeCommandRunner runner = new();
+    private readonly FakeToolWindows tools;
+
+    public VMViewModelTests()
+    {
+        tools = new FakeToolWindows(runner);
+    }
 
     public void Dispose() => culture.Dispose();
+
+    private VMViewModel Open(VMDashboard entry) => new(entry, tools);
+
+    [Fact]
+    public void Checks_OpensTheVMsChecks()
+    {
+        runner.ReturnsChecks(Sample.Check());
+        var vm = Open(Sample.VM("DevEnv"));
+
+        vm.ChecksCommand.Execute(null);
+
+        Assert.Equal("DevEnv", Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown)).VMName);
+        Assert.Equal([("DevEnv", false)], runner.CheckCalls);
+    }
+
+    [Fact]
+    public void Log_OpensTheVMsLog()
+    {
+        runner.ReturnsLog();
+        var vm = Open(Sample.VM("DevEnv"));
+
+        vm.LogCommand.Execute(null);
+
+        Assert.Equal("DevEnv", Assert.IsType<LogViewModel>(Assert.Single(tools.Shown)).VMName);
+    }
 
     private static string? Detail(VMViewModel vm, string label) =>
         vm.Details.SingleOrDefault(detail => detail.Label == label)?.Value;
@@ -16,7 +48,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Title_NamesTheVM()
     {
-        var vm = new VMViewModel(Sample.VM("DevEnv"));
+        var vm = Open(Sample.VM("DevEnv"));
 
         Assert.Equal("DevEnv", vm.Name);
         Assert.Equal("DevEnv - LazyVM", vm.Title);
@@ -25,7 +57,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Memory_IsShownInGB()
     {
-        var vm = new VMViewModel(Sample.VM() with { MemoryAssigned = 8 * GB });
+        var vm = Open(Sample.VM() with { MemoryAssigned = 8 * GB });
 
         Assert.Equal("8 GB", Detail(vm, "Memory in use"));
     }
@@ -33,7 +65,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Memory_OfAVMThatIsOff_IsNone()
     {
-        var vm = new VMViewModel(Sample.VM(state: "Off") with { MemoryAssigned = 0 });
+        var vm = Open(Sample.VM(state: "Off") with { MemoryAssigned = 0 });
 
         Assert.Equal("None", Detail(vm, "Memory in use"));
     }
@@ -41,7 +73,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Disks_ShowTheTotalAndEachDisk()
     {
-        var vm = new VMViewModel(Sample.VM() with
+        var vm = Open(Sample.VM() with
         {
             DiskSpaceUsed = 214 * GB + GB / 2,
             Disks =
@@ -60,7 +92,7 @@ public sealed class VMViewModelTests : IDisposable
     public void ADiskWhoseCheckpointsTakeMoreThanItsSize_SaysWhy()
     {
         // Used counts the disk's checkpoint files too, so it can be more than the disk's size.
-        var vm = new VMViewModel(Sample.VM() with
+        var vm = Open(Sample.VM() with
         {
             DiskSpaceUsed = 148 * GB,
             Disks = [new VMDisk("DevBox-OS.vhdx", @"D:\VMs\DevBox\DevBox-OS.vhdx", 148 * GB, 120 * GB)],
@@ -72,7 +104,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void LastMaintenance_GivesResultDayAndTime()
     {
-        var vm = new VMViewModel(Sample.VM());
+        var vm = Open(Sample.VM());
 
         Assert.Equal("Succeeded, 12 November 2026 02:10", Detail(vm, "Last maintenance"));
     }
@@ -80,7 +112,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Maintenance_GivesTimeAndTask()
     {
-        var vm = new VMViewModel(Sample.VM() with { MaintenanceTime = "02:00" });
+        var vm = Open(Sample.VM() with { MaintenanceTime = "02:00" });
 
         Assert.Equal("Daily at 02:00, task registered", Detail(vm, "Maintenance"));
     }
@@ -88,7 +120,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void SecurityScan_GivesDayAndOpenFindings()
     {
-        var vm = new VMViewModel(Sample.VM() with { LastSecurityScan = new DateTime(2026, 11, 13, 3, 0, 0), OpenFindings = 3 });
+        var vm = Open(Sample.VM() with { LastSecurityScan = new DateTime(2026, 11, 13, 3, 0, 0), OpenFindings = 3 });
 
         Assert.Equal("13 November 2026 03:00, 3 open findings", Detail(vm, "Last security scan"));
     }
@@ -96,7 +128,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void SecurityScan_BeforeTheFirstScan()
     {
-        var vm = new VMViewModel(Sample.VM() with { LastSecurityScan = null, OpenFindings = null });
+        var vm = Open(Sample.VM() with { LastSecurityScan = null, OpenFindings = null });
 
         Assert.Equal("Not scanned yet", Detail(vm, "Last security scan"));
     }
@@ -104,7 +136,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void GreenTemplate_GivesNameAndWhenItChanged()
     {
-        var vm = new VMViewModel(Sample.VM() with { GreenTemplate = "DevBox-latest", GreenTemplateUpdated = new DateTime(2026, 11, 13, 3, 5, 0) });
+        var vm = Open(Sample.VM() with { GreenTemplate = "DevBox-latest", GreenTemplateUpdated = new DateTime(2026, 11, 13, 3, 5, 0) });
 
         Assert.Equal("DevBox-latest, updated 13 November 2026 03:05", Detail(vm, "Green template"));
     }
@@ -112,7 +144,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void MissingValues_ReadAsNotKnown()
     {
-        var vm = new VMViewModel(new VMDashboard { Name = "DevBox", State = "Unknown" });
+        var vm = Open(new VMDashboard { Name = "DevBox", State = "Unknown" });
 
         Assert.Equal("Not known", Detail(vm, "Created"));
         Assert.Equal("Not known", Detail(vm, "Memory in use"));
@@ -122,7 +154,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void AVMNotBuiltYet_SaysSoInsteadOfNotKnown()
     {
-        var vm = new VMViewModel(new VMDashboard { Name = "TestBox", State = "Not built" });
+        var vm = Open(new VMDashboard { Name = "TestBox", State = "Not built" });
 
         Assert.Equal("Not built yet", Detail(vm, "Created"));
         Assert.Equal("Not built yet", Detail(vm, "Memory in use"));
@@ -132,7 +164,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void WhatCouldNotBeRead_IsListed()
     {
-        var vm = new VMViewModel(Sample.VM() with { Problems = ["Hyper-V: access denied", "Disks: access denied"] });
+        var vm = Open(Sample.VM() with { Problems = ["Hyper-V: access denied", "Disks: access denied"] });
 
         Assert.Equal(
             ["Hyper-V: access denied", "Disks: access denied"],
@@ -142,7 +174,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void EachDetail_ReadsAsLabelAndValue()
     {
-        var vm = new VMViewModel(Sample.VM());
+        var vm = Open(Sample.VM());
 
         Assert.Equal("State: Running", vm.Details.Single(detail => detail.Label == "State").AutomationName);
     }
@@ -150,7 +182,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Update_ReplacesTheDetails()
     {
-        var vm = new VMViewModel(Sample.VM(state: "Running"));
+        var vm = Open(Sample.VM(state: "Running"));
         var changed = new List<string?>();
         vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 

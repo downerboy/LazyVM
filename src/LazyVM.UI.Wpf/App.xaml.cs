@@ -18,10 +18,11 @@ public partial class App : Application
         });
 
         runner = new CommandRunner();
-        var main = new MainViewModel(runner, new VMWindowManager(), TimeProvider.System);
+        var tools = new ToolWindows(runner);
+        var main = new MainViewModel(runner, new VMWindowManager(tools), tools, TimeProvider.System);
         MainWindow = new MainWindow { DataContext = main };
         MainWindow.Show();
-        main.RefreshCommand.Execute(null);
+        _ = main.StartAsync();
     }
 
     protected override void OnExit(ExitEventArgs e)

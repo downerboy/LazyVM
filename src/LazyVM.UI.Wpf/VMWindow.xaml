@@ -17,10 +17,18 @@
 
     <DockPanel>
         <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
-            <StackPanel>
-                <TextBlock Text="{Binding Name}" Style="{StaticResource LvTitle}" />
-                <TextBlock Text="{Binding State}" Style="{StaticResource LvSubtitle}" />
-            </StackPanel>
+            <DockPanel>
+                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Content="Checks" Command="{Binding ChecksCommand}"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Checks of {0}'}" />
+                    <Button Content="Log" Command="{Binding LogCommand}" Margin="8,0,0,0"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Log of {0}'}" />
+                </WrapPanel>
+                <StackPanel>
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource LvTitle}" />
+                    <TextBlock Text="{Binding State}" Style="{StaticResource LvSubtitle}" />
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <Border Style="{StaticResource LvPanel}" Margin="24">

@@ -192,4 +192,45 @@ public sealed class CommandRunnerTests
 
         Assert.False(runner.IsStarted);
     }
+
+    [Fact]
+    public void ToCheck_ReadsEveryField()
+    {
+        var check = CommandRunner.ToCheck(Entry(
+            ("Name", "DevBox"),
+            ("Area", "Schedule"),
+            ("Check", "Maintenance task"),
+            ("Status", "WARN"),
+            ("Detail", "not scheduled"),
+            ("Fix", "Schedule it with: Register-LazyVMMaintenance -Name DevBox")));
+
+        Assert.Equal(new VMCheck("Schedule", "Maintenance task", "WARN", "not scheduled", "Schedule it with: Register-LazyVMMaintenance -Name DevBox"), check);
+    }
+
+    [Fact]
+    public void ToCheck_WithoutAFix_HasAnEmptyFix()
+    {
+        var check = CommandRunner.ToCheck(Entry(("Area", "Host"), ("Check", "LazyVM folder"), ("Status", "OK"), ("Detail", @"C:\Users\me\LazyVM")));
+
+        Assert.Equal(string.Empty, check.Fix);
+    }
+
+    [Fact]
+    public void ToLogEntry_ReadsEveryField()
+    {
+        var time = new DateTime(2026, 11, 12, 2, 10, 5);
+
+        var entry = CommandRunner.ToLogEntry(Entry(("Time", time), ("Level", "Error"), ("Message", "Windows Update failed\nwith 0x80070005")));
+
+        Assert.Equal(new VMLogEntry(time, "Error", "Windows Update failed\nwith 0x80070005"), entry);
+    }
+
+    [Fact]
+    public void ToLogEntry_ATimeThatCannotBeRead_IsLeftEmpty()
+    {
+        var entry = CommandRunner.ToLogEntry(Entry(("Time", "yesterday"), ("Level", "Info"), ("Message", "Started")));
+
+        Assert.Null(entry.Time);
+        Assert.Equal("Started", entry.Message);
+    }
 }

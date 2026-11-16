@@ -8,6 +8,7 @@ public sealed class MainViewModel : ViewModelBase
 {
     private readonly CommandRunner runner;
     private readonly VMWindowManager windows;
+    private readonly ToolWindows tools;
     private readonly TimeProvider clock;
     private readonly RelayCommand refreshCommand;
     private readonly RelayCommand cancelRefreshCommand;
@@ -15,12 +16,15 @@ public sealed class MainViewModel : ViewModelBase
     private CancellationTokenSource? refreshing;
     private VMRowViewModel? selectedVM;
     private string status = string.Empty;
+    private bool listIsKnown;
 
-    public MainViewModel(CommandRunner runner, VMWindowManager windows, TimeProvider clock)
+    public MainViewModel(CommandRunner runner, VMWindowManager windows, ToolWindows tools, TimeProvider clock)
     {
         this.runner = runner;
         this.windows = windows;
+        this.tools = tools;
         this.clock = clock;
+        HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, HostOnly()));
         refreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         cancelRefreshCommand = new RelayCommand(() => refreshing?.Cancel(), () => IsRefreshing);
         openVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);
@@ -57,6 +61,34 @@ public sealed class MainViewModel : ViewModelBase
     /// <summary>Opens the selected VM's window, or brings it to the front when it is open (Enter, double-click).</summary>
     public RelayCommand OpenVMCommand => openVMCommand;
 
+    /// <summary>Opens the checks of this host (Test-LazyVM).</summary>
+    public RelayCommand HostChecksCommand { get; }
+
+    /// <summary>
+    /// Reads the list, then checks the host. The checks show by themselves
+    /// only when they are needed: before the first VM, when a host check
+    /// failed, or when the checks could not run.
+    /// </summary>
+    public async Task StartAsync()
+    {
+        await RefreshAsync();
+        var checks = new ChecksViewModel(runner, null, HostOnly());
+        await checks.RunAsync();
+        if (NoVMs() || checks.HasFailures || checks.CouldNotRun)
+        {
+            tools.ShowChecks(checks);
+        }
+    }
+
+    /// <summary>True only once a refresh has found no VMs; a failed refresh says nothing about them.</summary>
+    private bool NoVMs() => listIsKnown && VMs.Count == 0;
+
+    /// <summary>
+    /// The host alone, unless there are no VMs: then Test-LazyVM adds a
+    /// note that there are none yet, saying how to make the first.
+    /// </summary>
+    private bool HostOnly() => !NoVMs();
+
     /// <summary>
     /// Reads every VM and updates the list and the open VM windows. A failure
     /// or a cancel keeps the list as it was and says so in <see cref="Status"/>.
@@ -74,6 +106,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             var entries = await runner.GetDashboardAsync(cancel.Token);
             ShowInList(entries);
+            listIsKnown = true;
             windows.Update(entries);
             var count = entries.Count == 1 ? "1 VM" : $"{entries.Count} VMs";
             Status = $"Refreshed {count} at {clock.GetLocalNow().ToString("t", CultureInfo.CurrentCulture)}";

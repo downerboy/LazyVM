@@ -21,6 +21,8 @@
                             AutomationProperties.Name="Refresh the list (F5)" />
                     <Button Content="Cancel refresh" Command="{Binding CancelRefreshCommand}" Margin="8,0,0,0"
                             Visibility="{Binding IsRefreshing, Converter={StaticResource VisibleWhenTrue}}" />
+                    <Button Content="Checks" Command="{Binding HostChecksCommand}" Margin="8,0,0,0"
+                            AutomationProperties.Name="Checks of this host" />
                 </WrapPanel>
                 <TextBlock Text="LazyVM" Style="{StaticResource LvTitle}" VerticalAlignment="Center" />
             </DockPanel>

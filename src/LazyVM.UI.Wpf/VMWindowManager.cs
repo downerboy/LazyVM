@@ -4,7 +4,7 @@ using LazyVM.UI.Wpf.ViewModels;
 namespace LazyVM.UI.Wpf;
 
 /// <summary>Keeps one window per VM: opening a VM whose window is open brings that window to the front.</summary>
-public class VMWindowManager
+public class VMWindowManager(ToolWindows tools)
 {
     private readonly Dictionary<string, VMViewModel> open = new(StringComparer.OrdinalIgnoreCase);
 
@@ -15,7 +15,7 @@ public class VMWindowManager
             BringToFront(existing);
             return;
         }
-        var viewModel = new VMViewModel(entry);
+        var viewModel = new VMViewModel(entry, tools);
         open.Add(entry.Name, viewModel);
         Show(viewModel, () => open.Remove(entry.Name));
     }
