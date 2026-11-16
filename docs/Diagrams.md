@@ -239,7 +239,7 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
 6. `Invoke-VMBuild` (Host): runs the phases from -FromPhase or the resume point, whichever is later
 7. `Get-ResumePhase` (Host, called by Invoke-VMBuild): picks up after a host restart
    - Reads D12, phase to resume at: <VM>\Config\ (Resume.json)
-8. `Invoke-BuildPhase` (Host, called by Invoke-VMBuild): runs each phase of Get-BuildPhase in order (steps 7-18); when a phase throws, deletes the answer-file disc first
+8. `Invoke-BuildPhase` (Host, called by Invoke-VMBuild): runs each phase of Get-BuildPhase in order (steps 7-18); when a phase throws or the build is stopped, deletes the answer-file disc first
    - Also runs `Get-BuildPhase`, `Remove-UnattendSeedDisk`
 9. `Initialize-InstallationIso` (Host, called by Invoke-BuildPhase): the Windows ISO, before anything changes; opens the download page and stops if there is none
    - Reads D13, Windows ISO: Shared\ISO\  or  Downloads\ (Windows 11 Enterprise, Evaluation ISO)

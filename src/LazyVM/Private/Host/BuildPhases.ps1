@@ -73,9 +73,11 @@ function Invoke-BuildPhase {
       still there to fetch it; a host restart would hand it to the resume
       task, which runs as SYSTEM and can only log it. Returns a BuildOutcome:
       CompleteWithProblems when a phase returned it, because a step in it
-      failed and the phase carried on. When a phase fails, the answer-file
-      disc goes before the error does: it holds the guest password in clear
-      text, and phase 7 only removes it once the guest is ready (#247).
+      failed and the phase carried on. When a phase fails, or the build is
+      stopped (Ctrl+C), the answer-file disc goes before the build ends: it
+      holds the guest password in clear text, and phase 7 only removes it
+      once the guest is ready (#247). A stop runs finally blocks but no catch
+      block, so the disc goes in a finally (#416).
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -87,11 +89,15 @@ function Invoke-BuildPhase {
 
     $run = @{ NoUnattend = [bool]$NoUnattend; UseUnattend = $false }
     $withProblems = [System.Collections.Generic.List[int]]::new()
+    $phasesEnded = $false
     try {
         foreach ($phase in @(Get-BuildPhase | Where-Object { $_.Number -ge $FromPhase })) {
             Write-LogEntry "PHASE $($phase.Number) - $($phase.Name)" 'PHASE'
             $outcome = @(& $phase.Action $VM $run) | Where-Object { $_ -is [BuildOutcome] } | Select-Object -Last 1
-            if ($outcome -eq [BuildOutcome]::RestartPending) { return [BuildOutcome]::RestartPending }
+            if ($outcome -eq [BuildOutcome]::RestartPending) {
+                $phasesEnded = $true
+                return [BuildOutcome]::RestartPending
+            }
             if ($outcome -eq [BuildOutcome]::CompleteWithProblems) {
                 $withProblems.Add($phase.Number)
                 Write-LogEntry "Phase $($phase.Number) finished with problems - see the errors above" 'WARN'
@@ -100,10 +106,11 @@ function Invoke-BuildPhase {
                 Write-LogEntry "Phase $($phase.Number) complete" 'OK'
             }
         }
+        $phasesEnded = $true
     }
-    catch {
+    finally {
         # Only when there is one: before phase 2, Hyper-V may not be there to ask.
-        if (Test-Path -LiteralPath $VM.Settings.SeedDiskPath) {
+        if (-not $phasesEnded -and (Test-Path -LiteralPath $VM.Settings.SeedDiskPath)) {
             # A disc that could not be deleted is already reported as one to delete by hand.
             $seedDiskDeleted = Remove-UnattendSeedDisk -VM $VM
             # Without a VM, the next run builds a new disc along with it.
@@ -112,7 +119,6 @@ function Invoke-BuildPhase {
                 Write-LogEntry 'The answer-file disc is gone, so Windows Setup cannot finish unattended: finish it by hand in the VM console, or remove the VM and build it again.' 'WARN'
             }
         }
-        throw
     }
     if ($withProblems.Count -gt 0) {
         Write-LogEntry "Phases with problems: $($withProblems -join ', ') - re-run with -FromPhase $($withProblems[0]) once the cause is fixed" 'WARN'
