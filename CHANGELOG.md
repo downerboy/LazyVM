@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.12.0](https://github.com/downerboy/LazyVM/compare/v6.11.0...v6.12.0) (2026-11-16)
+
+
+### Features
+
+* run Test-LazyVM's host checks with no VM, and add -HostOnly ([#403](https://github.com/downerboy/LazyVM/issues/403)) ([6141dc4](https://github.com/downerboy/LazyVM/commit/6141dc491cd9227569d4e9de7f3cadcb79eefee9))
+
 ## [6.11.0](https://github.com/downerboy/LazyVM/compare/v6.10.0...v6.11.0) (2026-11-14)
 
 
