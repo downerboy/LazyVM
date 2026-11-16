@@ -102,6 +102,7 @@ public sealed class MainViewModel : ViewModelBase
         using var cancel = new CancellationTokenSource();
         SetRefreshing(cancel);
         Status = "Refreshing";
+        listIsKnown = false;
         try
         {
             var entries = await runner.GetDashboardAsync(cancel.Token);
