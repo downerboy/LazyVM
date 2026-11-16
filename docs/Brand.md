@@ -29,6 +29,8 @@ All pairs meet WCAG AA (4.5:1) for text; most meet AAA.
 | `--lv-accent-hover` | `#FFC929` | Button hover/pressed |
 | `--lv-on-accent` | `#0B2E59` | Button text (about 10:1 on yellow) |
 | `--lv-on-sev` | `#FFFFFF` | Severity badge text (`#0A1628` in the dark theme) |
+| `--lv-selection` | `#0B2E59` | Selected row of a list in the app, active window or not |
+| `--lv-on-selection` | `#FFFFFF` | Text on the selected row (about 13:1) |
 
 ### Severity
 
@@ -127,12 +129,15 @@ Shapes differ as well as colors, so severities stay distinct for color-blind use
 | `--lv-tint` | `#16304F` |
 | Severity High / Med / Low | `#F97066` / `#FDB022` / `#84ADFF` |
 | `--lv-on-sev` | `#0A1628` |
+| `--lv-selection` / `--lv-on-selection` | `#2A4468` / `#FFFFFF` (about 9:1) |
 
 Severity badges use dark text (`#0A1628`) in the dark theme. White text is too faint on the lighter dark-theme severity colors; dark text gives at least 7:1.
 
 The accent and button styles are unchanged. The command box becomes `#0A1628` with `--lv-ink` text.
 
 The focus outline is yellow (`--lv-accent`, `#FFD75E`) in the dark theme: navy is too faint on the dark page to see.
+
+In the app, an item inside a list (a grid cell or a list item) draws its focus outline on its own edge, not 2px outside, because the list would cut it off. In High Contrast the selection uses the system Highlight and HighlightText colors.
 
 ## 9. Console (PowerShell) theme
 

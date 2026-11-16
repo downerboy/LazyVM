@@ -32,10 +32,8 @@
                          Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
                             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
-                            <Setter Property="Padding" Value="0,4" />
-                            <Setter Property="FocusVisualStyle" Value="{StaticResource LvFocusVisual}" />
                         </Style>
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>

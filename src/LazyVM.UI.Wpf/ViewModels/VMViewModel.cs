@@ -47,9 +47,12 @@ public sealed class VMViewModel : ViewModelBase
                 : missing),
         };
 
+        // Used counts the disk's checkpoint files too, so it can be more than the disk's size; say why then.
         details.AddRange(vm.Disks.Select(disk => new VMDetail(
             "Disk " + disk.Name,
-            $"{DashboardText.Size(disk.Used)} used of {DashboardText.Size(disk.Maximum)}, {disk.Path}")));
+            disk.Used > disk.Maximum
+                ? $"{DashboardText.Size(disk.Used)} used with its checkpoints, disk size {DashboardText.Size(disk.Maximum)}, {disk.Path}"
+                : $"{DashboardText.Size(disk.Used)} used of {DashboardText.Size(disk.Maximum)}, {disk.Path}")));
 
         details.Add(new("Maintenance", MaintenanceText(vm)));
         details.Add(new("Last maintenance", DashboardText.LastMaintenance(vm, DashboardText.When)));

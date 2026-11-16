@@ -14,6 +14,9 @@
     <SolidColorBrush x:Key="LvOnAccent" Color="#0B2E59" />
     <SolidColorBrush x:Key="LvSevMedium" Color="#B54708" />
     <SolidColorBrush x:Key="LvOnSev" Color="#FFFFFF" />
+    <!-- The selected row of a list: navy with white text, about 13:1, the same whether the window is active or not. -->
+    <SolidColorBrush x:Key="LvSelection" Color="#0B2E59" />
+    <SolidColorBrush x:Key="LvOnSelection" Color="#FFFFFF" />
     <!-- The header bar: navy, with white text and the light border color under it. -->
     <SolidColorBrush x:Key="LvHeader" Color="#0B2E59" />
     <SolidColorBrush x:Key="LvOnHeader" Color="#FFFFFF" />
