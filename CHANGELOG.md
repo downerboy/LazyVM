@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.13.0](https://github.com/downerboy/LazyVM/compare/v6.12.0...v6.13.0) (2026-11-16)
+
+
+### Features
+
+* add Get-LazyVMLog, a VM's log as entries ([#408](https://github.com/downerboy/LazyVM/issues/408)) ([ca85d5d](https://github.com/downerboy/LazyVM/commit/ca85d5d70ffe9e49e107bb1247a8f26ce6bfb3aa))
+
 ## [6.12.0](https://github.com/downerboy/LazyVM/compare/v6.11.0...v6.12.0) (2026-11-16)
 
 
