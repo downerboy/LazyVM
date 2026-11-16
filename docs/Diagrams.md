@@ -940,7 +940,7 @@ Checks the LazyVM folder and its set-up on this host first, even before the firs
    - Reads D3, stored and exported keys: <VM>\ (Credentials\bitlocker.cred, Config\RecoveryKeyExport.json)
    - Reads D4, VM and task: Hyper-V and Task Scheduler (VM <VM>, LazyVM-Maintain-<VM>)
    - Reads D5, guest set-up, if running: Running guest (PowerShell Direct, disks, automatic sign-in on or off)
-   - Writes D6, checks: Pipeline (Status, Area, Check, Detail)
+   - Writes D6, checks: Pipeline (Status, Area, Check, Detail, Fix)
 2. `Set-Content` (PowerShell): only with -ReportPath: the same checks as a text report
    - Writes D7, report: -ReportPath (<file>)
 

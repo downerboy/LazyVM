@@ -102,7 +102,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="st" x="875" y="194" text-anchor="middle">«output»</text>
 <text class="nm" x="875" y="210" text-anchor="middle">Pipeline</text>
 <line class="div" x1="740" y1="217" x2="1010" y2="217"/>
-<text class="at" x="750" y="232">Status, Area, Check, Detail</text>
+<text class="at" x="750" y="232">Status, Area, Check, Detail, Fix</text>
 </g>
 <g class="bx-mod"><rect x="335" y="676" width="305" height="84" rx="3"/>
 <text class="st" x="500.5" y="690" text-anchor="middle">«PowerShell»</text>

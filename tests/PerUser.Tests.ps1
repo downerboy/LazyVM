@@ -164,7 +164,8 @@ Describe 'Get-RootAccessCheck (#284)' {
         $check = InModuleScope $module { Get-RootAccessCheck -Name 'Alpha' -Root 'C:\Users\sean\LazyVM' }
 
         $check.Status | Should -Be 'WARN'
-        $check.Detail | Should -BeLike '*name of S-1-5-32-544*Set-LazyVMRoot -Path C:\Users\sean\LazyVM*'
+        $check.Detail | Should -BeLike '*name of S-1-5-32-544*'
+        $check.Fix | Should -Be 'Lock it to you and SYSTEM again with: Set-LazyVMRoot -Path C:\Users\sean\LazyVM'
     }
 
     It 'fails, rather than stopping the other checks, when the access cannot be read' {
@@ -465,7 +466,8 @@ Describe 'A LazyVM folder in OneDrive (#284)' {
         $check = InModuleScope $module { Get-CloudSyncCheck -Name 'Alpha' -Root 'C:\Users\sean\LazyVM' }
 
         $check.Status | Should -Be 'WARN'
-        $check.Detail | Should -BeLike '*Documents\PowerShell\Modules\LazyVM\6.0.0 in OneDrive*Install.ps1*'
+        $check.Detail | Should -BeLike '*Documents\PowerShell\Modules\LazyVM\6.0.0 in OneDrive*'
+        $check.Fix | Should -BeLike '*Install.ps1*outside OneDrive*'
     }
 
     It 'is not reported when neither is in OneDrive' {

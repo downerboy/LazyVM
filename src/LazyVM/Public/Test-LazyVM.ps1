@@ -18,9 +18,11 @@ function Test-LazyVM {
         marker and automatic sign-in
       - the maintenance task's last result and next run
 
-    Each check is OK, INFO, WARN or FAIL. Nothing is changed: a VM that is
-    not running is not started, and its guest is not checked. Automatic
-    sign-in is shown as on or off with its user name, never its password.
+    Each check is OK, INFO, WARN or FAIL. Detail says what was found, and
+    Fix, when there is a known fix, what to do about it, ending with the
+    command to run. Nothing is changed: a VM that is not running is not
+    started, and its guest is not checked. Automatic sign-in is shown as on
+    or off with its user name, never its password.
 
     The host checks (the LazyVM folder, its access, OneDrive, the code the
     tasks run and the module copies) come first and need no VM. Before the
@@ -35,7 +37,8 @@ function Test-LazyVM {
     Run only the host checks, touching no VM.
 
     .PARAMETER ReportPath
-    Also write the checks to this text file, for sharing or keeping.
+    Also write the checks to this text file, for sharing or keeping. Each
+    fix goes on its own line under its check.
 
     .EXAMPLE
     Test-LazyVM -Name DevBox
@@ -69,7 +72,10 @@ function Test-LazyVM {
         if ($ReportPath) {
             $subject = if ($checks -and $checks[0].Name) { $checks[0].Name } elseif ($Name) { $Name } else { $env:COMPUTERNAME }
             $lines = @("LazyVM check of $subject, $(Get-Date -Format 'yyyy-MM-dd HH:mm'), module $($MyInvocation.MyCommand.Module.Version)", '')
-            $lines += $checks | ForEach-Object { '{0,-5} {1,-9} {2,-20} {3}' -f $_.Status, $_.Area, $_.Check, $_.Detail }
+            $lines += $checks | ForEach-Object {
+                '{0,-5} {1,-9} {2,-20} {3}' -f $_.Status, $_.Area, $_.Check, $_.Detail
+                if ($_.Fix) { '{0,-37} Fix: {1}' -f '', $_.Fix }
+            }
             Set-Content -LiteralPath $ReportPath -Value $lines -Encoding utf8
         }
         foreach ($check in $checks) { $check }
