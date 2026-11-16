@@ -360,6 +360,29 @@ Describe 'The diagrams in docs\Diagrams.md' {
         $gaps | Should -BeNullOrEmpty -Because "a diagram must show each call, or say in Omits why not: $($gaps -join '; ')"
     }
 
+    It 'leaves a file whose content has not changed alone, whatever its line endings (#406)' {
+        # A clone checks the files out with CRLF; rewriting them as LF would
+        # mark every diagram as changed in git although none is.
+        $root = Join-Path -Path $TestDrive -ChildPath 'update'
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+        [System.IO.File]::WriteAllText("$root\same.svg", "<svg>`r`n</svg>`r`n")
+        [System.IO.File]::WriteAllText("$root\changed.svg", "<svg>old</svg>`r`n")
+        Mock Import-DiagramSet { @{} }
+        Mock Get-DiagramOutput { [ordered]@{ 'same.svg' = "<svg>`n</svg>`n"; 'changed.svg' = "<svg>new</svg>`n" } }
+
+        Update-Diagram -Root $root
+
+        [System.IO.File]::ReadAllText("$root\same.svg") | Should -BeExactly "<svg>`r`n</svg>`r`n"
+        [System.IO.File]::ReadAllText("$root\changed.svg") | Should -BeExactly "<svg>new</svg>`n"
+    }
+
+    It 'is written with LF line endings only, even from code checked out with CRLF (#406)' {
+        # Diagrams.ps1 is checked out with CRLF, so its here-strings, such as
+        # the SVG style block, carry CRLF into the output unless it is normalised.
+        $withCR = @((Get-DiagramOutput -Set $script:set).GetEnumerator() | Where-Object { $_.Value.Contains("`r") } | ForEach-Object { $_.Key })
+        $withCR | Should -BeNullOrEmpty -Because "these would be written with mixed line endings: $($withCR -join ', ')"
+    }
+
     It 'matches its source: run ./Update-Diagram.ps1 after changing one' {
         $stale = @(Get-DiagramStaleFile -Root $script:repoRoot -Output (Get-DiagramOutput -Set $script:set))
         $stale | Should -BeNullOrEmpty -Because "these are out of date: $($stale -join ', ')"
