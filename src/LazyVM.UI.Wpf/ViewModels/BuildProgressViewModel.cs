@@ -1,0 +1,404 @@
+namespace LazyVM.UI.Wpf.ViewModels;
+
+/// <summary>
+/// The build progress window: each phase as its number and its goal, the
+/// phase the build is in, and Cancel. It follows the run state the module
+/// records (<c>Get-LazyVMDashboard</c> Run), never the log's text, so it
+/// also follows a build the app did not start, such as one carrying on
+/// after a host restart. Closing the window stops only the following: the
+/// build carries on.
+/// </summary>
+public sealed class BuildProgressViewModel : ViewModelBase
+{
+    /// <summary>How often the run state is read while the window is open.</summary>
+    internal static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
+
+    private readonly CommandRunner runner;
+    private readonly StartedBuild? started;
+    private readonly TimeProvider clock;
+    private readonly RelayCommand cancelCommand;
+    private CancellationTokenSource? following;
+    private IReadOnlyList<BuildPhase> phases = [];
+    private IReadOnlyList<PhaseRowViewModel> phaseRows = [];
+    private VMRun? run;
+    private int? followedProcess;
+    private string status;
+    private string? advice;
+    private bool isFinished;
+    private bool isStopRequested;
+    private bool isCancelling;
+
+    /// <param name="vmName">The VM whose build is followed.</param>
+    /// <param name="started">The build process the app started; empty to follow the VM's build that is running now.</param>
+    public BuildProgressViewModel(CommandRunner runner, string vmName, StartedBuild? started, TimeProvider clock)
+    {
+        this.runner = runner;
+        this.started = started;
+        this.clock = clock;
+        VMName = vmName;
+        followedProcess = started?.ProcessId;
+        status = $"Starting the build of {vmName}";
+        cancelCommand = new RelayCommand(() => _ = CancelAsync(), CanCancel);
+    }
+
+    /// <summary>Raised once, when the build has ended.</summary>
+    public event EventHandler? Ended;
+
+    public string VMName { get; }
+
+    public string Title => $"Build of {VMName} - LazyVM";
+
+    public string Heading => $"Build of {VMName}";
+
+    /// <summary>Every phase, each with its number, its goal and how far it has got.</summary>
+    public IReadOnlyList<PhaseRowViewModel> Phases
+    {
+        get => phaseRows;
+        private set => SetProperty(ref phaseRows, value);
+    }
+
+    /// <summary>Where the build is, such as "Phase 7: Install Windows and the tools", or how it ended.</summary>
+    public string Status
+    {
+        get => status;
+        private set => SetProperty(ref status, value);
+    }
+
+    /// <summary>What to do next after a build that stopped or failed; empty otherwise.</summary>
+    public string? Advice
+    {
+        get => advice;
+        private set
+        {
+            if (SetProperty(ref advice, value))
+            {
+                OnPropertyChanged(nameof(HasAdvice));
+            }
+        }
+    }
+
+    public bool HasAdvice => Advice is not null;
+
+    public bool IsFinished
+    {
+        get => isFinished;
+        private set
+        {
+            if (SetProperty(ref isFinished, value))
+            {
+                cancelCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>True once the build has been asked to stop, until it has.</summary>
+    public bool IsStopping
+    {
+        get => isStopRequested && !IsFinished;
+        private set
+        {
+            if (isStopRequested != value)
+            {
+                isStopRequested = value;
+                OnPropertyChanged();
+                cancelCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>Asks the build to stop at its next safe point (Stop-LazyVMBuild). The process is never killed.</summary>
+    public RelayCommand CancelCommand => cancelCommand;
+
+    /// <summary>
+    /// Reads the phases, then the run state every few seconds until the build
+    /// ends or <see cref="StopFollowing"/> is called.
+    /// </summary>
+    public async Task FollowAsync()
+    {
+        if (following is not null || IsFinished)
+        {
+            return;
+        }
+        using var cancel = new CancellationTokenSource();
+        following = cancel;
+        try
+        {
+            await LoadPhasesAsync(cancel.Token);
+            while (!IsFinished)
+            {
+                await PollAsync(cancel.Token);
+                if (IsFinished)
+                {
+                    break;
+                }
+                // Read again sooner when the process ends, but once it has, wait as usual, so a failing read never spins.
+                var wait = Task.Delay(PollInterval, clock, cancel.Token);
+                await (started is null || started.Ended.IsCompleted ? wait : Task.WhenAny(wait, started.Ended));
+                cancel.Token.ThrowIfCancellationRequested();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The window closed; the build carries on.
+        }
+        finally
+        {
+            following = null;
+        }
+    }
+
+    /// <summary>Stops reading the run state, as when the window closes. The build carries on.</summary>
+    public void StopFollowing() => following?.Cancel();
+
+    internal async Task LoadPhasesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            phases = await runner.GetBuildPhasesAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // The progress still shows, with the phase numbers alone.
+            phases = [];
+        }
+        ShowPhases();
+    }
+
+    /// <summary>Reads the VM's run once and shows where the build is, or how it ended.</summary>
+    internal async Task PollAsync(CancellationToken cancellationToken)
+    {
+        VMRun? latest;
+        try
+        {
+            latest = (await runner.GetVMAsync(VMName, cancellationToken))?.Run;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            Status = $"The build's progress could not be read: {exception.Message} Trying again.";
+            return;
+        }
+
+        if (started is not null)
+        {
+            ShowStartedBuild(latest);
+        }
+        else
+        {
+            ShowRunningBuild(latest);
+        }
+    }
+
+    /// <summary>A build the app started: only the run of its own process counts, never the one before it.</summary>
+    private void ShowStartedBuild(VMRun? latest)
+    {
+        var processEnded = started!.Ended.IsCompleted;
+        var result = processEnded ? started.Ended.Result : null;
+        if (latest?.ProcessId == started.ProcessId)
+        {
+            Show(latest, result);
+        }
+        else if (processEnded)
+        {
+            // It ended before it recorded a run, such as when the Windows ISO is missing or another run is going.
+            Finish(result!.Outcome == BuildResult.Completed
+                ? $"The build of {VMName} ended."
+                : $"The build of {VMName} did not start: {result.Message}", null);
+        }
+        else
+        {
+            Status = $"Starting the build of {VMName}";
+        }
+    }
+
+    /// <summary>A build already running: the one running when the window opened.</summary>
+    private void ShowRunningBuild(VMRun? latest)
+    {
+        if (followedProcess is null && latest is { IsRunning: true, ProcessId: { } process } && latest.Command is null or VMRun.Build)
+        {
+            followedProcess = process;
+        }
+        if (followedProcess is null)
+        {
+            if (latest is { IsRunning: true, ProcessId: null })
+            {
+                Status = $"A run of {VMName} is just starting";
+                return;
+            }
+            Finish($"No build of {VMName} is running.", null);
+            return;
+        }
+        if (latest is null || latest.ProcessId != followedProcess)
+        {
+            Finish($"The build of {VMName} has ended.", null);
+            return;
+        }
+        Show(latest, null);
+    }
+
+    private void Show(VMRun latest, BuildResult? result)
+    {
+        run = latest;
+        IsStopping = latest.StopRequested;
+        ShowPhases();
+        if (!latest.IsRunning)
+        {
+            Ending(latest, result);
+            return;
+        }
+        Status = latest switch
+        {
+            { StopRequested: true } => $"Stopping at the next safe point{InPhase(latest.Phase)}. An install already started inside the VM finishes by itself.",
+            { Phase: { } phase } => PhaseText(phase),
+            _ => $"Starting the build of {VMName}",
+        };
+    }
+
+    /// <summary>How the build ended, and for a build that stopped or failed, how to carry on.</summary>
+    private void Ending(VMRun ended, BuildResult? result)
+    {
+        var phase = ended.UnfinishedPhase ?? ended.Phase;
+        var carryOn = phase is { } number
+            ? $" Then carry on from phase {number}: in PowerShell, run Build-LazyVM -Name {VMName} -FromPhase {number}"
+            : string.Empty;
+        switch (ended.Status)
+        {
+            case VMRun.Completed:
+                Finish($"The build of {VMName} is complete. {VMName} is ready.", null);
+                break;
+            case VMRun.CompletedWithProblems:
+                Finish($"All phases ran, but some steps failed. {VMName} can be used.", "The log says which steps failed and how to fix them.");
+                break;
+            case VMRun.WaitingForRestart:
+                Finish("The host is restarting to finish turning on Hyper-V.", "The build carries on by itself after the restart.");
+                break;
+            case VMRun.Stopped:
+                Finish($"The build of {VMName} stopped{InPhase(phase)}, as asked.",
+                    "Let any install still running inside the VM finish first, so two installers do not run at once." + carryOn);
+                break;
+            case VMRun.EndedUnexpectedly:
+                Finish($"The build of {VMName} ended unexpectedly{InPhase(phase)}: its process was closed, crashed or lost power.",
+                    "The log says how far it got." + carryOn);
+                break;
+            default:
+                var reason = result?.Message is { Length: > 0 } message ? $": {message}" : ".";
+                Finish($"The build of {VMName} failed{InPhase(phase)}{reason}", "The log says why. Fix the problem first." + carryOn);
+                break;
+        }
+    }
+
+    private void Finish(string text, string? next)
+    {
+        Status = text;
+        Advice = next;
+        IsFinished = true;
+        OnPropertyChanged(nameof(IsStopping));
+        ShowPhases();
+        Ended?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task CancelAsync()
+    {
+        isCancelling = true;
+        cancelCommand.RaiseCanExecuteChanged();
+        try
+        {
+            var stopping = await runner.StopBuildAsync(VMName, CancellationToken.None);
+            if (stopping is null)
+            {
+                Status = $"No build of {VMName} is running, so there is nothing to stop.";
+                return;
+            }
+            Show(stopping, null);
+        }
+        catch (Exception exception)
+        {
+            Status = "The build could not be stopped: " + exception.Message;
+        }
+        finally
+        {
+            isCancelling = false;
+            cancelCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    /// <summary>Only a build that has recorded its process can be asked to stop, and only once.</summary>
+    private bool CanCancel() =>
+        !IsFinished && !isCancelling && !isStopRequested && run is { IsRunning: true, IsBuild: true, ProcessId: not null };
+
+    private void ShowPhases()
+    {
+        var current = run?.Phase;
+        var finished = IsFinished && run is not null;
+        Phases = phases.Select(phase => new PhaseRowViewModel(phase, PhaseState(phase.Number))).ToList();
+
+        string PhaseState(int number)
+        {
+            if (run is null || current is null)
+            {
+                return PhaseRowViewModel.NotStarted;
+            }
+            if (finished && run.Status is VMRun.Completed or VMRun.CompletedWithProblems)
+            {
+                return run.Status == VMRun.CompletedWithProblems && number == current ? PhaseRowViewModel.DoneWithProblems : PhaseRowViewModel.Done;
+            }
+            if (number < current)
+            {
+                return PhaseRowViewModel.Done;
+            }
+            if (number > current)
+            {
+                return PhaseRowViewModel.NotStarted;
+            }
+            return run.Status switch
+            {
+                VMRun.Running when run.StopRequested => PhaseRowViewModel.Stopping,
+                VMRun.Running => PhaseRowViewModel.InProgress,
+                VMRun.WaitingForRestart => PhaseRowViewModel.WaitingForRestart,
+                VMRun.Stopped => PhaseRowViewModel.Stopped,
+                _ => PhaseRowViewModel.Failed,
+            };
+        }
+    }
+
+    private string PhaseText(int number) =>
+        phases.FirstOrDefault(phase => phase.Number == number) is { } phase
+            ? $"Phase {number}: {phase.Goal}"
+            : $"Phase {number}";
+
+    private static string InPhase(int? phase) => phase is { } number ? $" in phase {number}" : string.Empty;
+}
+
+/// <summary>One phase of the build: its number, its goal and how far it has got.</summary>
+public sealed class PhaseRowViewModel(BuildPhase phase, string state)
+{
+    public const string NotStarted = "Not started";
+    public const string InProgress = "In progress";
+    public const string Stopping = "Stopping";
+    public const string Done = "Done";
+    public const string DoneWithProblems = "Done, with problems";
+    public const string WaitingForRestart = "Waiting for the host to restart";
+    public const string Stopped = "Stopped";
+    public const string Failed = "Failed";
+
+    public int Number => phase.Number;
+
+    public string Goal => phase.Goal;
+
+    public string State => state;
+
+    /// <summary>True for the phase the build is in, or ended in.</summary>
+    public bool IsCurrent => state is not (NotStarted or Done);
+
+    /// <summary>A shape for the state, so it is never told by color alone.</summary>
+    public string Symbol => state switch
+    {
+        Done => "✓",
+        NotStarted => "○",
+        InProgress or Stopping or WaitingForRestart => "▶",
+        DoneWithProblems => "▲",
+        _ => "✖",
+    };
+
+    /// <summary>The phase as a screen reader reads it, such as "Phase 7, Install Windows and the tools: In progress".</summary>
+    public string AutomationName => $"Phase {Number}, {Goal}: {State}";
+}

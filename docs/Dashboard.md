@@ -2,7 +2,7 @@
 
 # LazyVM Dashboard — specification
 
-Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, and the Checks and Log windows (delivery plan steps 3 and 4); the rest is not built yet. Updated 2026-11-16 with the decisions for step 5.
+Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, the Checks and Log windows (delivery plan steps 3 and 4), and the Build window with build progress and Cancel (step 5.6); the rest is not built yet. Updated 2026-11-16 with the decisions for step 5.
 
 ## 1. Purpose
 
@@ -73,7 +73,7 @@ Not yet available: the name of the config template a VM was first created from. 
 
 - **Needs attention.** The open-findings badges, plus a "Needs attention" marker in the State column when the last maintenance failed or a settings problem exists. Every badge and marker has text for screen readers, for example "High 1 open finding" and "Needs attention: last maintenance failed".
 - **Refresh.** On open, on F5 or a Refresh button, and after any action. No live polling in this step; a running build updates its own progress.
-- **Builds.** Each build runs in its own elevated `pwsh` process, started with `-File` and a script in the module folder, its arguments passed as a list, never as script text. Closing or crashing the window never stops a build. The window shows progress from the run state the module records (#425), not by reading the log's text, so it also follows a build the app did not start, such as one carrying on after a host restart. Other actions run in-process.
+- **Builds.** Each build runs in its own elevated `pwsh` process, started with `-File` and a script in the module folder (`Scripts\Start-AppBuild.ps1`), its arguments passed as a list, never as script text. pwsh 7.6 or later comes from `%ProgramFiles%\PowerShell\7`, or else from its Microsoft Store package in `%ProgramFiles%\WindowsApps`, never from PATH, and the script loads modules only from folders administrators control. Its output is not redirected, so a closed window cannot stall the build; the script writes how the build ended to a result file, which says why when a build ends before it records a run, such as when the Windows ISO is missing. Closing or crashing the window never stops a build. The window shows progress from the run state the module records (#425), not by reading the log's text, so it also follows a build the app did not start, such as one carrying on after a host restart. Other actions run in-process.
 - **Cancel.** Asks the build to stop (#426). It stops at the next safe point: between phases, between steps, or in a wait. The failed-build clean-up runs, so the answer-file disc is removed. Work already started inside the VM, such as an install, finishes by itself. The window says so. `Stop-LazyVMBuild` does this, and the dashboard's `Run.StopRequested` shows the build is stopping. The process is never killed, since that would skip the clean-up.
 - **Run maintenance now** starts the VM's maintenance task, so it runs exactly as the nightly run does.
 - **Checks.** On open, after the list, the app runs `Test-LazyVM -HostOnly`, or plain `Test-LazyVM` while there are no VMs, so the note on making the first one shows. The Checks window opens by itself only when there are no VMs, a check failed, or the checks could not run. A **Checks** button in the main window checks the host, and one in each VM window checks that VM. Each row reads as status, check, what was found, then the fix; Ctrl+C copies the fix.
@@ -177,7 +177,7 @@ Each screen needs its command first. Where a command is missing (for example the
    3. `Build-LazyVM -UserName` for a new VM's account (#424).
    4. The run state: a running build or maintenance recorded, reported by `Get-LazyVMDashboard`, and a second build refused (#425).
    5. A clean stop of a running build (#426).
-   6. The app: the Build window, progress and Cancel (#427).
+   6. The app: the Build window, progress and Cancel (#427). Done.
    7. The app: run from phase N, and run maintenance now (#428).
 6. Dispose and restore.
 7. Recovery keys and the password.

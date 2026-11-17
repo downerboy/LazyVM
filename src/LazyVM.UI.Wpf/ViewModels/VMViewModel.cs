@@ -11,7 +11,17 @@ public sealed class VMViewModel : ViewModelBase
         Details = ReadDetails(entry);
         ChecksCommand = new RelayCommand(() => tools.OpenChecks(Name, hostOnly: false));
         LogCommand = new RelayCommand(() => tools.OpenLog(Name));
+        BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(Name, started: null), () => IsBuilding);
     }
+
+    /// <summary>Opens the progress of the build running now, including one the app did not start.</summary>
+    public RelayCommand BuildProgressCommand { get; }
+
+    /// <summary>True while a build of the VM is running.</summary>
+    public bool IsBuilding => entry.Run is { IsRunning: true, Command: null or VMRun.Build };
+
+    /// <summary>True while a build, maintenance or rebuild of the VM is running: no other may start.</summary>
+    public bool IsBusy => entry.Run is { IsRunning: true };
 
     /// <summary>Opens the VM's checks (Test-LazyVM).</summary>
     public RelayCommand ChecksCommand { get; }
@@ -34,6 +44,7 @@ public sealed class VMViewModel : ViewModelBase
         this.entry = entry;
         Details = ReadDetails(entry);
         OnPropertyChanged(string.Empty);
+        BuildProgressCommand.RaiseCanExecuteChanged();
     }
 
     private static List<VMDetail> ReadDetails(VMDashboard vm)
@@ -43,6 +54,7 @@ public sealed class VMViewModel : ViewModelBase
         var details = new List<VMDetail>
         {
             new("State", vm.State),
+            new("Running now", RunningText(vm.Run)),
             new("Created", vm.Created is { } created ? DashboardText.When(created) : missing),
             new("Memory in use", vm.MemoryAssigned switch
             {
@@ -72,6 +84,23 @@ public sealed class VMViewModel : ViewModelBase
         details.Add(new("Settings", vm.Settings));
         details.AddRange(vm.Problems.Select(problem => new VMDetail("Could not read", problem)));
         return details;
+    }
+
+    /// <summary>Such as "Build, in phase 7 (Windows)", "Build, stopping" or "Nothing".</summary>
+    private static string RunningText(VMRun? run)
+    {
+        if (run is not { IsRunning: true })
+        {
+            return "Nothing";
+        }
+        var what = run.Command ?? "A run, just starting";
+        if (run.StopRequested)
+        {
+            return $"{what}, stopping";
+        }
+        return run.Phase is { } phase
+            ? $"{what}, in phase {phase}" + (run.PhaseName is { Length: > 0 } name ? $" ({name})" : string.Empty)
+            : what;
     }
 
     private static string MaintenanceText(VMDashboard vm)

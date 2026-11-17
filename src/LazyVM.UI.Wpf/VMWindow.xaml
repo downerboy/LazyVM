@@ -23,6 +23,9 @@
                             AutomationProperties.Name="{Binding Name, StringFormat='Checks of {0}'}" />
                     <Button Content="Log" Command="{Binding LogCommand}" Margin="8,0,0,0"
                             AutomationProperties.Name="{Binding Name, StringFormat='Log of {0}'}" />
+                    <Button Content="Build progress" Command="{Binding BuildProgressCommand}" Margin="8,0,0,0"
+                            Visibility="{Binding IsBuilding, Converter={StaticResource VisibleWhenTrue}}"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Progress of the build of {0}'}" />
                 </WrapPanel>
                 <StackPanel>
                     <TextBlock Text="{Binding Name}" Style="{StaticResource LvTitle}" />

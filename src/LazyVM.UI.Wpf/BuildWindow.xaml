@@ -1,0 +1,69 @@
+<Window x:Class="LazyVM.UI.Wpf.BuildWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:LazyVM.UI.Wpf"
+        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:BuildViewModel}"
+        Title="{Binding Title}" Width="640" Height="720" MinWidth="320"
+        Style="{StaticResource LvWindow}">
+    <Window.CommandBindings>
+        <CommandBinding Command="Close" Executed="CloseWindow" />
+    </Window.CommandBindings>
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="Close" />
+    </Window.InputBindings>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
+            <TextBlock Text="Build new VM" Style="{StaticResource LvTitle}" VerticalAlignment="Center" />
+        </Border>
+
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24" Padding="24,16">
+            <DockPanel>
+                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Content="_Build" Command="{Binding BuildCommand}" IsDefault="True"
+                            AutomationProperties.Name="Build the VM" />
+                    <Button Content="Close" Command="Close" Margin="8,0,0,0" />
+                </WrapPanel>
+                <TextBlock Text="{Binding Status}" Style="{StaticResource LvStatus}" VerticalAlignment="Center" Margin="0,0,16,0"
+                           AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+            </DockPanel>
+        </Border>
+
+        <Border Style="{StaticResource LvPanel}" Margin="24">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <Label Content="_Name of the new VM" Target="{Binding ElementName=NameBox}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
+                    <TextBlock Text="1 to 15 letters, digits or hyphens, starting with a letter or digit." Style="{StaticResource LvMuted}" />
+                    <TextBox x:Name="NameBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="15" Margin="0,4,0,16"
+                             AutomationProperties.Name="Name of the new VM"
+                             AutomationProperties.HelpText="1 to 15 letters, digits or hyphens, starting with a letter or digit." />
+
+                    <Label Content="Administrator _account inside the VM (optional)" Target="{Binding ElementName=UserNameBox}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
+                    <TextBlock Text="Leave empty for the usual account. Its password is made for you." Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                    <TextBox x:Name="UserNameBox" Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" MaxLength="20" Margin="0,4,0,16"
+                             AutomationProperties.Name="Administrator account inside the VM, optional"
+                             AutomationProperties.HelpText="Leave empty for the usual account. Its password is made for you." />
+
+                    <Label Content="_Config template" Target="{Binding ElementName=TemplateList}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
+                    <TextBlock Text="What the VM is built with. Developer has the developer tools; PlainWindows has Windows alone." Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                </StackPanel>
+                <!-- A list rather than a drop-down, so the arrow keys move through the templates and Narrator reads each one. -->
+                <ListBox x:Name="TemplateList" ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate}"
+                         DisplayMemberPath="Text" AutomationProperties.Name="Config template"
+                         BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
+                         Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </DockPanel>
+        </Border>
+    </DockPanel>
+</Window>

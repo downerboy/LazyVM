@@ -17,6 +17,7 @@
         <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
             <DockPanel>
                 <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Content="Build new VM" Command="{Binding BuildCommand}" Margin="0,0,8,0" />
                     <Button Content="Refresh" Command="{Binding RefreshCommand}"
                             AutomationProperties.Name="Refresh the list (F5)" />
                     <Button Content="Cancel refresh" Command="{Binding CancelRefreshCommand}" Margin="8,0,0,0"
