@@ -17,6 +17,7 @@
         'Export-LazyVMRecoveryKey'
         'Export-LazyVMTemplate'
         'Get-LazyVM'
+        'Get-LazyVMBuildPhase'
         'Get-LazyVMCredential'
         'Get-LazyVMDashboard'
         'Get-LazyVMLicense'

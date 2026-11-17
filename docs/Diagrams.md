@@ -9,14 +9,14 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
 
 - Install: [Install from the repository](#install-from-repo), [Install from a release](#install-from-release), [Move a machine-wide install to your account](#convert-installation)
 - Set up: [Show LazyVM and its commands](#show), [Choose the LazyVM folder](#set-root), [Create a VM profile without building](#new-profile), [Store the guest account](#set-credential)
-- Build: [Build a VM](#build)
+- Build: [Build a VM](#build), [List the build phases](#build-phases)
 - Maintain: [Daily maintenance](#maintenance), [Schedule maintenance again](#register-maintenance), [Rebuild a VM](#rebuild)
 - Tooling: [Record tooling now](#tooling-record), [See installed tooling](#tooling-view), [List tooling restore points](#restore-points), [Return to an earlier tooling version](#tooling-revert)
 - State: [Capture state](#capture), [Restore state](#restore)
@@ -285,6 +285,19 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
 22. `Write-RecoveryKeyReminder` (Disks, called by Build-LazyVM): when the build is over: reminds you to export any recovery password not exported yet, with the command
    - Reads D38, stored and exported keys: <VM>\ (Credentials\bitlocker.cred, Config\RecoveryKeyExport.json)
    - Writes D39, reminder: Console and log (one line, with the command)
+
+<a id="build-phases"></a>
+
+## List the build phases
+
+`Get-LazyVMBuildPhase`
+
+Lists the phases Build-LazyVM runs, in order: the number -FromPhase takes, the name, and the goal, which the app shows as a build's progress. Only reads the module's list of phases, so it needs no VM, no LazyVM folder and no administrator rights.
+
+![List the build phases: call order and data flow](diagrams/build-phases.svg)
+
+1. `Get-BuildPhase` (Host): every phase, in order, the same list a build runs
+   - Writes D1, phases: Pipeline (LazyVM.BuildPhase: Number, Name, Goal)
 
 <a id="maintenance"></a>
 

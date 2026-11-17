@@ -6,33 +6,35 @@
 
 function Get-BuildPhase {
     <#
-      Every build phase, in order. Each Action takes the VM and a table, $Run,
-      holding -NoUnattend and phase 6's UseUnattend, which phase 7 reads. An
-      Action that returns RestartPending stops the build for a host restart.
+      Every build phase, in order. Goal says in a few words what the phase
+      does; Get-LazyVMBuildPhase and the app show it. Each Action takes the
+      VM and a table, $Run, holding -NoUnattend and phase 6's UseUnattend,
+      which phase 7 reads. An Action that returns RestartPending stops the
+      build for a host restart.
     #>
     return @(
-        [pscustomobject]@{ Number = 0; Name = 'Hyper-V Service Health Check'; Action = {
+        [pscustomobject]@{ Number = 0; Name = 'Hyper-V Service Health Check'; Goal = 'Check the Hyper-V services'; Action = {
                 if (Repair-HyperVService) {
                     Write-LogEntry 'Hyper-V looks missing or broken; Phase 2 turns it on' 'WARN'
                 }
             }
         }
-        [pscustomobject]@{ Number = 1; Name = 'CPU, Firmware and Capacity Readiness'; Action = { param($VM) Test-HostReadiness -VM $VM } }
-        [pscustomobject]@{ Number = 2; Name = 'Hyper-V Feature Installation'; Action = {
+        [pscustomobject]@{ Number = 1; Name = 'CPU, Firmware and Capacity Readiness'; Goal = 'Check the processor, firmware, memory and free disk space'; Action = { param($VM) Test-HostReadiness -VM $VM } }
+        [pscustomobject]@{ Number = 2; Name = 'Hyper-V Feature Installation'; Goal = 'Turn on Hyper-V if needed, restarting the computer'; Action = {
                 param($VM)
                 if (Enable-HyperVFeature -VM $VM) { return [BuildOutcome]::RestartPending }
             }
         }
-        [pscustomobject]@{ Number = 3; Name = 'Folder Structure'; Action = { param($VM) Initialize-HostFolder -VM $VM } }
-        [pscustomobject]@{ Number = 4; Name = 'SQL Server Media'; Action = { param($VM) Initialize-SqlServerIso -VM $VM } }
-        [pscustomobject]@{ Number = 5; Name = 'SQL Data Disk, Dev Drive and User Disk'; Action = {
+        [pscustomobject]@{ Number = 3; Name = 'Folder Structure'; Goal = 'Create the folders in the LazyVM folder'; Action = { param($VM) Initialize-HostFolder -VM $VM } }
+        [pscustomobject]@{ Number = 4; Name = 'SQL Server Media'; Goal = 'Check the Windows ISO and download the SQL Server ISO'; Action = { param($VM) Initialize-SqlServerIso -VM $VM } }
+        [pscustomobject]@{ Number = 5; Name = 'SQL Data Disk, Dev Drive and User Disk'; Goal = 'Create the SQL data disk, the Dev Drive and the User disk'; Action = {
                 param($VM)
                 Initialize-SqlDataVhd -VM $VM
                 Initialize-DevDriveVhd -VM $VM
                 Initialize-UserDataVhd -VM $VM
             }
         }
-        [pscustomobject]@{ Number = 6; Name = 'VM Build'; Action = {
+        [pscustomobject]@{ Number = 6; Name = 'VM Build'; Goal = 'Create the VM and its answer-file disc'; Action = {
                 param($VM, $Run)
                 # The answer-file disc is only worth building for a VM that
                 # does not exist yet.
@@ -50,12 +52,12 @@ function Get-BuildPhase {
                 New-GuestVM -VM $VM -UseUnattend:$Run.UseUnattend
             }
         }
-        [pscustomobject]@{ Number = 7; Name = 'Guest Provisioning and Silent Installs'; Action = {
+        [pscustomobject]@{ Number = 7; Name = 'Guest Provisioning and Silent Installs'; Goal = 'Install Windows, then the tools and Windows updates'; Action = {
                 param($VM, $Run)
                 Install-GuestSoftware -VM $VM -UsedUnattend:([bool]$Run.UseUnattend -or (Test-SeedDiskAttached -VM $VM))
             }
         }
-        [pscustomobject]@{ Number = 8; Name = 'Post-Configuration'; Action = { param($VM) Complete-GuestConfiguration -VM $VM } }
+        [pscustomobject]@{ Number = 8; Name = 'Post-Configuration'; Goal = 'Move the SQL data to its disk and set up Visual Studio'; Action = { param($VM) Complete-GuestConfiguration -VM $VM } }
     )
 }
 
