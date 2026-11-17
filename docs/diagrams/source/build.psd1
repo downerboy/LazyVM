@@ -2,7 +2,7 @@
     Id         = 'build'
     Title      = 'Build a VM'
     Command    = 'Build-LazyVM'
-    Parameters = @('-Name <VM>', '-ConfigTemplate <Template>  (optional)', '-FromPhase 0-8  (optional)', '-NoUnattend  (optional)')
+    Parameters = @('-Name <VM>', '-ConfigTemplate <Template>  (optional)', '-FromPhase 0-8  (optional)', '-UserName <account>  (optional)', '-NoUnattend  (optional)')
     Summary    = 'Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skipping work already done. Running it again finishes an interrupted build.'
     Covers     = @('Build-LazyVM', 'Invoke-VMBuild', 'Invoke-BuildPhase', 'Get-BuildPhase', 'Install-GuestSoftware', 'Complete-GuestConfiguration')
     Omits      = @{
@@ -30,6 +30,13 @@
             Note     = 'builds the VM context and opens the log'
             Reads    = @(@{ Label = 'settings, VM profile, guest user name'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKCU:\SOFTWARE\LazyVM  Root', 'Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json', '<VM>\Credentials\guest.cred') })
             Writes   = @(@{ Label = 'run log'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('<VM>.log  (appended)') })
+        }
+        @{
+            Function = 'Initialize-GuestUserName'
+            Area     = 'Credentials'
+            Note     = 'with -UserName only: stores that account with a generated password when none is stored; stops, before anything changes, when another account is'
+            Includes = @('Get-GuestCredential', 'Set-StoredGuestCredential')
+            Writes   = @(@{ Label = 'guest account, if none yet'; Kind = 'file'; Store = '<VM>\Credentials\'; Items = @('guest.cred  (encrypted)') })
         }
         @{
             Function = 'Sync-VMProfile'
@@ -68,7 +75,7 @@
             Function = 'Invoke-BuildPhase'
             Area     = 'Host'
             Caller   = 'Invoke-VMBuild'
-            Note     = 'runs each phase of Get-BuildPhase in order (steps 7-18); when a phase throws or the build is stopped, deletes the answer-file disc first'
+            Note     = 'runs each phase of Get-BuildPhase in order (steps 10-20); when a phase throws or the build is stopped, deletes the answer-file disc first'
             Includes = @('Get-BuildPhase', 'Remove-UnattendSeedDisk')
         }
         @{

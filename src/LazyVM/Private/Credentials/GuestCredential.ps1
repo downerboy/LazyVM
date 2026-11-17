@@ -75,6 +75,27 @@ function Initialize-GuestCredential {
     return $result.Credential
 }
 
+function Initialize-GuestUserName {
+    <#
+      Build-LazyVM -UserName: stores $UserName with a generated password for
+      a VM that has no account stored yet. The same account stored already
+      is left alone, so a build can be run again. Another one throws: the
+      account of a VM is changed with Set-LazyVMCredential, which says what
+      that means for a VM already built.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$UserName
+    )
+
+    $stored = Get-GuestCredential -VM $VM
+    if ($stored) {
+        if ($stored.UserName -eq $UserName) { return }
+        throw "A credential for '$($stored.UserName)' is already stored for $($VM.Name), so -UserName $UserName was not used and nothing was built. To change the account, use: Set-LazyVMCredential -Name $($VM.Name)"
+    }
+    $null = Set-StoredGuestCredential -VM $VM -Credential ([pscredential]::new($UserName, [securestring]::new()))
+}
+
 function Set-StoredGuestCredential {
     <#
       Stores the guest account for the VM. An empty password means "generate

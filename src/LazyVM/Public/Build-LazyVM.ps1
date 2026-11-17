@@ -66,6 +66,13 @@
     -Root. LazyVM's scheduled tasks pass it; the folder must be locked to
     that user and SYSTEM. The account running the command if left out.
 
+    .PARAMETER UserName
+    The name of the administrator account the build creates inside a new
+    VM, instead of GuestAdminUser (devadmin by default). Its password is
+    generated; see it with Get-LazyVMCredential -AsPlainText. Only for a VM
+    with no account stored yet, or the same one: to change the account of
+    a VM, use Set-LazyVMCredential.
+
     .PARAMETER NoUnattend
     Do not give the VM an answer file: Windows Setup has to be completed by
     hand in VMConnect, and Phase 7 waits for that.
@@ -79,6 +86,12 @@
     Build-LazyVM -Name Clean -ConfigTemplate PlainWindows
 
     Builds a new VM with plain Windows and no developer tools.
+
+    .EXAMPLE
+    Build-LazyVM -Name DevBox2 -UserName sean
+
+    Builds a new VM whose administrator account is sean, with a generated
+    password.
 
     .EXAMPLE
     Build-LazyVM -Name DevBox -FromPhase 7
@@ -98,6 +111,10 @@
 
         [switch]$NoUnattend,
 
+        # The rule GuestAdminUser has in the settings schema: a local account name Windows accepts.
+        [ValidatePattern('^[^"/\\\[\]:;|=,+*?<>@ ]{1,20}$', ErrorMessage = "'{0}' cannot be used as the account name: use 1-20 characters, without spaces or any of \`" / \ [ ] : ; | = , + * ? < > @.")]
+        [string]$UserName,
+
         [string]$Root,
 
         [ValidatePattern('^S-1-\d+(-\d+)+$')]
@@ -109,10 +126,13 @@
         $target = if ($Name) { $Name } else { 'the VM' }
         $setup = if ($NoUnattend) { ', with Windows Setup completed by hand' } else { '' }
         $vmProfile = if ($ConfigTemplate) { "profile (from the config template '$ConfigTemplate')" } else { 'profile' }
-        if (-not $PSCmdlet.ShouldProcess($target, "Build from phase $FromPhase$setup, first setting up the LazyVM folder, $vmProfile and Windows ISO if they are missing")) { return }
+        $account = if ($UserName) { ", with the administrator account '$UserName'" } else { '' }
+        if (-not $PSCmdlet.ShouldProcess($target, "Build from phase $FromPhase$setup$account, first setting up the LazyVM folder, $vmProfile and Windows ISO if they are missing")) { return }
         Initialize-BuildTarget -Name $Name -ConfigTemplate $ConfigTemplate -Root $Root -OwnerSid $OwnerSid
         Invoke-CommandRun -Title 'Build' -Name $Name -Root $Root -OwnerSid $OwnerSid -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
             param($VM)
+            # First, so another account than the one stored stops the build before it changes anything.
+            if ($UserName) { Initialize-GuestUserName -VM $VM -UserName $UserName }
             Sync-VMProfile -VM $VM
             # Run by its owner: the places outside the LazyVM folder its
             # settings name are allowed for the scheduled tasks.

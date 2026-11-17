@@ -211,7 +211,7 @@ Optional before a build: Build-LazyVM generates an account if none is stored. Th
 
 ## Build a VM
 
-`Build-LazyVM` `-Name <VM>` `-ConfigTemplate <Template>  (optional)` `-FromPhase 0-8  (optional)` `-NoUnattend  (optional)`
+`Build-LazyVM` `-Name <VM>` `-ConfigTemplate <Template>  (optional)` `-FromPhase 0-8  (optional)` `-UserName <account>  (optional)` `-NoUnattend  (optional)`
 
 Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skipping work already done. Running it again finishes an interrupted build.
 
@@ -227,64 +227,67 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
 2. `Initialize-CommandRun` (Common): builds the VM context and opens the log
    - Reads D6, settings, VM profile, guest user name: VM context sources (HKCU:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
    - Writes D7, run log: <VM>\Logs\ (<VM>.log  (appended))
-3. `Sync-VMProfile` (Settings): fills in any setting VM.json lacks from the shared template
-   - Reads D8, shared template: Shared\Config\ (LazyVM.Settings.json)
-   - Writes D9, complete profile: <VM>\Config\ (VM.json, VM.Template.json  (first time only))
-4. `Register-TrustedHostPath` (Settings): run by you, not a task (Test-Unattended): allows the places outside the LazyVM folder the settings name, such as BackupDir
+3. `Initialize-GuestUserName` (Credentials): with -UserName only: stores that account with a generated password when none is stored; stops, before anything changes, when another account is
+   - Also runs `Get-GuestCredential`, `Set-StoredGuestCredential`
+   - Writes D8, guest account, if none yet: <VM>\Credentials\ (guest.cred  (encrypted))
+4. `Sync-VMProfile` (Settings): fills in any setting VM.json lacks from the shared template
+   - Reads D9, shared template: Shared\Config\ (LazyVM.Settings.json)
+   - Writes D10, complete profile: <VM>\Config\ (VM.json, VM.Template.json  (first time only))
+5. `Register-TrustedHostPath` (Settings): run by you, not a task (Test-Unattended): allows the places outside the LazyVM folder the settings name, such as BackupDir
    - Also runs `Test-Unattended`, `Get-OutsideHostPath`, `Add-TrustedHostPath`
-   - Writes D10, places outside the LazyVM folder, allowed for the tasks: HKLM:\SOFTWARE\LazyVM (<your SID>\HostPaths)
-5. `Register-RebuildSchedule` (Maintenance): before the phases, so the schedule is in place even if the host restarts; a failure here is logged and the build goes on
+   - Writes D11, places outside the LazyVM folder, allowed for the tasks: HKLM:\SOFTWARE\LazyVM (<your SID>\HostPaths)
+6. `Register-RebuildSchedule` (Maintenance): before the phases, so the schedule is in place even if the host restarts; a failure here is logged and the build goes on
    - Also runs `Get-HostTaskCommand`, `Register-LazyVMHostTask`
-   - Writes D11, daily maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, daily at MaintenanceTime, as SYSTEM, with -Root, -OwnerSid)
-6. `Invoke-VMBuild` (Host): runs the phases from -FromPhase or the resume point, whichever is later
-7. `Get-ResumePhase` (Host, called by Invoke-VMBuild): picks up after a host restart
-   - Reads D12, phase to resume at: <VM>\Config\ (Resume.json)
-8. `Invoke-BuildPhase` (Host, called by Invoke-VMBuild): runs each phase of Get-BuildPhase in order (steps 7-18); when a phase throws or the build is stopped, deletes the answer-file disc first
+   - Writes D12, daily maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, daily at MaintenanceTime, as SYSTEM, with -Root, -OwnerSid)
+7. `Invoke-VMBuild` (Host): runs the phases from -FromPhase or the resume point, whichever is later
+8. `Get-ResumePhase` (Host, called by Invoke-VMBuild): picks up after a host restart
+   - Reads D13, phase to resume at: <VM>\Config\ (Resume.json)
+9. `Invoke-BuildPhase` (Host, called by Invoke-VMBuild): runs each phase of Get-BuildPhase in order (steps 10-20); when a phase throws or the build is stopped, deletes the answer-file disc first
    - Also runs `Get-BuildPhase`, `Remove-UnattendSeedDisk`
-9. `Initialize-InstallationIso` (Host, called by Invoke-BuildPhase): the Windows ISO, before anything changes; opens the download page and stops if there is none
-   - Reads D13, Windows ISO: Shared\ISO\  or  Downloads\ (Windows 11 Enterprise, Evaluation ISO)
-   - Writes D14, Windows ISO in place: Shared\ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
-10. `Repair-HyperVService` and `Test-HostReadiness` (Host, called by Invoke-BuildPhase): phases 0 and 1: the Hyper-V services, then CPU, SLAT, memory and free space
-   - Reads D15, host checks: This PC (vmms, vmcompute, CPU, SLAT, RAM, free space)
-11. `Enable-HyperVFeature` (Host, called by Invoke-BuildPhase): phase 2; returns RestartPending when the host must restart
-   - Writes D16, resume task, only if a restart is needed: Task Scheduler (LazyVM-ResumeAfterReboot-<VM>, as SYSTEM, with -Root)
-   - Writes D17, where to resume: <VM>\Config\ (Resume.json  (Phase 3))
-12. `Initialize-HostFolder` (Host, called by Invoke-BuildPhase): phase 3
-   - Writes D18, folders created if missing: <Root>\ (Shared\ ISO, Installers, Credentials, <VM>\ Disks, Credentials, Backups,, Logs, Checkpoints)
-13. `Initialize-SqlServerIso` (Host, called by Invoke-BuildPhase): phase 4: downloads the SQL Server ISO if it is missing
-   - Reads D19, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
-   - Writes D20, SQL Server ISO in place: Shared\Installers\ (SQLServer2025-x64-ENU-EntDev.iso)
-14. `Initialize-SqlDataVhd`, `Initialize-DevDriveVhd` and `Initialize-UserDataVhd` (Host, called by Invoke-BuildPhase): phase 5: existing disks are never overwritten
-   - Writes D21, data disk, Dev Drive and User disk: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB), <VM>-User.vhdx  (20 GB))
-15. `Initialize-GuestCredential` (Credentials, called by Invoke-BuildPhase): phase 6, for a VM that does not exist yet, without -NoUnattend: generates the account if there is none
-   - Reads D22, guest credential: Credential store (<VM>\Credentials\guest.cred)
-   - Writes D23, credential, if new: Credential store (<VM>\Credentials\guest.cred)
-16. `New-UnattendSeedDisk` (Host, called by Invoke-BuildPhase): phase 6: the answer file for Setup, in the same cases
-   - Writes D24, answer-file disc: <VM>\Disks\ (<VM>-Seed.iso)
-17. `New-GuestVM` (Host, called by Invoke-BuildPhase): phase 6: Gen 2, Secure Boot, TPM, dynamic memory
-   - Reads D25, install discs: Shared\ISO\  <VM>\Disks\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
-   - Writes D26, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
-   - Writes D27, new VM: VM <VM> (created, not started yet)
-18. `Install-GuestSoftware` (Installation, called by Invoke-BuildPhase): phase 7: starts the VM, waits for Setup and deletes the answer-file disc; attaches and prepares D:, W: and U: and puts the personal folders on U:; extends C:; BitLocker; Enhanced Session; removes built-in apps and applies the appearance and Developer Mode; Sysmon; then the tooling list: Visual Studio Installer products, SQL Server, winget packages, official installers; Windows updates, and after their restart waits for the guest to settle (no further restart, automatic sign-in done); puts back the application and Windows settings VM.json records, such as those a config template brings; records the tooling list
+10. `Initialize-InstallationIso` (Host, called by Invoke-BuildPhase): the Windows ISO, before anything changes; opens the download page and stops if there is none
+   - Reads D14, Windows ISO: Shared\ISO\  or  Downloads\ (Windows 11 Enterprise, Evaluation ISO)
+   - Writes D15, Windows ISO in place: Shared\ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
+11. `Repair-HyperVService` and `Test-HostReadiness` (Host, called by Invoke-BuildPhase): phases 0 and 1: the Hyper-V services, then CPU, SLAT, memory and free space
+   - Reads D16, host checks: This PC (vmms, vmcompute, CPU, SLAT, RAM, free space)
+12. `Enable-HyperVFeature` (Host, called by Invoke-BuildPhase): phase 2; returns RestartPending when the host must restart
+   - Writes D17, resume task, only if a restart is needed: Task Scheduler (LazyVM-ResumeAfterReboot-<VM>, as SYSTEM, with -Root)
+   - Writes D18, where to resume: <VM>\Config\ (Resume.json  (Phase 3))
+13. `Initialize-HostFolder` (Host, called by Invoke-BuildPhase): phase 3
+   - Writes D19, folders created if missing: <Root>\ (Shared\ ISO, Installers, Credentials, <VM>\ Disks, Credentials, Backups,, Logs, Checkpoints)
+14. `Initialize-SqlServerIso` (Host, called by Invoke-BuildPhase): phase 4: downloads the SQL Server ISO if it is missing
+   - Reads D20, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
+   - Writes D21, SQL Server ISO in place: Shared\Installers\ (SQLServer2025-x64-ENU-EntDev.iso)
+15. `Initialize-SqlDataVhd`, `Initialize-DevDriveVhd` and `Initialize-UserDataVhd` (Host, called by Invoke-BuildPhase): phase 5: existing disks are never overwritten
+   - Writes D22, data disk, Dev Drive and User disk: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB), <VM>-User.vhdx  (20 GB))
+16. `Initialize-GuestCredential` (Credentials, called by Invoke-BuildPhase): phase 6, for a VM that does not exist yet, without -NoUnattend: generates the account if there is none
+   - Reads D23, guest credential: Credential store (<VM>\Credentials\guest.cred)
+   - Writes D24, credential, if new: Credential store (<VM>\Credentials\guest.cred)
+17. `New-UnattendSeedDisk` (Host, called by Invoke-BuildPhase): phase 6: the answer file for Setup, in the same cases
+   - Writes D25, answer-file disc: <VM>\Disks\ (<VM>-Seed.iso)
+18. `New-GuestVM` (Host, called by Invoke-BuildPhase): phase 6: Gen 2, Secure Boot, TPM, dynamic memory
+   - Reads D26, install discs: Shared\ISO\  <VM>\Disks\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
+   - Writes D27, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
+   - Writes D28, new VM: VM <VM> (created, not started yet)
+19. `Install-GuestSoftware` (Installation, called by Invoke-BuildPhase): phase 7: starts the VM, waits for Setup and deletes the answer-file disc; attaches and prepares D:, W: and U: and puts the personal folders on U:; extends C:; BitLocker; Enhanced Session; removes built-in apps and applies the appearance and Developer Mode; Sysmon; then the tooling list: Visual Studio Installer products, SQL Server, winget packages, official installers; Windows updates, and after their restart waits for the guest to settle (no further restart, automatic sign-in done); puts back the application and Windows settings VM.json records, such as those a config template brings; records the tooling list
    - Also runs `Test-SeedDiskAttached`, `Assert-GuestCredential`, `Start-VMFromInstallMedia`, `Wait-GuestReady`, `Remove-UnattendSeedDisk`, `Add-SqlDataDisk`, `Add-DevDriveDisk`, `Add-UserDataDisk`, `Connect-Guest`, `Expand-GuestSystemDrive`, `Unlock-GuestDataDisk`, `Initialize-GuestSqlDisk`, `Initialize-GuestDevDrive`, `Initialize-GuestUserDisk`, `Protect-GuestPersistentDisk`, `Enable-GuestEnhancedSession`, `Set-GuestCustomization`, `Set-GuestSysmon`, `Set-GuestEventLogging`, `Get-BuildTooling`, `Wait-GuestNetwork`, `Install-ToolingProduct`, `Install-SqlServerIfMissing`, `Install-WingetPackage`, `Install-OfficialInstaller`, `Update-GuestWindows`, `Wait-GuestSettled`, `Restore-GuestRecordedAppSetting`, `Initialize-VMTooling`, `Write-ToolingReinstallReport`
-   - Reads D28, tooling list: <VM>\Config\ (VM.json, its Tooling,, or the shared template's)
-   - Reads D29, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
-   - Reads D30, updates and packages: Internet (VS bootstrappers, Marketplace,, winget, Windows Update)
-   - Writes D31, installed and configured guest: Guest (D: data disk, W: Dev Drive,, U: User disk, BitLocker, Sysmon, appearance, VS + SSMS, extensions, SQL Server 2025, winget apps, Windows updates)
-   - Writes D32, tooling list, what needs a manual install: <VM>\ (Config\VM.json, State\reinstall-by-hand.txt)
-19. `Complete-GuestConfiguration` (Installation, called by Invoke-BuildPhase): phase 8: 8a the SQL data disk, 8b moves SQL data files onto it, 8c answers Visual Studio's first launch and imports its settings; a step that fails does not stop the others
+   - Reads D29, tooling list: <VM>\Config\ (VM.json, its Tooling,, or the shared template's)
+   - Reads D30, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
+   - Reads D31, updates and packages: Internet (VS bootstrappers, Marketplace,, winget, Windows Update)
+   - Writes D32, installed and configured guest: Guest (D: data disk, W: Dev Drive,, U: User disk, BitLocker, Sysmon, appearance, VS + SSMS, extensions, SQL Server 2025, winget apps, Windows updates)
+   - Writes D33, tooling list, what needs a manual install: <VM>\ (Config\VM.json, State\reinstall-by-hand.txt)
+20. `Complete-GuestConfiguration` (Installation, called by Invoke-BuildPhase): phase 8: 8a the SQL data disk, 8b moves SQL data files onto it, 8c answers Visual Studio's first launch and imports its settings; a step that fails does not stop the others
    - Also runs `Connect-Guest`, `Assert-GuestCredential`, `Invoke-IsolatedStep`, `Add-SqlDataDisk`, `Unlock-GuestDataDisk`, `Initialize-GuestSqlDisk`, `Move-GuestSqlDataFile`, `Restore-GuestVisualStudioSetting`
-   - Reads D33, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
-   - Writes D34, configured guest: Guest (user databases on D:\SQLData, VS settings imported, or pending, for nightly maintenance)
-20. `Unregister-ResumeTask` (Host, called by Invoke-VMBuild): unless the host is restarting
-   - Writes D35, resume entries removed: Task Scheduler (resume task deleted, Resume.json deleted)
-21. `Save-GuestPersistenceBaseline` (Security, called by Build-LazyVM): unless the host is restarting or GuestSecurityScan is off: at the first build, the VM as the build leaves it, which the nightly security scan compares with; at a later one, only an area the baseline lacks, so a change is never made known-good. Approves automatic sign-in once for the VM. A failure is logged and the next scan records what is missing
+   - Reads D34, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
+   - Writes D35, configured guest: Guest (user databases on D:\SQLData, VS settings imported, or pending, for nightly maintenance)
+21. `Unregister-ResumeTask` (Host, called by Invoke-VMBuild): unless the host is restarting
+   - Writes D36, resume entries removed: Task Scheduler (resume task deleted, Resume.json deleted)
+22. `Save-GuestPersistenceBaseline` (Security, called by Build-LazyVM): unless the host is restarting or GuestSecurityScan is off: at the first build, the VM as the build leaves it, which the nightly security scan compares with; at a later one, only an area the baseline lacks, so a change is never made known-good. Approves automatic sign-in once for the VM. A failure is logged and the next scan records what is missing
    - Also runs `Get-GuestPersistenceSnapshot`, `Install-GuestSecurityFindingOpener`, `Get-GuestPersistenceFact`, `New-PersistenceBaseline`, `Update-SecurityBaseline`, `Add-PersistenceBaselineArea`, `Add-DefaultSecurityApproval`
-   - Reads D36, places programs start from: Running guest (scheduled tasks, services, Run keys,, startup folders, WMI subscriptions,, local users, Administrators)
-   - Writes D37, known-good baseline, under a lock: <VM>\Config\ (SecurityBaseline.json)
-22. `Write-RecoveryKeyReminder` (Disks, called by Build-LazyVM): when the build is over: reminds you to export any recovery password not exported yet, with the command
-   - Reads D38, stored and exported keys: <VM>\ (Credentials\bitlocker.cred, Config\RecoveryKeyExport.json)
-   - Writes D39, reminder: Console and log (one line, with the command)
+   - Reads D37, places programs start from: Running guest (scheduled tasks, services, Run keys,, startup folders, WMI subscriptions,, local users, Administrators)
+   - Writes D38, known-good baseline, under a lock: <VM>\Config\ (SecurityBaseline.json)
+23. `Write-RecoveryKeyReminder` (Disks, called by Build-LazyVM): when the build is over: reminds you to export any recovery password not exported yet, with the command
+   - Reads D39, stored and exported keys: <VM>\ (Credentials\bitlocker.cred, Config\RecoveryKeyExport.json)
+   - Writes D40, reminder: Console and log (one line, with the command)
 
 <a id="build-phases"></a>
 
