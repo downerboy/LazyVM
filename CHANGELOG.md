@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.21.0](https://github.com/downerboy/LazyVM/compare/v6.20.0...v6.21.0) (2026-11-17)
+
+
+### Features
+
+* **gui:** build a VM from the app, with progress and cancel ([#441](https://github.com/downerboy/LazyVM/issues/441)) ([b5fbed3](https://github.com/downerboy/LazyVM/commit/b5fbed387b52d997efc0cbae56e9aed343178f5d))
+
 ## [6.20.0](https://github.com/downerboy/LazyVM/compare/v6.19.0...v6.20.0) (2026-11-17)
 
 
