@@ -16,7 +16,9 @@ function Get-LazyVMDashboard {
     Completed, CompletedWithProblems, WaitingForRestart, Failed, Stopped or
     EndedUnexpectedly), ProcessId, Started, Ended, the Phase and PhaseName
     it is in or was last in, the UnfinishedPhase a failed or stopped run
-    was in, and the PhasesWithProblems. Empty when there has been none.
+    was in, the PhasesWithProblems, and StopRequested, true while a running
+    build has been asked to stop (Stop-LazyVMBuild) and has not stopped
+    yet. Empty when there has been none.
 
     It only reads. What it cannot read for a VM is listed in that VM's
     Problems, and the rest is still filled in, so one VM never hides

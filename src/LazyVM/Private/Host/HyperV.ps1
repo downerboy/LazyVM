@@ -189,6 +189,11 @@ function Enable-HyperVFeature {
         Write-LogEntry 'Hyper-V enabled. Rebooting in 30 seconds; the build resumes automatically at Phase 3.' 'WARN'
         Write-LogEntry "Cancel with: Unregister-ScheduledTask -TaskName '$($VM.Settings.ResumeTaskName)' -Confirm:`$false" 'INFO'
         Start-Sleep -Seconds 30
+        # A build asked to stop meanwhile does not restart the computer (#426).
+        if (Test-VMRunStopRequested) {
+            Write-LogEntry 'Not restarting, as the build was asked to stop. Hyper-V is on once the computer restarts; then run Build-LazyVM to carry on from Phase 3.' 'WARN'
+            Assert-VMRunNotStopped -Boundary
+        }
         Restart-Computer -Force
         return $true
     }
@@ -229,14 +234,22 @@ function Set-ResumePhase {
 }
 
 function Unregister-ResumeTask {
-    param([Parameter(Mandatory)][VMContext]$VM)
+    <#
+      Removes the startup task that carries a build on after a host restart,
+      and the resume point it carries on from. With -KeepResumePoint, keeps
+      that, so the next Build-LazyVM carries on from it.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [switch]$KeepResumePoint
+    )
 
     $settings = $VM.Settings
     if (Get-ScheduledTask -TaskName $settings.ResumeTaskName -ErrorAction SilentlyContinue) {
         Unregister-ScheduledTask -TaskName $settings.ResumeTaskName -Confirm:$false
         Write-LogEntry "Resume task '$($settings.ResumeTaskName)' removed" 'INFO'
     }
-    if (Test-Path -LiteralPath $settings.ResumeFile) {
+    if (-not $KeepResumePoint -and (Test-Path -LiteralPath $settings.ResumeFile)) {
         Remove-Item -LiteralPath $settings.ResumeFile -Force
     }
 }
