@@ -18,7 +18,7 @@
         place even if the host restarts
 
     The build runs these phases, skipping whatever is already done, so it is
-    safe to run again after a failure:
+    safe to run again after a failure (Get-LazyVMBuildPhase lists them):
 
       0  Hyper-V service health check
       1  CPU, firmware, memory and disk space readiness

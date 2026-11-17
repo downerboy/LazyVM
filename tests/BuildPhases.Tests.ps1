@@ -55,6 +55,51 @@ Describe 'Invoke-BuildPhase' {
     }
 }
 
+Describe 'Get-BuildPhase goals (#422)' {
+    It 'gives every phase a goal, shown after "Phase N:"' {
+        foreach ($phase in InModuleScope $module { @(Get-BuildPhase) }) {
+            $phase.Goal | Should -Not -BeNullOrEmpty -Because "phase $($phase.Number) needs a goal"
+            $phase.Goal | Should -MatchExactly '^[A-Z]' -Because "phase $($phase.Number)'s goal starts with a capital"
+            $phase.Goal | Should -Not -Match '\.$' -Because "phase $($phase.Number)'s goal follows 'Phase N:', with no full stop"
+        }
+    }
+
+    It 'numbers the phases from 0, one after another' {
+        $numbers = InModuleScope $module { @(Get-BuildPhase | ForEach-Object { $_.Number }) }
+
+        $numbers | Should -Be @(0..($numbers.Count - 1))
+    }
+}
+
+Describe 'Get-LazyVMBuildPhase (#422)' {
+    It 'returns every phase in order, with its number, name and goal' {
+        $expected = InModuleScope $module { @(Get-BuildPhase) }
+
+        $phases = @(Get-LazyVMBuildPhase)
+
+        $phases.Count | Should -Be $expected.Count
+        for ($i = 0; $i -lt $phases.Count; $i++) {
+            $phases[$i].Number | Should -Be $expected[$i].Number
+            $phases[$i].Name | Should -Be $expected[$i].Name
+            $phases[$i].Goal | Should -Be $expected[$i].Goal
+        }
+    }
+
+    It 'returns LazyVM.BuildPhase objects, without the code that runs the phase' {
+        $phase = @(Get-LazyVMBuildPhase)[0]
+
+        $phase.PSObject.TypeNames | Should -Contain 'LazyVM.BuildPhase'
+        $phase.PSObject.Properties.Name | Should -Be @('Number', 'Name', 'Goal')
+    }
+
+    It 'needs no VM, no LazyVM folder and no administrator rights' {
+        Mock -ModuleName $module Assert-Administrator { throw 'not elevated' }
+        Mock -ModuleName $module Resolve-LazyVMRoot { throw 'no LazyVM folder' }
+
+        { Get-LazyVMBuildPhase } | Should -Not -Throw
+    }
+}
+
 Describe 'Invoke-VMBuild' {
     BeforeEach {
         Mock -ModuleName $module Write-LogEntry { }
