@@ -72,6 +72,30 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Memory_IsShownOfTheMostTheVMCanUse()
+    {
+        var vm = Open(Sample.VM() with { MemoryAssigned = 6 * GB, MemoryMaximum = 16 * GB });
+
+        Assert.Equal("6 GB of 16 GB", Detail(vm, "Memory in use"));
+    }
+
+    [Fact]
+    public void Memory_OfAVMThatIsOff_IsNoneOfTheMost()
+    {
+        var vm = Open(Sample.VM(state: "Off") with { MemoryAssigned = 0, MemoryMaximum = 16 * GB });
+
+        Assert.Equal("None of 16 GB", Detail(vm, "Memory in use"));
+    }
+
+    [Fact]
+    public void Memory_NotKnown_DoesNotShowTheMostOnItsOwn()
+    {
+        var vm = Open(Sample.VM() with { MemoryAssigned = null, MemoryMaximum = 16 * GB });
+
+        Assert.DoesNotContain("16 GB", Detail(vm, "Memory in use"));
+    }
+
+    [Fact]
     public void Disks_ShowTheTotalAndEachDisk()
     {
         var vm = Open(Sample.VM() with

@@ -33,7 +33,7 @@ BeforeAll {
 
         $rootPath = $Root
         Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $rootPath; Source = 'a test' } }.GetNewClosure()
-        Mock -ModuleName $module Get-VM { [pscustomobject]@{ State = 'Off'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 0 } }.GetNewClosure()
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ State = 'Off'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 0; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }.GetNewClosure()
         Mock -ModuleName $module Get-VMHardDiskDrive { }
         Mock -ModuleName $module Get-ScheduledTask { }
     }
@@ -61,12 +61,26 @@ Describe 'Get-LazyVMDashboard' {
 
     It 'gives when the VM was created and the memory it is using, from Hyper-V' {
         Use-TestRoot -Root (New-TestRoot -VMs 'Alpha')
-        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 8GB } }.GetNewClosure()
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 8GB; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }.GetNewClosure()
 
         $row = Get-LazyVMDashboard -Name 'Alpha'
 
         $row.Created | Should -Be $created
         $row.MemoryAssigned | Should -Be 8GB
+    }
+
+    It 'gives the dynamic memory maximum as the most memory the VM can use' {
+        Use-TestRoot -Root (New-TestRoot -VMs 'Alpha')
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 6GB; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }
+
+        (Get-LazyVMDashboard -Name 'Alpha').MemoryMaximum | Should -Be 16GB
+    }
+
+    It 'gives the startup memory as the most the VM can use when dynamic memory is off' {
+        Use-TestRoot -Root (New-TestRoot -VMs 'Alpha')
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 8GB; DynamicMemoryEnabled = $false; MemoryStartup = 8GB; MemoryMaximum = 1TB } }
+
+        (Get-LazyVMDashboard -Name 'Alpha').MemoryMaximum | Should -Be 8GB
     }
 
     It 'gives each disk once, counting its checkpoint files, and the total' {
@@ -97,6 +111,7 @@ Describe 'Get-LazyVMDashboard' {
 
         $row.State | Should -Be 'Not built'
         $row.Created | Should -BeNullOrEmpty
+        $row.MemoryMaximum | Should -BeNullOrEmpty
         $row.Disks | Should -BeNullOrEmpty
         $row.DiskSpaceUsed | Should -BeNullOrEmpty
         Should -Invoke -ModuleName $module Get-VMHardDiskDrive -Times 0

@@ -167,6 +167,7 @@ public class CommandRunner : IDisposable
             State = Value<string>(entry, "State", "State") ?? "Unknown",
             Created = Date("Created", "Created"),
             MemoryAssigned = Value<long?>(entry, "MemoryAssigned", "Memory in use"),
+            MemoryMaximum = Value<long?>(entry, "MemoryMaximum", "Memory maximum"),
             Disks = ReadList(entry, "Disks").Select(disk => new VMDisk(
                 Value<string>(disk, "Name", "Disk name") ?? string.Empty,
                 Value<string>(disk, "Path", "Disk path") ?? string.Empty,

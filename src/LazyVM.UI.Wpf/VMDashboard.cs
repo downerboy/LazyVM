@@ -16,6 +16,9 @@ public sealed record VMDashboard
     /// <summary>Memory in use, in bytes. 0 while the VM is off.</summary>
     public long? MemoryAssigned { get; init; }
 
+    /// <summary>The most memory the VM can use, in bytes: its dynamic memory maximum, or its startup memory when dynamic memory is off.</summary>
+    public long? MemoryMaximum { get; init; }
+
     public IReadOnlyList<VMDisk> Disks { get; init; } = [];
 
     /// <summary>The space all the VM's disks take, in bytes.</summary>
