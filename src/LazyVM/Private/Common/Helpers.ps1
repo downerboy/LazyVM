@@ -121,6 +121,9 @@ function Wait-Until {
 
       $Condition runs in a scope of its own: anything it must remember from
       one try to the next goes in a table the caller passes in as $State.
+
+      A safe point of a build: before each try, stops when the run has been
+      asked to stop (Assert-VMRunNotStopped), even with -NoThrow.
     #>
     param(
         [Parameter(Mandatory)][scriptblock]$Condition,
@@ -133,6 +136,7 @@ function Wait-Until {
 
     $waitDeadline = [datetime]::UtcNow + $Timeout
     while ($true) {
+        Assert-VMRunNotStopped
         $waitResult = & $Condition $State
         if ($waitResult) { return $waitResult }
         if ([datetime]::UtcNow + $Interval -gt $waitDeadline) { break }

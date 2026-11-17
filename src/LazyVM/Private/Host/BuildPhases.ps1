@@ -79,7 +79,9 @@ function Invoke-BuildPhase {
       stopped (Ctrl+C), the answer-file disc goes before the build ends: it
       holds the guest password in clear text, and phase 7 only removes it
       once the guest is ready (#247). A stop runs finally blocks but no catch
-      block, so the disc goes in a finally (#416).
+      block, so the disc goes in a finally (#416). The same goes for a build
+      asked to stop (Stop-LazyVMBuild), which stops before the next phase,
+      the next step or in a wait (#426).
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -96,6 +98,8 @@ function Invoke-BuildPhase {
         foreach ($phase in @(Get-BuildPhase | Where-Object { $_.Number -ge $FromPhase })) {
             Write-LogEntry "PHASE $($phase.Number) - $($phase.Name)" 'PHASE'
             Set-VMRunPhase -Number $phase.Number -Name $phase.Name
+            # After recording the phase, so a build stopped here names it as the one to run from (#426).
+            Assert-VMRunNotStopped -Boundary
             $outcome = @(& $phase.Action $VM $run) | Where-Object { $_ -is [BuildOutcome] } | Select-Object -Last 1
             if ($outcome -eq [BuildOutcome]::RestartPending) {
                 $phasesEnded = $true
@@ -135,7 +139,9 @@ function Invoke-VMBuild {
     <#
       Runs the build from $FromPhase or the resume point left before a host
       restart, whichever is later. The resume point is cleared only once the
-      build completes, so a crash while resuming keeps it.
+      build completes, so a crash while resuming keeps it. A build asked to
+      stop also removes the resume task, so it does not start again at the
+      next start-up, but keeps the resume point for the next Build-LazyVM.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
@@ -148,7 +154,17 @@ function Invoke-VMBuild {
     $startPhase = [math]::Max($FromPhase, $resumePhase)
     if ($startPhase -gt 0) { Write-LogEntry "Starting at Phase $startPhase" 'INFO' }
 
-    $outcome = Invoke-BuildPhase -VM $VM -FromPhase $startPhase -NoUnattend:$NoUnattend
+    try {
+        $outcome = Invoke-BuildPhase -VM $VM -FromPhase $startPhase -NoUnattend:$NoUnattend
+    }
+    catch {
+        $failure = $_
+        if (Test-VMRunStoppedError -Exception $failure.Exception) {
+            try { Unregister-ResumeTask -VM $VM -KeepResumePoint }
+            catch { Write-LogEntry "Could not remove the resume task: $($_.Exception.Message)" 'WARN' }
+        }
+        throw $failure
+    }
     if ($outcome -ne [BuildOutcome]::RestartPending) { Unregister-ResumeTask -VM $VM }
     return $outcome
 }

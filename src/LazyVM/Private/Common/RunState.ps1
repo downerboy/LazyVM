@@ -22,6 +22,11 @@
 #   Phase, PhaseName    the build phase it is in, or was last in
 #   UnfinishedPhase     the phase a failed or stopped run was in
 #   PhasesWithProblems  the phases that finished with problems
+#
+# Stop-LazyVMBuild asks a run to stop by writing <VM>\Config\Run.stop with
+# the run's ProcessId and Started (#426). The run checks for it at its safe
+# points (Assert-VMRunNotStopped): between phases, between steps and in its
+# wait loops. A request naming another run, one already ended, is ignored.
 
 $script:VMRun = $null
 # The dashboard opens the lock for a moment to see whether it is held, so a
@@ -30,13 +35,14 @@ $script:RunLockAttempts = 5
 $script:RunLockRetryMilliseconds = 200
 
 function Get-VMRunPath {
-    <# The VM's run lock and run state: Run.lock and Run.json beside Resume.json, in its Config folder. #>
+    <# The VM's run lock, run state and stop request: Run.lock, Run.json and Run.stop beside Resume.json, in its Config folder. #>
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Settings)
 
     $folder = Split-Path -Path $Settings.ResumeFile -Parent
     return [pscustomobject]@{
         Lock  = Join-Path -Path $folder -ChildPath 'Run.lock'
         State = Join-Path -Path $folder -ChildPath 'Run.json'
+        Stop  = Join-Path -Path $folder -ChildPath 'Run.stop'
     }
 }
 
@@ -72,6 +78,7 @@ function Enter-VMRun {
     $paths = Get-VMRunPath -Settings $VM.Settings
     Assert-NoReparsePoint -Path $paths.Lock
     Assert-NoReparsePoint -Path $paths.State
+    Assert-NoReparsePoint -Path $paths.Stop
 
     $lock = $null
     for ($attempt = 1; -not $lock; $attempt++) {
@@ -90,11 +97,16 @@ function Enter-VMRun {
     foreach ($earlier in (Read-VMRunDocument -Path $paths.State).Runs) {
         if ($earlier.Command -and $earlier.Command -ne $Command) { $runs[$earlier.Command] = $earlier }
     }
+    # A request left from an earlier run is not for this one.
+    Remove-VMRunStopRequest -Path $paths.Stop
     $script:VMRun = @{
-        Lock    = $lock
-        Path    = $paths.State
-        Outcome = $null
-        Runs    = $runs
+        Lock     = $lock
+        Path     = $paths.State
+        StopPath = $paths.Stop
+        VMName   = $VM.Name
+        Stopping = $false
+        Outcome  = $null
+        Runs     = $runs
         State   = [ordered]@{
             Command            = $Command
             Status             = 'Running'
@@ -185,6 +197,7 @@ function Exit-VMRun {
         if ($Status -ne 'Completed') { $state.UnfinishedPhase = $state.Phase }
         $state.Ended = (Get-Date).ToString('o')
         Save-VMRunState
+        Remove-VMRunStopRequest -Path $script:VMRun.StopPath
     }
     finally {
         $script:VMRun.Lock.Dispose()
@@ -236,8 +249,9 @@ function Read-VMRunDocument {
 function Get-VMRunState {
     <#
       A long run of the VM, as a LazyVM.VMRun: Command, Status, ProcessId,
-      Started, Ended, Phase, PhaseName, UnfinishedPhase and
-      PhasesWithProblems. The latest run, or with -Command the latest run
+      Started, Ended, Phase, PhaseName, UnfinishedPhase,
+      PhasesWithProblems and StopRequested, true while a running run has
+      been asked to stop and has not stopped yet. The latest run, or with -Command the latest run
       of that command (Build, Maintenance or Rebuild). Status is Running
       while a run holds the lock, even one that has not written its state
       yet, and EndedUnexpectedly for one recorded as running whose lock is
@@ -252,6 +266,7 @@ function Get-VMRunState {
 
     $paths = Get-VMRunPath -Settings $Settings
     Assert-NoReparsePoint -Path $paths.State -Root $Settings.Root
+    Assert-NoReparsePoint -Path $paths.Stop -Root $Settings.Root
     $held = Test-VMRunLockHeld -Path $paths.Lock
     $document = Read-VMRunDocument -Path $paths.State
     $wanted = if ($Command) { $Command } else { $document.Last }
@@ -273,16 +288,21 @@ function Get-VMRunState {
         PhaseName          = Read-Field 'PhaseName'
         UnfinishedPhase    = Read-Field 'UnfinishedPhase'
         PhasesWithProblems = @(Read-Field 'PhasesWithProblems' | Where-Object { $null -ne $_ })
+        StopRequested      = $false
     }
     if ($held -and $run.Status -ne 'Running') {
         # A new run has the lock but has not written its state yet: what is recorded is the last one's.
         foreach ($key in @($run.Keys)) { if ($key -ne 'PSTypeName') { $run[$key] = $null } }
         $run.Status = 'Running'
         $run.PhasesWithProblems = @()
+        $run.StopRequested = $false
     }
     elseif (-not $held -and $run.Status -eq 'Running') {
         $run.Status = 'EndedUnexpectedly'
         $run.UnfinishedPhase = $run.Phase
+    }
+    elseif ($held) {
+        $run.StopRequested = Test-VMRunStopMatch -Request (Read-VMRunStopRequest -Path $paths.Stop) -ProcessId $run.ProcessId -Started $run.Started
     }
     return [pscustomobject]$run
 }
@@ -305,4 +325,145 @@ function Get-VMRunBusyMessage {
     }
     $since = if ($running.Started) { " (started $(([datetime]$running.Started).ToString('g')), process $($running.ProcessId))" } else { '' }
     return "$what of $($VM.Name) is already running$since, so this $($Title.ToLowerInvariant()) did not start. Wait for it to finish, then run it again."
+}
+
+function Read-VMRunStopRequest {
+    <# The stop request at $Path: the ProcessId and Started of the run it is for. Nothing when there is none or it cannot be read. #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+    try { $request = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -ErrorAction Stop }
+    catch { return }
+    if ($request -and $request.PSObject.Properties['ProcessId'] -and $request.PSObject.Properties['Started']) { return $request }
+}
+
+function Test-VMRunStopMatch {
+    <#
+      Whether the stop request $Request is for the run that started at
+      $Started in process $ProcessId. Compared as instants: JSON may give a
+      time back as text or as a date.
+    #>
+    [OutputType([bool])]
+    param(
+        [AllowNull()][object]$Request,
+        [AllowNull()][object]$ProcessId,
+        [AllowNull()][object]$Started
+    )
+
+    if (-not $Request -or $null -eq $ProcessId -or -not $Started -or -not $Request.Started) { return $false }
+    try {
+        $sameProcess = [int]$Request.ProcessId -eq [int]$ProcessId
+        $sameStart = ([datetime]$Request.Started).ToUniversalTime() -eq ([datetime]$Started).ToUniversalTime()
+        return $sameProcess -and $sameStart
+    }
+    catch { return $false }
+}
+
+function Remove-VMRunStopRequest {
+    <# Deletes the stop request at $Path, if there is one. Logged, not thrown: it must not change how a run ends. #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    try {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) { Remove-Item -LiteralPath $Path -Force -ErrorAction Stop }
+    }
+    catch {
+        Write-LogEntry "Could not remove the stop request $Path`: $($_.Exception.Message)" 'WARN'
+    }
+}
+
+function Request-VMRunStop {
+    <#
+      Asks the run $Run of the VM, as Get-VMRunState read it, to stop: writes
+      Run.stop with its ProcessId and Started, so it reaches that run and no
+      later one.
+    #>
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Settings,
+        [Parameter(Mandatory)][pscustomobject]$Run
+    )
+
+    $path = (Get-VMRunPath -Settings $Settings).Stop
+    Assert-NoReparsePoint -Path $path -Root $Settings.Root
+    $request = [pscustomobject]@{
+        ProcessId = [int]$Run.ProcessId
+        Started   = ([datetime]$Run.Started).ToUniversalTime().ToString('o')
+        Requested = [datetime]::UtcNow.ToString('o')
+    }
+    Write-TextFileAtomic -Path $path -Text (ConvertTo-Json -InputObject $request)
+}
+
+function Test-VMRunStopRequested {
+    <# Whether the run this process holds has been asked to stop. False in a process that holds no run lock. #>
+    [OutputType([bool])]
+    param()
+
+    if (-not $script:VMRun) { return $false }
+    $request = Read-VMRunStopRequest -Path $script:VMRun.StopPath
+    return Test-VMRunStopMatch -Request $request -ProcessId $script:VMRun.State.ProcessId -Started $script:VMRun.State.Started
+}
+
+function Assert-VMRunNotStopped {
+    <#
+      A safe point of the run: throws a VMRunStoppedException when it has
+      been asked to stop. Nothing in a process that holds no run lock.
+
+      In a wait loop it throws once, so the clean-up that runs as the stop
+      goes up (removing the answer-file disc, tidying up in the guest) is not
+      stopped in turn. With -Boundary, between phases and between steps, it
+      throws again whenever the run is stopping, so a stop that something
+      took for a failure and carried on from still stops the run there.
+    #>
+    param([switch]$Boundary)
+
+    if (-not $script:VMRun) { return }
+    if ($script:VMRun.Stopping) {
+        if ($Boundary) { throw (New-VMRunStoppedException) }
+        return
+    }
+    if (-not (Test-VMRunStopRequested)) { return }
+    $script:VMRun.Stopping = $true
+    Write-LogEntry 'Asked to stop (Stop-LazyVMBuild): stopping here. Work already running in the guest carries on by itself.' 'WARN'
+    throw (New-VMRunStoppedException)
+}
+
+function New-VMRunStoppedException {
+    <# The VMRunStoppedException a stopped run ends with, naming the run and the phase it was in. #>
+    [OutputType([VMRunStoppedException])]
+    param()
+
+    $what = switch ($script:VMRun.State.Command) {
+        'Build' { 'The build' }
+        'Maintenance' { 'Maintenance' }
+        'Rebuild' { 'The rebuild' }
+        default { 'The run' }
+    }
+    $where = if ($null -ne $script:VMRun.State.Phase) { " in phase $($script:VMRun.State.Phase), $($script:VMRun.State.PhaseName)" } else { '' }
+    return [VMRunStoppedException]::new("$what of $($script:VMRun.VMName) was stopped$where, as asked.")
+}
+
+function Find-VMRunStoppedException {
+    <#
+      The VMRunStoppedException $Exception is, or wraps: as an inner
+      exception, or as the exception of the error record it carries. Nothing
+      when it is a failure, not a stop.
+    #>
+    [OutputType([VMRunStoppedException])]
+    param([AllowNull()][Exception]$Exception)
+
+    for ($current = $Exception; $current; $current = $current.InnerException) {
+        if ($current -is [VMRunStoppedException]) { return $current }
+        if ($current -is [System.Management.Automation.IContainsErrorRecord] -and $current.ErrorRecord -and $current.ErrorRecord.Exception -and
+            -not [object]::ReferenceEquals($current.ErrorRecord.Exception, $current)) {
+            $found = Find-VMRunStoppedException -Exception $current.ErrorRecord.Exception
+            if ($found) { return $found }
+        }
+    }
+}
+
+function Test-VMRunStoppedError {
+    <# Whether $Exception, or one it wraps, is a run stopping as asked rather than failing. #>
+    [OutputType([bool])]
+    param([AllowNull()][Exception]$Exception)
+
+    return [bool](Find-VMRunStoppedException -Exception $Exception)
 }

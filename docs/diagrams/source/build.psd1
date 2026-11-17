@@ -63,7 +63,8 @@
         @{
             Function = 'Invoke-VMBuild'
             Area     = 'Host'
-            Note     = 'runs the phases from -FromPhase or the resume point, whichever is later'
+            Note     = 'runs the phases from -FromPhase or the resume point, whichever is later; a build asked to stop (Stop-LazyVMBuild) removes the resume task'
+            Includes = @('Test-VMRunStoppedError')
         }
         @{
             Function = 'Get-ResumePhase'
@@ -76,8 +77,9 @@
             Function = 'Invoke-BuildPhase'
             Area     = 'Host'
             Caller   = 'Invoke-VMBuild'
-            Note     = 'runs each phase of Get-BuildPhase in order (steps 10-20); when a phase throws or the build is stopped, deletes the answer-file disc first'
-            Includes = @('Get-BuildPhase', 'Remove-UnattendSeedDisk', 'Set-VMRunPhase', 'Add-VMRunProblemPhase')
+            Note     = 'runs each phase of Get-BuildPhase in order (steps 10-20); stops before a phase when asked to (Stop-LazyVMBuild); when a phase throws or the build is stopped, deletes the answer-file disc first'
+            Includes = @('Get-BuildPhase', 'Remove-UnattendSeedDisk', 'Set-VMRunPhase', 'Add-VMRunProblemPhase', 'Assert-VMRunNotStopped')
+            Reads    = @(@{ Label = 'stop request'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Run.stop') })
             Writes   = @(@{ Label = 'run state'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Run.json  (each phase as it starts, and those with problems)') })
         }
         @{

@@ -29,7 +29,8 @@ function Invoke-GuestScript {
     $run = @{ VM = $VM; ScriptBlock = $ScriptBlock; ArgumentList = $ArgumentList; TimeoutMinutes = $TimeoutMinutes; Activity = $Activity }
     try { return Invoke-GuestScriptJob @run }
     catch {
-        if (-not $RetryOnDisconnect -or (Test-GuestSessionOpen -VM $VM)) { throw }
+        # A run asked to stop is not a dropped session: never run again.
+        if (-not $RetryOnDisconnect -or (Test-VMRunStoppedError -Exception $_.Exception) -or (Test-GuestSessionOpen -VM $VM)) { throw }
         Write-LogEntry "  The guest dropped the session during $Activity ($($_.Exception.Message)) - reconnecting and running it once more" 'WARN'
         return Invoke-GuestScriptJob @run
     }
@@ -160,7 +161,10 @@ function Invoke-GuestTask {
     }
 
     # Removed however the wait ends, so a task that timed out does not stay
-    # registered in the guest (#227).
+    # registered in the guest (#227). When the build was asked to stop, the
+    # task is only unregistered, which leaves its work running to the end
+    # (#426); otherwise it is stopped first.
+    $stopped = $false
     try {
         $done = Wait-Until -Activity $Activity -Timeout ([timespan]::FromMinutes($TimeoutMinutes)) -Interval ([timespan]::FromSeconds(30)) -State $progress -Condition {
             param($p)
@@ -171,6 +175,7 @@ function Invoke-GuestTask {
                 $p.Failures = 0
             }
             catch {
+                if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
                 # A dropped session means the guest is restarting; the next try
                 # reconnects. Anything else that keeps failing is a real problem.
                 if (Test-GuestSessionOpen -VM $VM) {
@@ -198,10 +203,16 @@ function Invoke-GuestTask {
             return $null
         }
     }
+    catch {
+        $stopped = Test-VMRunStoppedError -Exception $_.Exception
+        throw
+    }
     finally {
         try {
-            $null = Invoke-GuestScript -VM $VM -Activity "tidying up after $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName) -ScriptBlock {
-                param($taskName) Remove-GuestTask -TaskName $taskName
+            $null = Invoke-GuestScript -VM $VM -Activity "tidying up after $Activity" -TimeoutMinutes 2 -ArgumentList @($TaskName, $stopped) -ScriptBlock {
+                param($taskName, $leaveRunning)
+                if ($leaveRunning) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue }
+                else { Remove-GuestTask -TaskName $taskName }
             }
         }
         catch {
