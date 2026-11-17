@@ -149,6 +149,29 @@ function Get-VMTemplateName {
     return Select-VMTemplateName -Template @(Get-VMTemplate -Root $Root)
 }
 
+function Select-NamedVMTemplate {
+    <#
+      The config template named $Name among $Template that a build uses:
+      the user's own over a built-in one of the same name. Nothing when
+      there is none. Throws, naming the files, when several share the name.
+    #>
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Template
+    )
+
+    $named = @($Template | Where-Object { -not $_.Problem -and $_.Name -eq $Name })
+    $found = @($named | Where-Object { -not $_.BuiltIn })
+    if ($found.Count -eq 0) { $found = $named }
+    if ($found.Count -gt 1) {
+        throw "Several config templates are named '$Name', so LazyVM cannot tell which to use. Change the Name in all but one:`n$(($found | ForEach-Object { "  $($_.Path)" }) -join "`n")"
+    }
+    if ($found.Count -eq 1) {
+        return $found[0]
+    }
+}
+
 function Read-VMTemplate {
     <#
       The settings the config template of that name changes. One of the
@@ -165,14 +188,9 @@ function Read-VMTemplate {
     )
 
     $templates = @(Get-VMTemplate -Root $Root)
-    $named = @($templates | Where-Object { -not $_.Problem -and $_.Name -eq $Name })
-    $found = @($named | Where-Object { -not $_.BuiltIn })
-    if ($found.Count -eq 0) { $found = $named }
-    if ($found.Count -eq 1) {
-        return $found[0].Settings
-    }
-    if ($found.Count -gt 1) {
-        throw "Several config templates are named '$Name', so LazyVM cannot tell which to use. Change the Name in all but one:`n$(($found | ForEach-Object { "  $($_.Path)" }) -join "`n")"
+    $found = Select-NamedVMTemplate -Name $Name -Template $templates
+    if ($found) {
+        return $found.Settings
     }
 
     $message = "There is no config template named '$Name'. Config templates: $((Select-VMTemplateName -Template $templates) -join ', ')."

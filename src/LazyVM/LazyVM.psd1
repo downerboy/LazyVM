@@ -18,6 +18,7 @@
         'Export-LazyVMTemplate'
         'Get-LazyVM'
         'Get-LazyVMBuildPhase'
+        'Get-LazyVMConfigTemplate'
         'Get-LazyVMCredential'
         'Get-LazyVMDashboard'
         'Get-LazyVMLicense'

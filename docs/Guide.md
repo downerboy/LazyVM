@@ -191,6 +191,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Build-LazyVM -FromPhase 7` | Starts at a phase, skipping earlier ones, after fixing what stopped a build. |
 | `Build-LazyVM -NoUnattend` | No answer file: Windows Setup has to be completed by hand in VMConnect. This is also the only way to have a VM without automatic sign-in: on every other VM it stays on for the VM's life, and maintenance turns it back on if it is turned off. |
 | `Get-LazyVMBuildPhase` | The build's phases, in order: the number `-FromPhase` takes, the name and the goal. Read-only, and needs no VM. |
+| `Get-LazyVMConfigTemplate` | The config templates `-ConfigTemplate` can use: the built-in ones and your own, each with whether it is built in and whether LazyVM keeps it up to date (`<VM>-latest`). A template file that cannot be read is left out with a warning. Read-only. |
 | `Get-LazyVM` | Lists the VMs, their state in Hyper-V, and their maintenance time and task. |
 | `Get-LazyVMDashboard` | Everything the dashboard shows for each VM: what `Get-LazyVM` lists, when it was created, the memory it is using, its disks and the space they take, its last maintenance run and result, its open security findings, the configuration it was first built from, and its green template (`<VM>-latest`). Only reads. |
 | `Get-LazyVMSetting` | Every setting as the VM uses it, where the value came from, and what it does. `-Setting Mem*` narrows it. |

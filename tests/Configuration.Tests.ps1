@@ -1011,6 +1011,82 @@ Describe 'The built-in config templates' {
     }
 }
 
+Describe 'Get-LazyVMConfigTemplate (#423)' {
+    BeforeEach {
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $templates = Join-Path -Path $root -ChildPath 'Shared/Templates'
+        $null = New-Item -ItemType Directory -Path $templates -Force
+        Mock -ModuleName $module Get-RegisteredRoot { $root }.GetNewClosure()
+
+        function Add-TestTemplate([string]$FileName, [string]$Json) {
+            Set-Content -LiteralPath (Join-Path -Path $templates -ChildPath $FileName) -Value $Json
+        }
+    }
+
+    It 'lists the built-in config templates and the user''s, by name' {
+        Add-TestTemplate 'web.json' '{ "Name": "WebDev", "Settings": {} }'
+        Add-TestTemplate 'alpha.json' '{ "Name": "Alpha-latest", "Automatic": true, "ProfileId": "p1", "Settings": {} }'
+
+        $listed = @(Get-LazyVMConfigTemplate)
+
+        $listed.Name | Should -Be @('Alpha-latest', 'Developer', 'PlainWindows', 'WebDev')
+        ($listed | Where-Object Name -eq 'Developer').BuiltIn | Should -BeTrue
+        ($listed | Where-Object Name -eq 'WebDev').BuiltIn | Should -BeFalse
+        ($listed | Where-Object Name -eq 'WebDev').Path | Should -Be (Join-Path -Path $templates -ChildPath 'web.json')
+        ($listed | Where-Object Name -eq 'Alpha-latest').Automatic | Should -BeTrue
+        ($listed | Where-Object Name -eq 'WebDev').Automatic | Should -BeFalse
+    }
+
+    It 'returns LazyVM.ConfigTemplate objects with Name, BuiltIn, Automatic and Path only' {
+        $first = @(Get-LazyVMConfigTemplate)[0]
+
+        $first.PSObject.TypeNames | Should -Contain 'LazyVM.ConfigTemplate'
+        $first.PSObject.Properties.Name | Should -Be @('Name', 'BuiltIn', 'Automatic', 'Path')
+    }
+
+    It 'lists the user''s own in place of a built-in one of the same name, as a build would use it' {
+        Add-TestTemplate 'mine.json' '{ "Name": "PlainWindows", "Settings": { "vCPU": 2 } }'
+
+        $plain = @(Get-LazyVMConfigTemplate | Where-Object Name -eq 'PlainWindows')
+
+        $plain.Count | Should -Be 1
+        $plain[0].BuiltIn | Should -BeFalse
+    }
+
+    It 'leaves out a file that cannot be read, and warns with what is wrong' {
+        Add-TestTemplate 'broken.json' '{ "Settings": {} }'
+
+        $listed = @(Get-LazyVMConfigTemplate -WarningVariable warnings -WarningAction SilentlyContinue)
+
+        $listed.Name | Should -Be @('Developer', 'PlainWindows')
+        $warnings.Count | Should -Be 1
+        "$($warnings[0])" | Should -BeLike '*needs a Name*broken.json*'
+    }
+
+    It 'leaves out a name several of the user''s templates share, since a build refuses it, and warns' {
+        Add-TestTemplate 'one.json' '{ "Name": "WebDev", "Settings": {} }'
+        Add-TestTemplate 'two.json' '{ "Name": "WebDev", "Settings": {} }'
+
+        $listed = @(Get-LazyVMConfigTemplate -WarningVariable warnings -WarningAction SilentlyContinue)
+
+        $listed.Name | Should -Not -Contain 'WebDev'
+        $warnings.Count | Should -Be 1
+        "$($warnings[0])" | Should -BeLike "*Several config templates are named 'WebDev'*one.json*two.json*"
+    }
+
+    It 'lists the built-in ones alone before there is a LazyVM folder' {
+        Mock -ModuleName $module Get-RegisteredRoot { }
+
+        (Get-LazyVMConfigTemplate).Name | Should -Be @('Developer', 'PlainWindows')
+    }
+
+    It 'needs no administrator rights' {
+        Mock -ModuleName $module Assert-Administrator { throw 'not elevated' }
+
+        { Get-LazyVMConfigTemplate } | Should -Not -Throw
+    }
+}
+
 Describe 'Export-VMTemplate (#250)' {
     BeforeAll {
         $sourceJson = '{ "MemMaxGB": 32, "LogFile": "Logs\\Alpha-Old.log", "GuestComputerName": "ALPHA",

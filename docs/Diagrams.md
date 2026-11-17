@@ -9,7 +9,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
@@ -20,7 +20,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - Maintain: [Daily maintenance](#maintenance), [Schedule maintenance again](#register-maintenance), [Rebuild a VM](#rebuild)
 - Tooling: [Record tooling now](#tooling-record), [See installed tooling](#tooling-view), [List tooling restore points](#restore-points), [Return to an earlier tooling version](#tooling-revert)
 - State: [Capture state](#capture), [Restore state](#restore)
-- Templates: [Save a VM as a config template](#export-template)
+- Templates: [List the config templates](#config-templates), [Save a VM as a config template](#export-template)
 - Remove: [Remove a VM](#remove)
 - Check: [List VMs](#status), [See the dashboard data](#dashboard), [Read a VM's log](#log), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [Export the recovery passwords](#recovery-key-export), [See the security findings](#security-finding), [Approve a security finding](#security-approve), [Revoke a security finding approval](#security-revoke), [Check a VM end to end](#test)
 
@@ -647,6 +647,25 @@ Puts the newest capture and the VM's records back into the VM. A rebuild runs th
 10. `Restore-GuestVisualStudioSetting` (Installation): imports the Visual Studio settings; when it cannot, nightly maintenance does
    - Reads D18, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
    - Writes D19, VS settings: Visual Studio (imported, or pending)
+
+<a id="config-templates"></a>
+
+## List the config templates
+
+`Get-LazyVMConfigTemplate`
+
+Lists the config templates a new VM can be created from: the built-in ones and your own, each name once, as a build would use it. A file that cannot be read, or a name several of yours share, is left out with a warning. Only reads, so no administrator rights are needed.
+
+![List the config templates: call order and data flow](diagrams/config-templates.svg)
+
+1. `Get-RegisteredRoot` (Settings): the LazyVM folder, if one is chosen yet
+   - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root)
+2. `Get-VMTemplate` (Settings): every template file, built-in first; a file that cannot be read keeps its problem, which becomes a warning
+   - Also runs `Read-VMTemplateFile`
+   - Reads D2, config templates: Templates (<module>\Data\Templates\*.json, Shared\Templates\*.json)
+3. `Select-VMTemplateName` (Settings): the names of the usable ones, sorted, each once
+4. `Select-NamedVMTemplate` (Settings): for each name, yours over a built-in one; a name several of yours share becomes a warning
+   - Writes D3, templates: Pipeline (LazyVM.ConfigTemplate: Name, BuiltIn, Automatic, Path)
 
 <a id="export-template"></a>
 
