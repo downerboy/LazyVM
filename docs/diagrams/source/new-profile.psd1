@@ -18,7 +18,7 @@
         @{
             Function = 'New-VMProfile'
             Area     = 'Settings'
-            Note     = 'applies -ConfigTemplate''s Settings, or copies -From settings except paths, computer name, maintenance time and disk identity; schedules maintenance an hour after the latest existing VM'
+            Note     = 'applies -ConfigTemplate''s Settings and records its name as CreatedFromTemplate, or copies -From settings except paths, computer name, maintenance time and disk identity; schedules maintenance an hour after the latest existing VM'
             Reads    = @(
                 @{ Label = 'settings and tooling, with -From'; Kind = 'file'; Store = '<OtherVM>\Config\'; Items = @('VM.json') }
                 @{ Label = 'config template, with -ConfigTemplate'; Kind = 'file'; Store = 'Config templates'; Items = @('Data\Templates\*.json', 'Shared\Templates\*.json') }
@@ -26,7 +26,7 @@
                 @{ Label = 'maintenance times in use'; Kind = 'file'; Store = '*\Config\'; Items = @('VM.json') }
             )
             Writes   = @(
-                @{ Label = 'new profile'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json') }
+                @{ Label = 'new profile'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json', 'its CreatedFromTemplate  (with -ConfigTemplate)') }
                 @{ Label = 'tooling list to build with'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('VM.json', 'its Tooling  (with -From)') }
             )
         }

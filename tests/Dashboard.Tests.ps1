@@ -154,6 +154,17 @@ Describe 'Get-LazyVMDashboard' {
         $rows[1].OriginalConfig | Should -BeNullOrEmpty
     }
 
+    It 'gives the config template the VM''s profile was created from, when one is recorded (#421)' {
+        $root = New-TestRoot -VMs 'Alpha', 'Beta'
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/VM.json') -Value '{ "vCPU": 6, "CreatedFromTemplate": "PlainWindows" }'
+        Use-TestRoot -Root $root
+
+        $rows = @(Get-LazyVMDashboard)
+
+        $rows[0].CreatedFromTemplate | Should -Be 'PlainWindows'
+        $rows[1].CreatedFromTemplate | Should -BeNullOrEmpty
+    }
+
     It 'gives the green template LazyVM keeps for the VM, and when it last changed' {
         $root = New-TestRoot -VMs 'Alpha', 'Beta'
         $templates = Join-Path -Path $root -ChildPath 'Shared' | Join-Path -ChildPath 'Templates'

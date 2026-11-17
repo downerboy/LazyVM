@@ -36,6 +36,7 @@ public sealed class CommandRunnerTests
             ("LastSecurityScan", created),
             ("OpenFindings", 2),
             ("OriginalConfig", @"D:\VMs\DevBox\Config\VM.Template.json"),
+            ("CreatedFromTemplate", "PlainWindows"),
             ("GreenTemplate", "DevBox-latest"),
             ("GreenTemplateUpdated", created),
             ("Settings", "OK"),
@@ -55,6 +56,7 @@ public sealed class CommandRunnerTests
         Assert.Equal(created, vm.LastSecurityScan);
         Assert.Equal(2, vm.OpenFindings);
         Assert.Equal(@"D:\VMs\DevBox\Config\VM.Template.json", vm.OriginalConfig);
+        Assert.Equal("PlainWindows", vm.CreatedFromTemplate);
         Assert.Equal("DevBox-latest", vm.GreenTemplate);
         Assert.Equal(created, vm.GreenTemplateUpdated);
         Assert.Equal("OK", vm.Settings);
@@ -80,6 +82,7 @@ public sealed class CommandRunnerTests
         Assert.Null(vm.Created);
         Assert.Null(vm.MemoryAssigned);
         Assert.Null(vm.MemoryMaximum);
+        Assert.Null(vm.CreatedFromTemplate);
         Assert.Empty(vm.Disks);
         Assert.Null(vm.OpenFindings);
         Assert.Empty(vm.Problems);

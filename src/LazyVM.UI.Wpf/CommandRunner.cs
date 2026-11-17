@@ -181,6 +181,7 @@ public class CommandRunner : IDisposable
             LastSecurityScan = Date("LastSecurityScan", "Last security scan"),
             OpenFindings = Value<int?>(entry, "OpenFindings", "Open findings"),
             OriginalConfig = Value<string>(entry, "OriginalConfig", "Original configuration"),
+            CreatedFromTemplate = Value<string>(entry, "CreatedFromTemplate", "Config template"),
             GreenTemplate = Value<string>(entry, "GreenTemplate", "Green template"),
             GreenTemplateUpdated = Date("GreenTemplateUpdated", "Green template updated"),
             Settings = Value<string>(entry, "Settings", "Settings") ?? "Not known",

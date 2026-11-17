@@ -266,7 +266,7 @@ function Get-PerVMSettingName {
     [OutputType([string[]])]
     param()
 
-    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime', $script:ProfileIdSettingName) + @($script:DataDiskIdentitySettings) + @($script:RecordedGuestStateSettings)
+    return @($script:HostPathSettings) + @('GuestComputerName', 'MaintenanceTime', $script:ProfileIdSettingName, $script:CreatedFromTemplateSettingName) + @($script:DataDiskIdentitySettings) + @($script:RecordedGuestStateSettings)
 }
 
 function Get-ShareableSetting {
@@ -332,8 +332,10 @@ function New-VMProfile {
 
     $settings = (Get-SharedTemplateSetting -Root $Root).Values
     if ($ConfigTemplate) {
-        $templateValues = Read-VMTemplate -Name $ConfigTemplate -Root $Root
-        foreach ($key in $templateValues.Keys) { $settings[$key] = $templateValues[$key] }
+        $template = Find-VMTemplate -Name $ConfigTemplate -Root $Root
+        foreach ($key in $template.Settings.Keys) { $settings[$key] = $template.Settings[$key] }
+        # The template's own spelling of its name, whatever case -ConfigTemplate was given in (#421).
+        $settings[$script:CreatedFromTemplateSettingName] = $template.Name
     }
     if ($From) {
         $source = $existing | Where-Object { $_ -eq $From } | Select-Object -First 1

@@ -45,13 +45,14 @@ One row per VM in the main list. The details open in the VM's own window.
 | Last maintenance run and result | `LastMaintenance`, `LastMaintenanceResult` (Succeeded, Failed (0x…), Not run yet) | Task Scheduler. Runs started by hand are not counted. |
 | Last security scan, findings still open | `LastSecurityScan`, `OpenFindings` | `Logs\SecurityFindings.json`, less approved and resolved findings |
 | Configuration it was first built from | `OriginalConfig` | `Config\VM.Template.json` |
+| Config template it was created from | `CreatedFromTemplate` | `VM.json`, recorded when the profile is created with `-ConfigTemplate` (#421). Empty when there was none, and for profiles made before LazyVM recorded it. |
 | Green template | `GreenTemplate`, `GreenTemplateUpdated` | `Shared\Templates\<VM>-latest.json` |
 | Settings problem | `Settings` | The VM's settings files |
 | What could not be read | `Problems` | One line per part that failed, such as `Disks: access denied` |
 
 The green template is the config template LazyVM keeps up to date every time the VM changes (#292), so there is always a template to build another VM just like it. "Green" as in evergreen.
 
-Not yet available: the name of the config template a VM was first created from. `VM.json` does not record it yet; LazyVM will record it when the profile is created, and the VM window will name it (#421). `OriginalConfig` gives the configuration itself.
+The VM window names the config template the VM was created from, or says "None recorded" when the VM was made without one or before LazyVM recorded it (#421). `OriginalConfig` gives the configuration itself.
 
 
 ## 4. What the window does
@@ -162,7 +163,7 @@ The module is per-user by design. Any multi-user mode must be an explicit, admin
 Decided 2026-11-16:
 
 1. Memory is shown as use against the maximum the VM can use (#420). Done.
-2. LazyVM records the config template a VM was created from, and the window names it (#421).
+2. LazyVM records the config template a VM was created from, and the window names it (#421). Done.
 3. A copied password stays on the clipboard for three minutes, then it is cleared.
 4. Build progress shows each phase's number with its goal. The goals come from the module (`Get-LazyVMBuildPhase`, #422), the single list of phases.
 

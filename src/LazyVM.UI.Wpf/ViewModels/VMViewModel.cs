@@ -291,6 +291,8 @@ public sealed class VMViewModel : ViewModelBase
         details.Add(new("Last security scan", vm.LastSecurityScan is { } scanned
             ? $"{DashboardText.When(scanned)}, {DashboardText.InSentence(DashboardText.OpenFindings(vm.OpenFindings))}"
             : "Not scanned yet"));
+        // Empty both for a VM made without a template and for one made before LazyVM recorded it (#421).
+        details.Add(new("Created from config template", vm.CreatedFromTemplate ?? "None recorded"));
         details.Add(new("Configuration first built from", vm.OriginalConfig ?? DashboardText.NotKnown));
         details.Add(new("Green template", GreenTemplateText(vm)));
         details.Add(new("Settings", vm.Settings));

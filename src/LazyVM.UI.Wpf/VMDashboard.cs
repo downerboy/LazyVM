@@ -42,6 +42,9 @@ public sealed record VMDashboard
     /// <summary>The path of the configuration the VM was first built from.</summary>
     public string? OriginalConfig { get; init; }
 
+    /// <summary>The config template the VM's profile was created from; empty when there was none, or before LazyVM recorded it.</summary>
+    public string? CreatedFromTemplate { get; init; }
+
     public string? GreenTemplate { get; init; }
 
     public DateTime? GreenTemplateUpdated { get; init; }

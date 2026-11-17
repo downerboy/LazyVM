@@ -1308,6 +1308,12 @@
       "default": null,
       "description": "Recorded by LazyVM: this VM's own identifier, made when its profile is created and kept across rebuilds. Its <VM>-latest config template carries it, so a new VM of the same name never replaces the template kept from an earlier one. Leave it as it is; a VM copied with -From gets its own.",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "CreatedFromTemplate": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Recorded by LazyVM: the name of the config template this VM's profile was created from with -ConfigTemplate, such as Developer or PlainWindows. Empty when it was created without one, by copying another VM with -From, or before LazyVM recorded it. Changing it changes nothing about the VM.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,63}$"
     }
   }
 }

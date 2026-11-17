@@ -178,12 +178,12 @@ Creates the profile only. Build-LazyVM does this by itself when the profile is m
 
 1. `Resolve-LazyVMRoot` (Settings): the LazyVM folder; stops if none has been chosen yet
    - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root)
-2. `New-VMProfile` (Settings): applies -ConfigTemplate's Settings, or copies -From settings except paths, computer name, maintenance time and disk identity; schedules maintenance an hour after the latest existing VM
+2. `New-VMProfile` (Settings): applies -ConfigTemplate's Settings and records its name as CreatedFromTemplate, or copies -From settings except paths, computer name, maintenance time and disk identity; schedules maintenance an hour after the latest existing VM
    - Reads D2, settings and tooling, with -From: <OtherVM>\Config\ (VM.json)
    - Reads D3, config template, with -ConfigTemplate: Config templates (Data\Templates\*.json, Shared\Templates\*.json)
    - Reads D4, shared template: Shared\Config\ (LazyVM.Settings.json)
    - Reads D5, maintenance times in use: *\Config\ (VM.json)
-   - Writes D6, new profile: <VM>\Config\ (VM.json)
+   - Writes D6, new profile: <VM>\Config\ (VM.json, its CreatedFromTemplate  (with -ConfigTemplate))
    - Writes D7, tooling list to build with: <VM>\Config\ (VM.json, its Tooling  (with -From))
 3. `Get-LazyVM` (command): returns the new VM as LazyVM.VM
 
@@ -811,8 +811,8 @@ Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's d
    - Reads D3, created, memory: Hyper-V (CreationTime, MemoryAssigned, DynamicMemoryEnabled, MemoryMaximum, MemoryStartup)
 5. `Get-VMDiskUsage` (Dashboard, called by New-DashboardEntry): built VMs only: each disk, with its checkpoint files (Get-VMHardDiskDrive, Get-VHD)
    - Reads D4, disks: Hyper-V (attached disks, file and maximum sizes)
-6. `Read-VMSetting` (Settings, called by New-DashboardEntry): read-only; when the settings are OK
-   - Reads D5, settings: Settings files (Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json)
+6. `Read-VMSetting` (Settings, called by New-DashboardEntry): read-only; when the settings are OK; gives the config template the profile was created from
+   - Reads D5, settings: Settings files (Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, its CreatedFromTemplate)
 7. `Get-MaintenanceRunSummary` (Dashboard, called by New-DashboardEntry): when the task is registered: last run and result (Get-ScheduledTaskInfo)
    - Reads D6, last run: Task Scheduler (LazyVM-Maintain-<VM>)
 8. `Get-SecurityFindingSummary` (Dashboard, called by New-DashboardEntry): last scan, and findings neither approved nor resolved
