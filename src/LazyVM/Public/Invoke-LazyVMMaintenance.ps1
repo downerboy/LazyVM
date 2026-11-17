@@ -21,7 +21,9 @@
     Only when no rearms are left is the VM rebuilt (see
     Invoke-LazyVMRebuild). A VM whose build is still in progress - one
     waiting to carry on after a host restart, or not there yet - is left
-    alone that night, so maintenance never starts a second build.
+    alone that night, so maintenance never starts a second build. So is a
+    VM with a build or rebuild running when maintenance starts: that run is
+    skipped, without failing.
 
     Register-LazyVMMaintenance schedules this to run daily, unattended. If a
     settings file has a problem when it runs, the copy from the last time
@@ -72,7 +74,8 @@
 
     process {
         # -WhatIf reads, but records nothing: not even a hardware change in VM.json.
-        Invoke-CommandRun -Title 'Maintenance' -Name $Name -Root $Root -OwnerSid $OwnerSid -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
+        # One long run of a VM at a time (#425): with a build or rebuild going, tonight's run is skipped, not failed.
+        Invoke-CommandRun -Title 'Maintenance' -Name $Name -Root $Root -OwnerSid $OwnerSid -FailureMessage 'Maintenance stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -Exclusive:(-not $WhatIfPreference) -SkipWhenBusy -ScriptBlock {
             param($VM)
             if ($WhatIfPreference) {
                 $null = $PSCmdlet.ShouldProcess($VM.Name, (Get-MaintenancePreview -VM $VM))

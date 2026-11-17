@@ -43,7 +43,10 @@ function Initialize-CommandRun {
       starts its log, writes the run's header and any settings warnings, and
       adopts the guest account name from the credential store. With
       -RecordHardware, first records in VM.json any hardware change made in
-      Hyper-V. Returns the VM's context.
+      Hyper-V. With -Exclusive, takes the VM's run lock (RunState.ps1)
+      before it changes anything, and stops, saying what is running, when
+      another run holds it; with -SkipWhenBusy as well, logs that it is
+      skipping and returns nothing instead. Returns the VM's context.
     #>
     [OutputType([VMContext])]
     param(
@@ -51,7 +54,9 @@ function Initialize-CommandRun {
         [string]$Name,
         [string]$Root,
         [string]$OwnerSid,
-        [switch]$RecordHardware
+        [switch]$RecordHardware,
+        [switch]$Exclusive,
+        [switch]$SkipWhenBusy
     )
 
     $folder = Resolve-LazyVMRoot -Root $Root -OwnerSid $OwnerSid
@@ -65,6 +70,18 @@ function Initialize-CommandRun {
     # the log among them.
     $configuration = Read-TrustedVMSetting -Root $folder.Path -VMName $Name -OwnerSid $owner
     $vm = [VMContext]::new($configuration.Settings)
+
+    # Before the log and before the first write, so two long runs never
+    # change the VM at once, and a refused run writes nothing to the running
+    # one's log, which could otherwise read as its failure (#425).
+    if ($Exclusive -and -not (Enter-VMRun -VM $vm -Command $Title)) {
+        $busy = Get-VMRunBusyMessage -VM $vm -Title $Title
+        if (-not $SkipWhenBusy) { throw $busy }
+        # Unattended: the one line the log needs to show why tonight's run did nothing.
+        Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
+        Write-LogEntry "$busy Skipping." 'INFO'
+        return
+    }
 
     Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
     $rule = '========================================================'
@@ -128,6 +145,12 @@ function Invoke-CommandRun {
       failure before reporting it as the command's error, and always cleans
       up. The script block's output is the command's output.
 
+      With -Exclusive, the run holds the VM's run lock and records how it
+      ended: Completed, Failed, or Stopped when the pipeline was stopped
+      (Ctrl+C, or the host stopping it), which runs no catch block. A run refused because
+      another holds the lock records nothing; with -SkipWhenBusy it is not
+      an error either, and the script block does not run.
+
       Deliberately a simple function: an advanced one would have its own
       $PSCmdlet, hiding the command's from the script block, which needs it
       for ShouldProcess.
@@ -140,20 +163,30 @@ function Invoke-CommandRun {
         [scriptblock]$ScriptBlock,
         [string]$Root,
         [string]$OwnerSid,
-        [switch]$RecordHardware
+        [switch]$RecordHardware,
+        [switch]$Exclusive,
+        [switch]$SkipWhenBusy
     )
 
     Assert-Administrator
     $context = $null
+    $outcome = 'Stopped'
+    # A run's lock is ended only by the run that took it, never by one refused inside it.
+    $outerRun = Test-VMRunEntered
     try {
-        $context = Initialize-CommandRun -Title $Title -Name $Name -Root $Root -OwnerSid $OwnerSid -RecordHardware:$RecordHardware
+        $context = Initialize-CommandRun -Title $Title -Name $Name -Root $Root -OwnerSid $OwnerSid -RecordHardware:$RecordHardware -Exclusive:$Exclusive -SkipWhenBusy:$SkipWhenBusy
+        if (-not $context) { return }
         & $ScriptBlock $context
+        $outcome = 'Completed'
     }
     catch {
+        $outcome = 'Failed'
         if (Test-LogStarted) { Write-LogError $FailureMessage $_ }
         $Cmdlet.ThrowTerminatingError($_)
     }
     finally {
+        # Only the run that holds the lock writes, so a refused run leaves the running one's state alone.
+        if (-not $outerRun) { Exit-VMRun -Status $outcome }
         Complete-CommandRun -VM $context
     }
 }

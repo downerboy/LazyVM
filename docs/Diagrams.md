@@ -9,7 +9,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance and a rebuild also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
@@ -243,51 +243,52 @@ Build-LazyVM schedules maintenance, then Invoke-VMBuild runs phases 0 to 8, skip
 8. `Get-ResumePhase` (Host, called by Invoke-VMBuild): picks up after a host restart
    - Reads D13, phase to resume at: <VM>\Config\ (Resume.json)
 9. `Invoke-BuildPhase` (Host, called by Invoke-VMBuild): runs each phase of Get-BuildPhase in order (steps 10-20); when a phase throws or the build is stopped, deletes the answer-file disc first
-   - Also runs `Get-BuildPhase`, `Remove-UnattendSeedDisk`
+   - Also runs `Get-BuildPhase`, `Remove-UnattendSeedDisk`, `Set-VMRunPhase`, `Add-VMRunProblemPhase`
+   - Writes D14, run state: <VM>\Config\ (Run.json  (each phase as it starts, and those with problems))
 10. `Initialize-InstallationIso` (Host, called by Invoke-BuildPhase): the Windows ISO, before anything changes; opens the download page and stops if there is none
-   - Reads D14, Windows ISO: Shared\ISO\  or  Downloads\ (Windows 11 Enterprise, Evaluation ISO)
-   - Writes D15, Windows ISO in place: Shared\ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
+   - Reads D15, Windows ISO: Shared\ISO\  or  Downloads\ (Windows 11 Enterprise, Evaluation ISO)
+   - Writes D16, Windows ISO in place: Shared\ISO\ (Win11Ent_Eval.iso, (moved from Downloads))
 11. `Repair-HyperVService` and `Test-HostReadiness` (Host, called by Invoke-BuildPhase): phases 0 and 1: the Hyper-V services, then CPU, SLAT, memory and free space
-   - Reads D16, host checks: This PC (vmms, vmcompute, CPU, SLAT, RAM, free space)
+   - Reads D17, host checks: This PC (vmms, vmcompute, CPU, SLAT, RAM, free space)
 12. `Enable-HyperVFeature` (Host, called by Invoke-BuildPhase): phase 2; returns RestartPending when the host must restart
-   - Writes D17, resume task, only if a restart is needed: Task Scheduler (LazyVM-ResumeAfterReboot-<VM>, as SYSTEM, with -Root)
-   - Writes D18, where to resume: <VM>\Config\ (Resume.json  (Phase 3))
+   - Writes D18, resume task, only if a restart is needed: Task Scheduler (LazyVM-ResumeAfterReboot-<VM>, as SYSTEM, with -Root)
+   - Writes D19, where to resume: <VM>\Config\ (Resume.json  (Phase 3))
 13. `Initialize-HostFolder` (Host, called by Invoke-BuildPhase): phase 3
-   - Writes D19, folders created if missing: <Root>\ (Shared\ ISO, Installers, Credentials, <VM>\ Disks, Credentials, Backups,, Logs, Checkpoints)
+   - Writes D20, folders created if missing: <Root>\ (Shared\ ISO, Installers, Credentials, <VM>\ Disks, Credentials, Backups,, Logs, Checkpoints)
 14. `Initialize-SqlServerIso` (Host, called by Invoke-BuildPhase): phase 4: downloads the SQL Server ISO if it is missing
-   - Reads D20, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
-   - Writes D21, SQL Server ISO in place: Shared\Installers\ (SQLServer2025-x64-ENU-EntDev.iso)
+   - Reads D21, SQL Server ISO: download.microsoft.com (SQL Server 2025 ISO, only if missing)
+   - Writes D22, SQL Server ISO in place: Shared\Installers\ (SQLServer2025-x64-ENU-EntDev.iso)
 15. `Initialize-SqlDataVhd`, `Initialize-DevDriveVhd` and `Initialize-UserDataVhd` (Host, called by Invoke-BuildPhase): phase 5: existing disks are never overwritten
-   - Writes D22, data disk, Dev Drive and User disk: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB), <VM>-User.vhdx  (20 GB))
+   - Writes D23, data disk, Dev Drive and User disk: <VM>\Disks\ (<VM>-SQL.vhdx  (100 GB), <VM>-DevDrive.vhdx  (250 GB), <VM>-User.vhdx  (20 GB))
 16. `Initialize-GuestCredential` (Credentials, called by Invoke-BuildPhase): phase 6, for a VM that does not exist yet, without -NoUnattend: generates the account if there is none
-   - Reads D23, guest credential: Credential store (<VM>\Credentials\guest.cred)
-   - Writes D24, credential, if new: Credential store (<VM>\Credentials\guest.cred)
+   - Reads D24, guest credential: Credential store (<VM>\Credentials\guest.cred)
+   - Writes D25, credential, if new: Credential store (<VM>\Credentials\guest.cred)
 17. `New-UnattendSeedDisk` (Host, called by Invoke-BuildPhase): phase 6: the answer file for Setup, in the same cases
-   - Writes D25, answer-file disc: <VM>\Disks\ (<VM>-Seed.iso)
+   - Writes D26, answer-file disc: <VM>\Disks\ (<VM>-Seed.iso)
 18. `New-GuestVM` (Host, called by Invoke-BuildPhase): phase 6: Gen 2, Secure Boot, TPM, dynamic memory
-   - Reads D26, install discs: Shared\ISO\  <VM>\Disks\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
-   - Writes D27, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
-   - Writes D28, new VM: VM <VM> (created, not started yet)
+   - Reads D27, install discs: Shared\ISO\  <VM>\Disks\ (Win11Ent_Eval.iso, <VM>-Seed.iso)
+   - Writes D28, Windows disk, VM files: <VM>\ (Disks\<VM>-OS.vhdx, Virtual Machines\  (configuration))
+   - Writes D29, new VM: VM <VM> (created, not started yet)
 19. `Install-GuestSoftware` (Installation, called by Invoke-BuildPhase): phase 7: starts the VM, waits for Setup and deletes the answer-file disc; attaches and prepares D:, W: and U: and puts the personal folders on U:; extends C:; BitLocker; Enhanced Session; removes built-in apps and applies the appearance and Developer Mode; Sysmon; then the tooling list: Visual Studio Installer products, SQL Server, winget packages, official installers; Windows updates, and after their restart waits for the guest to settle (no further restart, automatic sign-in done); puts back the application and Windows settings VM.json records, such as those a config template brings; records the tooling list
    - Also runs `Test-SeedDiskAttached`, `Assert-GuestCredential`, `Start-VMFromInstallMedia`, `Wait-GuestReady`, `Remove-UnattendSeedDisk`, `Add-SqlDataDisk`, `Add-DevDriveDisk`, `Add-UserDataDisk`, `Connect-Guest`, `Expand-GuestSystemDrive`, `Unlock-GuestDataDisk`, `Initialize-GuestSqlDisk`, `Initialize-GuestDevDrive`, `Initialize-GuestUserDisk`, `Protect-GuestPersistentDisk`, `Enable-GuestEnhancedSession`, `Set-GuestCustomization`, `Set-GuestSysmon`, `Set-GuestEventLogging`, `Get-BuildTooling`, `Wait-GuestNetwork`, `Install-ToolingProduct`, `Install-SqlServerIfMissing`, `Install-WingetPackage`, `Install-OfficialInstaller`, `Update-GuestWindows`, `Wait-GuestSettled`, `Restore-GuestRecordedAppSetting`, `Initialize-VMTooling`, `Write-ToolingReinstallReport`
-   - Reads D29, tooling list: <VM>\Config\ (VM.json, its Tooling,, or the shared template's)
-   - Reads D30, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
-   - Reads D31, updates and packages: Internet (VS bootstrappers, Marketplace,, winget, Windows Update)
-   - Writes D32, installed and configured guest: Guest (D: data disk, W: Dev Drive,, U: User disk, BitLocker, Sysmon, appearance, VS + SSMS, extensions, SQL Server 2025, winget apps, Windows updates)
-   - Writes D33, tooling list, what needs a manual install: <VM>\ (Config\VM.json, State\reinstall-by-hand.txt)
+   - Reads D30, tooling list: <VM>\Config\ (VM.json, its Tooling,, or the shared template's)
+   - Reads D31, SQL Server media: Shared\Installers\ (SQLServer2025 ISO)
+   - Reads D32, updates and packages: Internet (VS bootstrappers, Marketplace,, winget, Windows Update)
+   - Writes D33, installed and configured guest: Guest (D: data disk, W: Dev Drive,, U: User disk, BitLocker, Sysmon, appearance, VS + SSMS, extensions, SQL Server 2025, winget apps, Windows updates)
+   - Writes D34, tooling list, what needs a manual install: <VM>\ (Config\VM.json, State\reinstall-by-hand.txt)
 20. `Complete-GuestConfiguration` (Installation, called by Invoke-BuildPhase): phase 8: 8a the SQL data disk, 8b moves SQL data files onto it, 8c answers Visual Studio's first launch and imports its settings; a step that fails does not stop the others
    - Also runs `Connect-Guest`, `Assert-GuestCredential`, `Invoke-IsolatedStep`, `Add-SqlDataDisk`, `Unlock-GuestDataDisk`, `Initialize-GuestSqlDisk`, `Move-GuestSqlDataFile`, `Restore-GuestVisualStudioSetting`
-   - Reads D34, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
-   - Writes D35, configured guest: Guest (user databases on D:\SQLData, VS settings imported, or pending, for nightly maintenance)
+   - Reads D35, VS settings backup: <VM>\Backups\ (VisualStudio.vssettings)
+   - Writes D36, configured guest: Guest (user databases on D:\SQLData, VS settings imported, or pending, for nightly maintenance)
 21. `Unregister-ResumeTask` (Host, called by Invoke-VMBuild): unless the host is restarting
-   - Writes D36, resume entries removed: Task Scheduler (resume task deleted, Resume.json deleted)
+   - Writes D37, resume entries removed: Task Scheduler (resume task deleted, Resume.json deleted)
 22. `Save-GuestPersistenceBaseline` (Security, called by Build-LazyVM): unless the host is restarting or GuestSecurityScan is off: at the first build, the VM as the build leaves it, which the nightly security scan compares with; at a later one, only an area the baseline lacks, so a change is never made known-good. Approves automatic sign-in once for the VM. A failure is logged and the next scan records what is missing
    - Also runs `Get-GuestPersistenceSnapshot`, `Install-GuestSecurityFindingOpener`, `Get-GuestPersistenceFact`, `New-PersistenceBaseline`, `Update-SecurityBaseline`, `Add-PersistenceBaselineArea`, `Add-DefaultSecurityApproval`
-   - Reads D37, places programs start from: Running guest (scheduled tasks, services, Run keys,, startup folders, WMI subscriptions,, local users, Administrators)
-   - Writes D38, known-good baseline, under a lock: <VM>\Config\ (SecurityBaseline.json)
+   - Reads D38, places programs start from: Running guest (scheduled tasks, services, Run keys,, startup folders, WMI subscriptions,, local users, Administrators)
+   - Writes D39, known-good baseline, under a lock: <VM>\Config\ (SecurityBaseline.json)
 23. `Write-RecoveryKeyReminder` (Disks, called by Build-LazyVM): when the build is over: reminds you to export any recovery password not exported yet, with the command
-   - Reads D39, stored and exported keys: <VM>\ (Credentials\bitlocker.cred, Config\RecoveryKeyExport.json)
-   - Writes D40, reminder: Console and log (one line, with the command)
+   - Reads D40, stored and exported keys: <VM>\ (Credentials\bitlocker.cred, Config\RecoveryKeyExport.json)
+   - Writes D41, reminder: Console and log (one line, with the command)
 
 <a id="build-phases"></a>
 
@@ -751,7 +752,7 @@ Lists the VMs in the LazyVM folder with their state and maintenance. No administ
 
 `Get-LazyVMDashboard` `-Name  (wildcards, default *)`
 
-Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's disks, memory, last maintenance, open findings and templates. Only reads. No administrator rights needed.
+Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's disks, memory, last maintenance, open findings, templates, and the build, maintenance or rebuild going now with the latest build. Only reads. No administrator rights needed.
 
 ![See the dashboard data: call order and data flow](diagrams/dashboard.svg)
 
@@ -772,10 +773,13 @@ Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's d
    - Also runs `Read-SecurityFindingRecord`, `Read-SecurityBaseline`, `Select-UnapprovedSecurityFinding`
    - Reads D7, last findings: <VM>\Logs\ (SecurityFindings.json)
    - Reads D8, approvals: <VM>\Config\ (SecurityBaseline.json)
-9. `Get-VMTemplateSummary` (Dashboard, called by New-DashboardEntry): the configuration first built from, and the green template
+9. `Get-VMRunState` (Common, called by New-DashboardEntry): twice: the latest run, then the latest build; a run is Running while its lock is held, and EndedUnexpectedly when recorded as running with its lock free
+   - Also runs `Get-VMRunPath`, `Test-VMRunLockHeld`, `Read-VMRunDocument`
+   - Reads D9, run lock and state: <VM>\Config\ (Run.lock  (opened for a moment, never created), Run.json)
+10. `Get-VMTemplateSummary` (Dashboard, called by New-DashboardEntry): the configuration first built from, and the green template
    - Also runs `Get-VMAsBuiltProfilePath`, `Get-AutomaticTemplateName`, `Get-UserTemplatePath`
-   - Reads D9, templates: Templates (<VM>\Config\VM.Template.json, Shared\Templates\<VM>-latest.json)
-   - Writes D10, dashboard rows: Pipeline (LazyVM.Dashboard per VM)
+   - Reads D10, templates: Templates (<VM>\Config\VM.Template.json, Shared\Templates\<VM>-latest.json)
+   - Writes D11, dashboard rows: Pipeline (LazyVM.Dashboard per VM)
 
 <a id="log"></a>
 

@@ -51,6 +51,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <path class="cl" d="M305,1329 L335,1329" marker-end="url(#ac)"/>
 <path class="df" d="M275,1351 L335,1351" marker-end="url(#ad)"/>
 <path class="cl" d="M305,1441 L335,1441" marker-end="url(#ac)"/>
+<path class="df" d="M640,1463 L740,1463" marker-end="url(#ad)"/>
 <path class="cl" d="M305,1604 L335,1604" marker-end="url(#ac)"/>
 <path class="df" d="M275,1626 L335,1626" marker-end="url(#ad)"/>
 <path class="df" d="M640,1626 L740,1626" marker-end="url(#ad)"/>
@@ -105,33 +106,34 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <g class="bd"><circle cx="690" cy="947" r="10"/><text x="690" y="950.5" text-anchor="middle">D11</text></g>
 <g class="bd"><circle cx="690" cy="1101.5" r="10"/><text x="690" y="1105" text-anchor="middle">D12</text></g>
 <g class="bd"><circle cx="293" cy="1351" r="10"/><text x="293" y="1354.5" text-anchor="middle">D13</text></g>
-<g class="bd"><circle cx="293" cy="1626" r="10"/><text x="293" y="1629.5" text-anchor="middle">D14</text></g>
-<g class="bd"><circle cx="690" cy="1626" r="10"/><text x="690" y="1629.5" text-anchor="middle">D15</text></g>
-<g class="bd"><circle cx="293" cy="1772" r="10"/><text x="293" y="1775.5" text-anchor="middle">D16</text></g>
-<g class="bd"><circle cx="690" cy="1918" r="10"/><text x="690" y="1921.5" text-anchor="middle">D17</text></g>
-<g class="bd"><circle cx="690" cy="2014" r="10"/><text x="690" y="2017.5" text-anchor="middle">D18</text></g>
-<g class="bd"><circle cx="690" cy="2143" r="10"/><text x="690" y="2146.5" text-anchor="middle">D19</text></g>
-<g class="bd"><circle cx="293" cy="2272" r="10"/><text x="293" y="2275.5" text-anchor="middle">D20</text></g>
-<g class="bd"><circle cx="690" cy="2272" r="10"/><text x="690" y="2275.5" text-anchor="middle">D21</text></g>
-<g class="bd"><circle cx="690" cy="2409.5" r="10"/><text x="690" y="2413" text-anchor="middle">D22</text></g>
-<g class="bd"><circle cx="293" cy="2564" r="10"/><text x="293" y="2567.5" text-anchor="middle">D23</text></g>
-<g class="bd"><circle cx="690" cy="2564" r="10"/><text x="690" y="2567.5" text-anchor="middle">D24</text></g>
-<g class="bd"><circle cx="690" cy="2710" r="10"/><text x="690" y="2713.5" text-anchor="middle">D25</text></g>
-<g class="bd"><circle cx="293" cy="2839" r="10"/><text x="293" y="2842.5" text-anchor="middle">D26</text></g>
-<g class="bd"><circle cx="690" cy="2839" r="10"/><text x="690" y="2842.5" text-anchor="middle">D27</text></g>
-<g class="bd"><circle cx="690" cy="2935" r="10"/><text x="690" y="2938.5" text-anchor="middle">D28</text></g>
-<g class="bd"><circle cx="293" cy="3047" r="10"/><text x="293" y="3050.5" text-anchor="middle">D29</text></g>
-<g class="bd"><circle cx="293" cy="3143" r="10"/><text x="293" y="3146.5" text-anchor="middle">D30</text></g>
-<g class="bd"><circle cx="293" cy="3239" r="10"/><text x="293" y="3242.5" text-anchor="middle">D31</text></g>
-<g class="bd"><circle cx="690" cy="3081" r="10"/><text x="690" y="3084.5" text-anchor="middle">D32</text></g>
-<g class="bd"><circle cx="690" cy="3211" r="10"/><text x="690" y="3214.5" text-anchor="middle">D33</text></g>
-<g class="bd"><circle cx="293" cy="3414" r="10"/><text x="293" y="3417.5" text-anchor="middle">D34</text></g>
-<g class="bd"><circle cx="690" cy="3422.5" r="10"/><text x="690" y="3426" text-anchor="middle">D35</text></g>
-<g class="bd"><circle cx="690" cy="3594" r="10"/><text x="690" y="3597.5" text-anchor="middle">D36</text></g>
-<g class="bd"><circle cx="293" cy="3731.5" r="10"/><text x="293" y="3735" text-anchor="middle">D37</text></g>
-<g class="bd"><circle cx="690" cy="3706" r="10"/><text x="690" y="3709.5" text-anchor="middle">D38</text></g>
-<g class="bd"><circle cx="293" cy="3971" r="10"/><text x="293" y="3974.5" text-anchor="middle">D39</text></g>
-<g class="bd"><circle cx="690" cy="3971" r="10"/><text x="690" y="3974.5" text-anchor="middle">D40</text></g>
+<g class="bd"><circle cx="690" cy="1463" r="10"/><text x="690" y="1466.5" text-anchor="middle">D14</text></g>
+<g class="bd"><circle cx="293" cy="1626" r="10"/><text x="293" y="1629.5" text-anchor="middle">D15</text></g>
+<g class="bd"><circle cx="690" cy="1626" r="10"/><text x="690" y="1629.5" text-anchor="middle">D16</text></g>
+<g class="bd"><circle cx="293" cy="1772" r="10"/><text x="293" y="1775.5" text-anchor="middle">D17</text></g>
+<g class="bd"><circle cx="690" cy="1918" r="10"/><text x="690" y="1921.5" text-anchor="middle">D18</text></g>
+<g class="bd"><circle cx="690" cy="2014" r="10"/><text x="690" y="2017.5" text-anchor="middle">D19</text></g>
+<g class="bd"><circle cx="690" cy="2143" r="10"/><text x="690" y="2146.5" text-anchor="middle">D20</text></g>
+<g class="bd"><circle cx="293" cy="2272" r="10"/><text x="293" y="2275.5" text-anchor="middle">D21</text></g>
+<g class="bd"><circle cx="690" cy="2272" r="10"/><text x="690" y="2275.5" text-anchor="middle">D22</text></g>
+<g class="bd"><circle cx="690" cy="2409.5" r="10"/><text x="690" y="2413" text-anchor="middle">D23</text></g>
+<g class="bd"><circle cx="293" cy="2564" r="10"/><text x="293" y="2567.5" text-anchor="middle">D24</text></g>
+<g class="bd"><circle cx="690" cy="2564" r="10"/><text x="690" y="2567.5" text-anchor="middle">D25</text></g>
+<g class="bd"><circle cx="690" cy="2710" r="10"/><text x="690" y="2713.5" text-anchor="middle">D26</text></g>
+<g class="bd"><circle cx="293" cy="2839" r="10"/><text x="293" y="2842.5" text-anchor="middle">D27</text></g>
+<g class="bd"><circle cx="690" cy="2839" r="10"/><text x="690" y="2842.5" text-anchor="middle">D28</text></g>
+<g class="bd"><circle cx="690" cy="2935" r="10"/><text x="690" y="2938.5" text-anchor="middle">D29</text></g>
+<g class="bd"><circle cx="293" cy="3047" r="10"/><text x="293" y="3050.5" text-anchor="middle">D30</text></g>
+<g class="bd"><circle cx="293" cy="3143" r="10"/><text x="293" y="3146.5" text-anchor="middle">D31</text></g>
+<g class="bd"><circle cx="293" cy="3239" r="10"/><text x="293" y="3242.5" text-anchor="middle">D32</text></g>
+<g class="bd"><circle cx="690" cy="3081" r="10"/><text x="690" y="3084.5" text-anchor="middle">D33</text></g>
+<g class="bd"><circle cx="690" cy="3211" r="10"/><text x="690" y="3214.5" text-anchor="middle">D34</text></g>
+<g class="bd"><circle cx="293" cy="3414" r="10"/><text x="293" y="3417.5" text-anchor="middle">D35</text></g>
+<g class="bd"><circle cx="690" cy="3422.5" r="10"/><text x="690" y="3426" text-anchor="middle">D36</text></g>
+<g class="bd"><circle cx="690" cy="3594" r="10"/><text x="690" y="3597.5" text-anchor="middle">D37</text></g>
+<g class="bd"><circle cx="293" cy="3731.5" r="10"/><text x="293" y="3735" text-anchor="middle">D38</text></g>
+<g class="bd"><circle cx="690" cy="3706" r="10"/><text x="690" y="3709.5" text-anchor="middle">D39</text></g>
+<g class="bd"><circle cx="293" cy="3971" r="10"/><text x="293" y="3974.5" text-anchor="middle">D40</text></g>
+<g class="bd"><circle cx="690" cy="3971" r="10"/><text x="690" y="3974.5" text-anchor="middle">D41</text></g>
 <g class="bx-cmd"><rect x="335" y="34" width="305" height="135" rx="3"/>
 <text class="st" x="487.5" y="48" text-anchor="middle">«command»</text>
 <text class="nm" x="487.5" y="64" text-anchor="middle">Build-LazyVM</text>
@@ -310,6 +312,13 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <text class="at" x="345" y="1507">order (steps 10-20); when a phase throws</text>
 <text class="at" x="345" y="1524">or the build is stopped, deletes the</text>
 <text class="at" x="345" y="1541">answer-file disc first</text>
+</g>
+<g class="bx-store"><rect x="740" y="1421" width="270" height="84" rx="3"/>
+<text class="st" x="875" y="1435" text-anchor="middle">«file»</text>
+<text class="nm" x="875" y="1451" text-anchor="middle">&lt;VM&gt;\Config\</text>
+<line class="div" x1="740" y1="1458" x2="1010" y2="1458"/>
+<text class="at" x="750" y="1473">Run.json (each phase as it starts,</text>
+<text class="at" x="750" y="1490">and those with problems)</text>
 </g>
 <g class="bx-mod"><rect x="335" y="1584" width="305" height="118" rx="3"/>
 <text class="st" x="500.5" y="1598" text-anchor="middle">«Host»</text>

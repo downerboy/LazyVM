@@ -38,7 +38,10 @@
       8  SQL data moved to the data disk, Visual Studio's first launch
          answered and its settings restored
 
-    Progress is shown as it goes and written to the VM's log. With -WhatIf,
+    Progress is shown as it goes and written to the VM's log, and the phase
+    the build is in is recorded for Get-LazyVMDashboard. Only one build,
+    maintenance run or rebuild of a VM runs at a time: while one is
+    running, a build started by hand stops at once and says so. With -WhatIf,
     says what would be built and changes nothing, not even the first-use
     set-up.
 
@@ -129,7 +132,9 @@
         $account = if ($UserName) { ", with the administrator account '$UserName'" } else { '' }
         if (-not $PSCmdlet.ShouldProcess($target, "Build from phase $FromPhase$setup$account, first setting up the LazyVM folder, $vmProfile and Windows ISO if they are missing")) { return }
         Initialize-BuildTarget -Name $Name -ConfigTemplate $ConfigTemplate -Root $Root -OwnerSid $OwnerSid
-        Invoke-CommandRun -Title 'Build' -Name $Name -Root $Root -OwnerSid $OwnerSid -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+        # One long run of a VM at a time (#425). The resume task, unattended,
+        # leaves a VM a build started by hand meanwhile to it, without failing.
+        Invoke-CommandRun -Title 'Build' -Name $Name -Root $Root -OwnerSid $OwnerSid -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -Exclusive -SkipWhenBusy:(Test-Unattended) -ScriptBlock {
             param($VM)
             # First, so another account than the one stored stops the build before it changes anything.
             if ($UserName) { Initialize-GuestUserName -VM $VM -UserName $UserName }
@@ -148,9 +153,11 @@
             }
             $outcome = Invoke-VMBuild -VM $VM -FromPhase $FromPhase -NoUnattend:$NoUnattend
             if ($outcome -eq [BuildOutcome]::RestartPending) {
+                Set-VMRunOutcome -Status 'WaitingForRestart'
                 Write-LogEntry 'The host is restarting to finish turning on Hyper-V. The build carries on by itself afterwards.' 'WARN'
                 return
             }
+            if ($outcome -eq [BuildOutcome]::CompleteWithProblems) { Set-VMRunOutcome -Status 'CompletedWithProblems' }
             # The known-good baseline at the first build; a later one only adds an area it lacks (#290, #334).
             $null = Save-GuestPersistenceBaseline -VM $VM
 

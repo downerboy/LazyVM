@@ -7,6 +7,7 @@
     Covers     = @('Build-LazyVM', 'Invoke-VMBuild', 'Invoke-BuildPhase', 'Get-BuildPhase', 'Install-GuestSoftware', 'Complete-GuestConfiguration')
     Omits      = @{
         'Test-BuildPhaseNumber' = 'validates -FromPhase before the command runs'
+        'Set-VMRunOutcome'      = 'tells Invoke-CommandRun to record the run as CompletedWithProblems or WaitingForRestart; it writes Run.json when the run ends'
     }
     Steps      = @(
         @{
@@ -76,7 +77,8 @@
             Area     = 'Host'
             Caller   = 'Invoke-VMBuild'
             Note     = 'runs each phase of Get-BuildPhase in order (steps 10-20); when a phase throws or the build is stopped, deletes the answer-file disc first'
-            Includes = @('Get-BuildPhase', 'Remove-UnattendSeedDisk')
+            Includes = @('Get-BuildPhase', 'Remove-UnattendSeedDisk', 'Set-VMRunPhase', 'Add-VMRunProblemPhase')
+            Writes   = @(@{ Label = 'run state'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Run.json  (each phase as it starts, and those with problems)') })
         }
         @{
             Function = 'Initialize-InstallationIso'
