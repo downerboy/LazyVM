@@ -147,7 +147,9 @@ function Invoke-CommandRun {
 
       With -Exclusive, the run holds the VM's run lock and records how it
       ended: Completed, Failed, or Stopped when the pipeline was stopped
-      (Ctrl+C, or the host stopping it), which runs no catch block. A run refused because
+      (Ctrl+C, or the host stopping it), which runs no catch block, or
+      when Stop-LazyVMBuild asked it to stop: that ends the command with
+      the error LazyVM.RunStopped, not its failure message. A run refused because
       another holds the lock records nothing; with -SkipWhenBusy it is not
       an error either, and the script block does not run.
 
@@ -180,6 +182,13 @@ function Invoke-CommandRun {
         $outcome = 'Completed'
     }
     catch {
+        $stop = Find-VMRunStoppedException -Exception $_.Exception
+        if ($stop) {
+            # Asked to stop (Stop-LazyVMBuild): not a failure, but the work is not done, so still an error, of its own kind (#426).
+            $outcome = 'Stopped'
+            if (Test-LogStarted) { Write-LogEntry $stop.Message 'WARN' }
+            $Cmdlet.ThrowTerminatingError([System.Management.Automation.ErrorRecord]::new($stop, 'LazyVM.RunStopped', [System.Management.Automation.ErrorCategory]::OperationStopped, $Name))
+        }
         $outcome = 'Failed'
         if (Test-LogStarted) { Write-LogError $FailureMessage $_ }
         $Cmdlet.ThrowTerminatingError($_)

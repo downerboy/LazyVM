@@ -94,6 +94,8 @@ function Install-WingetPackage {
         Write-GuestNote -Notes @(ConvertFrom-Json -InputObject $report)
     }
     catch {
+        # A build asked to stop is not a failed install: it goes up untouched (#426).
+        if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
         Write-LogError 'winget package installation failed (non-fatal)' $_
     }
 }

@@ -7,6 +7,9 @@ function Invoke-IsolatedStep {
       rest still run: a firewall rule that cannot be added must not cost the
       databases. Returns Results (each step's output, by Name) and Failures
       (one line per failed step).
+
+      A run asked to stop (Stop-LazyVMBuild) is not a failing step: it
+      stops before the next step, and its stop goes up untouched.
     #>
     param(
         [Parameter(Mandatory)][string]$What,
@@ -16,10 +19,12 @@ function Invoke-IsolatedStep {
     $results = @{}
     $failures = [System.Collections.Generic.List[string]]::new()
     foreach ($step in $Steps) {
+        Assert-VMRunNotStopped -Boundary
         try {
             $results[$step.Name] = & $step.Action
         }
         catch {
+            if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
             $failures.Add("$($step.Name): $($_.Exception.Message)")
             Write-LogError "$($step.Name) failed" $_
             Write-LogEntry "  Carrying on with the remaining $What steps." 'INFO'

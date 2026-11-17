@@ -41,7 +41,8 @@
     Progress is shown as it goes and written to the VM's log, and the phase
     the build is in is recorded for Get-LazyVMDashboard. Only one build,
     maintenance run or rebuild of a VM runs at a time: while one is
-    running, a build started by hand stops at once and says so. With -WhatIf,
+    running, a build started by hand stops at once and says so.
+    Stop-LazyVMBuild stops a running build cleanly. With -WhatIf,
     says what would be built and changes nothing, not even the first-use
     set-up.
 
