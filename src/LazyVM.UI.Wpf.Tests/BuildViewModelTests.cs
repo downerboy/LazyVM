@@ -4,73 +4,73 @@ namespace LazyVM.UI.Wpf.Tests;
 
 public sealed class BuildViewModelTests
 {
-    private readonly FakeCommandRunner runner = new();
-    private readonly FakeBuildLauncher launcher = new();
-    private readonly List<(string Name, StartedBuild Build)> started = [];
-    private readonly BuildViewModel build;
+    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeBuildLauncher _Launcher = new();
+    private readonly List<(string Name, StartedBuild Build)> _Started = [];
+    private readonly BuildViewModel _Build;
 
     public BuildViewModelTests()
     {
-        build = new BuildViewModel(runner, launcher, ["DevBox"], (name, process) => started.Add((name, process)));
+        _Build = new BuildViewModel(_Runner, _Launcher, ["DevBox"], (name, process) => _Started.Add((name, process)));
     }
 
     [Fact]
     public async Task Load_ListsTheTemplates_AndChoosesDeveloper()
     {
-        await build.LoadAsync();
+        await _Build.LoadAsync();
 
-        Assert.Equal(["DevBox-latest", "Developer", "PlainWindows"], build.Templates.Select(template => template.Name));
-        Assert.Equal("Developer", build.SelectedTemplate?.Name);
+        Assert.Equal(["DevBox-latest", "Developer", "PlainWindows"], _Build.Templates.Select(template => template.Name));
+        Assert.Equal("Developer", _Build.SelectedTemplate?.Name);
     }
 
     [Fact]
     public async Task Templates_SayWhatKindTheyAre()
     {
-        await build.LoadAsync();
+        await _Build.LoadAsync();
 
         Assert.Equal(
             ["DevBox-latest (kept up to date from a VM)", "Developer (built in)", "PlainWindows (built in)"],
-            build.Templates.Select(template => template.Text));
+            _Build.Templates.Select(template => template.Text));
     }
 
     [Fact]
     public async Task Load_WhenTheTemplatesCannotBeRead_SaysWhy()
     {
-        runner.TemplatesFail = new InvalidOperationException("Access is denied.");
+        _Runner.TemplatesFail = new InvalidOperationException("Access is denied.");
 
-        await build.LoadAsync();
+        await _Build.LoadAsync();
 
-        Assert.Equal("The config templates could not be read: Access is denied.", build.Status);
+        Assert.Equal("The config templates could not be read: Access is denied.", _Build.Status);
     }
 
     [Fact]
     public async Task Build_StartsTheBuildWithTheNameTemplateAndAccount_AndHandsItOn()
     {
-        await build.LoadAsync();
-        build.Name = "TestBox";
-        build.UserName = "sean";
-        build.SelectedTemplate = build.Templates.Single(template => template.Name == "PlainWindows");
+        await _Build.LoadAsync();
+        _Build.Name = "TestBox";
+        _Build.UserName = "sean";
+        _Build.SelectedTemplate = _Build.Templates.Single(template => template.Name == "PlainWindows");
         var closed = 0;
-        build.CloseRequested += (_, _) => closed++;
+        _Build.CloseRequested += (_, _) => closed++;
 
-        await build.BuildAsync();
+        await _Build.BuildAsync();
 
-        var (request, folder) = Assert.Single(launcher.Started);
+        var (request, folder) = Assert.Single(_Launcher.Started);
         Assert.Equal(new BuildRequest("TestBox", "PlainWindows", "sean"), request);
         Assert.Equal(@"C:\Program Files\LazyVM\Modules\LazyVM\6.20.0", folder);
-        Assert.Equal("TestBox", Assert.Single(started).Name);
+        Assert.Equal("TestBox", Assert.Single(_Started).Name);
         Assert.Equal(1, closed);
     }
 
     [Fact]
     public async Task Build_WithNoAccount_LeavesItToTheModule()
     {
-        await build.LoadAsync();
-        build.Name = "TestBox";
+        await _Build.LoadAsync();
+        _Build.Name = "TestBox";
 
-        await build.BuildAsync();
+        await _Build.BuildAsync();
 
-        Assert.Null(Assert.Single(launcher.Started).Request.UserName);
+        Assert.Null(Assert.Single(_Launcher.Started).Request.UserName);
     }
 
     [Theory]
@@ -80,43 +80,43 @@ public sealed class BuildViewModelTests
     [InlineData("devbox", "There is a VM named devbox already. Choose another name.")]
     public async Task Build_RefusesANameTheModuleWouldRefuse(string name, string problem)
     {
-        await build.LoadAsync();
-        build.Name = name;
+        await _Build.LoadAsync();
+        _Build.Name = name;
 
-        await build.BuildAsync();
+        await _Build.BuildAsync();
 
-        Assert.Equal(problem, build.Status);
-        Assert.Empty(launcher.Started);
+        Assert.Equal(problem, _Build.Status);
+        Assert.Empty(_Launcher.Started);
     }
 
     [Fact]
     public async Task Build_RefusesAnAccountNameWindowsWouldRefuse()
     {
-        await build.LoadAsync();
-        build.Name = "TestBox";
-        build.UserName = "dev admin";
+        await _Build.LoadAsync();
+        _Build.Name = "TestBox";
+        _Build.UserName = "dev admin";
 
-        await build.BuildAsync();
+        await _Build.BuildAsync();
 
-        Assert.StartsWith("'dev admin' cannot be used as the account name", build.Status);
-        Assert.Empty(launcher.Started);
+        Assert.StartsWith("'dev admin' cannot be used as the account name", _Build.Status);
+        Assert.Empty(_Launcher.Started);
     }
 
     [Fact]
     public async Task Build_WhenTheProcessCannotStart_SaysWhy_AndStaysOpen()
     {
-        await build.LoadAsync();
-        build.Name = "TestBox";
-        launcher.Fails = new InvalidOperationException(@"PowerShell 7 was not found at C:\Program Files\PowerShell\7\pwsh.exe.");
+        await _Build.LoadAsync();
+        _Build.Name = "TestBox";
+        _Launcher.Fails = new InvalidOperationException(@"PowerShell 7 was not found at C:\Program Files\PowerShell\7\pwsh.exe.");
         var closed = 0;
-        build.CloseRequested += (_, _) => closed++;
+        _Build.CloseRequested += (_, _) => closed++;
 
-        await build.BuildAsync();
+        await _Build.BuildAsync();
 
-        Assert.StartsWith("The build could not start: PowerShell 7 was not found", build.Status);
-        Assert.Empty(started);
+        Assert.StartsWith("The build could not start: PowerShell 7 was not found", _Build.Status);
+        Assert.Empty(_Started);
         Assert.Equal(0, closed);
-        Assert.True(build.BuildCommand.CanExecute(null));
+        Assert.True(_Build.BuildCommand.CanExecute(null));
     }
 }
 

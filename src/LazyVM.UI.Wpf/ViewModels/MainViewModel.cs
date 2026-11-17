@@ -6,44 +6,44 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// <summary>The main window: the list of VMs, refreshing it, and opening a VM's window.</summary>
 public sealed class MainViewModel : ViewModelBase
 {
-    private readonly CommandRunner runner;
-    private readonly VMWindowManager windows;
-    private readonly ToolWindows tools;
-    private readonly TimeProvider clock;
-    private readonly RelayCommand refreshCommand;
-    private readonly RelayCommand cancelRefreshCommand;
-    private readonly RelayCommand openVMCommand;
-    private CancellationTokenSource? refreshing;
-    private VMRowViewModel? selectedVM;
-    private string status = string.Empty;
-    private bool listIsKnown;
+    private readonly CommandRunner _Runner;
+    private readonly VMWindowManager _Windows;
+    private readonly ToolWindows _Tools;
+    private readonly TimeProvider _Clock;
+    private readonly RelayCommand _RefreshCommand;
+    private readonly RelayCommand _CancelRefreshCommand;
+    private readonly RelayCommand _OpenVMCommand;
+    private CancellationTokenSource? _Refreshing;
+    private VMRowViewModel? _SelectedVM;
+    private string _Status = string.Empty;
+    private bool _ListIsKnown;
 
     public MainViewModel(CommandRunner runner, VMWindowManager windows, ToolWindows tools, TimeProvider clock)
     {
-        this.runner = runner;
-        this.windows = windows;
-        this.tools = tools;
-        this.clock = clock;
+        this._Runner = runner;
+        this._Windows = windows;
+        this._Tools = tools;
+        this._Clock = clock;
         HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, HostOnly()));
         BuildCommand = new RelayCommand(() => tools.OpenBuild(VMs.Select(row => row.Name).ToList()));
         // A build that ended, or a build or maintenance that started, changed the list: read it again.
         tools.BuildEnded += (_, _) => _ = RefreshAsync();
         tools.RunStarted += (_, _) => _ = RefreshAsync();
-        refreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
-        cancelRefreshCommand = new RelayCommand(() => refreshing?.Cancel(), () => IsRefreshing);
-        openVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);
+        _RefreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
+        _CancelRefreshCommand = new RelayCommand(() => _Refreshing?.Cancel(), () => IsRefreshing);
+        _OpenVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);
     }
 
     public ObservableCollection<VMRowViewModel> VMs { get; } = [];
 
     public VMRowViewModel? SelectedVM
     {
-        get => selectedVM;
+        get => _SelectedVM;
         set
         {
-            if (SetProperty(ref selectedVM, value))
+            if (SetProperty(ref _SelectedVM, value))
             {
-                openVMCommand.RaiseCanExecuteChanged();
+                _OpenVMCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -51,19 +51,19 @@ public sealed class MainViewModel : ViewModelBase
     /// <summary>What the last refresh did, such as "Refreshed 3 VMs at 14:52".</summary>
     public string Status
     {
-        get => status;
-        private set => SetProperty(ref status, value);
+        get => _Status;
+        private set => SetProperty(ref _Status, value);
     }
 
-    public bool IsRefreshing => refreshing is not null;
+    public bool IsRefreshing => _Refreshing is not null;
 
     /// <summary>Reads every VM again (F5).</summary>
-    public RelayCommand RefreshCommand => refreshCommand;
+    public RelayCommand RefreshCommand => _RefreshCommand;
 
-    public RelayCommand CancelRefreshCommand => cancelRefreshCommand;
+    public RelayCommand CancelRefreshCommand => _CancelRefreshCommand;
 
     /// <summary>Opens the selected VM's window, or brings it to the front when it is open (Enter, double-click).</summary>
-    public RelayCommand OpenVMCommand => openVMCommand;
+    public RelayCommand OpenVMCommand => _OpenVMCommand;
 
     /// <summary>Opens the checks of this host (Test-LazyVM).</summary>
     public RelayCommand HostChecksCommand { get; }
@@ -79,16 +79,16 @@ public sealed class MainViewModel : ViewModelBase
     public async Task StartAsync()
     {
         await RefreshAsync();
-        var checks = new ChecksViewModel(runner, null, HostOnly());
+        var checks = new ChecksViewModel(_Runner, null, HostOnly());
         await checks.RunAsync();
         if (NoVMs() || checks.HasFailures || checks.CouldNotRun)
         {
-            tools.ShowChecks(checks);
+            _Tools.ShowChecks(checks);
         }
     }
 
     /// <summary>True only once a refresh has found no VMs; a failed refresh says nothing about them.</summary>
-    private bool NoVMs() => listIsKnown && VMs.Count == 0;
+    private bool NoVMs() => _ListIsKnown && VMs.Count == 0;
 
     /// <summary>
     /// The host alone, unless there are no VMs: then Test-LazyVM adds a
@@ -102,22 +102,22 @@ public sealed class MainViewModel : ViewModelBase
     /// </summary>
     public async Task RefreshAsync()
     {
-        if (refreshing is not null)
+        if (_Refreshing is not null)
         {
             return;
         }
         using var cancel = new CancellationTokenSource();
         SetRefreshing(cancel);
         Status = "Refreshing";
-        listIsKnown = false;
+        _ListIsKnown = false;
         try
         {
-            var entries = await runner.GetDashboardAsync(cancel.Token);
+            var entries = await _Runner.GetDashboardAsync(cancel.Token);
             ShowInList(entries);
-            listIsKnown = true;
-            windows.Update(entries);
+            _ListIsKnown = true;
+            _Windows.Update(entries);
             var count = entries.Count == 1 ? "1 VM" : $"{entries.Count} VMs";
-            Status = $"Refreshed {count} at {clock.GetLocalNow().ToString("t", CultureInfo.CurrentCulture)}";
+            Status = $"Refreshed {count} at {_Clock.GetLocalNow().ToString("t", CultureInfo.CurrentCulture)}";
         }
         catch (OperationCanceledException)
         {
@@ -136,10 +136,10 @@ public sealed class MainViewModel : ViewModelBase
 
     private void SetRefreshing(CancellationTokenSource? value)
     {
-        refreshing = value;
+        _Refreshing = value;
         OnPropertyChanged(nameof(IsRefreshing));
-        refreshCommand.RaiseCanExecuteChanged();
-        cancelRefreshCommand.RaiseCanExecuteChanged();
+        _RefreshCommand.RaiseCanExecuteChanged();
+        _CancelRefreshCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>Updates the rows in place, so the selection and keyboard focus stay where they were.</summary>
@@ -176,7 +176,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (SelectedVM is { } row)
         {
-            windows.Open(row.Entry);
+            _Windows.Open(row.Entry);
         }
     }
 }

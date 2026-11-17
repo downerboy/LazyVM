@@ -8,9 +8,9 @@ namespace LazyVM.UI.Wpf.Tests;
 /// </summary>
 internal sealed class FakeCommandRunner : CommandRunner
 {
-    private readonly Answers<VMDashboard> dashboards = new();
-    private readonly Answers<VMCheck> checks = new();
-    private readonly Answers<VMLogEntry> logs = new();
+    private readonly Answers<VMDashboard> _Dashboards = new();
+    private readonly Answers<VMCheck> _Checks = new();
+    private readonly Answers<VMLogEntry> _Logs = new();
 
     public int DashboardCalls { get; private set; }
 
@@ -18,43 +18,43 @@ internal sealed class FakeCommandRunner : CommandRunner
 
     public List<(string Name, int Tail)> LogCalls { get; } = [];
 
-    public void Returns(params VMDashboard[] entries) => dashboards.Returns(entries);
+    public void Returns(params VMDashboard[] entries) => _Dashboards.Returns(entries);
 
-    public void Throws(Exception exception) => dashboards.Throws(exception);
+    public void Throws(Exception exception) => _Dashboards.Throws(exception);
 
     /// <summary>The next call waits until it is cancelled.</summary>
-    public void WaitsForCancel() => dashboards.WaitsForCancel();
+    public void WaitsForCancel() => _Dashboards.WaitsForCancel();
 
-    public void ReturnsChecks(params VMCheck[] results) => checks.Returns(results);
+    public void ReturnsChecks(params VMCheck[] results) => _Checks.Returns(results);
 
-    public void ChecksThrow(Exception exception) => checks.Throws(exception);
+    public void ChecksThrow(Exception exception) => _Checks.Throws(exception);
 
-    public void ChecksWaitForCancel() => checks.WaitsForCancel();
+    public void ChecksWaitForCancel() => _Checks.WaitsForCancel();
 
-    public void ReturnsLog(params VMLogEntry[] entries) => logs.Returns(entries);
+    public void ReturnsLog(params VMLogEntry[] entries) => _Logs.Returns(entries);
 
-    public void LogThrows(Exception exception) => logs.Throws(exception);
+    public void LogThrows(Exception exception) => _Logs.Throws(exception);
 
     public override Task<IReadOnlyList<VMDashboard>> GetDashboardAsync(CancellationToken cancellationToken)
     {
         DashboardCalls++;
-        return dashboards.Next(cancellationToken);
+        return _Dashboards.Next(cancellationToken);
     }
 
     public override Task<IReadOnlyList<VMCheck>> GetChecksAsync(string? name, bool hostOnly, CancellationToken cancellationToken)
     {
         CheckCalls.Add((name, hostOnly));
-        return checks.Next(cancellationToken);
+        return _Checks.Next(cancellationToken);
     }
 
     public override Task<IReadOnlyList<VMLogEntry>> GetLogAsync(string name, int tail, CancellationToken cancellationToken)
     {
         LogCalls.Add((name, tail));
-        return logs.Next(cancellationToken);
+        return _Logs.Next(cancellationToken);
     }
 
-    private readonly Answers<VMDashboard> vms = new();
-    private readonly Answers<VMRun> stops = new();
+    private readonly Answers<VMDashboard> _VMs = new();
+    private readonly Answers<VMRun> _Stops = new();
 
     public IReadOnlyList<BuildPhase> Phases { get; set; } =
     [
@@ -80,19 +80,19 @@ internal sealed class FakeCommandRunner : CommandRunner
     public List<string> StopCalls { get; } = [];
 
     /// <summary>The next Get-LazyVMDashboard -Name finds the VM with this run.</summary>
-    public void ReturnsRun(VMRun? run, string name = "DevBox") => vms.Returns([Sample.VM(name) with { Run = run }]);
+    public void ReturnsRun(VMRun? run, string name = "DevBox") => _VMs.Returns([Sample.VM(name) with { Run = run }]);
 
-    public void VMThrows(Exception exception) => vms.Throws(exception);
+    public void VMThrows(Exception exception) => _VMs.Throws(exception);
 
     /// <summary>The next Stop-LazyVMBuild returns this run.</summary>
-    public void StopReturns(VMRun? run) => stops.Returns(run is null ? [] : [run]);
+    public void StopReturns(VMRun? run) => _Stops.Returns(run is null ? [] : [run]);
 
-    public void StopThrows(Exception exception) => stops.Throws(exception);
+    public void StopThrows(Exception exception) => _Stops.Throws(exception);
 
     public override async Task<VMDashboard?> GetVMAsync(string name, CancellationToken cancellationToken)
     {
         VMCalls.Add(name);
-        return (await vms.Next(cancellationToken)).FirstOrDefault();
+        return (await _VMs.Next(cancellationToken)).FirstOrDefault();
     }
 
     public override Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken) =>
@@ -104,7 +104,7 @@ internal sealed class FakeCommandRunner : CommandRunner
     public override async Task<VMRun?> StopBuildAsync(string name, CancellationToken cancellationToken)
     {
         StopCalls.Add(name);
-        return (await stops.Next(cancellationToken)).FirstOrDefault();
+        return (await _Stops.Next(cancellationToken)).FirstOrDefault();
     }
 
     public List<string> MaintenanceCalls { get; } = [];
@@ -125,20 +125,20 @@ internal sealed class FakeCommandRunner : CommandRunner
 
     private sealed class Answers<T>
     {
-        private readonly Queue<Func<CancellationToken, Task<IReadOnlyList<T>>>> queue = new();
+        private readonly Queue<Func<CancellationToken, Task<IReadOnlyList<T>>>> _Queue = new();
 
-        public void Returns(T[] values) => queue.Enqueue(_ => Task.FromResult<IReadOnlyList<T>>(values));
+        public void Returns(T[] values) => _Queue.Enqueue(_ => Task.FromResult<IReadOnlyList<T>>(values));
 
-        public void Throws(Exception exception) => queue.Enqueue(_ => Task.FromException<IReadOnlyList<T>>(exception));
+        public void Throws(Exception exception) => _Queue.Enqueue(_ => Task.FromException<IReadOnlyList<T>>(exception));
 
         public void WaitsForCancel() =>
-            queue.Enqueue(async token =>
+            _Queue.Enqueue(async token =>
             {
                 await Task.Delay(Timeout.Infinite, token);
                 return [];
             });
 
-        public Task<IReadOnlyList<T>> Next(CancellationToken cancellationToken) => queue.Dequeue()(cancellationToken);
+        public Task<IReadOnlyList<T>> Next(CancellationToken cancellationToken) => _Queue.Dequeue()(cancellationToken);
     }
 }
 
@@ -168,7 +168,7 @@ internal sealed class FakeBuildLauncher : BuildLauncher
 /// <summary>Records the windows shown, brought to the front and closed, without making windows.</summary>
 internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launcher = null) : ToolWindows(runner, launcher ?? new FakeBuildLauncher(), new FixedClock(DateTimeOffset.UnixEpoch))
 {
-    private readonly Dictionary<ViewModelBase, Action> closers = [];
+    private readonly Dictionary<ViewModelBase, Action> _Closers = [];
 
     public List<ViewModelBase> Shown { get; } = [];
 
@@ -176,18 +176,18 @@ internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launc
 
     public List<ViewModelBase> Closed { get; } = [];
 
-    public void Close(ViewModelBase window) => closers[window]();
+    public void Close(ViewModelBase window) => _Closers[window]();
 
     protected override void CloseWindow(ViewModelBase viewModel)
     {
         Closed.Add(viewModel);
-        closers[viewModel]();
+        _Closers[viewModel]();
     }
 
     protected override void Show(ViewModelBase viewModel, Action closed)
     {
         Shown.Add(viewModel);
-        closers[viewModel] = closed;
+        _Closers[viewModel] = closed;
     }
 
     protected override void BringToFront(ViewModelBase viewModel) => BroughtToFront.Add(viewModel);
@@ -196,18 +196,18 @@ internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launc
 /// <summary>Records the VM windows shown and brought to the front, without making windows.</summary>
 internal sealed class FakeVMWindowManager(ToolWindows tools) : VMWindowManager(tools)
 {
-    private readonly Dictionary<VMViewModel, Action> closers = [];
+    private readonly Dictionary<VMViewModel, Action> _Closers = [];
 
     public List<VMViewModel> Shown { get; } = [];
 
     public List<VMViewModel> BroughtToFront { get; } = [];
 
-    public void Close(VMViewModel window) => closers[window]();
+    public void Close(VMViewModel window) => _Closers[window]();
 
     protected override void Show(VMViewModel viewModel, Action closed)
     {
         Shown.Add(viewModel);
-        closers[viewModel] = closed;
+        _Closers[viewModel] = closed;
     }
 
     protected override void BringToFront(VMViewModel viewModel) => BroughtToFront.Add(viewModel);
@@ -243,8 +243,8 @@ internal static class Sample
 /// <summary>Runs a test with a fixed culture, so dates and numbers read the same on every machine.</summary>
 internal sealed class CultureScope : IDisposable
 {
-    private readonly System.Globalization.CultureInfo culture = System.Globalization.CultureInfo.CurrentCulture;
-    private readonly System.Globalization.CultureInfo uiCulture = System.Globalization.CultureInfo.CurrentUICulture;
+    private readonly System.Globalization.CultureInfo _Culture = System.Globalization.CultureInfo.CurrentCulture;
+    private readonly System.Globalization.CultureInfo _UiCulture = System.Globalization.CultureInfo.CurrentUICulture;
 
     public CultureScope(string name)
     {
@@ -255,7 +255,7 @@ internal sealed class CultureScope : IDisposable
 
     public void Dispose()
     {
-        System.Globalization.CultureInfo.CurrentCulture = culture;
-        System.Globalization.CultureInfo.CurrentUICulture = uiCulture;
+        System.Globalization.CultureInfo.CurrentCulture = _Culture;
+        System.Globalization.CultureInfo.CurrentUICulture = _UiCulture;
     }
 }

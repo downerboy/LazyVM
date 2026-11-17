@@ -4,293 +4,293 @@ namespace LazyVM.UI.Wpf.Tests;
 
 public sealed class MainViewModelTests : IDisposable
 {
-    private readonly CultureScope culture = new("en-GB");
-    private readonly FakeCommandRunner runner = new();
-    private readonly FakeToolWindows tools;
-    private readonly FakeVMWindowManager windows;
-    private readonly MainViewModel main;
+    private readonly CultureScope _Culture = new("en-GB");
+    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeToolWindows _Tools;
+    private readonly FakeVMWindowManager _Windows;
+    private readonly MainViewModel _Main;
 
     public MainViewModelTests()
     {
-        tools = new FakeToolWindows(runner);
-        windows = new FakeVMWindowManager(tools);
-        main = new MainViewModel(runner, windows, tools, new FixedClock(new DateTimeOffset(2026, 11, 14, 14, 52, 0, TimeSpan.Zero)));
+        _Tools = new FakeToolWindows(_Runner);
+        _Windows = new FakeVMWindowManager(_Tools);
+        _Main = new MainViewModel(_Runner, _Windows, _Tools, new FixedClock(new DateTimeOffset(2026, 11, 14, 14, 52, 0, TimeSpan.Zero)));
     }
 
-    public void Dispose() => culture.Dispose();
+    public void Dispose() => _Culture.Dispose();
 
     [Fact]
     public async Task Refresh_ShowsOneRowPerVM()
     {
-        runner.Returns(Sample.VM("DevBox"), Sample.VM("PlainWin"), Sample.VM("TestBox"));
+        _Runner.Returns(Sample.VM("DevBox"), Sample.VM("PlainWin"), Sample.VM("TestBox"));
 
-        await main.RefreshAsync();
+        await _Main.RefreshAsync();
 
-        Assert.Equal(["DevBox", "PlainWin", "TestBox"], main.VMs.Select(row => row.Name));
+        Assert.Equal(["DevBox", "PlainWin", "TestBox"], _Main.VMs.Select(row => row.Name));
     }
 
     [Fact]
     public async Task Refresh_SaysWhatItDidInTheStatusLine()
     {
-        runner.Returns(Sample.VM("DevBox"), Sample.VM("PlainWin"), Sample.VM("TestBox"));
+        _Runner.Returns(Sample.VM("DevBox"), Sample.VM("PlainWin"), Sample.VM("TestBox"));
 
-        await main.RefreshAsync();
+        await _Main.RefreshAsync();
 
-        Assert.Equal("Refreshed 3 VMs at 14:52", main.Status);
+        Assert.Equal("Refreshed 3 VMs at 14:52", _Main.Status);
     }
 
     [Fact]
     public async Task Refresh_OfOneVM_SaysVMNotVMs()
     {
-        runner.Returns(Sample.VM());
+        _Runner.Returns(Sample.VM());
 
-        await main.RefreshAsync();
+        await _Main.RefreshAsync();
 
-        Assert.Equal("Refreshed 1 VM at 14:52", main.Status);
+        Assert.Equal("Refreshed 1 VM at 14:52", _Main.Status);
     }
 
     [Fact]
     public async Task Refresh_WhenTheCommandFails_KeepsTheListAndSaysWhy()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        runner.Throws(new InvalidOperationException("The LazyVM folder was not found."));
-        await main.RefreshAsync();
+        _Runner.Returns(Sample.VM("DevBox"));
+        _Runner.Throws(new InvalidOperationException("The LazyVM folder was not found."));
+        await _Main.RefreshAsync();
 
-        await main.RefreshAsync();
+        await _Main.RefreshAsync();
 
-        Assert.Equal(["DevBox"], main.VMs.Select(row => row.Name));
-        Assert.Equal("Refresh failed: The LazyVM folder was not found.", main.Status);
+        Assert.Equal(["DevBox"], _Main.VMs.Select(row => row.Name));
+        Assert.Equal("Refresh failed: The LazyVM folder was not found.", _Main.Status);
     }
 
     [Fact]
     public async Task CancelRefresh_StopsTheCallAndKeepsTheList()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        runner.WaitsForCancel();
-        await main.RefreshAsync();
+        _Runner.Returns(Sample.VM("DevBox"));
+        _Runner.WaitsForCancel();
+        await _Main.RefreshAsync();
 
-        var refresh = main.RefreshAsync();
-        Assert.True(main.IsRefreshing);
-        main.CancelRefreshCommand.Execute(null);
+        var refresh = _Main.RefreshAsync();
+        Assert.True(_Main.IsRefreshing);
+        _Main.CancelRefreshCommand.Execute(null);
         await refresh;
 
-        Assert.False(main.IsRefreshing);
-        Assert.Equal(["DevBox"], main.VMs.Select(row => row.Name));
-        Assert.Equal("Refresh cancelled", main.Status);
+        Assert.False(_Main.IsRefreshing);
+        Assert.Equal(["DevBox"], _Main.VMs.Select(row => row.Name));
+        Assert.Equal("Refresh cancelled", _Main.Status);
     }
 
     [Fact]
     public async Task RefreshCommand_IsUnavailableWhileARefreshRuns()
     {
-        runner.WaitsForCancel();
+        _Runner.WaitsForCancel();
 
-        var refresh = main.RefreshAsync();
+        var refresh = _Main.RefreshAsync();
 
-        Assert.False(main.RefreshCommand.CanExecute(null));
-        Assert.True(main.CancelRefreshCommand.CanExecute(null));
-        main.CancelRefreshCommand.Execute(null);
+        Assert.False(_Main.RefreshCommand.CanExecute(null));
+        Assert.True(_Main.CancelRefreshCommand.CanExecute(null));
+        _Main.CancelRefreshCommand.Execute(null);
         await refresh;
-        Assert.True(main.RefreshCommand.CanExecute(null));
-        Assert.False(main.CancelRefreshCommand.CanExecute(null));
+        Assert.True(_Main.RefreshCommand.CanExecute(null));
+        Assert.False(_Main.CancelRefreshCommand.CanExecute(null));
     }
 
     [Fact]
     public async Task Refresh_KeepsTheSelectedVMSelected()
     {
-        runner.Returns(Sample.VM("DevBox"), Sample.VM("TestBox"));
-        runner.Returns(Sample.VM("DevBox", "Off"), Sample.VM("TestBox", "Off"));
-        await main.RefreshAsync();
-        main.SelectedVM = main.VMs[1];
+        _Runner.Returns(Sample.VM("DevBox"), Sample.VM("TestBox"));
+        _Runner.Returns(Sample.VM("DevBox", "Off"), Sample.VM("TestBox", "Off"));
+        await _Main.RefreshAsync();
+        _Main.SelectedVM = _Main.VMs[1];
 
-        await main.RefreshAsync();
+        await _Main.RefreshAsync();
 
-        Assert.Equal("TestBox", main.SelectedVM?.Name);
-        Assert.Equal("Off", main.SelectedVM?.State);
+        Assert.Equal("TestBox", _Main.SelectedVM?.Name);
+        Assert.Equal("Off", _Main.SelectedVM?.State);
     }
 
     [Fact]
     public async Task Refresh_AddsNewVMsAndDropsDisposedOnes()
     {
-        runner.Returns(Sample.VM("DevBox"), Sample.VM("OldBox"));
-        runner.Returns(Sample.VM("DevBox"), Sample.VM("NewBox"));
-        await main.RefreshAsync();
+        _Runner.Returns(Sample.VM("DevBox"), Sample.VM("OldBox"));
+        _Runner.Returns(Sample.VM("DevBox"), Sample.VM("NewBox"));
+        await _Main.RefreshAsync();
 
-        await main.RefreshAsync();
+        await _Main.RefreshAsync();
 
-        Assert.Equal(["DevBox", "NewBox"], main.VMs.Select(row => row.Name));
+        Assert.Equal(["DevBox", "NewBox"], _Main.VMs.Select(row => row.Name));
     }
 
     [Fact]
     public async Task OpenVM_ShowsTheSelectedVMsWindow()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        await main.RefreshAsync();
-        main.SelectedVM = main.VMs[0];
+        _Runner.Returns(Sample.VM("DevBox"));
+        await _Main.RefreshAsync();
+        _Main.SelectedVM = _Main.VMs[0];
 
-        main.OpenVMCommand.Execute(null);
+        _Main.OpenVMCommand.Execute(null);
 
-        Assert.Equal("DevBox", Assert.Single(windows.Shown).Name);
+        Assert.Equal("DevBox", Assert.Single(_Windows.Shown).Name);
     }
 
     [Fact]
     public void OpenVM_WithNothingSelected_IsUnavailable()
     {
-        Assert.False(main.OpenVMCommand.CanExecute(null));
+        Assert.False(_Main.OpenVMCommand.CanExecute(null));
     }
 
     [Fact]
     public async Task OpenVM_Twice_BringsTheOpenWindowToTheFront()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        await main.RefreshAsync();
-        main.SelectedVM = main.VMs[0];
+        _Runner.Returns(Sample.VM("DevBox"));
+        await _Main.RefreshAsync();
+        _Main.SelectedVM = _Main.VMs[0];
 
-        main.OpenVMCommand.Execute(null);
-        main.OpenVMCommand.Execute(null);
+        _Main.OpenVMCommand.Execute(null);
+        _Main.OpenVMCommand.Execute(null);
 
-        var window = Assert.Single(windows.Shown);
-        Assert.Same(window, Assert.Single(windows.BroughtToFront));
+        var window = Assert.Single(_Windows.Shown);
+        Assert.Same(window, Assert.Single(_Windows.BroughtToFront));
     }
 
     [Fact]
     public async Task OpenVM_AfterItsWindowClosed_OpensANewWindow()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        await main.RefreshAsync();
-        main.SelectedVM = main.VMs[0];
-        main.OpenVMCommand.Execute(null);
-        windows.Close(windows.Shown[0]);
+        _Runner.Returns(Sample.VM("DevBox"));
+        await _Main.RefreshAsync();
+        _Main.SelectedVM = _Main.VMs[0];
+        _Main.OpenVMCommand.Execute(null);
+        _Windows.Close(_Windows.Shown[0]);
 
-        main.OpenVMCommand.Execute(null);
+        _Main.OpenVMCommand.Execute(null);
 
-        Assert.Equal(2, windows.Shown.Count);
-        Assert.Empty(windows.BroughtToFront);
+        Assert.Equal(2, _Windows.Shown.Count);
+        Assert.Empty(_Windows.BroughtToFront);
     }
 
     [Fact]
     public async Task Start_WithNoVMs_ShowsTheChecks_WithTheNoteOnTheFirstVM()
     {
-        runner.Returns();
-        runner.ReturnsChecks(Sample.Check(), Sample.Check(VMCheck.Info, "VMs", "none yet", "Create the first one with: New-LazyVM -Name <Name>"));
+        _Runner.Returns();
+        _Runner.ReturnsChecks(Sample.Check(), Sample.Check(VMCheck.Info, "VMs", "none yet", "Create the first one with: New-LazyVM -Name <Name>"));
 
-        await main.StartAsync();
+        await _Main.StartAsync();
 
         // Without -HostOnly, Test-LazyVM adds the note that there are no VMs yet.
-        Assert.Equal([(null, false)], runner.CheckCalls);
-        Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown));
+        Assert.Equal([(null, false)], _Runner.CheckCalls);
+        Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown));
     }
 
     [Fact]
     public async Task Start_WhenAHostCheckFails_ShowsTheChecks()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        runner.ReturnsChecks(Sample.Check(VMCheck.Failed, "Folder access", "others can change it"));
+        _Runner.Returns(Sample.VM("DevBox"));
+        _Runner.ReturnsChecks(Sample.Check(VMCheck.Failed, "Folder access", "others can change it"));
 
-        await main.StartAsync();
+        await _Main.StartAsync();
 
-        Assert.Equal([(null, true)], runner.CheckCalls);
-        Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown));
+        Assert.Equal([(null, true)], _Runner.CheckCalls);
+        Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown));
     }
 
     [Fact]
     public async Task Start_WithVMsAndNoFailedCheck_ShowsNoChecks()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        runner.ReturnsChecks(Sample.Check(VMCheck.OK), Sample.Check(VMCheck.Info), Sample.Check(VMCheck.Warning));
+        _Runner.Returns(Sample.VM("DevBox"));
+        _Runner.ReturnsChecks(Sample.Check(VMCheck.OK), Sample.Check(VMCheck.Info), Sample.Check(VMCheck.Warning));
 
-        await main.StartAsync();
+        await _Main.StartAsync();
 
-        Assert.Empty(tools.Shown);
-        Assert.Equal("Refreshed 1 VM at 14:52", main.Status);
+        Assert.Empty(_Tools.Shown);
+        Assert.Equal("Refreshed 1 VM at 14:52", _Main.Status);
     }
 
     [Fact]
     public async Task Start_WhenTheRefreshFails_ChecksTheHostOnly()
     {
         // A failed refresh says nothing about whether there are VMs.
-        runner.Throws(new InvalidOperationException("The LazyVM folder was not found."));
-        runner.ReturnsChecks(Sample.Check(VMCheck.OK));
+        _Runner.Throws(new InvalidOperationException("The LazyVM folder was not found."));
+        _Runner.ReturnsChecks(Sample.Check(VMCheck.OK));
 
-        await main.StartAsync();
+        await _Main.StartAsync();
 
-        Assert.Equal([(null, true)], runner.CheckCalls);
-        Assert.Empty(tools.Shown);
+        Assert.Equal([(null, true)], _Runner.CheckCalls);
+        Assert.Empty(_Tools.Shown);
     }
 
     [Fact]
     public async Task Start_WhenTheChecksCannotRun_ShowsTheChecksSayingWhy()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        runner.ChecksThrow(new InvalidOperationException("Run LazyVM as administrator."));
+        _Runner.Returns(Sample.VM("DevBox"));
+        _Runner.ChecksThrow(new InvalidOperationException("Run LazyVM as administrator."));
 
-        await main.StartAsync();
+        await _Main.StartAsync();
 
-        var checks = Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown));
+        var checks = Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown));
         Assert.Equal("Checks could not run: Run LazyVM as administrator.", checks.Status);
     }
 
     [Fact]
     public async Task HostChecks_WithVMs_ChecksTheHostOnly()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        runner.ReturnsChecks(Sample.Check());
-        await main.RefreshAsync();
+        _Runner.Returns(Sample.VM("DevBox"));
+        _Runner.ReturnsChecks(Sample.Check());
+        await _Main.RefreshAsync();
 
-        main.HostChecksCommand.Execute(null);
+        _Main.HostChecksCommand.Execute(null);
 
-        Assert.Equal([(null, true)], runner.CheckCalls);
-        Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown));
+        Assert.Equal([(null, true)], _Runner.CheckCalls);
+        Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown));
     }
 
     [Fact]
     public async Task HostChecks_WithNoVMs_AlsoSaysThereAreNone()
     {
-        runner.Returns();
-        runner.ReturnsChecks(Sample.Check());
-        await main.RefreshAsync();
+        _Runner.Returns();
+        _Runner.ReturnsChecks(Sample.Check());
+        await _Main.RefreshAsync();
 
-        main.HostChecksCommand.Execute(null);
+        _Main.HostChecksCommand.Execute(null);
 
-        Assert.Equal([(null, false)], runner.CheckCalls);
+        Assert.Equal([(null, false)], _Runner.CheckCalls);
     }
 
     [Fact]
     public async Task HostChecks_AfterARefreshFailed_ChecksTheHostOnly()
     {
         // The empty list from before the failure no longer says there are no VMs.
-        runner.Returns();
-        runner.Throws(new InvalidOperationException("The LazyVM folder was not found."));
-        runner.ReturnsChecks(Sample.Check());
-        await main.RefreshAsync();
-        await main.RefreshAsync();
+        _Runner.Returns();
+        _Runner.Throws(new InvalidOperationException("The LazyVM folder was not found."));
+        _Runner.ReturnsChecks(Sample.Check());
+        await _Main.RefreshAsync();
+        await _Main.RefreshAsync();
 
-        main.HostChecksCommand.Execute(null);
+        _Main.HostChecksCommand.Execute(null);
 
-        Assert.Equal([(null, true)], runner.CheckCalls);
+        Assert.Equal([(null, true)], _Runner.CheckCalls);
     }
 
     [Fact]
     public async Task Refresh_UpdatesTheOpenVMWindows()
     {
-        runner.Returns(Sample.VM("DevBox", "Running"));
-        runner.Returns(Sample.VM("DevBox", "Off"));
-        await main.RefreshAsync();
-        main.SelectedVM = main.VMs[0];
-        main.OpenVMCommand.Execute(null);
+        _Runner.Returns(Sample.VM("DevBox", "Running"));
+        _Runner.Returns(Sample.VM("DevBox", "Off"));
+        await _Main.RefreshAsync();
+        _Main.SelectedVM = _Main.VMs[0];
+        _Main.OpenVMCommand.Execute(null);
 
-        await main.RefreshAsync();
+        await _Main.RefreshAsync();
 
-        Assert.Equal("Off", windows.Shown[0].State);
+        Assert.Equal("Off", _Windows.Shown[0].State);
     }
 
     [Fact]
     public async Task Build_OpensTheBuildWindow_KnowingTheVMsThereAre()
     {
-        runner.Returns(Sample.VM("DevBox"));
-        await main.RefreshAsync();
+        _Runner.Returns(Sample.VM("DevBox"));
+        await _Main.RefreshAsync();
 
-        main.BuildCommand.Execute(null);
-        var build = Assert.IsType<BuildViewModel>(Assert.Single(tools.Shown));
+        _Main.BuildCommand.Execute(null);
+        var build = Assert.IsType<BuildViewModel>(Assert.Single(_Tools.Shown));
         await build.LoadAsync();
         build.Name = "devbox";
         await build.BuildAsync();
@@ -301,23 +301,23 @@ public sealed class MainViewModelTests : IDisposable
     [Fact]
     public async Task ABuildThatEnds_ReadsTheListAgain()
     {
-        runner.ReturnsRun(null);
-        runner.Returns(Sample.VM("DevBox"));
+        _Runner.ReturnsRun(null);
+        _Runner.Returns(Sample.VM("DevBox"));
 
-        tools.OpenProgress("DevBox", started: null);
+        _Tools.OpenProgress("DevBox", started: null);
         await Task.Yield();
 
-        Assert.Equal(1, runner.DashboardCalls);
+        Assert.Equal(1, _Runner.DashboardCalls);
     }
 
     [Fact]
     public async Task MaintenanceStartedFromAVMWindow_ReadsTheListAgain()
     {
-        runner.Returns(Sample.VM("DevBox"));
+        _Runner.Returns(Sample.VM("DevBox"));
 
-        await tools.StartMaintenanceAsync("DevBox");
+        await _Tools.StartMaintenanceAsync("DevBox");
         await Task.Yield();
 
-        Assert.Equal(1, runner.DashboardCalls);
+        Assert.Equal(1, _Runner.DashboardCalls);
     }
 }

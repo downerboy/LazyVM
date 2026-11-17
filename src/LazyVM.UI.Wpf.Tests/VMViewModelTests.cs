@@ -6,41 +6,41 @@ public sealed class VMViewModelTests : IDisposable
 {
     private const long GB = 1024L * 1024 * 1024;
 
-    private readonly CultureScope culture = new("en-GB");
-    private readonly FakeCommandRunner runner = new();
-    private readonly FakeBuildLauncher launcher = new();
-    private readonly FakeToolWindows tools;
+    private readonly CultureScope _Culture = new("en-GB");
+    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeBuildLauncher _Launcher = new();
+    private readonly FakeToolWindows _Tools;
 
     public VMViewModelTests()
     {
-        tools = new FakeToolWindows(runner, launcher);
+        _Tools = new FakeToolWindows(_Runner, _Launcher);
     }
 
-    public void Dispose() => culture.Dispose();
+    public void Dispose() => _Culture.Dispose();
 
-    private VMViewModel Open(VMDashboard entry) => new(entry, tools);
+    private VMViewModel Open(VMDashboard entry) => new(entry, _Tools);
 
     [Fact]
     public void Checks_OpensTheVMsChecks()
     {
-        runner.ReturnsChecks(Sample.Check());
+        _Runner.ReturnsChecks(Sample.Check());
         var vm = Open(Sample.VM("DevEnv"));
 
         vm.ChecksCommand.Execute(null);
 
-        Assert.Equal("DevEnv", Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown)).VMName);
-        Assert.Equal([("DevEnv", false)], runner.CheckCalls);
+        Assert.Equal("DevEnv", Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown)).VMName);
+        Assert.Equal([("DevEnv", false)], _Runner.CheckCalls);
     }
 
     [Fact]
     public void Log_OpensTheVMsLog()
     {
-        runner.ReturnsLog();
+        _Runner.ReturnsLog();
         var vm = Open(Sample.VM("DevEnv"));
 
         vm.LogCommand.Execute(null);
 
-        Assert.Equal("DevEnv", Assert.IsType<LogViewModel>(Assert.Single(tools.Shown)).VMName);
+        Assert.Equal("DevEnv", Assert.IsType<LogViewModel>(Assert.Single(_Tools.Shown)).VMName);
     }
 
     private static string? Detail(VMViewModel vm, string label) =>
@@ -251,12 +251,12 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void BuildProgress_OpensTheProgressOfTheRunningBuild()
     {
-        runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 }, "DevEnv");
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 }, "DevEnv");
         var vm = Open(Sample.VM("DevEnv") with { Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 } });
 
         vm.BuildProgressCommand.Execute(null);
 
-        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(tools.Shown));
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Shown));
         Assert.Equal("DevEnv", progress.VMName);
         progress.StopFollowing();
     }
@@ -310,7 +310,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task Load_WhenThePhasesCannotBeRead_SaysWhy_AndOffersNoBuild()
     {
-        runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
+        _Runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
 
         var vm = await Loaded(Sample.VM());
 
@@ -323,12 +323,12 @@ public sealed class VMViewModelTests : IDisposable
     {
         var vm = await Loaded(Sample.VM("DevEnv"));
         vm.SelectedPhase = vm.Phases.Single(phase => phase.Number == 7);
-        runner.ReturnsRun(null, "DevEnv");
+        _Runner.ReturnsRun(null, "DevEnv");
 
         await vm.BuildFromPhaseAsync();
 
-        Assert.Equal(new BuildRequest("DevEnv", null, null, 7), Assert.Single(launcher.Started).Request);
-        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(tools.Shown));
+        Assert.Equal(new BuildRequest("DevEnv", null, null, 7), Assert.Single(_Launcher.Started).Request);
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Shown));
         Assert.Equal("DevEnv", progress.VMName);
         Assert.Equal("The build of DevEnv has started from phase 7. Its progress is in its own window.", vm.Status);
         progress.StopFollowing();
@@ -337,7 +337,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task BuildFromPhase_WhenItCannotStart_SaysWhy()
     {
-        launcher.Fails = new InvalidOperationException("PowerShell 7.6 or later was not found.");
+        _Launcher.Fails = new InvalidOperationException("PowerShell 7.6 or later was not found.");
         var vm = await Loaded(Sample.VM());
 
         await vm.BuildFromPhaseAsync();
@@ -353,14 +353,14 @@ public sealed class VMViewModelTests : IDisposable
 
         await vm.RunMaintenanceAsync();
 
-        Assert.Equal(["DevEnv"], runner.MaintenanceCalls);
+        Assert.Equal(["DevEnv"], _Runner.MaintenanceCalls);
         Assert.StartsWith("The maintenance of DevEnv has started, as its nightly run does.", vm.Status);
     }
 
     [Fact]
     public async Task RunMaintenance_WhenTheModuleStartsNothing_SaysWhy()
     {
-        runner.MaintenanceFails = new InvalidOperationException("The maintenance of DevBox is running already, so it was not started again.");
+        _Runner.MaintenanceFails = new InvalidOperationException("The maintenance of DevBox is running already, so it was not started again.");
         var vm = await Loaded(Sample.VM());
 
         await vm.RunMaintenanceAsync();
@@ -384,8 +384,8 @@ public sealed class VMViewModelTests : IDisposable
 
         await vm.RunMaintenanceAsync();
         await vm.BuildFromPhaseAsync();
-        Assert.Empty(runner.MaintenanceCalls);
-        Assert.Empty(launcher.Started);
+        Assert.Empty(_Runner.MaintenanceCalls);
+        Assert.Empty(_Launcher.Started);
     }
 
     [Fact]

@@ -4,103 +4,103 @@ namespace LazyVM.UI.Wpf.Tests;
 
 public sealed class ToolWindowsTests
 {
-    private readonly FakeCommandRunner runner = new();
-    private readonly FakeToolWindows tools;
+    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeToolWindows _Tools;
 
     public ToolWindowsTests()
     {
-        tools = new FakeToolWindows(runner);
+        _Tools = new FakeToolWindows(_Runner);
     }
 
     [Fact]
     public void OpenChecks_ShowsTheChecksAndRunsThem()
     {
-        runner.ReturnsChecks(Sample.Check());
+        _Runner.ReturnsChecks(Sample.Check());
 
-        tools.OpenChecks("DevBox", hostOnly: false);
+        _Tools.OpenChecks("DevBox", hostOnly: false);
 
-        var checks = Assert.IsType<ChecksViewModel>(Assert.Single(tools.Shown));
+        var checks = Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown));
         Assert.Equal("DevBox", checks.VMName);
-        Assert.Equal([("DevBox", false)], runner.CheckCalls);
+        Assert.Equal([("DevBox", false)], _Runner.CheckCalls);
     }
 
     [Fact]
     public void OpenChecks_Twice_BringsTheOpenWindowToTheFront()
     {
-        runner.ReturnsChecks(Sample.Check());
+        _Runner.ReturnsChecks(Sample.Check());
 
-        tools.OpenChecks("DevBox", hostOnly: false);
-        tools.OpenChecks("devbox", hostOnly: false);
+        _Tools.OpenChecks("DevBox", hostOnly: false);
+        _Tools.OpenChecks("devbox", hostOnly: false);
 
-        Assert.Same(Assert.Single(tools.Shown), Assert.Single(tools.BroughtToFront));
-        Assert.Single(runner.CheckCalls);
+        Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
+        Assert.Single(_Runner.CheckCalls);
     }
 
     [Fact]
     public void OpenChecks_OfTheHostAndOfAVM_AreTwoWindows()
     {
-        runner.ReturnsChecks(Sample.Check());
-        runner.ReturnsChecks(Sample.Check());
+        _Runner.ReturnsChecks(Sample.Check());
+        _Runner.ReturnsChecks(Sample.Check());
 
-        tools.OpenChecks(null, hostOnly: true);
-        tools.OpenChecks("DevBox", hostOnly: false);
+        _Tools.OpenChecks(null, hostOnly: true);
+        _Tools.OpenChecks("DevBox", hostOnly: false);
 
-        Assert.Equal(2, tools.Shown.Count);
+        Assert.Equal(2, _Tools.Shown.Count);
     }
 
     [Fact]
     public void ShowChecks_OfChecksAlreadyRun_ShowsThemWithoutRunningAgain()
     {
-        var checks = new ChecksViewModel(runner, null, hostOnly: true);
+        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
 
-        tools.ShowChecks(checks);
+        _Tools.ShowChecks(checks);
 
-        Assert.Same(checks, Assert.Single(tools.Shown));
-        Assert.Empty(runner.CheckCalls);
+        Assert.Same(checks, Assert.Single(_Tools.Shown));
+        Assert.Empty(_Runner.CheckCalls);
     }
 
     [Fact]
     public void OpenLog_ShowsTheLogAndReadsIt()
     {
-        runner.ReturnsLog(Sample.Log("Info", "a"));
+        _Runner.ReturnsLog(Sample.Log("Info", "a"));
 
-        tools.OpenLog("DevBox");
+        _Tools.OpenLog("DevBox");
 
-        var log = Assert.IsType<LogViewModel>(Assert.Single(tools.Shown));
+        var log = Assert.IsType<LogViewModel>(Assert.Single(_Tools.Shown));
         Assert.Equal("DevBox", log.VMName);
-        Assert.Single(runner.LogCalls);
+        Assert.Single(_Runner.LogCalls);
     }
 
     [Fact]
     public void OpenLog_AfterItsWindowClosed_OpensANewWindow()
     {
-        runner.ReturnsLog();
-        runner.ReturnsLog();
-        tools.OpenLog("DevBox");
-        tools.Close(tools.Shown[0]);
+        _Runner.ReturnsLog();
+        _Runner.ReturnsLog();
+        _Tools.OpenLog("DevBox");
+        _Tools.Close(_Tools.Shown[0]);
 
-        tools.OpenLog("DevBox");
+        _Tools.OpenLog("DevBox");
 
-        Assert.Equal(2, tools.Shown.Count);
-        Assert.Empty(tools.BroughtToFront);
+        Assert.Equal(2, _Tools.Shown.Count);
+        Assert.Empty(_Tools.BroughtToFront);
     }
 
     [Fact]
     public void OpenBuild_ShowsTheBuildWindow_Once()
     {
-        tools.OpenBuild(["DevBox"]);
-        tools.OpenBuild(["DevBox"]);
+        _Tools.OpenBuild(["DevBox"]);
+        _Tools.OpenBuild(["DevBox"]);
 
-        Assert.IsType<BuildViewModel>(Assert.Single(tools.Shown));
-        Assert.Single(tools.BroughtToFront);
+        Assert.IsType<BuildViewModel>(Assert.Single(_Tools.Shown));
+        Assert.Single(_Tools.BroughtToFront);
     }
 
     [Fact]
     public async Task ABuildStartedFromTheBuildWindow_OpensItsProgress()
     {
         var launcher = new FakeBuildLauncher();
-        var withLauncher = new FakeToolWindows(runner, launcher);
-        runner.ReturnsRun(null, "TestBox");
+        var withLauncher = new FakeToolWindows(_Runner, launcher);
+        _Runner.ReturnsRun(null, "TestBox");
         withLauncher.OpenBuild([]);
         var build = Assert.IsType<BuildViewModel>(withLauncher.Shown[0]);
         await build.LoadAsync();
@@ -116,53 +116,53 @@ public sealed class ToolWindowsTests
     [Fact]
     public void OpenProgress_Twice_BringsTheOpenWindowToTheFront()
     {
-        runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
-        tools.OpenProgress("DevBox", started: null);
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
+        _Tools.OpenProgress("DevBox", started: null);
 
-        tools.OpenProgress("DevBox", started: null);
+        _Tools.OpenProgress("DevBox", started: null);
 
-        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(tools.Shown));
-        Assert.Same(progress, Assert.Single(tools.BroughtToFront));
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Shown));
+        Assert.Same(progress, Assert.Single(_Tools.BroughtToFront));
         progress.StopFollowing();
     }
 
     [Fact]
     public void ClosingTheProgressWindow_StopsOnlyTheFollowing()
     {
-        runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
-        tools.OpenProgress("DevBox", started: null);
-        var progress = (BuildProgressViewModel)tools.Shown[0];
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
+        _Tools.OpenProgress("DevBox", started: null);
+        var progress = (BuildProgressViewModel)_Tools.Shown[0];
 
-        tools.Close(progress);
+        _Tools.Close(progress);
 
-        Assert.Empty(runner.StopCalls);
+        Assert.Empty(_Runner.StopCalls);
         Assert.False(progress.IsFinished);
     }
 
     [Fact]
     public void ANewBuild_ReplacesTheWindowOfAnEndedOne()
     {
-        runner.ReturnsRun(null);
-        tools.OpenProgress("DevBox", started: null);
-        var ended = (BuildProgressViewModel)tools.Shown[0];
+        _Runner.ReturnsRun(null);
+        _Tools.OpenProgress("DevBox", started: null);
+        var ended = (BuildProgressViewModel)_Tools.Shown[0];
         Assert.True(ended.IsFinished);
-        runner.ReturnsRun(null);
+        _Runner.ReturnsRun(null);
 
-        tools.OpenProgress("DevBox", new StartedBuild(4242, new TaskCompletionSource<BuildResult>().Task));
+        _Tools.OpenProgress("DevBox", new StartedBuild(4242, new TaskCompletionSource<BuildResult>().Task));
 
-        Assert.Same(ended, Assert.Single(tools.Closed));
-        Assert.Equal(2, tools.Shown.Count);
-        ((BuildProgressViewModel)tools.Shown[1]).StopFollowing();
+        Assert.Same(ended, Assert.Single(_Tools.Closed));
+        Assert.Equal(2, _Tools.Shown.Count);
+        ((BuildProgressViewModel)_Tools.Shown[1]).StopFollowing();
     }
 
     [Fact]
     public async Task StartBuild_FromAPhase_StartsItOpensItsProgress_AndReportsIt()
     {
         var launcher = new FakeBuildLauncher();
-        var withLauncher = new FakeToolWindows(runner, launcher);
+        var withLauncher = new FakeToolWindows(_Runner, launcher);
         var started = 0;
         withLauncher.RunStarted += (_, _) => started++;
-        runner.ReturnsRun(null);
+        _Runner.ReturnsRun(null);
 
         await withLauncher.StartBuildAsync(new BuildRequest("DevBox", null, null, 7));
 
@@ -178,7 +178,7 @@ public sealed class ToolWindowsTests
     public async Task StartBuild_WhenItCannotStart_ThrowsAndReportsNothing()
     {
         var launcher = new FakeBuildLauncher { Fails = new InvalidOperationException("PowerShell 7.6 or later was not found.") };
-        var withLauncher = new FakeToolWindows(runner, launcher);
+        var withLauncher = new FakeToolWindows(_Runner, launcher);
         var started = 0;
         withLauncher.RunStarted += (_, _) => started++;
 
@@ -192,15 +192,15 @@ public sealed class ToolWindowsTests
     public async Task CarryOn_FromAFailedBuildsWindow_StartsFromItsPhase_InANewWindow()
     {
         var launcher = new FakeBuildLauncher();
-        var withLauncher = new FakeToolWindows(runner, launcher);
-        runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
+        var withLauncher = new FakeToolWindows(_Runner, launcher);
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
         withLauncher.OpenProgress("DevBox", started: null);
         var failed = (BuildProgressViewModel)withLauncher.Shown[0];
         // The window follows the build it found running, until it reads the build as failed.
         failed.StopFollowing();
-        runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Failed, ProcessId = 9, Phase = 7, UnfinishedPhase = 7 });
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Failed, ProcessId = 9, Phase = 7, UnfinishedPhase = 7 });
         await failed.PollAsync(CancellationToken.None);
-        runner.ReturnsRun(null);
+        _Runner.ReturnsRun(null);
 
         await failed.CarryOnAsync();
 
@@ -215,11 +215,11 @@ public sealed class ToolWindowsTests
     public async Task StartMaintenance_RunsTheModulesCommand_AndReportsIt()
     {
         var started = 0;
-        tools.RunStarted += (_, _) => started++;
+        _Tools.RunStarted += (_, _) => started++;
 
-        await tools.StartMaintenanceAsync("DevBox");
+        await _Tools.StartMaintenanceAsync("DevBox");
 
-        Assert.Equal(["DevBox"], runner.MaintenanceCalls);
+        Assert.Equal(["DevBox"], _Runner.MaintenanceCalls);
         Assert.Equal(1, started);
     }
 
@@ -227,10 +227,10 @@ public sealed class ToolWindowsTests
     public async Task StartMaintenance_WhenTheModuleStartsNothing_ThrowsItsReason_AndReportsNothing()
     {
         var started = 0;
-        tools.RunStarted += (_, _) => started++;
-        runner.MaintenanceFails = new InvalidOperationException("A build of DevBox is running, so maintenance was not started.");
+        _Tools.RunStarted += (_, _) => started++;
+        _Runner.MaintenanceFails = new InvalidOperationException("A build of DevBox is running, so maintenance was not started.");
 
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => tools.StartMaintenanceAsync("DevBox"));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => _Tools.StartMaintenanceAsync("DevBox"));
 
         Assert.Contains("A build of DevBox is running", failure.Message);
         Assert.Equal(0, started);
@@ -240,10 +240,10 @@ public sealed class ToolWindowsTests
     public void ABuildThatEnds_IsReported_SoTheListIsReadAgain()
     {
         var ended = 0;
-        tools.BuildEnded += (_, _) => ended++;
-        runner.ReturnsRun(null);
+        _Tools.BuildEnded += (_, _) => ended++;
+        _Runner.ReturnsRun(null);
 
-        tools.OpenProgress("DevBox", started: null);
+        _Tools.OpenProgress("DevBox", started: null);
 
         Assert.Equal(1, ended);
     }

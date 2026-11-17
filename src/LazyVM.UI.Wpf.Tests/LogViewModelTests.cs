@@ -4,107 +4,107 @@ namespace LazyVM.UI.Wpf.Tests;
 
 public sealed class LogViewModelTests : IDisposable
 {
-    private readonly CultureScope culture = new("en-GB");
-    private readonly FakeCommandRunner runner = new();
-    private readonly LogViewModel log;
+    private readonly CultureScope _Culture = new("en-GB");
+    private readonly FakeCommandRunner _Runner = new();
+    private readonly LogViewModel _Log;
 
     public LogViewModelTests()
     {
-        log = new LogViewModel(runner, "DevBox");
+        _Log = new LogViewModel(_Runner, "DevBox");
     }
 
-    public void Dispose() => culture.Dispose();
+    public void Dispose() => _Culture.Dispose();
 
     [Fact]
     public void Title_NamesTheVM()
     {
-        Assert.Equal("DevBox log - LazyVM", log.Title);
-        Assert.Equal("Log of DevBox", log.Heading);
+        Assert.Equal("DevBox log - LazyVM", _Log.Title);
+        Assert.Equal("Log of DevBox", _Log.Heading);
     }
 
     [Fact]
     public async Task Load_AsksForTheVMsLastEntriesOnly()
     {
-        runner.ReturnsLog();
+        _Runner.ReturnsLog();
 
-        await log.LoadAsync();
+        await _Log.LoadAsync();
 
-        Assert.Equal([("DevBox", LogViewModel.Tail)], runner.LogCalls);
+        Assert.Equal([("DevBox", LogViewModel.Tail)], _Runner.LogCalls);
     }
 
     [Fact]
     public async Task Load_ShowsTheEntriesOldestFirst_AndSelectsTheNewest()
     {
-        runner.ReturnsLog(Sample.Log("Phase", "Build", 1), Sample.Log("Info", "Copying the ISO", 2), Sample.Log("OK", "Done", 3));
+        _Runner.ReturnsLog(Sample.Log("Phase", "Build", 1), Sample.Log("Info", "Copying the ISO", 2), Sample.Log("OK", "Done", 3));
 
-        await log.LoadAsync();
+        await _Log.LoadAsync();
 
-        Assert.Equal(["Build", "Copying the ISO", "Done"], log.Entries.Select(entry => entry.Message));
-        Assert.Same(log.Entries[^1], log.SelectedEntry);
+        Assert.Equal(["Build", "Copying the ISO", "Done"], _Log.Entries.Select(entry => entry.Message));
+        Assert.Same(_Log.Entries[^1], _Log.SelectedEntry);
     }
 
     [Fact]
     public async Task Load_SaysHowManyEntriesWarningsAndErrors()
     {
-        runner.ReturnsLog(
+        _Runner.ReturnsLog(
             Sample.Log("Info", "a"), Sample.Log("Error", "b"), Sample.Log("Warning", "c"),
             Sample.Log("Warning", "d"), Sample.Log("Error", "e"), Sample.Log("Error", "f"));
 
-        await log.LoadAsync();
+        await _Log.LoadAsync();
 
-        Assert.Equal("6 entries: 3 errors, 2 warnings", log.Status);
+        Assert.Equal("6 entries: 3 errors, 2 warnings", _Log.Status);
     }
 
     [Fact]
     public async Task Load_OfAQuietLog_SaysThereAreNoWarningsOrErrors()
     {
-        runner.ReturnsLog(Sample.Log("Info", "a"));
+        _Runner.ReturnsLog(Sample.Log("Info", "a"));
 
-        await log.LoadAsync();
+        await _Log.LoadAsync();
 
-        Assert.Equal("1 entry: no warnings or errors", log.Status);
+        Assert.Equal("1 entry: no warnings or errors", _Log.Status);
     }
 
     [Fact]
     public async Task Load_BeforeThereIsALog_SaysSo()
     {
-        runner.ReturnsLog();
+        _Runner.ReturnsLog();
 
-        await log.LoadAsync();
+        await _Log.LoadAsync();
 
-        Assert.Empty(log.Entries);
-        Assert.Null(log.SelectedEntry);
-        Assert.Equal("No log entries yet", log.Status);
+        Assert.Empty(_Log.Entries);
+        Assert.Null(_Log.SelectedEntry);
+        Assert.Equal("No log entries yet", _Log.Status);
     }
 
     [Fact]
     public async Task Load_OfAFullTail_SaysOnlyTheLastAreShown()
     {
-        runner.ReturnsLog([.. Enumerable.Range(0, LogViewModel.Tail).Select(_ => Sample.Log("Info", "a"))]);
+        _Runner.ReturnsLog([.. Enumerable.Range(0, LogViewModel.Tail).Select(_ => Sample.Log("Info", "a"))]);
 
-        await log.LoadAsync();
+        await _Log.LoadAsync();
 
-        Assert.Equal($"The last {LogViewModel.Tail} entries: no warnings or errors", log.Status);
+        Assert.Equal($"The last {LogViewModel.Tail} entries: no warnings or errors", _Log.Status);
     }
 
     [Fact]
     public async Task Load_WhenTheLogCannotBeRead_SaysWhy()
     {
-        runner.LogThrows(new InvalidOperationException("Access to the path is denied."));
+        _Runner.LogThrows(new InvalidOperationException("Access to the path is denied."));
 
-        await log.LoadAsync();
+        await _Log.LoadAsync();
 
-        Assert.Equal("The log could not be read: Access to the path is denied.", log.Status);
+        Assert.Equal("The log could not be read: Access to the path is denied.", _Log.Status);
     }
 
     [Fact]
     public async Task Entry_IsReadAsLevelTimeAndMessage()
     {
-        runner.ReturnsLog(Sample.Log("Error", "Windows Update failed", 10));
+        _Runner.ReturnsLog(Sample.Log("Error", "Windows Update failed", 10));
 
-        await log.LoadAsync();
+        await _Log.LoadAsync();
 
-        var entry = Assert.Single(log.Entries);
+        var entry = Assert.Single(_Log.Entries);
         Assert.Equal("12 November 2026 02:10:05", entry.TimeText);
         Assert.Equal("Error, 12 November 2026 02:10:05, Windows Update failed", entry.AutomationName);
         Assert.True(entry.IsProblem);
@@ -113,63 +113,63 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task PreviousProblem_FromTheNewest_JumpsToTheLastWarningOrError()
     {
-        runner.ReturnsLog(Sample.Log("Error", "a"), Sample.Log("Info", "b"), Sample.Log("Warning", "c"), Sample.Log("Info", "d"));
-        await log.LoadAsync();
+        _Runner.ReturnsLog(Sample.Log("Error", "a"), Sample.Log("Info", "b"), Sample.Log("Warning", "c"), Sample.Log("Info", "d"));
+        await _Log.LoadAsync();
         LogEntryRowViewModel? jumpedTo = null;
-        log.JumpedTo += entry => jumpedTo = entry;
+        _Log.JumpedTo += entry => jumpedTo = entry;
 
-        log.PreviousProblemCommand.Execute(null);
+        _Log.PreviousProblemCommand.Execute(null);
 
-        Assert.Equal("c", log.SelectedEntry?.Message);
-        Assert.Same(log.SelectedEntry, jumpedTo);
+        Assert.Equal("c", _Log.SelectedEntry?.Message);
+        Assert.Same(_Log.SelectedEntry, jumpedTo);
     }
 
     [Fact]
     public async Task NextProblem_SkipsEntriesThatAreNotWarningsOrErrors()
     {
-        runner.ReturnsLog(Sample.Log("Info", "a"), Sample.Log("OK", "b"), Sample.Log("Phase", "c"), Sample.Log("Error", "d"), Sample.Log("Info", "e"));
-        await log.LoadAsync();
-        log.SelectedEntry = log.Entries[0];
+        _Runner.ReturnsLog(Sample.Log("Info", "a"), Sample.Log("OK", "b"), Sample.Log("Phase", "c"), Sample.Log("Error", "d"), Sample.Log("Info", "e"));
+        await _Log.LoadAsync();
+        _Log.SelectedEntry = _Log.Entries[0];
 
-        log.NextProblemCommand.Execute(null);
+        _Log.NextProblemCommand.Execute(null);
 
-        Assert.Equal("d", log.SelectedEntry?.Message);
+        Assert.Equal("d", _Log.SelectedEntry?.Message);
     }
 
     [Fact]
     public async Task NextProblem_WithNoneLeft_StaysAndSaysSo()
     {
-        runner.ReturnsLog(Sample.Log("Error", "a"), Sample.Log("Info", "b"));
-        await log.LoadAsync();
+        _Runner.ReturnsLog(Sample.Log("Error", "a"), Sample.Log("Info", "b"));
+        await _Log.LoadAsync();
 
-        log.NextProblemCommand.Execute(null);
+        _Log.NextProblemCommand.Execute(null);
 
-        Assert.Equal("b", log.SelectedEntry?.Message);
-        Assert.Equal("No warnings or errors after this entry", log.Status);
+        Assert.Equal("b", _Log.SelectedEntry?.Message);
+        Assert.Equal("No warnings or errors after this entry", _Log.Status);
     }
 
     [Fact]
     public async Task PreviousProblem_WithNoneBefore_StaysAndSaysSo()
     {
-        runner.ReturnsLog(Sample.Log("Info", "a"), Sample.Log("Error", "b"));
-        await log.LoadAsync();
-        log.SelectedEntry = log.Entries[0];
+        _Runner.ReturnsLog(Sample.Log("Info", "a"), Sample.Log("Error", "b"));
+        await _Log.LoadAsync();
+        _Log.SelectedEntry = _Log.Entries[0];
 
-        log.PreviousProblemCommand.Execute(null);
+        _Log.PreviousProblemCommand.Execute(null);
 
-        Assert.Equal("a", log.SelectedEntry?.Message);
-        Assert.Equal("No warnings or errors before this entry", log.Status);
+        Assert.Equal("a", _Log.SelectedEntry?.Message);
+        Assert.Equal("No warnings or errors before this entry", _Log.Status);
     }
 
     [Fact]
     public async Task NextProblem_WithNothingSelected_StartsAtTheTop()
     {
-        runner.ReturnsLog(Sample.Log("Warning", "a"), Sample.Log("Info", "b"));
-        await log.LoadAsync();
-        log.SelectedEntry = null;
+        _Runner.ReturnsLog(Sample.Log("Warning", "a"), Sample.Log("Info", "b"));
+        await _Log.LoadAsync();
+        _Log.SelectedEntry = null;
 
-        log.NextProblemCommand.Execute(null);
+        _Log.NextProblemCommand.Execute(null);
 
-        Assert.Equal("a", log.SelectedEntry?.Message);
+        Assert.Equal("a", _Log.SelectedEntry?.Message);
     }
 }

@@ -1,0 +1,35 @@
+# C# style for the app and its tests (#449). The build checks these rules
+# (EnforceCodeStyleInBuild in Directory.Build.props), so Visual Studio and CI
+# both report a break as an error.
+
+[*.cs]
+
+# Every block has braces, even a one-line if, else, for, foreach, while or
+# using body, so no block is implied.
+csharp_prefer_braces = true:error
+dotnet_diagnostic.IDE0011.severity = error
+
+# Private fields: a leading underscore and Pascal casing, such as _Runner, so
+# a field can be told from a local or a parameter at a glance. Constants are
+# not variables, so they keep plain Pascal casing, such as GB.
+dotnet_naming_rule.private_constants_pascal.symbols = private_constants
+dotnet_naming_rule.private_constants_pascal.style = pascal
+dotnet_naming_rule.private_constants_pascal.severity = error
+
+dotnet_naming_rule.private_fields_underscore_pascal.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore_pascal.style = underscore_pascal
+dotnet_naming_rule.private_fields_underscore_pascal.severity = error
+
+dotnet_naming_symbols.private_constants.applicable_kinds = field
+dotnet_naming_symbols.private_constants.applicable_accessibilities = private
+dotnet_naming_symbols.private_constants.required_modifiers = const
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_style.pascal.capitalization = pascal_case
+
+dotnet_naming_style.underscore_pascal.required_prefix = _
+dotnet_naming_style.underscore_pascal.capitalization = pascal_case
+
+dotnet_diagnostic.IDE1006.severity = error

@@ -7,7 +7,7 @@ namespace LazyVM.UI.Wpf;
 /// <summary>Starts the app: picks the theme, makes the command runner and opens the main window.</summary>
 public partial class App : Application
 {
-    private CommandRunner? runner;
+    private CommandRunner? _Runner;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -17,9 +17,9 @@ public partial class App : Application
             Source = new Uri($"Themes/{ThemeName()}.xaml", UriKind.Relative),
         });
 
-        runner = new CommandRunner();
-        var tools = new ToolWindows(runner, new BuildLauncher(), TimeProvider.System);
-        var main = new MainViewModel(runner, new VMWindowManager(tools), tools, TimeProvider.System);
+        _Runner = new CommandRunner();
+        var tools = new ToolWindows(_Runner, new BuildLauncher(), TimeProvider.System);
+        var main = new MainViewModel(_Runner, new VMWindowManager(tools), tools, TimeProvider.System);
         MainWindow = new MainWindow { DataContext = main };
         MainWindow.Show();
         _ = main.StartAsync();
@@ -27,7 +27,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        runner?.Dispose();
+        _Runner?.Dispose();
         base.OnExit(e);
     }
 

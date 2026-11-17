@@ -4,9 +4,9 @@ namespace LazyVM.UI.Wpf.Tests;
 
 public sealed class VMRowViewModelTests : IDisposable
 {
-    private readonly CultureScope culture = new("en-GB");
+    private readonly CultureScope _Culture = new("en-GB");
 
-    public void Dispose() => culture.Dispose();
+    public void Dispose() => _Culture.Dispose();
 
     [Fact]
     public void HealthyVM_DoesNotNeedAttention()

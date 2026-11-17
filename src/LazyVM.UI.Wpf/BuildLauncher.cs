@@ -22,7 +22,7 @@ namespace LazyVM.UI.Wpf;
 public class BuildLauncher
 {
     /// <summary>The oldest PowerShell the module supports.</summary>
-    private static readonly Version MinimumPowerShell = new(7, 6);
+    private static readonly Version _MinimumPowerShell = new(7, 6);
 
     /// <summary>Microsoft's publisher ID, the end of every Store PowerShell package folder's name.</summary>
     private const string MicrosoftPublisher = "8wekyb3d8bbwe";
@@ -54,7 +54,7 @@ public class BuildLauncher
         }
         return folders
             .Select(folder => (Folder: folder, Version: StorePackageVersion(Path.GetFileName(folder), architecture)))
-            .Where(package => package.Version >= MinimumPowerShell && File.Exists(Path.Combine(package.Folder, "pwsh.exe")))
+            .Where(package => package.Version >= _MinimumPowerShell && File.Exists(Path.Combine(package.Folder, "pwsh.exe")))
             .OrderByDescending(package => package.Version)
             .Select(package => Path.Combine(package.Folder, "pwsh.exe"))
             .FirstOrDefault();
