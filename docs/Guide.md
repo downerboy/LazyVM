@@ -215,6 +215,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | `Invoke-LazyVMRebuild` | The full cycle: capture, retire the old VM, build a new one, restore, verify. `-SkipCapture` reuses the last capture. |
 | `Invoke-LazyVMMaintenance` | What the scheduled task runs. Not usually run by hand. |
 | `Register-LazyVMMaintenance` | Schedules the VM's daily maintenance, or schedules it again. |
+| `Start-LazyVMMaintenance -Name DevBox` | Runs the VM's maintenance now: starts its scheduled task, so it runs exactly as the nightly run does, and returns at once. Starts nothing while a build, maintenance or rebuild of the VM is running, or when maintenance is not scheduled. |
 | `Remove-LazyVM` | Deletes the VM and everything created for it ([section 10](#removing-a-vm)). |
 
 Commands that change something support `-WhatIf`, to see what would happen without doing it, and `-Confirm`. `Invoke-LazyVMMaintenance -WhatIf` reads the VM's evaluation and says whether the run would only do the daily checks, rearm, rebuild, or build the VM, without starting a VM that is off. The ones that cannot be undone (`Remove-LazyVM`, `Restore-LazyVMTooling`, `Restore-LazyVMState`, `Invoke-LazyVMRebuild`) ask before acting; `-Force` skips the question.

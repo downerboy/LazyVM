@@ -86,6 +86,15 @@ public class CommandRunner : IDisposable
         return output.Count == 0 ? null : ToRun(output[0], []);
     }
 
+    /// <summary>
+    /// Runs <c>Start-LazyVMMaintenance -Name</c>: starts the VM's maintenance
+    /// task, so it runs as the nightly run does. Throws with the module's
+    /// reason when nothing was started, such as while another run of the VM
+    /// is going or when maintenance is not scheduled.
+    /// </summary>
+    public virtual async Task StartMaintenanceAsync(string name, CancellationToken cancellationToken) =>
+        await InvokeAsync("Start-LazyVMMaintenance", [("Name", name)], cancellationToken).ConfigureAwait(false);
+
     /// <summary>The folder the module was imported from, which holds the script each build runs with.</summary>
     public virtual async Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
     {

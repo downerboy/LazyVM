@@ -156,6 +156,87 @@ public sealed class ToolWindowsTests
     }
 
     [Fact]
+    public async Task StartBuild_FromAPhase_StartsItOpensItsProgress_AndReportsIt()
+    {
+        var launcher = new FakeBuildLauncher();
+        var withLauncher = new FakeToolWindows(runner, launcher);
+        var started = 0;
+        withLauncher.RunStarted += (_, _) => started++;
+        runner.ReturnsRun(null);
+
+        await withLauncher.StartBuildAsync(new BuildRequest("DevBox", null, null, 7));
+
+        var (request, _) = Assert.Single(launcher.Started);
+        Assert.Equal(new BuildRequest("DevBox", null, null, 7), request);
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(withLauncher.Shown));
+        Assert.Equal("DevBox", progress.VMName);
+        Assert.Equal(1, started);
+        progress.StopFollowing();
+    }
+
+    [Fact]
+    public async Task StartBuild_WhenItCannotStart_ThrowsAndReportsNothing()
+    {
+        var launcher = new FakeBuildLauncher { Fails = new InvalidOperationException("PowerShell 7.6 or later was not found.") };
+        var withLauncher = new FakeToolWindows(runner, launcher);
+        var started = 0;
+        withLauncher.RunStarted += (_, _) => started++;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => withLauncher.StartBuildAsync(new BuildRequest("DevBox", null, null, 7)));
+
+        Assert.Empty(withLauncher.Shown);
+        Assert.Equal(0, started);
+    }
+
+    [Fact]
+    public async Task CarryOn_FromAFailedBuildsWindow_StartsFromItsPhase_InANewWindow()
+    {
+        var launcher = new FakeBuildLauncher();
+        var withLauncher = new FakeToolWindows(runner, launcher);
+        runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
+        withLauncher.OpenProgress("DevBox", started: null);
+        var failed = (BuildProgressViewModel)withLauncher.Shown[0];
+        // The window follows the build it found running, until it reads the build as failed.
+        failed.StopFollowing();
+        runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Failed, ProcessId = 9, Phase = 7, UnfinishedPhase = 7 });
+        await failed.PollAsync(CancellationToken.None);
+        runner.ReturnsRun(null);
+
+        await failed.CarryOnAsync();
+
+        Assert.Equal(7, Assert.Single(launcher.Started).Request.FromPhase);
+        Assert.Same(failed, Assert.Single(withLauncher.Closed));
+        var next = Assert.IsType<BuildProgressViewModel>(withLauncher.Shown[1]);
+        Assert.NotSame(failed, next);
+        next.StopFollowing();
+    }
+
+    [Fact]
+    public async Task StartMaintenance_RunsTheModulesCommand_AndReportsIt()
+    {
+        var started = 0;
+        tools.RunStarted += (_, _) => started++;
+
+        await tools.StartMaintenanceAsync("DevBox");
+
+        Assert.Equal(["DevBox"], runner.MaintenanceCalls);
+        Assert.Equal(1, started);
+    }
+
+    [Fact]
+    public async Task StartMaintenance_WhenTheModuleStartsNothing_ThrowsItsReason_AndReportsNothing()
+    {
+        var started = 0;
+        tools.RunStarted += (_, _) => started++;
+        runner.MaintenanceFails = new InvalidOperationException("A build of DevBox is running, so maintenance was not started.");
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => tools.StartMaintenanceAsync("DevBox"));
+
+        Assert.Contains("A build of DevBox is running", failure.Message);
+        Assert.Equal(0, started);
+    }
+
+    [Fact]
     public void ABuildThatEnds_IsReported_SoTheListIsReadAgain()
     {
         var ended = 0;

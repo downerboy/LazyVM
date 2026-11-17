@@ -9,6 +9,9 @@ public sealed class BuildProgressViewModelTests
     private readonly TaskCompletionSource<BuildResult> ending = new();
     private readonly FixedClock clock = new(DateTimeOffset.UnixEpoch);
 
+    /// <summary>The phases Carry on was asked to start from.</summary>
+    private readonly List<int> carriedOn = [];
+
     private BuildProgressViewModel Started() => new(runner, "DevBox", new StartedBuild(Process, ending.Task), clock);
 
     private BuildProgressViewModel Following() => new(runner, "DevBox", started: null, clock);
@@ -35,6 +38,100 @@ public sealed class BuildProgressViewModelTests
     {
         await progress.LoadPhasesAsync(CancellationToken.None);
         return progress;
+    }
+
+    /// <summary>A started build whose window offers Carry on, recording the phase it starts from.</summary>
+    private BuildProgressViewModel StartedWithCarryOn(Exception? fails = null) =>
+        new(runner, "DevBox", new StartedBuild(Process, ending.Task), clock, phase =>
+        {
+            carriedOn.Add(phase);
+            return fails is null ? Task.CompletedTask : Task.FromException(fails);
+        });
+
+    [Theory]
+    [InlineData(VMRun.Failed)]
+    [InlineData(VMRun.Stopped)]
+    [InlineData(VMRun.EndedUnexpectedly)]
+    public async Task ABuildThatDidNotFinish_OffersToCarryOnFromItsPhase(string status)
+    {
+        var progress = await Loaded(StartedWithCarryOn());
+        ending.SetResult(new BuildResult(BuildResult.Failed, null, "It did not finish."));
+        runner.ReturnsRun(Ended(status, 7));
+
+        await progress.PollAsync(CancellationToken.None);
+
+        Assert.Equal(7, progress.CarryOnPhase);
+        Assert.True(progress.CanCarryOn);
+        Assert.Equal("Carry on from phase 7", progress.CarryOnText);
+        Assert.Contains("Then choose Carry on from phase 7.", progress.Advice);
+        Assert.DoesNotContain("PowerShell", progress.Advice);
+        Assert.True(progress.CarryOnCommand.CanExecute(null));
+    }
+
+    [Theory]
+    [InlineData(VMRun.Completed)]
+    [InlineData(VMRun.CompletedWithProblems)]
+    [InlineData(VMRun.WaitingForRestart)]
+    public async Task ABuildThatFinishedOrCarriesOnByItself_OffersNoCarryOn(string status)
+    {
+        var progress = await Loaded(StartedWithCarryOn());
+        runner.ReturnsRun(Ended(status, 8));
+
+        await progress.PollAsync(CancellationToken.None);
+
+        Assert.Null(progress.CarryOnPhase);
+        Assert.False(progress.CarryOnCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task WhileTheBuildRuns_ThereIsNoCarryOn()
+    {
+        var progress = await Loaded(StartedWithCarryOn());
+        runner.ReturnsRun(Running(7));
+
+        await progress.PollAsync(CancellationToken.None);
+
+        Assert.Null(progress.CarryOnPhase);
+        Assert.False(progress.CarryOnCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task CarryOn_StartsTheBuildFromThePhaseItStoppedIn()
+    {
+        var progress = await Loaded(StartedWithCarryOn());
+        runner.ReturnsRun(Ended(VMRun.Stopped, 7));
+        await progress.PollAsync(CancellationToken.None);
+
+        await progress.CarryOnAsync();
+
+        Assert.Equal([7], carriedOn);
+        Assert.Equal("Starting the build of DevBox from phase 7", progress.Status);
+    }
+
+    [Fact]
+    public async Task CarryOn_WhenTheBuildCannotStart_SaysWhy_AndCanBeTriedAgain()
+    {
+        var progress = await Loaded(StartedWithCarryOn(new InvalidOperationException("PowerShell 7.6 or later was not found.")));
+        runner.ReturnsRun(Ended(VMRun.Failed, 7));
+        await progress.PollAsync(CancellationToken.None);
+
+        await progress.CarryOnAsync();
+
+        Assert.Equal("The build could not start: PowerShell 7.6 or later was not found.", progress.Status);
+        Assert.True(progress.CarryOnCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task ABuildThatDidNotStartAtAll_OffersNoCarryOn()
+    {
+        var progress = await Loaded(StartedWithCarryOn());
+        ending.SetResult(new BuildResult(BuildResult.Failed, null, "There is no Windows ISO."));
+        runner.ReturnsRun(null);
+
+        await progress.PollAsync(CancellationToken.None);
+
+        Assert.True(progress.IsFinished);
+        Assert.Null(progress.CarryOnPhase);
     }
 
     [Fact]

@@ -17,7 +17,7 @@ BeforeAll {
     Set-Content -LiteralPath (Join-Path -Path $moduleDir -ChildPath 'LazyVM.psm1') -Value @"
 function Build-LazyVM {
     [CmdletBinding()]
-    param([string]`$Name, [string]`$ConfigTemplate, [string]`$UserName)
+    param([string]`$Name, [string]`$ConfigTemplate, [string]`$UserName, [int]`$FromPhase)
     `$PSBoundParameters | ConvertTo-Json -Compress | Set-Content -LiteralPath '$calls'
     Set-Content -LiteralPath '$modulePathFile' -Value `$env:PSModulePath
     if (`$Name -eq 'Stopped') {
@@ -57,6 +57,20 @@ Describe 'Start-AppBuild.ps1' {
         $run = Invoke-AppBuild -Arguments '-Name', 'DevBox'
 
         $run.Call.Keys | Should -Be @('Name')
+    }
+
+    It 'builds from the phase it is given, and passes no phase when it is not given' {
+        $run = Invoke-AppBuild -Arguments '-Name', 'DevBox', '-FromPhase', '7'
+
+        $run.Call.FromPhase | Should -Be 7
+        (Invoke-AppBuild -Arguments '-Name', 'DevBox').Call.Keys | Should -Not -Contain 'FromPhase'
+    }
+
+    It 'builds from phase 0 when that is the phase given' {
+        $run = Invoke-AppBuild -Arguments '-Name', 'DevBox', '-FromPhase', '0'
+
+        $run.Call.Keys | Should -Contain 'FromPhase'
+        $run.Call.FromPhase | Should -Be 0
     }
 
     It 'passes a value with quotes and spaces as it is, never as script text' {

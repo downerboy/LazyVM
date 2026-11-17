@@ -9,6 +9,14 @@ public partial class VMWindow : Window
     public VMWindow()
     {
         InitializeComponent();
+        // The phase chosen for the VM, such as the one its last build failed in, may be below the list's fold.
+        PhaseList.SelectionChanged += (_, _) =>
+        {
+            if (PhaseList.SelectedItem is { } chosen)
+            {
+                PhaseList.ScrollIntoView(chosen);
+            }
+        };
     }
 
     /// <summary>Esc closes the window.</summary>

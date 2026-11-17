@@ -36,7 +36,7 @@ Actors: Host user, Administrator (a Host user), Task Scheduler running as SYSTEM
 - Administrator, also:
   - Look up: Check the license (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`), Check a VM end to end (`Test-LazyVM`).
   - Set up: Choose the LazyVM folder (`Set-LazyVMRoot`), Store the guest account (`Set-LazyVMCredential`), Move an install made for every user to your account (`Convert-LazyVMInstallation`).
-  - Build and maintain: Build a VM (`Build-LazyVM`), Schedule daily maintenance (`Register-LazyVMMaintenance`), Run daily maintenance (`Invoke-LazyVMMaintenance`), Rebuild the VM (`Invoke-LazyVMRebuild`).
+  - Build and maintain: Build a VM (`Build-LazyVM`), Schedule daily maintenance (`Register-LazyVMMaintenance`), Run daily maintenance (`Invoke-LazyVMMaintenance`), Run maintenance now (`Start-LazyVMMaintenance`), Rebuild the VM (`Invoke-LazyVMRebuild`).
   - Tooling: View installed tooling (`Get-LazyVMTooling`), Record tooling changes (`Save-LazyVMTooling`), List tooling restore points (`Get-LazyVMRestorePoint`), Return to a tooling version (`Restore-LazyVMTooling`).
   - State: Capture state (`Save-LazyVMState`), Restore state (`Restore-LazyVMState`).
   - Remove a VM (`Remove-LazyVM`).
@@ -91,7 +91,7 @@ It is extended by:
 
 It does nothing that night while the VM's build is still in progress: a build waits to carry on after a host restart, or the VM is not there yet.
 
-Schedule daily maintenance (`Register-LazyVMMaintenance`) registers the task with Task Scheduler. Build a VM does this too.
+Schedule daily maintenance (`Register-LazyVMMaintenance`) registers the task with Task Scheduler. Build a VM does this too. Run maintenance now (`Start-LazyVMMaintenance`, or the button in the app's VM window) starts that task, so the run is the same as the nightly one. It starts nothing while a build, maintenance or rebuild of the VM is running.
 
 ## 4. Rebuild the VM
 

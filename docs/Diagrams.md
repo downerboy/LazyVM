@@ -9,7 +9,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance and a rebuild also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance and a rebuild also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Start-LazyVMMaintenance`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
@@ -17,7 +17,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - Install: [Install from the repository](#install-from-repo), [Install from a release](#install-from-release), [Move a machine-wide install to your account](#convert-installation)
 - Set up: [Show LazyVM and its commands](#show), [Choose the LazyVM folder](#set-root), [Create a VM profile without building](#new-profile), [Store the guest account](#set-credential)
 - Build: [Build a VM](#build), [List the build phases](#build-phases), [Stop a running build](#stop-build)
-- Maintain: [Daily maintenance](#maintenance), [Schedule maintenance again](#register-maintenance), [Rebuild a VM](#rebuild)
+- Maintain: [Daily maintenance](#maintenance), [Schedule maintenance again](#register-maintenance), [Run maintenance now](#start-maintenance), [Rebuild a VM](#rebuild)
 - Tooling: [Record tooling now](#tooling-record), [See installed tooling](#tooling-view), [List tooling restore points](#restore-points), [Return to an earlier tooling version](#tooling-revert)
 - State: [Capture state](#capture), [Restore state](#restore)
 - Templates: [List the config templates](#config-templates), [Save a VM as a config template](#export-template)
@@ -451,6 +451,28 @@ Build-LazyVM already does this. Use it after changing MaintenanceTime, or if sch
    - Also runs `Assert-GuestCredential`, `Register-LazyVMHostTask`
    - Reads D4, guest credential: Credential store (<VM>\Credentials\guest.cred)
    - Writes D5, daily maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, daily at MaintenanceTime, as SYSTEM,, wake to run,, 6 h limit, 2 retries)
+
+<a id="start-maintenance"></a>
+
+## Run maintenance now
+
+`Start-LazyVMMaintenance` `-Name <VM>  (optional with one VM)`
+
+Starts the VM's maintenance task, so maintenance runs exactly as its nightly run does, and returns at once. Starts nothing while a build, maintenance or rebuild of the VM is running, or when maintenance is not scheduled. Never takes the run lock: the task's run does.
+
+![Run maintenance now: call order and data flow](diagrams/start-maintenance.svg)
+
+1. `Resolve-LazyVMRoot` (Settings): the LazyVM folder
+   - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root)
+2. `Read-VMSetting` (Settings): read-only: the VM's Config folder and its maintenance task's name
+   - Reads D2, settings: Settings files (Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json)
+3. `Get-VMRunState` (Common): the run going now; stops, saying so, while a build, maintenance or rebuild is running
+   - Reads D3, run: <VM>\Config\ (Run.lock (held or not), Run.json, Run.stop)
+4. `Get-ScheduledTask` (Task Scheduler): the maintenance task; stops, saying so, when it is not registered or is running already
+   - Reads D4, maintenance task: Task Scheduler (LazyVM-Maintain-<VM>, State)
+5. `Start-ScheduledTask` (Task Scheduler): unless -WhatIf: starts the task, which runs Invoke-LazyVMMaintenance as SYSTEM
+   - Writes D5, maintenance run: Task Scheduler (LazyVM-Maintain-<VM>  (started))
+   - Writes D6, start: Pipeline (LazyVM.MaintenanceStart: Name, TaskName, Started)
 
 <a id="rebuild"></a>
 

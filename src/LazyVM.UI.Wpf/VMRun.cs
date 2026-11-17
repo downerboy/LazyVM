@@ -51,8 +51,13 @@ public sealed record BuildPhase(int Number, string Name, string Goal);
 /// <summary>A config template a new VM can be built from, from <c>Get-LazyVMConfigTemplate</c>.</summary>
 public sealed record ConfigTemplate(string Name, bool BuiltIn, bool Automatic);
 
-/// <summary>What to build: a new VM's name, and optionally its config template and administrator account.</summary>
-public sealed record BuildRequest(string Name, string? ConfigTemplate, string? UserName);
+/// <summary>
+/// What to build: the VM's name and, for a new VM, optionally its config
+/// template and administrator account. <see cref="FromPhase"/> starts at
+/// that phase, such as the one a failed build was in; empty starts at the
+/// beginning.
+/// </summary>
+public sealed record BuildRequest(string Name, string? ConfigTemplate, string? UserName, int? FromPhase = null);
 
 /// <summary>
 /// How a build process ended, as its script wrote it: Completed, Stopped or

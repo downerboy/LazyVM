@@ -309,4 +309,15 @@ public sealed class MainViewModelTests : IDisposable
 
         Assert.Equal(1, runner.DashboardCalls);
     }
+
+    [Fact]
+    public async Task MaintenanceStartedFromAVMWindow_ReadsTheListAgain()
+    {
+        runner.Returns(Sample.VM("DevBox"));
+
+        await tools.StartMaintenanceAsync("DevBox");
+        await Task.Yield();
+
+        Assert.Equal(1, runner.DashboardCalls);
+    }
 }

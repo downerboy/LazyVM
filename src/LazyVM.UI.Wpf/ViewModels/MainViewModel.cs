@@ -26,8 +26,9 @@ public sealed class MainViewModel : ViewModelBase
         this.clock = clock;
         HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, HostOnly()));
         BuildCommand = new RelayCommand(() => tools.OpenBuild(VMs.Select(row => row.Name).ToList()));
-        // A build that ended changed the list: read it again.
+        // A build that ended, or a build or maintenance that started, changed the list: read it again.
         tools.BuildEnded += (_, _) => _ = RefreshAsync();
+        tools.RunStarted += (_, _) => _ = RefreshAsync();
         refreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         cancelRefreshCommand = new RelayCommand(() => refreshing?.Cancel(), () => IsRefreshing);
         openVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);
