@@ -113,15 +113,16 @@ Describe 'Enter-VMRun and Exit-VMRun' {
         Should -Invoke -ModuleName $module Start-Sleep -Times 4 -Exactly
     }
 
-    It 'counts a lock this process already holds as held, so a run inside a run is not refused' {
+    It 'refuses a run started inside another in this process, leaving the outer run''s state alone' {
         $results = InModuleScope $module -Parameters @{ VM = $vm } {
             param($VM)
             Enter-VMRun -VM $VM -Command 'Maintenance'
             Enter-VMRun -VM $VM -Command 'Rebuild'
         }
 
-        $results | Should -Be @($true, $true)
+        $results | Should -Be @($true, $false)
         (Read-TestRunState $vm).Command | Should -Be 'Maintenance'
+        (Read-TestRunState $vm).Status | Should -Be 'Running'
     }
 
     It 'refuses a lock or state path with a reparse point in it, before opening anything' {
@@ -296,7 +297,6 @@ Describe 'Invoke-CommandRun -Exclusive' {
         Mock -ModuleName $module Write-LogError { }
         Mock -ModuleName $module Start-Log { }
         Mock -ModuleName $module Stop-Log { }
-        Mock -ModuleName $module Test-LogStarted { $true }
         Mock -ModuleName $module Initialize-ConfigFolder { }
         Mock -ModuleName $module Move-ToolingIntoProfile { $false }
         Mock -ModuleName $module Sync-GuestUserFromStore { }
@@ -339,6 +339,38 @@ Describe 'Invoke-CommandRun -Exclusive' {
         $thrown | Should -BeLike '*maintenance of Alpha is already running*'
         InModuleScope $module { $script:ran } | Should -BeFalse
         Get-Content -LiteralPath (Get-TestRunPath $vm).State -Raw | Should -Be $before
+        # Nothing in the running one's log, where it would read as that run failing.
+        Should -Invoke -ModuleName $module Start-Log -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogError -Times 0 -Exactly
+    }
+
+    It 'records the run as Stopped when it is stopped, as by Ctrl+C, which runs no catch block' {
+        # The run goes in a pipeline of its own, so the stop ends only that pipeline.
+        $stopped = [powershell]::Create('CurrentRunspace')
+        $null = $stopped.AddScript({
+                & (Get-Module -Name 'LazyVM') {
+                    function Test-Command { [CmdletBinding()] param() Invoke-CommandRun -Title 'Build' -Name 'Alpha' -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -Exclusive -ScriptBlock { throw [System.Management.Automation.PipelineStoppedException]::new() } }
+                    Test-Command
+                }
+            }.ToString())
+
+        try { $null = $stopped.Invoke() } catch { $null = $_ }
+        finally { $stopped.Dispose() }
+
+        (Read-TestRunState $vm).Status | Should -Be 'Stopped'
+        Should -Invoke -ModuleName $module Write-LogError -Times 0 -Exactly
+    }
+
+    It 'leaves the outer run''s lock and state alone when a run inside it is refused' {
+        InModuleScope $module {
+            function Test-Inner { [CmdletBinding()] param() Invoke-CommandRun -Title 'Rebuild' -Name 'Alpha' -FailureMessage 'x' -Cmdlet $PSCmdlet -Exclusive -ScriptBlock { } }
+            function Test-Outer { [CmdletBinding()] param() Invoke-CommandRun -Title 'Maintenance' -Name 'Alpha' -FailureMessage 'x' -Cmdlet $PSCmdlet -Exclusive -ScriptBlock { try { Test-Inner } catch { $null = $_ }; $script:stillHeld = Test-VMRunEntered } }
+            Test-Outer
+        }
+
+        InModuleScope $module { $script:stillHeld } | Should -BeTrue
+        (Read-TestRunState $vm).Command | Should -Be 'Maintenance'
+        (Read-TestRunState $vm).Status | Should -Be 'Completed'
     }
 
     It 'skips quietly with -SkipWhenBusy while another run holds the lock, and says so in the log' {
@@ -353,6 +385,7 @@ Describe 'Invoke-CommandRun -Exclusive' {
 
         InModuleScope $module { $script:ran } | Should -BeFalse
         Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*already running*skipping*' -and $Level -eq 'INFO' }
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -ParameterFilter { $Message -like '*LazyVM - *' }
     }
 
     It 'takes no lock without -Exclusive' {

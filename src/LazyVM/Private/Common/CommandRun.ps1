@@ -71,6 +71,18 @@ function Initialize-CommandRun {
     $configuration = Read-TrustedVMSetting -Root $folder.Path -VMName $Name -OwnerSid $owner
     $vm = [VMContext]::new($configuration.Settings)
 
+    # Before the log and before the first write, so two long runs never
+    # change the VM at once, and a refused run writes nothing to the running
+    # one's log, which could otherwise read as its failure (#425).
+    if ($Exclusive -and -not (Enter-VMRun -VM $vm -Command $Title)) {
+        $busy = Get-VMRunBusyMessage -VM $vm -Title $Title
+        if (-not $SkipWhenBusy) { throw $busy }
+        # Unattended: the one line the log needs to show why tonight's run did nothing.
+        Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
+        Write-LogEntry "$busy Skipping." 'INFO'
+        return
+    }
+
     Start-Log -Path $vm.Settings.LogFile -MaxSizeMB $vm.Settings.LogMaxSizeMB
     $rule = '========================================================'
     Write-LogEntry $rule 'INFO'
@@ -85,16 +97,6 @@ function Initialize-CommandRun {
     Write-LogEntry "  Profile : $(if ($missing.Count -gt 0) { "$($missing.Count) setting(s) not yet in VM.json, taken from the shared template" } else { 'complete' })" 'INFO'
     Write-LogEntry $rule 'INFO'
     foreach ($warning in $configuration.Warnings) { Write-LogEntry $warning 'WARN' }
-
-    # Before the first write below, so two long runs never change the VM at once (#425).
-    if ($Exclusive -and -not (Enter-VMRun -VM $vm -Command $Title)) {
-        $busy = Get-VMRunBusyMessage -VM $vm -Title $Title
-        if ($SkipWhenBusy) {
-            Write-LogEntry "$busy Skipping." 'INFO'
-            return
-        }
-        throw $busy
-    }
 
     # A VM from before #130 has its tooling list in files of its own: they
     # go into VM.json before anything reads it, except with -WhatIf, which
@@ -144,8 +146,8 @@ function Invoke-CommandRun {
       up. The script block's output is the command's output.
 
       With -Exclusive, the run holds the VM's run lock and records how it
-      ended: Completed, Failed, or Stopped when it was stopped (Ctrl+C, or
-      Stop-LazyVMBuild), which runs no catch block. A run refused because
+      ended: Completed, Failed, or Stopped when the pipeline was stopped
+      (Ctrl+C, or the host stopping it), which runs no catch block. A run refused because
       another holds the lock records nothing; with -SkipWhenBusy it is not
       an error either, and the script block does not run.
 
@@ -169,6 +171,8 @@ function Invoke-CommandRun {
     Assert-Administrator
     $context = $null
     $outcome = 'Stopped'
+    # A run's lock is ended only by the run that took it, never by one refused inside it.
+    $outerRun = Test-VMRunEntered
     try {
         $context = Initialize-CommandRun -Title $Title -Name $Name -Root $Root -OwnerSid $OwnerSid -RecordHardware:$RecordHardware -Exclusive:$Exclusive -SkipWhenBusy:$SkipWhenBusy
         if (-not $context) { return }
@@ -182,7 +186,7 @@ function Invoke-CommandRun {
     }
     finally {
         # Only the run that holds the lock writes, so a refused run leaves the running one's state alone.
-        Exit-VMRun -Status $outcome
+        if (-not $outerRun) { Exit-VMRun -Status $outcome }
         Complete-CommandRun -VM $context
     }
 }

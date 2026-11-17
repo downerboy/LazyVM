@@ -57,8 +57,10 @@ function Enter-VMRun {
     <#
       Takes the VM's run lock for this process's $Command (Build,
       Maintenance or Rebuild) and records it as running. False, writing
-      nothing, when another run holds it. True when this process holds it
-      already, so a run inside a run is not refused.
+      nothing, when another run holds it. Runs never nest (maintenance runs
+      a rebuild inside its own run), so a run started inside another one in
+      this process is refused the same way, and the outer run's lock and
+      state are left alone.
     #>
     [OutputType([bool])]
     param(
@@ -66,7 +68,7 @@ function Enter-VMRun {
         [Parameter(Mandatory)][string]$Command
     )
 
-    if ($script:VMRun) { return $true }
+    if ($script:VMRun) { return $false }
     $paths = Get-VMRunPath -Settings $VM.Settings
     Assert-NoReparsePoint -Path $paths.Lock
     Assert-NoReparsePoint -Path $paths.State
@@ -107,6 +109,14 @@ function Enter-VMRun {
     }
     Save-VMRunState
     return $true
+}
+
+function Test-VMRunEntered {
+    <# Whether this process holds a run lock. #>
+    [OutputType([bool])]
+    param()
+
+    return [bool]$script:VMRun
 }
 
 function Save-VMRunState {
