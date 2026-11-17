@@ -813,6 +813,39 @@ Describe 'New-VMProfile' {
         $vmProfile.Keys | Should -Not -Contain 'Settings'
     }
 
+    It 'with -ConfigTemplate, records the config template''s own name, whatever case it was given in (#421)' {
+        $root = New-TestRoot
+
+        $path = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            New-VMProfile -Root $Root -Name 'Alpha' -ConfigTemplate 'plainwindows'
+        }
+
+        (Read-TestJson -Path $path).CreatedFromTemplate | Should -BeExactly 'PlainWindows'
+    }
+
+    It 'records no config template without -ConfigTemplate, and never copies it with -From (#421)' {
+        $root = New-TestRoot
+
+        $recorded = InModuleScope $module -Parameters @{ Root = $root } {
+            param($Root)
+            Mock Write-LogEntry {}
+            $null = New-VMProfile -Root $Root -Name 'Alpha' -ConfigTemplate 'PlainWindows'
+            $null = New-VMProfile -Root $Root -Name 'Beta' -From 'Alpha'
+            $null = New-VMProfile -Root $Root -Name 'Gamma'
+            foreach ($name in 'Beta', 'Gamma') { , (Read-SettingsFile -Path (Get-VMProfilePath -Root $Root -Name $name)).CreatedFromTemplate }
+        }
+
+        $recorded | Should -HaveCount 2
+        foreach ($value in $recorded) { $value | Should -BeNullOrEmpty }
+    }
+
+    It 'never puts the recorded config template in a config template, as each VM has its own (#421)' {
+        $names = InModuleScope $module { Get-PerVMSettingName }
+
+        $names | Should -Contain 'CreatedFromTemplate'
+    }
+
     It 'refuses a config template that does not exist, naming the ones there are' {
         $root = New-TestRoot
 

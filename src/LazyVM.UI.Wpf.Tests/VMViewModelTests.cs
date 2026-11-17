@@ -88,6 +88,22 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ConfigTemplate_IsNamed()
+    {
+        var vm = Open(Sample.VM() with { CreatedFromTemplate = "PlainWindows" });
+
+        Assert.Equal("PlainWindows", Detail(vm, "Created from config template"));
+    }
+
+    [Fact]
+    public void ConfigTemplate_NotRecorded_SaysSo()
+    {
+        var vm = Open(Sample.VM() with { CreatedFromTemplate = null });
+
+        Assert.Equal("None recorded", Detail(vm, "Created from config template"));
+    }
+
+    [Fact]
     public void Memory_NotKnown_DoesNotShowTheMostOnItsOwn()
     {
         var vm = Open(Sample.VM() with { MemoryAssigned = null, MemoryMaximum = 16 * GB });

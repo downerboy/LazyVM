@@ -173,15 +173,27 @@ function Select-NamedVMTemplate {
 }
 
 function Read-VMTemplate {
+    <# The settings the config template of that name changes, as Find-VMTemplate finds it. #>
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [string]$Root
+    )
+
+    return (Find-VMTemplate -Name $Name -Root $Root).Settings
+}
+
+function Find-VMTemplate {
     <#
-      The settings the config template of that name changes. One of the
-      user's own replaces a built-in one of the same name, as
+      The config template of that name, as Read-VMTemplateFile gives it:
+      its own Name, whatever case $Name is in, and the settings it changes.
+      One of the user's own replaces a built-in one of the same name, as
       LazyVM.Settings.json replaces the defaults. Throws, naming the
       templates there are and any file that could not be read, when there is
       none of that name, and naming the files when several of the user's
       share it.
     #>
-    [OutputType([hashtable])]
+    [OutputType([pscustomobject])]
     param(
         [Parameter(Mandatory)][string]$Name,
         [string]$Root
@@ -190,7 +202,7 @@ function Read-VMTemplate {
     $templates = @(Get-VMTemplate -Root $Root)
     $found = Select-NamedVMTemplate -Name $Name -Template $templates
     if ($found) {
-        return $found.Settings
+        return $found
     }
 
     $message = "There is no config template named '$Name'. Config templates: $((Select-VMTemplateName -Template $templates) -join ', ')."

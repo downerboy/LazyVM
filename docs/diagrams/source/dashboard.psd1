@@ -51,9 +51,9 @@
             Function = 'Read-VMSetting'
             Caller   = 'New-DashboardEntry'
             Area     = 'Settings'
-            Note     = 'read-only; when the settings are OK'
+            Note     = 'read-only; when the settings are OK; gives the config template the profile was created from'
             Reads    = @(
-                @{ Label = 'settings'; Kind = 'file'; Store = 'Settings files'; Items = @('Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json') }
+                @{ Label = 'settings'; Kind = 'file'; Store = 'Settings files'; Items = @('Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json', 'its CreatedFromTemplate') }
             )
         }
         @{

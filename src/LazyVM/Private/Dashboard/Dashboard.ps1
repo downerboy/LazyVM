@@ -29,7 +29,8 @@ function New-DashboardEntry {
         LastSecurityScan      = $null
         OpenFindings          = $null
         OriginalConfig        = $null
-        GreenTemplate         = $null
+        CreatedFromTemplate   = $null
+        GreenTemplate        = $null
         GreenTemplateUpdated  = $null
         Run                   = $null
         LastBuild             = $null
@@ -73,6 +74,9 @@ function New-DashboardEntry {
     }
 
     if ($settings) {
+        # The config template the profile was created from; empty when there was none, or before LazyVM recorded it (#421).
+        $entry.CreatedFromTemplate = $settings[$script:CreatedFromTemplateSettingName]
+
         try {
             $scan = Get-SecurityFindingSummary -VM ([VMContext]::new($settings))
             $entry.LastSecurityScan = $scan.ScannedAt

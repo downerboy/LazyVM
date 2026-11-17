@@ -5,11 +5,14 @@ function Get-LazyVMDashboard {
 
     .DESCRIPTION
     One object per VM profile: everything Get-LazyVM gives, and when the VM
-    was created, the memory it is using, its disks and the space they take,
-    its last maintenance run and how it ended, its last security scan and
-    the findings still open, the configuration it was first built from, and
-    its green template: the config template LazyVM keeps up to date with
-    every change to the VM, to build another VM just like it.
+    was created, the memory it is using and the most it can use, its disks
+    and the space they take, its last maintenance run and how it ended, its
+    last security scan and the findings still open, the configuration it was
+    first built from, the config template its profile was created from
+    (CreatedFromTemplate; empty when there was none, or for a profile made
+    before LazyVM recorded it), and its green template: the config template
+    LazyVM keeps up to date with every change to the VM, to build another VM
+    just like it.
 
     Run is the build, maintenance or rebuild going now, or the latest one,
     and LastBuild the latest build: each with its Command, Status (Running,
