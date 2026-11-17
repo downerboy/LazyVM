@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.19.0](https://github.com/downerboy/LazyVM/compare/v6.18.0...v6.19.0) (2026-11-17)
+
+
+### Features
+
+* record a running build or maintenance, and refuse a second one ([#436](https://github.com/downerboy/LazyVM/issues/436)) ([b8c9aae](https://github.com/downerboy/LazyVM/commit/b8c9aae0682b00ab89282d0c4135992e8abd4e8d))
+
 ## [6.18.0](https://github.com/downerboy/LazyVM/compare/v6.17.0...v6.18.0) (2026-11-17)
 
 
