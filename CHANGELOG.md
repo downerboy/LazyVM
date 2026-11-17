@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.18.0](https://github.com/downerboy/LazyVM/compare/v6.17.0...v6.18.0) (2026-11-17)
+
+
+### Features
+
+* let Build-LazyVM choose the guest account name of a new VM ([#434](https://github.com/downerboy/LazyVM/issues/434)) ([f8230b4](https://github.com/downerboy/LazyVM/commit/f8230b44cb4a6810429d9e8cb8029c42ca075a7f))
+
 ## [6.17.0](https://github.com/downerboy/LazyVM/compare/v6.16.0...v6.17.0) (2026-11-17)
 
 
