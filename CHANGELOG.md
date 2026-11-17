@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.16.0](https://github.com/downerboy/LazyVM/compare/v6.15.2...v6.16.0) (2026-11-17)
+
+
+### Features
+
+* give each build phase a goal, and add Get-LazyVMBuildPhase ([#430](https://github.com/downerboy/LazyVM/issues/430)) ([f696060](https://github.com/downerboy/LazyVM/commit/f696060b38c44592ed7d7b59a4d1d01814a7123f))
+
 ## [6.15.2](https://github.com/downerboy/LazyVM/compare/v6.15.1...v6.15.2) (2026-11-16)
 
 
