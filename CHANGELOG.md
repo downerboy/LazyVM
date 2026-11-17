@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.20.0](https://github.com/downerboy/LazyVM/compare/v6.19.0...v6.20.0) (2026-11-17)
+
+
+### Features
+
+* stop a running build cleanly with Stop-LazyVMBuild ([#438](https://github.com/downerboy/LazyVM/issues/438)) ([fd663ed](https://github.com/downerboy/LazyVM/commit/fd663ed11b38948d6f8e92401d452461d12ad7d1))
+
 ## [6.19.0](https://github.com/downerboy/LazyVM/compare/v6.18.0...v6.19.0) (2026-11-17)
 
 
