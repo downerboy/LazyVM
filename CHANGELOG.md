@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.24.0](https://github.com/downerboy/LazyVM/compare/v6.23.0...v6.24.0) (2026-11-17)
+
+
+### Features
+
+* record the config template a VM was created from ([#447](https://github.com/downerboy/LazyVM/issues/447)) ([2d8ed0b](https://github.com/downerboy/LazyVM/commit/2d8ed0bce18f1cf7b94d59faf5c32eb54e6000f0))
+
 ## [6.23.0](https://github.com/downerboy/LazyVM/compare/v6.22.0...v6.23.0) (2026-11-17)
 
 
