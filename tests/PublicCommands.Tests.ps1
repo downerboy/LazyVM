@@ -249,6 +249,67 @@ Describe 'Build-LazyVM' {
     It 'refuses a phase that does not exist' {
         { Build-LazyVM -Name Alpha -FromPhase 9 } | Should -Throw -ExpectedMessage '*There is no build phase 9*'
     }
+
+    Context '-UserName (#424)' {
+        BeforeEach {
+            Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
+            Mock -ModuleName $module Get-GuestCredential { }
+            Mock -ModuleName $module Set-StoredGuestCredential { $true }
+        }
+
+        It 'stores the account with a generated password before anything else, for a VM with no credential yet' {
+            $script:order = [System.Collections.Generic.List[string]]::new()
+            Mock -ModuleName $module Set-StoredGuestCredential { $script:order.Add("credential $($Credential.UserName)"); $true }
+            Mock -ModuleName $module Register-RebuildSchedule { $script:order.Add('schedule') }
+            Mock -ModuleName $module Invoke-VMBuild { $script:order.Add('phases'); 'Complete' }
+
+            Build-LazyVM -Name Alpha -UserName sean
+
+            $script:order -join ',' | Should -Be 'credential sean,schedule,phases'
+            Should -Invoke -ModuleName $module Set-StoredGuestCredential -Times 1 -Exactly -ParameterFilter { $Credential.Password.Length -eq 0 }
+        }
+
+        It 'leaves a stored credential for the same account alone, so the build can be run again' {
+            Mock -ModuleName $module Get-GuestCredential { [pscredential]::new('sean', [securestring]::new()) }
+
+            Build-LazyVM -Name Alpha -UserName sean
+
+            Should -Invoke -ModuleName $module Set-StoredGuestCredential -Times 0
+            Should -Invoke -ModuleName $module Invoke-VMBuild -Times 1 -Exactly
+        }
+
+        It 'refuses another account than the one stored, builds nothing, and says how to change it' {
+            Mock -ModuleName $module Get-GuestCredential { [pscredential]::new('devadmin', [securestring]::new()) }
+
+            { Build-LazyVM -Name Alpha -UserName sean } | Should -Throw -ExpectedMessage "*'devadmin' is already stored*Set-LazyVMCredential -Name Alpha*"
+            Should -Invoke -ModuleName $module Set-StoredGuestCredential -Times 0
+            Should -Invoke -ModuleName $module Register-RebuildSchedule -Times 0
+            Should -Invoke -ModuleName $module Invoke-VMBuild -Times 0
+        }
+
+        It 'refuses <UserName>, which Windows cannot use for a local account' -ForEach @(
+            @{ UserName = 'sean@example.com' }
+            @{ UserName = 'DOMAIN\sean' }
+            @{ UserName = 'two words' }
+            @{ UserName = 'a-name-longer-than-20' }
+        ) {
+            { Build-LazyVM -Name Alpha -UserName $UserName } | Should -Throw -ExpectedMessage "*'$UserName' cannot be used as the account name*"
+        }
+
+        It 'stores nothing with -WhatIf, and says which account the build would use' {
+            Build-LazyVM -Name Alpha -UserName sean -WhatIf -InformationVariable info 6>$null
+
+            Should -Invoke -ModuleName $module Set-StoredGuestCredential -Times 0
+            Should -Invoke -ModuleName $module Initialize-BuildTarget -Times 0
+        }
+
+        It 'does not look at the stored credential without -UserName' {
+            Build-LazyVM -Name Alpha
+
+            Should -Invoke -ModuleName $module Get-GuestCredential -Times 0
+            Should -Invoke -ModuleName $module Set-StoredGuestCredential -Times 0
+        }
+    }
 }
 
 Describe 'Restore-LazyVMTooling' {
