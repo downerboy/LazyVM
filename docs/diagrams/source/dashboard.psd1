@@ -3,7 +3,7 @@
     Title      = 'See the dashboard data'
     Command    = 'Get-LazyVMDashboard'
     Parameters = @('-Name  (wildcards, default *)')
-    Summary    = 'Lists every VM with what the dashboard shows: Get-LazyVM''s list, and each VM''s disks, memory, last maintenance, open findings and templates. Only reads. No administrator rights needed.'
+    Summary    = 'Lists every VM with what the dashboard shows: Get-LazyVM''s list, and each VM''s disks, memory, last maintenance, open findings, templates, and the build, maintenance or rebuild going now with the latest build. Only reads. No administrator rights needed.'
     Covers     = @('Get-LazyVMDashboard', 'New-DashboardEntry', 'Get-VMDiskUsage', 'Get-MaintenanceRunSummary', 'Get-SecurityFindingSummary', 'Get-VMTemplateSummary')
     Omits      = @{}
     Steps      = @(
@@ -74,6 +74,16 @@
             Reads    = @(
                 @{ Label = 'last findings'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('SecurityFindings.json') }
                 @{ Label = 'approvals'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('SecurityBaseline.json') }
+            )
+        }
+        @{
+            Function = 'Get-VMRunState'
+            Caller   = 'New-DashboardEntry'
+            Area     = 'Common'
+            Note     = 'twice: the latest run, then the latest build; a run is Running while its lock is held, and EndedUnexpectedly when recorded as running with its lock free'
+            Includes = @('Get-VMRunPath', 'Test-VMRunLockHeld', 'Read-VMRunDocument')
+            Reads    = @(
+                @{ Label = 'run lock and state'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Run.lock  (opened for a moment, never created)', 'Run.json') }
             )
         }
         @{

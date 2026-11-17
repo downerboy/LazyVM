@@ -17,6 +17,9 @@
     The daily maintenance does this by itself when the Windows evaluation is
     about to expire and no rearms are left.
 
+    Only one build, maintenance run or rebuild of a VM runs at a time:
+    while one is running, a rebuild stops at once and says so.
+
     .PARAMETER Name
     The VM to rebuild.
 
@@ -48,7 +51,8 @@
 
     process {
         Set-ForceConfirmation -Force:$Force -BoundParameters $PSBoundParameters
-        Invoke-CommandRun -Title 'Rebuild' -Name $Name -FailureMessage 'The rebuild stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -ScriptBlock {
+        # One long run of a VM at a time (#425).
+        Invoke-CommandRun -Title 'Rebuild' -Name $Name -FailureMessage 'The rebuild stopped' -Cmdlet $PSCmdlet -RecordHardware:(-not $WhatIfPreference) -Exclusive:(-not $WhatIfPreference) -ScriptBlock {
             param($VM)
             $action = 'Rebuild from scratch. State is captured first and restored afterwards, and the old Windows disk is kept until the new VM is checked'
             if (-not $PSCmdlet.ShouldProcess($VM.Name, $action)) {

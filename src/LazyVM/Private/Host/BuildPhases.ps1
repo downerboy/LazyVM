@@ -95,6 +95,7 @@ function Invoke-BuildPhase {
     try {
         foreach ($phase in @(Get-BuildPhase | Where-Object { $_.Number -ge $FromPhase })) {
             Write-LogEntry "PHASE $($phase.Number) - $($phase.Name)" 'PHASE'
+            Set-VMRunPhase -Number $phase.Number -Name $phase.Name
             $outcome = @(& $phase.Action $VM $run) | Where-Object { $_ -is [BuildOutcome] } | Select-Object -Last 1
             if ($outcome -eq [BuildOutcome]::RestartPending) {
                 $phasesEnded = $true
@@ -102,6 +103,7 @@ function Invoke-BuildPhase {
             }
             if ($outcome -eq [BuildOutcome]::CompleteWithProblems) {
                 $withProblems.Add($phase.Number)
+                Add-VMRunProblemPhase -Number $phase.Number
                 Write-LogEntry "Phase $($phase.Number) finished with problems - see the errors above" 'WARN'
             }
             else {

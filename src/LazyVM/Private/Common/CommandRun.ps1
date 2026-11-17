@@ -43,7 +43,10 @@ function Initialize-CommandRun {
       starts its log, writes the run's header and any settings warnings, and
       adopts the guest account name from the credential store. With
       -RecordHardware, first records in VM.json any hardware change made in
-      Hyper-V. Returns the VM's context.
+      Hyper-V. With -Exclusive, takes the VM's run lock (RunState.ps1)
+      before it changes anything, and stops, saying what is running, when
+      another run holds it; with -SkipWhenBusy as well, logs that it is
+      skipping and returns nothing instead. Returns the VM's context.
     #>
     [OutputType([VMContext])]
     param(
@@ -51,7 +54,9 @@ function Initialize-CommandRun {
         [string]$Name,
         [string]$Root,
         [string]$OwnerSid,
-        [switch]$RecordHardware
+        [switch]$RecordHardware,
+        [switch]$Exclusive,
+        [switch]$SkipWhenBusy
     )
 
     $folder = Resolve-LazyVMRoot -Root $Root -OwnerSid $OwnerSid
@@ -80,6 +85,16 @@ function Initialize-CommandRun {
     Write-LogEntry "  Profile : $(if ($missing.Count -gt 0) { "$($missing.Count) setting(s) not yet in VM.json, taken from the shared template" } else { 'complete' })" 'INFO'
     Write-LogEntry $rule 'INFO'
     foreach ($warning in $configuration.Warnings) { Write-LogEntry $warning 'WARN' }
+
+    # Before the first write below, so two long runs never change the VM at once (#425).
+    if ($Exclusive -and -not (Enter-VMRun -VM $vm -Command $Title)) {
+        $busy = Get-VMRunBusyMessage -VM $vm -Title $Title
+        if ($SkipWhenBusy) {
+            Write-LogEntry "$busy Skipping." 'INFO'
+            return
+        }
+        throw $busy
+    }
 
     # A VM from before #130 has its tooling list in files of its own: they
     # go into VM.json before anything reads it, except with -WhatIf, which
@@ -128,6 +143,12 @@ function Invoke-CommandRun {
       failure before reporting it as the command's error, and always cleans
       up. The script block's output is the command's output.
 
+      With -Exclusive, the run holds the VM's run lock and records how it
+      ended: Completed, Failed, or Stopped when it was stopped (Ctrl+C, or
+      Stop-LazyVMBuild), which runs no catch block. A run refused because
+      another holds the lock records nothing; with -SkipWhenBusy it is not
+      an error either, and the script block does not run.
+
       Deliberately a simple function: an advanced one would have its own
       $PSCmdlet, hiding the command's from the script block, which needs it
       for ShouldProcess.
@@ -140,20 +161,28 @@ function Invoke-CommandRun {
         [scriptblock]$ScriptBlock,
         [string]$Root,
         [string]$OwnerSid,
-        [switch]$RecordHardware
+        [switch]$RecordHardware,
+        [switch]$Exclusive,
+        [switch]$SkipWhenBusy
     )
 
     Assert-Administrator
     $context = $null
+    $outcome = 'Stopped'
     try {
-        $context = Initialize-CommandRun -Title $Title -Name $Name -Root $Root -OwnerSid $OwnerSid -RecordHardware:$RecordHardware
+        $context = Initialize-CommandRun -Title $Title -Name $Name -Root $Root -OwnerSid $OwnerSid -RecordHardware:$RecordHardware -Exclusive:$Exclusive -SkipWhenBusy:$SkipWhenBusy
+        if (-not $context) { return }
         & $ScriptBlock $context
+        $outcome = 'Completed'
     }
     catch {
+        $outcome = 'Failed'
         if (Test-LogStarted) { Write-LogError $FailureMessage $_ }
         $Cmdlet.ThrowTerminatingError($_)
     }
     finally {
+        # Only the run that holds the lock writes, so a refused run leaves the running one's state alone.
+        Exit-VMRun -Status $outcome
         Complete-CommandRun -VM $context
     }
 }

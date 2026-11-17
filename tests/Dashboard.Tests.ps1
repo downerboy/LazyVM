@@ -197,4 +197,28 @@ Describe 'Get-LazyVMDashboard' {
         $rows[0].Created | Should -Be $created
         $rows[1].Problems | Should -BeNullOrEmpty
     }
+
+    It 'gives the run going now, or the latest, and the latest build (#425)' {
+        $root = New-TestRoot -VMs 'Alpha'
+        Use-TestRoot -Root $root
+        $state = '{ "Last": "Maintenance", "Runs": { "Build": { "Command": "Build", "Status": "Failed", "Phase": 7, "UnfinishedPhase": 7 }, "Maintenance": { "Command": "Maintenance", "Status": "Completed" } } }'
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/Run.json') -Value $state
+
+        $row = Get-LazyVMDashboard -Name 'Alpha'
+
+        $row.Run.Command | Should -Be 'Maintenance'
+        $row.Run.Status | Should -Be 'Completed'
+        $row.LastBuild.Status | Should -Be 'Failed'
+        $row.LastBuild.UnfinishedPhase | Should -Be 7
+        $row.Problems | Should -BeNullOrEmpty
+    }
+
+    It 'gives no run for a VM that has had none' {
+        Use-TestRoot -Root (New-TestRoot -VMs 'Alpha')
+
+        $row = Get-LazyVMDashboard -Name 'Alpha'
+
+        $row.Run | Should -BeNullOrEmpty
+        $row.LastBuild | Should -BeNullOrEmpty
+    }
 }

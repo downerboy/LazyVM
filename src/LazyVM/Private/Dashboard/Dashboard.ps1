@@ -30,6 +30,8 @@ function New-DashboardEntry {
         OriginalConfig        = $null
         GreenTemplate         = $null
         GreenTemplateUpdated  = $null
+        Run                   = $null
+        LastBuild             = $null
         Settings              = $VM.Settings
         ProfilePath           = $VM.ProfilePath
         Problems              = @()
@@ -74,6 +76,13 @@ function New-DashboardEntry {
             $entry.OpenFindings = $scan.Open
         }
         catch { $problems.Add("Security findings: $($_.Exception.Message)") }
+
+        # A build, maintenance or rebuild going now, or the latest one, and the latest build (#425).
+        try {
+            $entry.Run = Get-VMRunState -Settings $settings
+            $entry.LastBuild = Get-VMRunState -Settings $settings -Command 'Build'
+        }
+        catch { $problems.Add("Run: $($_.Exception.Message)") }
     }
 
     try {

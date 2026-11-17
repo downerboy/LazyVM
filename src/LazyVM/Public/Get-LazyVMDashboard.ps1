@@ -11,6 +11,13 @@ function Get-LazyVMDashboard {
     its green template: the config template LazyVM keeps up to date with
     every change to the VM, to build another VM just like it.
 
+    Run is the build, maintenance or rebuild going now, or the latest one,
+    and LastBuild the latest build: each with its Command, Status (Running,
+    Completed, CompletedWithProblems, WaitingForRestart, Failed, Stopped or
+    EndedUnexpectedly), ProcessId, Started, Ended, the Phase and PhaseName
+    it is in or was last in, the UnfinishedPhase a failed or stopped run
+    was in, and the PhasesWithProblems. Empty when there has been none.
+
     It only reads. What it cannot read for a VM is listed in that VM's
     Problems, and the rest is still filled in, so one VM never hides
     another. Hyper-V details need Hyper-V rights; without them State is

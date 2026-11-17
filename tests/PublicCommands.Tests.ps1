@@ -121,7 +121,15 @@ Describe 'Invoke-LazyVMMaintenance' {
         Should -Invoke -ModuleName $module Get-MaintenancePreview -Times 1 -Exactly
         Should -Invoke -ModuleName $module Invoke-Maintenance -Times 0
         Should -Invoke -ModuleName $module Sync-VMProfile -Times 0
-        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { -not $RecordHardware }
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { -not $RecordHardware -and -not $Exclusive }
+    }
+
+    It 'holds the VM''s run lock, and skips rather than fails while a build or rebuild holds it (#425)' {
+        Mock -ModuleName $module Invoke-Maintenance { 'None' }
+
+        $null = Invoke-LazyVMMaintenance -Name Alpha
+
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { $Exclusive -and $SkipWhenBusy -and $Title -eq 'Maintenance' }
     }
 }
 
@@ -141,7 +149,13 @@ Describe 'Invoke-LazyVMRebuild' {
 
         Should -Invoke -ModuleName $module Invoke-Rebuild -Times 0
         Should -Invoke -ModuleName $module Sync-VMProfile -Times 0
-        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { -not $RecordHardware }
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { -not $RecordHardware -and -not $Exclusive }
+    }
+
+    It 'holds the VM''s run lock, and is refused while another run holds it (#425)' {
+        Invoke-LazyVMRebuild -Name Alpha -Force
+
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { $Exclusive -and -not $SkipWhenBusy -and $Title -eq 'Rebuild' }
     }
 }
 
@@ -244,6 +258,30 @@ Describe 'Build-LazyVM' {
         Build-LazyVM -Name Alpha -ConfigTemplate PlainWindows
 
         Should -Invoke -ModuleName $module Initialize-BuildTarget -ParameterFilter { $Name -eq 'Alpha' -and $ConfigTemplate -eq 'PlainWindows' }
+    }
+
+    It 'holds the VM''s run lock; by hand it is refused while another run holds it, and the resume task skips (#425)' -ForEach @(
+        @{ Unattended = $false }
+        @{ Unattended = $true }
+    ) {
+        Mock -ModuleName $module Test-Unattended { $Unattended }.GetNewClosure()
+        Mock -ModuleName $module Invoke-VMBuild { 'Complete' }
+
+        Build-LazyVM -Name Alpha
+
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { $Exclusive -and $SkipWhenBusy -eq $Unattended -and $Title -eq 'Build' }
+    }
+
+    It 'records a build that finished with problems, or waits for the host to restart, as such (#425)' -ForEach @(
+        @{ Outcome = 'CompleteWithProblems'; Expected = 'CompletedWithProblems' }
+        @{ Outcome = 'RestartPending'; Expected = 'WaitingForRestart' }
+    ) {
+        Mock -ModuleName $module Invoke-VMBuild { $Outcome }.GetNewClosure()
+        Mock -ModuleName $module Set-VMRunOutcome { }
+
+        Build-LazyVM -Name Alpha
+
+        Should -Invoke -ModuleName $module Set-VMRunOutcome -Times 1 -Exactly -ParameterFilter { $Status -eq $Expected }
     }
 
     It 'refuses a phase that does not exist' {
