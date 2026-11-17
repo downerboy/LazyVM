@@ -807,8 +807,8 @@ Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's d
 2. `Get-LazyVM` (command): every VM matching -Name, with its state and maintenance task (see List VMs)
    - Reads D2, profiles, state, task: Get-LazyVM (<VM>\Config\VM.json, Hyper-V, Task Scheduler)
 3. `New-DashboardEntry` (Dashboard): per VM; a part it cannot read goes in Problems
-4. `Get-VM` (Hyper-V, called by New-DashboardEntry): built VMs only: when created, memory in use
-   - Reads D3, created, memory: Hyper-V (CreationTime, MemoryAssigned)
+4. `Get-VM` (Hyper-V, called by New-DashboardEntry): built VMs only: when created, memory in use and the most it can use
+   - Reads D3, created, memory: Hyper-V (CreationTime, MemoryAssigned, DynamicMemoryEnabled, MemoryMaximum, MemoryStartup)
 5. `Get-VMDiskUsage` (Dashboard, called by New-DashboardEntry): built VMs only: each disk, with its checkpoint files (Get-VMHardDiskDrive, Get-VHD)
    - Reads D4, disks: Hyper-V (attached disks, file and maximum sizes)
 6. `Read-VMSetting` (Settings, called by New-DashboardEntry): read-only; when the settings are OK

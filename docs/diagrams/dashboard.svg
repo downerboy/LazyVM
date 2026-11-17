@@ -35,7 +35,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <path class="df" d="M275,300 L335,300" marker-end="url(#ad)"/>
 <path class="cl" d="M305,390 L335,390" marker-end="url(#ac)"/>
 <path class="cl" d="M305,502 L335,502" marker-end="url(#ac)"/>
-<path class="df" d="M275,524 L335,524" marker-end="url(#ad)"/>
+<path class="df" d="M275,532.5 L335,532.5" marker-end="url(#ad)"/>
 <path class="cl" d="M305,631 L335,631" marker-end="url(#ac)"/>
 <path class="df" d="M275,653 L335,653" marker-end="url(#ad)"/>
 <path class="cl" d="M305,777 L335,777" marker-end="url(#ac)"/>
@@ -52,7 +52,7 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <path class="df" d="M640,1411 L740,1411" marker-end="url(#ad)"/>
 <g class="bd"><circle cx="293" cy="188" r="10"/><text x="293" y="191.5" text-anchor="middle">D1</text></g>
 <g class="bd"><circle cx="293" cy="300" r="10"/><text x="293" y="303.5" text-anchor="middle">D2</text></g>
-<g class="bd"><circle cx="293" cy="524" r="10"/><text x="293" y="527.5" text-anchor="middle">D3</text></g>
+<g class="bd"><circle cx="293" cy="532.5" r="10"/><text x="293" y="536" text-anchor="middle">D3</text></g>
 <g class="bd"><circle cx="293" cy="653" r="10"/><text x="293" y="656.5" text-anchor="middle">D4</text></g>
 <g class="bd"><circle cx="293" cy="799" r="10"/><text x="293" y="802.5" text-anchor="middle">D5</text></g>
 <g class="bd"><circle cx="293" cy="911" r="10"/><text x="293" y="914.5" text-anchor="middle">D6</text></g>
@@ -110,13 +110,15 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <g class="sn"><circle cx="351" cy="503" r="10"/><text x="351" y="507" text-anchor="middle">4</text></g>
 <text class="at" x="345" y="534">called by New-DashboardEntry</text>
 <text class="at" x="345" y="551">built VMs only: when created, memory in</text>
-<text class="at" x="345" y="568">use</text>
+<text class="at" x="345" y="568">use and the most it can use</text>
 </g>
-<g class="bx-store"><rect x="20" y="482" width="255" height="84" rx="3"/>
+<g class="bx-store"><rect x="20" y="482" width="255" height="101" rx="3"/>
 <text class="st" x="147.5" y="496" text-anchor="middle">«Hyper-V»</text>
 <text class="nm" x="147.5" y="512" text-anchor="middle">Hyper-V</text>
 <line class="div" x1="20" y1="519" x2="275" y2="519"/>
-<text class="at" x="30" y="534">CreationTime, MemoryAssigned</text>
+<text class="at" x="30" y="534">CreationTime, MemoryAssigned,</text>
+<text class="at" x="30" y="551">DynamicMemoryEnabled,</text>
+<text class="at" x="30" y="568">MemoryMaximum, MemoryStartup</text>
 </g>
 <g class="bx-mod"><rect x="335" y="611" width="305" height="118" rx="3"/>
 <text class="st" x="500.5" y="625" text-anchor="middle">«Dashboard»</text>

@@ -2,7 +2,7 @@ using System.Management.Automation;
 
 namespace LazyVM.UI.Wpf.Tests;
 
-/// <summary>How the runner turns what Get-LazyVMDashboard returns into plain C# values.</summary>
+/// <summary>How the _Runner turns what Get-LazyVMDashboard returns into plain C# values.</summary>
 public sealed class CommandRunnerTests
 {
     private static PSObject Entry(params (string Name, object? Value)[] properties)
@@ -26,6 +26,7 @@ public sealed class CommandRunnerTests
             ("State", "Running"),
             ("Created", created),
             ("MemoryAssigned", 8L),
+            ("MemoryMaximum", 16L),
             ("Disks", new object[] { disk }),
             ("DiskSpaceUsed", 10L),
             ("MaintenanceTime", "02:00"),
@@ -44,6 +45,7 @@ public sealed class CommandRunnerTests
         Assert.Equal("Running", vm.State);
         Assert.Equal(created, vm.Created);
         Assert.Equal(8L, vm.MemoryAssigned);
+        Assert.Equal(16L, vm.MemoryMaximum);
         Assert.Equal(new VMDisk("DevBox.vhdx", @"D:\VMs\DevBox.vhdx", 10, 20), Assert.Single(vm.Disks));
         Assert.Equal(10L, vm.DiskSpaceUsed);
         Assert.Equal("02:00", vm.MaintenanceTime);
@@ -67,6 +69,7 @@ public sealed class CommandRunnerTests
             ("State", "Not built"),
             ("Created", null),
             ("MemoryAssigned", null),
+            ("MemoryMaximum", null),
             ("Disks", Array.Empty<object>()),
             ("DiskSpaceUsed", null),
             ("OpenFindings", null),
@@ -76,6 +79,7 @@ public sealed class CommandRunnerTests
         Assert.Equal("Not built", vm.State);
         Assert.Null(vm.Created);
         Assert.Null(vm.MemoryAssigned);
+        Assert.Null(vm.MemoryMaximum);
         Assert.Empty(vm.Disks);
         Assert.Null(vm.OpenFindings);
         Assert.Empty(vm.Problems);
@@ -187,7 +191,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void Constructor_DoesNotStartPowerShell()
     {
-        // A fake runner, or the window before its first refresh, must not need the module installed.
+        // A fake _Runner, or the window before its first refresh, must not need the module installed.
         using var runner = new CommandRunner();
 
         Assert.False(runner.IsStarted);

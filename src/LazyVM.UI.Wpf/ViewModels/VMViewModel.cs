@@ -250,6 +250,20 @@ public sealed class VMViewModel : ViewModelBase
         RaiseRunCommandsChanged();
     }
 
+    /// <summary>Memory in use against the most the VM can use, for example "6 GB of 16 GB" (#420).</summary>
+    private static string MemoryText(VMDashboard vm, string missing)
+    {
+        var inUse = vm.MemoryAssigned switch
+        {
+            null => missing,
+            0 => "None",
+            { } bytes => DashboardText.Size(bytes),
+        };
+        return vm.MemoryAssigned is not null && vm.MemoryMaximum is { } maximum
+            ? $"{inUse} of {DashboardText.Size(maximum)}"
+            : inUse;
+    }
+
     private static List<VMDetail> ReadDetails(VMDashboard vm)
     {
         // Hyper-V has nothing to say about a VM that is not built yet; say why.
@@ -259,12 +273,7 @@ public sealed class VMViewModel : ViewModelBase
             new("State", vm.State),
             new("Running now", RunningText(vm.Run)),
             new("Created", vm.Created is { } created ? DashboardText.When(created) : missing),
-            new("Memory in use", vm.MemoryAssigned switch
-            {
-                null => missing,
-                0 => "None",
-                { } bytes => DashboardText.Size(bytes),
-            }),
+            new("Memory in use", MemoryText(vm, missing)),
             new("Disk space used", vm.DiskSpaceUsed is { } used
                 ? $"{DashboardText.Size(used)} on {vm.Disks.Count} {(vm.Disks.Count == 1 ? "disk" : "disks")}"
                 : missing),

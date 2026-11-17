@@ -19,7 +19,8 @@ function New-DashboardEntry {
         State                 = $VM.State
         Created               = $null
         MemoryAssigned        = $null
-        Disks                 = @()
+        MemoryMaximum         = $null
+        Disks                = @()
         DiskSpaceUsed         = $null
         MaintenanceTime       = $VM.MaintenanceTime
         MaintenanceTask       = $VM.MaintenanceTask
@@ -42,6 +43,8 @@ function New-DashboardEntry {
             $machine = Get-VM -Name $VM.Name -ErrorAction Stop
             $entry.Created = $machine.CreationTime
             $entry.MemoryAssigned = [long]$machine.MemoryAssigned
+            # The most the VM can use: its dynamic memory maximum, or its startup memory when dynamic memory is off (#420).
+            $entry.MemoryMaximum = if ($machine.DynamicMemoryEnabled) { [long]$machine.MemoryMaximum } else { [long]$machine.MemoryStartup }
         }
         catch { $problems.Add("Hyper-V: $($_.Exception.Message)") }
 

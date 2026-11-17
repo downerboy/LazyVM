@@ -33,9 +33,9 @@
             External = $true
             Caller   = 'New-DashboardEntry'
             Area     = 'Hyper-V'
-            Note     = 'built VMs only: when created, memory in use'
+            Note     = 'built VMs only: when created, memory in use and the most it can use'
             Reads    = @(
-                @{ Label = 'created, memory'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('CreationTime, MemoryAssigned') }
+                @{ Label = 'created, memory'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('CreationTime, MemoryAssigned, DynamicMemoryEnabled, MemoryMaximum, MemoryStartup') }
             )
         }
         @{

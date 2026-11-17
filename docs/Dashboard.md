@@ -37,7 +37,8 @@ One row per VM in the main list. The details open in the VM's own window.
 | VM name | `Name` | The VM's profile |
 | State (Running, Off, Not built…) | `State` | Hyper-V |
 | When it was created | `Created` | Hyper-V `CreationTime`. A rebuild makes a new VM, so this is when the current one was built. |
-| Memory in use | `MemoryAssigned` (bytes) | Hyper-V. 0 while the VM is off. Shown against the maximum the VM can use, for example "6 GB of 16 GB" (#420). |
+| Memory in use | `MemoryAssigned` (bytes) | Hyper-V. 0 while the VM is off. Shown against `MemoryMaximum`, for example "6 GB of 16 GB" (#420). |
+| Most memory the VM can use | `MemoryMaximum` (bytes) | Hyper-V. The dynamic memory maximum, or the startup memory when dynamic memory is off. |
 | Attached disks | `Disks`: `Name`, `Path`, `Used`, `Maximum` (bytes) | Hyper-V. `Used` includes the disk's checkpoint files. |
 | Total disk space used | `DiskSpaceUsed` (bytes) | The sum of `Disks.Used` |
 | Maintenance schedule and task | `MaintenanceTime`, `MaintenanceTask` | The VM's settings, Task Scheduler |
@@ -160,7 +161,7 @@ The module is per-user by design. Any multi-user mode must be an explicit, admin
 
 Decided 2026-11-16:
 
-1. Memory is shown as use against the maximum the VM can use (#420).
+1. Memory is shown as use against the maximum the VM can use (#420). Done.
 2. LazyVM records the config template a VM was created from, and the window names it (#421).
 3. A copied password stays on the clipboard for three minutes, then it is cleared.
 4. Build progress shows each phase's number with its goal. The goals come from the module (`Get-LazyVMBuildPhase`, #422), the single list of phases.
