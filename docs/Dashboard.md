@@ -2,7 +2,7 @@
 
 # LazyVM Dashboard — specification
 
-Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list and the VM window, read-only (delivery plan step 3); the rest is not built yet. Updated 2026-11-14 to the design decided for the first step.
+Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, and the Checks and Log windows (delivery plan steps 3 and 4); the rest is not built yet. Updated 2026-11-16 with the decisions for step 5.
 
 ## 1. Purpose
 
@@ -37,7 +37,7 @@ One row per VM in the main list. The details open in the VM's own window.
 | VM name | `Name` | The VM's profile |
 | State (Running, Off, Not built…) | `State` | Hyper-V |
 | When it was created | `Created` | Hyper-V `CreationTime`. A rebuild makes a new VM, so this is when the current one was built. |
-| Memory in use | `MemoryAssigned` (bytes) | Hyper-V. 0 while the VM is off. |
+| Memory in use | `MemoryAssigned` (bytes) | Hyper-V. 0 while the VM is off. Shown against the maximum the VM can use, for example "6 GB of 16 GB" (#420). |
 | Attached disks | `Disks`: `Name`, `Path`, `Used`, `Maximum` (bytes) | Hyper-V. `Used` includes the disk's checkpoint files. |
 | Total disk space used | `DiskSpaceUsed` (bytes) | The sum of `Disks.Used` |
 | Maintenance schedule and task | `MaintenanceTime`, `MaintenanceTask` | The VM's settings, Task Scheduler |
@@ -50,7 +50,7 @@ One row per VM in the main list. The details open in the VM's own window.
 
 The green template is the config template LazyVM keeps up to date every time the VM changes (#292), so there is always a template to build another VM just like it. "Green" as in evergreen.
 
-Not yet available: the name of the config template a VM was first created from. `VM.json` does not record it. `OriginalConfig` gives the configuration itself.
+Not yet available: the name of the config template a VM was first created from. `VM.json` does not record it yet; LazyVM will record it when the profile is created, and the VM window will name it (#421). `OriginalConfig` gives the configuration itself.
 
 
 ## 4. What the window does
@@ -58,9 +58,9 @@ Not yet available: the name of the config template a VM was first created from. 
 ### Step 1 scope
 
 1. **App shell.** The VM list; the Windows evaluation expiry date and renewals left; first-run checks (`Test-LazyVM`) with plain-language fixes; a log viewer; Connect. Buttons are disabled, with an explanation, while maintenance or another build is running.
-2. **Build.** A form with the VM name, the template (Developer, PlainWindows, saved templates such as `DevEnv-latest`) and an optional user name. Progress by phase, cancel, and run from phase N after a failure. A manual "run maintenance now". A build keeps running if the window closes.
+2. **Build.** A form with the VM name, the template (Developer, PlainWindows, saved templates such as `DevEnv-latest`) and an optional user name. Progress by phase, each shown as its number and goal (for example "Phase 6: Create the VM and its answer-file disc"), cancel, and run from phase N after a failure. A manual "run maintenance now". A build keeps running if the window closes.
 3. **Dispose and restore.** Dispose asks "Do you really want to delete this VM?" with Yes and No, and No is the default. Restore shows the last backups and puts one back.
-4. **Credentials.** Recovery key export and a "keys not exported" notice. The guest password is hidden by default, revealed only on request, never written to a log, and the clipboard is cleared a short time after a copy.
+4. **Credentials.** Recovery key export and a "keys not exported" notice. The guest password is hidden by default, revealed only on request, never written to a log, and the clipboard is cleared three minutes after a copy.
 5. **Security findings.** View, approve and revoke.
 
 ### Windows
@@ -73,7 +73,9 @@ Not yet available: the name of the config template a VM was first created from. 
 
 - **Needs attention.** The open-findings badges, plus a "Needs attention" marker in the State column when the last maintenance failed or a settings problem exists. Every badge and marker has text for screen readers, for example "High 1 open finding" and "Needs attention: last maintenance failed".
 - **Refresh.** On open, on F5 or a Refresh button, and after any action. No live polling in this step; a running build updates its own progress.
-- **Builds.** Each build runs in its own elevated `pwsh` process and the window shows its progress from the VM's log, so closing or crashing the window never stops a build. Other actions run in-process.
+- **Builds.** Each build runs in its own elevated `pwsh` process, started with `-File` and a script in the module folder, its arguments passed as a list, never as script text. Closing or crashing the window never stops a build. The window shows progress from the run state the module records (#425), not by reading the log's text, so it also follows a build the app did not start, such as one carrying on after a host restart. Other actions run in-process.
+- **Cancel.** Asks the build to stop (#426). It stops at the next safe point: between phases, between steps, or in a wait. The failed-build clean-up runs, so the answer-file disc is removed. Work already started inside the VM, such as an install, finishes by itself. The window says so. The process is never killed, since that would skip the clean-up.
+- **Run maintenance now** starts the VM's maintenance task, so it runs exactly as the nightly run does.
 - **Checks.** On open, after the list, the app runs `Test-LazyVM -HostOnly`, or plain `Test-LazyVM` while there are no VMs, so the note on making the first one shows. The Checks window opens by itself only when there are no VMs, a check failed, or the checks could not run. A **Checks** button in the main window checks the host, and one in each VM window checks that VM. Each row reads as status, check, what was found, then the fix; Ctrl+C copies the fix.
 - **Log.** A **Log** button in each VM window shows the last 1000 entries of its log (`Get-LazyVMLog -Tail 1000`), oldest first, with the newest selected. Each entry reads as level, time, message. F8 and Shift+F8 go to the next and previous warning or error. The text is shown as plain text only, since the log is in the data folder.
 - Calls run off the UI thread and can be cancelled. A failure on one VM shows on that VM's row and does not blank the list.
@@ -152,12 +154,14 @@ The module is per-user by design. Any multi-user mode must be an explicit, admin
 - Updating means installing the newer release the same way. The app does not update itself in the first step.
 - Code signing (#4) is deferred until the first beta release. Until then Windows SmartScreen warns about the app.
 
-### Open questions
+### Decided questions
 
-1. Is memory shown as current use only, or with the assigned maximum?
-2. Should LazyVM record which config template a VM was created from, so the window can name it?
-3. How long does a copied password stay on the clipboard before it is cleared?
-4. The names and number of the build phases shown on the progress screen (the mockup uses placeholders).
+Decided 2026-11-16:
+
+1. Memory is shown as use against the maximum the VM can use (#420).
+2. LazyVM records the config template a VM was created from, and the window names it (#421).
+3. A copied password stays on the clipboard for three minutes, then it is cleared.
+4. Build progress shows each phase's number with its goal. The goals come from the module (`Get-LazyVMBuildPhase`, #422), the single list of phases.
 
 ## 10. Delivery plan (TDD, small pull requests)
 
@@ -167,7 +171,14 @@ Each screen needs its command first. Where a command is missing (for example the
 2. `Get-LazyVMDashboard` in the module, with tests, help, diagram and guide. Done.
 3. `LazyVM.UI.Wpf`: the command-runner class, theme dictionaries, the main list and the VM window (read-only), view-model tests first. Done.
 4. First-run checks and the log viewer. Done.
-5. Build, build progress and cancel, with each build in its own `pwsh` process; run from phase N; run maintenance now.
+5. Build, build progress and cancel, with each build in its own `pwsh` process; run from phase N; run maintenance now. Module pull requests first, then the app:
+   1. Each phase's goal, and `Get-LazyVMBuildPhase` (#422).
+   2. `Get-LazyVMConfigTemplate`, the config templates to choose from (#423).
+   3. `Build-LazyVM -UserName` for a new VM's account (#424).
+   4. The run state: a running build or maintenance recorded, reported by `Get-LazyVMDashboard`, and a second build refused (#425).
+   5. A clean stop of a running build (#426).
+   6. The app: the Build window, progress and Cancel (#427).
+   7. The app: run from phase N, and run maintenance now (#428).
 6. Dispose and restore.
 7. Recovery keys and the password.
 8. Security findings: view, approve, revoke.
