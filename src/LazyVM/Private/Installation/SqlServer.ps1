@@ -46,6 +46,8 @@ function Install-SqlServerIfMissing {
     }
     try { $sql = Get-GuestSqlInstance -VM $VM }
     catch {
+        # A build asked to stop is not a failed install: it goes up untouched (#426).
+        if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
         Write-LogError 'Could not tell whether SQL Server is installed, so it was not installed' $_
         return
     }

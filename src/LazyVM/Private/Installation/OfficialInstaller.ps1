@@ -159,6 +159,8 @@ function Install-OfficialInstallerItem {
         }
     }
     catch {
+        # A build asked to stop is not a failed install: it goes up untouched (#426).
+        if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
         Write-LogEntry "$label - not installed: $($_.Exception.Message)" 'WARN'
         return
     }
@@ -189,6 +191,8 @@ function Install-OfficialInstallerItem {
         $null = Test-InstallExitCode -Product $label -ExitCode $exitCode
     }
     catch {
+        # A build asked to stop is not a failed install: it goes up untouched (#426).
+        if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
         Write-LogEntry "$label - not installed: $($_.Exception.Message)" 'WARN'
     }
     finally {

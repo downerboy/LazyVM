@@ -364,6 +364,7 @@ function Remove-VMRunStopRequest {
     param([Parameter(Mandatory)][string]$Path)
 
     try {
+        Assert-NoReparsePoint -Path $Path
         if (Test-Path -LiteralPath $Path -PathType Leaf) { Remove-Item -LiteralPath $Path -Force -ErrorAction Stop }
     }
     catch {
@@ -422,7 +423,7 @@ function Assert-VMRunNotStopped {
     }
     if (-not (Test-VMRunStopRequested)) { return }
     $script:VMRun.Stopping = $true
-    Write-LogEntry 'Asked to stop (Stop-LazyVMBuild): stopping here. Work already running in the guest carries on by itself.' 'WARN'
+    Write-LogEntry 'Asked to stop (Stop-LazyVMBuild): stopping here. Work already running in the guest carries on by itself: let an install there finish before running the build again.' 'WARN'
     throw (New-VMRunStoppedException)
 }
 

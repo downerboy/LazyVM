@@ -251,6 +251,34 @@ Describe 'A stop goes through what carries on after failures' {
         Should -Invoke -ModuleName $module Invoke-GuestScript -Times 1 -Exactly -ParameterFilter { $Activity -like 'tidying up*' -and $ArgumentList[1] -eq $true }
     }
 
+    It 'Invoke-GuestTask starts no new work in the guest once the build is stopping, even after a stop taken for a failure' {
+        Mock -ModuleName $module Invoke-GuestScript { 'boot' }
+        Enter-TestRun $vm
+        Request-TestStop $vm
+        # Something before took the stop for a failure and carried on.
+        try { InModuleScope $module { Assert-VMRunNotStopped } } catch { $null = $_ }
+
+        $thrown = InModuleScope $module -Parameters @{ VM = $vm } {
+            param($VM)
+            try { Invoke-GuestTask -VM $VM -TaskName 'LazyVM-Next' -Work { } -TimeoutMinutes 5 -Activity 'the next install'; $null } catch { $_ }
+        }
+
+        $thrown.Exception.GetType().Name | Should -Be 'VMRunStoppedException'
+        Should -Invoke -ModuleName $module Invoke-GuestScript -Times 0 -Exactly
+    }
+
+    It 'an install that carries on after a failure lets a stop up, rather than logging it as not installed' {
+        $stop = New-TestStop
+        Mock -ModuleName $module Get-GuestSqlInstance { throw $stop }.GetNewClosure()
+
+        $thrown = InModuleScope $module {
+            try { $null = Install-SqlServerIfMissing -VM ([VMContext]::new(@{ VMName = 'Alpha'; InstallSqlServer = $true })); $null } catch { $_ }
+        }
+
+        $thrown.Exception.GetType().Name | Should -Be 'VMRunStoppedException'
+        Should -Invoke -ModuleName $module Write-LogError -Times 0 -Exactly
+    }
+
     It 'Invoke-GuestTask still stops its guest task after a failure' {
         Mock -ModuleName $module Invoke-GuestScript { 'boot' }
         Mock -ModuleName $module Wait-Until { throw 'timed out' }

@@ -137,6 +137,9 @@ function Invoke-GuestTask {
         [int]$RestartAttempts = 0
     )
 
+    # A safe point: a build asked to stop starts no new work in the guest,
+    # even when something before took its stop for a failure (#426).
+    Assert-VMRunNotStopped -Boundary
     $userName = if ($AsGuestUser) { $VM.Runtime.GuestAdminUser } else { '' }
     if ($InputFile.Count -gt 0) {
         $folder = Invoke-GuestScript -VM $VM -Activity "preparing the files of $Activity" -TimeoutMinutes 5 -ArgumentList @($TaskName, $userName, [bool]$Elevated) -ScriptBlock {

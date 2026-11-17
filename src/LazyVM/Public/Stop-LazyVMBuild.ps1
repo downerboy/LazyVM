@@ -17,7 +17,8 @@ function Stop-LazyVMBuild {
     Build-LazyVM then ends with the error LazyVM.RunStopped, and
     Get-LazyVMDashboard shows the build as Stopped, with the phase it was
     in as UnfinishedPhase: run Build-LazyVM -FromPhase with that number to
-    carry on.
+    carry on, once an install still running in the VM has finished, so two
+    installers do not run at once.
 
     Only a build is stopped. While maintenance or a rebuild is running, this
     says so and changes nothing. Nothing is written when no build is

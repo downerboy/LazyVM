@@ -209,6 +209,8 @@ function Install-ToolingProduct {
             }
         }
         catch {
+            # A build asked to stop is not a failed install: it goes up untouched (#426).
+            if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
             Write-LogError "$label install failed" $_
             continue
         }
@@ -218,6 +220,8 @@ function Install-ToolingProduct {
             $added = Get-GuestInstallerProduct -VM $VM | Where-Object { [ToolingProduct]::KeyFor($_.ProductId, $_.ChannelId) -eq $product.Key() } | Select-Object -First 1
         }
         catch {
+            # A build asked to stop is not a failed install: it goes up untouched (#426).
+            if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
             Write-LogError "Could not find $label after its install, so its extensions were not added" $_
             continue
         }
@@ -266,6 +270,8 @@ function Repair-ToolingProduct {
         return $false
     }
     catch {
+        # A build asked to stop is not a failed install: it goes up untouched (#426).
+        if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
         Write-LogError "$label repair failed" $_
         return $false
     }
@@ -359,6 +365,8 @@ function Invoke-ProductModify {
         return (Test-InstallSucceeded -ExitCode $exitCode)
     }
     catch {
+        # A build asked to stop is not a failed install: it goes up untouched (#426).
+        if (Test-VMRunStoppedError -Exception $_.Exception) { throw }
         Write-LogError "Adding extensions to $label failed" $_
         return $false
     }
