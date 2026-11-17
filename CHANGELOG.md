@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.17.0](https://github.com/downerboy/LazyVM/compare/v6.16.0...v6.17.0) (2026-11-17)
+
+
+### Features
+
+* add Get-LazyVMConfigTemplate to list the config templates ([#432](https://github.com/downerboy/LazyVM/issues/432)) ([d800e37](https://github.com/downerboy/LazyVM/commit/d800e37759e8e20d19295befc4eb8eb6cb4adbbd))
+
 ## [6.16.0](https://github.com/downerboy/LazyVM/compare/v6.15.2...v6.16.0) (2026-11-17)
 
 
