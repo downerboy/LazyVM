@@ -18,7 +18,7 @@ public partial class App : Application
         });
 
         runner = new CommandRunner();
-        var tools = new ToolWindows(runner);
+        var tools = new ToolWindows(runner, new BuildLauncher(), TimeProvider.System);
         var main = new MainViewModel(runner, new VMWindowManager(tools), tools, TimeProvider.System);
         MainWindow = new MainWindow { DataContext = main };
         MainWindow.Show();

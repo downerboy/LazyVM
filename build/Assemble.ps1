@@ -56,6 +56,8 @@ function Invoke-Assemble {
     [IO.File]::WriteAllText((Join-Path -Path $target -ChildPath "$ModuleName.psm1"), $text, $utf8Bom)
     Copy-Item -LiteralPath (Join-Path -Path $sourceDir -ChildPath "$ModuleName.psd1") -Destination $target
     Copy-Item -LiteralPath (Join-Path -Path $sourceDir -ChildPath 'Data') -Destination $target -Recurse
+    # The script the LazyVM app runs each build with, in a pwsh process of its own (#427).
+    Copy-Item -LiteralPath (Join-Path -Path $sourceDir -ChildPath 'Scripts') -Destination $target -Recurse
     Copy-Item -LiteralPath (Join-Path -Path $Root -ChildPath 'LICENSE.md') -Destination $target
 
     # The built module must load and export exactly the public commands.

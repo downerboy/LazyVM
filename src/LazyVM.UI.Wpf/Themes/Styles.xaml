@@ -218,4 +218,16 @@
         </Style.Triggers>
     </Style>
 
+    <!-- A text box on the card color, with the theme's ink and a visible border, in every theme. -->
+    <Style TargetType="TextBox">
+        <Setter Property="Background" Value="{DynamicResource LvCard}" />
+        <Setter Property="Foreground" Value="{DynamicResource LvInk}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource LvInk}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LvCardBorder}" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LvFocusVisual}" />
+    </Style>
+
 </ResourceDictionary>

@@ -53,6 +53,62 @@ internal sealed class FakeCommandRunner : CommandRunner
         return logs.Next(cancellationToken);
     }
 
+    private readonly Answers<VMDashboard> vms = new();
+    private readonly Answers<VMRun> stops = new();
+
+    public IReadOnlyList<BuildPhase> Phases { get; set; } =
+    [
+        new(0, "HyperVHealth", "Check Hyper-V is working"),
+        new(1, "Readiness", "Check the host is ready"),
+        new(7, "Windows", "Install Windows and the tools"),
+        new(8, "Finish", "Finish SQL Server and Visual Studio"),
+    ];
+
+    public IReadOnlyList<ConfigTemplate> Templates { get; set; } =
+    [
+        new("DevBox-latest", BuiltIn: false, Automatic: true),
+        new("Developer", BuiltIn: true, Automatic: false),
+        new("PlainWindows", BuiltIn: true, Automatic: false),
+    ];
+
+    public Exception? TemplatesFail { get; set; }
+
+    public Exception? ModuleFolderFails { get; set; }
+
+    public List<string> VMCalls { get; } = [];
+
+    public List<string> StopCalls { get; } = [];
+
+    /// <summary>The next Get-LazyVMDashboard -Name finds the VM with this run.</summary>
+    public void ReturnsRun(VMRun? run, string name = "DevBox") => vms.Returns([Sample.VM(name) with { Run = run }]);
+
+    public void VMThrows(Exception exception) => vms.Throws(exception);
+
+    /// <summary>The next Stop-LazyVMBuild returns this run.</summary>
+    public void StopReturns(VMRun? run) => stops.Returns(run is null ? [] : [run]);
+
+    public void StopThrows(Exception exception) => stops.Throws(exception);
+
+    public override async Task<VMDashboard?> GetVMAsync(string name, CancellationToken cancellationToken)
+    {
+        VMCalls.Add(name);
+        return (await vms.Next(cancellationToken)).FirstOrDefault();
+    }
+
+    public override Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken) => Task.FromResult(Phases);
+
+    public override Task<IReadOnlyList<ConfigTemplate>> GetConfigTemplatesAsync(CancellationToken cancellationToken) =>
+        TemplatesFail is { } failure ? Task.FromException<IReadOnlyList<ConfigTemplate>>(failure) : Task.FromResult(Templates);
+
+    public override async Task<VMRun?> StopBuildAsync(string name, CancellationToken cancellationToken)
+    {
+        StopCalls.Add(name);
+        return (await stops.Next(cancellationToken)).FirstOrDefault();
+    }
+
+    public override Task<string> GetModuleFolderAsync(CancellationToken cancellationToken) =>
+        ModuleFolderFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(@"C:\Program Files\LazyVM\Modules\LazyVM\6.20.0");
+
     private sealed class Answers<T>
     {
         private readonly Queue<Func<CancellationToken, Task<IReadOnlyList<T>>>> queue = new();
@@ -72,8 +128,31 @@ internal sealed class FakeCommandRunner : CommandRunner
     }
 }
 
-/// <summary>Records the check and log windows shown and brought to the front, without making windows.</summary>
-internal sealed class FakeToolWindows(CommandRunner runner) : ToolWindows(runner)
+/// <summary>Records the builds it is asked to start, without starting a process. Each build ends when the test says.</summary>
+internal sealed class FakeBuildLauncher : BuildLauncher
+{
+    public List<(BuildRequest Request, string ModuleFolder)> Started { get; } = [];
+
+    public TaskCompletionSource<BuildResult> Ending { get; private set; } = new();
+
+    public Exception? Fails { get; set; }
+
+    public int ProcessId { get; set; } = 4242;
+
+    public override StartedBuild Start(BuildRequest request, string moduleFolder)
+    {
+        if (Fails is { } failure)
+        {
+            throw failure;
+        }
+        Started.Add((request, moduleFolder));
+        Ending = new();
+        return new StartedBuild(ProcessId, Ending.Task);
+    }
+}
+
+/// <summary>Records the windows shown, brought to the front and closed, without making windows.</summary>
+internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launcher = null) : ToolWindows(runner, launcher ?? new FakeBuildLauncher(), new FixedClock(DateTimeOffset.UnixEpoch))
 {
     private readonly Dictionary<ViewModelBase, Action> closers = [];
 
@@ -81,7 +160,15 @@ internal sealed class FakeToolWindows(CommandRunner runner) : ToolWindows(runner
 
     public List<ViewModelBase> BroughtToFront { get; } = [];
 
+    public List<ViewModelBase> Closed { get; } = [];
+
     public void Close(ViewModelBase window) => closers[window]();
+
+    protected override void CloseWindow(ViewModelBase viewModel)
+    {
+        Closed.Add(viewModel);
+        closers[viewModel]();
+    }
 
     protected override void Show(ViewModelBase viewModel, Action closed)
     {

@@ -192,4 +192,48 @@ public sealed class VMViewModelTests : IDisposable
         Assert.Equal("Off", Detail(vm, "State"));
         Assert.Contains(changed, name => string.IsNullOrEmpty(name));
     }
+
+    [Fact]
+    public void BuildProgress_IsOfferedOnlyWhileABuildRuns()
+    {
+        var idle = Open(Sample.VM());
+        var building = Open(Sample.VM() with { Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 } });
+        var maintaining = Open(Sample.VM() with { Run = new VMRun { Command = "Maintenance", Status = VMRun.Running, ProcessId = 9 } });
+
+        Assert.False(idle.BuildProgressCommand.CanExecute(null));
+        Assert.True(building.BuildProgressCommand.CanExecute(null));
+        Assert.False(maintaining.BuildProgressCommand.CanExecute(null));
+        Assert.True(maintaining.IsBusy);
+        Assert.False(idle.IsBusy);
+    }
+
+    [Fact]
+    public void BuildProgress_OpensTheProgressOfTheRunningBuild()
+    {
+        runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 }, "DevEnv");
+        var vm = Open(Sample.VM("DevEnv") with { Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 } });
+
+        vm.BuildProgressCommand.Execute(null);
+
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(tools.Shown));
+        Assert.Equal("DevEnv", progress.VMName);
+        progress.StopFollowing();
+    }
+
+    [Theory]
+    [InlineData(null, null, false, "Nothing")]
+    [InlineData("Build", 7, false, "Build, in phase 7 (Windows)")]
+    [InlineData("Build", 7, true, "Build, stopping")]
+    [InlineData("Maintenance", null, false, "Maintenance")]
+    public void RunningNow_SaysWhatIsRunning(string? command, int? phase, bool stopping, string expected)
+    {
+        var run = command is null ? null : new VMRun
+        {
+            Command = command, Status = VMRun.Running, ProcessId = 9, Phase = phase, PhaseName = phase is null ? null : "Windows", StopRequested = stopping,
+        };
+
+        var vm = Open(Sample.VM() with { Run = run });
+
+        Assert.Equal(expected, Detail(vm, "Running now"));
+    }
 }

@@ -233,4 +233,45 @@ public sealed class CommandRunnerTests
         Assert.Null(entry.Time);
         Assert.Equal("Started", entry.Message);
     }
+
+    [Fact]
+    public void ToDashboard_ReadsTheRunAndTheLastBuild()
+    {
+        var started = new DateTime(2026, 11, 16, 9, 0, 0);
+        var run = Entry(
+            ("Command", "Build"), ("Status", "Running"), ("ProcessId", 4242), ("Started", started), ("Ended", null),
+            ("Phase", 7), ("PhaseName", "Windows"), ("UnfinishedPhase", null), ("PhasesWithProblems", Array.Empty<object>()),
+            ("StopRequested", true));
+
+        var vm = CommandRunner.ToDashboard(Entry(("Name", "DevBox"), ("State", "Running"), ("Run", run), ("LastBuild", run)));
+
+        var expected = new VMRun
+        {
+            Command = "Build", Status = "Running", ProcessId = 4242, Started = started, Phase = 7, PhaseName = "Windows", StopRequested = true,
+        };
+        Assert.Equal(expected, vm.Run);
+        Assert.Equal(expected, vm.LastBuild);
+        Assert.True(vm.Run!.IsRunning);
+        Assert.True(vm.Run.IsBuild);
+        Assert.Empty(vm.Problems);
+    }
+
+    [Fact]
+    public void ToDashboard_WithNoRunYet_LeavesItEmpty()
+    {
+        var vm = CommandRunner.ToDashboard(Entry(("Name", "DevBox"), ("State", "Off"), ("Run", null)));
+
+        Assert.Null(vm.Run);
+        Assert.Null(vm.LastBuild);
+    }
+
+    [Fact]
+    public void ToDashboard_ARunValueThatCannotBeRead_IsNamedInProblems()
+    {
+        var vm = CommandRunner.ToDashboard(Entry(("Name", "DevBox"), ("State", "Off"), ("Run", Entry(("Status", "Failed"), ("Phase", "seven")))));
+
+        Assert.Equal("Failed", vm.Run!.Status);
+        Assert.Null(vm.Run.Phase);
+        Assert.Equal(["Run phase: could not be read"], vm.Problems);
+    }
 }

@@ -282,4 +282,31 @@ public sealed class MainViewModelTests : IDisposable
 
         Assert.Equal("Off", windows.Shown[0].State);
     }
+
+    [Fact]
+    public async Task Build_OpensTheBuildWindow_KnowingTheVMsThereAre()
+    {
+        runner.Returns(Sample.VM("DevBox"));
+        await main.RefreshAsync();
+
+        main.BuildCommand.Execute(null);
+        var build = Assert.IsType<BuildViewModel>(Assert.Single(tools.Shown));
+        await build.LoadAsync();
+        build.Name = "devbox";
+        await build.BuildAsync();
+
+        Assert.Equal("There is a VM named devbox already. Choose another name.", build.Status);
+    }
+
+    [Fact]
+    public async Task ABuildThatEnds_ReadsTheListAgain()
+    {
+        runner.ReturnsRun(null);
+        runner.Returns(Sample.VM("DevBox"));
+
+        tools.OpenProgress("DevBox", started: null);
+        await Task.Yield();
+
+        Assert.Equal(1, runner.DashboardCalls);
+    }
 }

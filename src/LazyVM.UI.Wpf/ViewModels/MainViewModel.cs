@@ -25,6 +25,9 @@ public sealed class MainViewModel : ViewModelBase
         this.tools = tools;
         this.clock = clock;
         HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, HostOnly()));
+        BuildCommand = new RelayCommand(() => tools.OpenBuild(VMs.Select(row => row.Name).ToList()));
+        // A build that ended changed the list: read it again.
+        tools.BuildEnded += (_, _) => _ = RefreshAsync();
         refreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         cancelRefreshCommand = new RelayCommand(() => refreshing?.Cancel(), () => IsRefreshing);
         openVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);
@@ -63,6 +66,9 @@ public sealed class MainViewModel : ViewModelBase
 
     /// <summary>Opens the checks of this host (Test-LazyVM).</summary>
     public RelayCommand HostChecksCommand { get; }
+
+    /// <summary>Opens the Build new VM window.</summary>
+    public RelayCommand BuildCommand { get; }
 
     /// <summary>
     /// Reads the list, then checks the host. The checks show by themselves

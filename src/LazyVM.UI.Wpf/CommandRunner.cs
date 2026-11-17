@@ -49,6 +49,51 @@ public class CommandRunner : IDisposable
         return output.Select(ToDashboard).ToList();
     }
 
+    /// <summary>Runs <c>Get-LazyVMDashboard -Name</c>: the one VM, or nothing when there is no such VM.</summary>
+    public virtual async Task<VMDashboard?> GetVMAsync(string name, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMDashboard", [("Name", name)], cancellationToken).ConfigureAwait(false);
+        return output.Select(ToDashboard).FirstOrDefault(entry => string.Equals(entry.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Runs <c>Get-LazyVMBuildPhase</c>: every phase of a build, in order.</summary>
+    public virtual async Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMBuildPhase", [], cancellationToken).ConfigureAwait(false);
+        return output.Select(phase => new BuildPhase(
+            Read<int?>(phase, "Number", "Number", []) ?? 0, Text(phase, "Name"), Text(phase, "Goal"))).ToList();
+    }
+
+    /// <summary>Runs <c>Get-LazyVMConfigTemplate</c>: the config templates a new VM can be built from.</summary>
+    public virtual async Task<IReadOnlyList<ConfigTemplate>> GetConfigTemplatesAsync(CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMConfigTemplate", [], cancellationToken).ConfigureAwait(false);
+        return output.Select(template => new ConfigTemplate(
+            Text(template, "Name"),
+            Read<bool?>(template, "BuiltIn", "BuiltIn", []) ?? false,
+            Read<bool?>(template, "Automatic", "Automatic", []) ?? false)).ToList();
+    }
+
+    /// <summary>
+    /// Runs <c>Stop-LazyVMBuild -Name</c>: asks the VM's running build to stop
+    /// at its next safe point, and returns the run with StopRequested set.
+    /// Throws with the module's reason when nothing was stopped, such as a
+    /// run that has not recorded itself yet.
+    /// </summary>
+    public virtual async Task<VMRun?> StopBuildAsync(string name, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Stop-LazyVMBuild", [("Name", name)], cancellationToken).ConfigureAwait(false);
+        return output.Count == 0 ? null : ToRun(output[0], []);
+    }
+
+    /// <summary>The folder the module was imported from, which holds the script each build runs with.</summary>
+    public virtual async Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-Module", [("Name", "LazyVM")], cancellationToken).ConfigureAwait(false);
+        return output.Select(module => Text(module, "ModuleBase")).FirstOrDefault(folder => folder.Length > 0)
+            ?? throw new InvalidOperationException("The LazyVM module is not loaded.");
+    }
+
     /// <summary>
     /// Runs <c>Test-LazyVM</c>: the checks of the VM <paramref name="name"/>,
     /// or with no name, of the host and the only VM, if there is one.
@@ -129,9 +174,35 @@ public class CommandRunner : IDisposable
             GreenTemplate = Value<string>(entry, "GreenTemplate", "Green template"),
             GreenTemplateUpdated = Date("GreenTemplateUpdated", "Green template updated"),
             Settings = Value<string>(entry, "Settings", "Settings") ?? "Not known",
+            Run = ReadRun(entry, "Run", problems),
+            LastBuild = ReadRun(entry, "LastBuild", problems),
             Problems = problems,
         };
     }
+
+    /// <summary>Reads one <c>LazyVM.VMRun</c> object. A value that cannot be read is left empty and named in <paramref name="problems"/>.</summary>
+    internal static VMRun ToRun(PSObject run, List<string> problems) => new()
+    {
+        Command = Read<string>(run, "Command", "Run command", problems),
+        Status = Read<string>(run, "Status", "Run status", problems),
+        ProcessId = Read<int?>(run, "ProcessId", "Run process", problems),
+        Started = ReadDate(run, "Started", "Run started", problems),
+        Ended = ReadDate(run, "Ended", "Run ended", problems),
+        Phase = Read<int?>(run, "Phase", "Run phase", problems),
+        PhaseName = Read<string>(run, "PhaseName", "Run phase name", problems),
+        UnfinishedPhase = Read<int?>(run, "UnfinishedPhase", "Unfinished phase", problems),
+        StopRequested = Read<bool?>(run, "StopRequested", "Stop requested", problems) ?? false,
+    };
+
+    /// <summary>The run as it came: a [pscustomobject] keeps its properties only on its PSObject, never on what it wraps.</summary>
+    private static VMRun? ReadRun(PSObject entry, string name, List<string> problems) =>
+        entry.Properties[name]?.Value switch
+        {
+            null => null,
+            PSObject { BaseObject: null } => null,
+            PSObject run => ToRun(run, problems),
+            var other => ToRun(PSObject.AsPSObject(other), problems),
+        };
 
     /// <summary>Reads one <c>LazyVM.Check</c> object.</summary>
     internal static VMCheck ToCheck(PSObject check) => new(

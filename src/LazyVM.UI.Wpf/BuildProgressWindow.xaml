@@ -1,0 +1,88 @@
+<Window x:Class="LazyVM.UI.Wpf.BuildProgressWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:LazyVM.UI.Wpf"
+        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:BuildProgressViewModel}"
+        Title="{Binding Title}" Width="760" Height="760" MinWidth="320"
+        Style="{StaticResource LvWindow}">
+    <Window.CommandBindings>
+        <CommandBinding Command="Close" Executed="CloseWindow" />
+    </Window.CommandBindings>
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="Close" />
+    </Window.InputBindings>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
+            <DockPanel>
+                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Content="Cancel build" Command="{Binding CancelCommand}"
+                            AutomationProperties.Name="{Binding VMName, StringFormat='Cancel the build of {0}'}"
+                            AutomationProperties.HelpText="Stops the build at its next safe point. An install already started inside the VM finishes by itself." />
+                </WrapPanel>
+                <TextBlock Text="{Binding Heading}" Style="{StaticResource LvTitle}" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24" Padding="24,16">
+            <StackPanel>
+                <TextBlock Text="Progress" Style="{StaticResource LvHeading}" />
+                <TextBlock Text="{Binding Status}" Style="{StaticResource LvStatus}"
+                           AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+                <TextBlock Text="{Binding Advice}" TextWrapping="Wrap" Margin="0,8,0,0"
+                           Visibility="{Binding HasAdvice, Converter={StaticResource VisibleWhenTrue}}"
+                           AutomationProperties.Name="{Binding Advice}" local:LiveRegion.Announce="True" />
+                <TextBlock Text="Closing this window does not stop the build." Style="{StaticResource LvMuted}" Margin="0,8,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource LvPanel}" Margin="24">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Phases" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
+                <!-- A list, so the arrow keys move from one phase to the next and Narrator reads each one with how far it has got. -->
+                <ListBox x:Name="List" ItemsSource="{Binding Phases}" AutomationProperties.Name="Phases"
+                         BorderThickness="0" Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:PhaseRowViewModel">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Number}" FontWeight="Bold" />
+                                <TextBlock Grid.Column="1" Text="{Binding Goal}" TextWrapping="Wrap" Margin="0,0,12,0" />
+                                <!-- The state as a shape and a word, never color alone; the current phase on the attention color. -->
+                                <Border Grid.Column="2" VerticalAlignment="Top" Padding="8,2" CornerRadius="4">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource LvSevMedium}" />
+                                                    <Setter Property="TextElement.Foreground" Value="{DynamicResource LvOnSev}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock FontWeight="SemiBold">
+                                        <Run Text="{Binding Symbol, Mode=OneWay}" /> <Run Text="{Binding State, Mode=OneWay}" />
+                                    </TextBlock>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+    </DockPanel>
+</Window>
