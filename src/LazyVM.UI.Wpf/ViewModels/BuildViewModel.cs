@@ -12,27 +12,27 @@ public sealed partial class BuildViewModel : ViewModelBase
     /// <summary>The template chosen when the window opens, when there is one: the full developer VM.</summary>
     internal const string DefaultTemplate = "Developer";
 
-    private readonly CommandRunner runner;
-    private readonly BuildLauncher launcher;
-    private readonly IReadOnlySet<string> existingNames;
-    private readonly Action<string, StartedBuild> buildStarted;
-    private readonly RelayCommand buildCommand;
-    private IReadOnlyList<TemplateOption> templates = [];
-    private TemplateOption? selectedTemplate;
-    private string name = string.Empty;
-    private string userName = string.Empty;
-    private string status = string.Empty;
-    private bool isStarting;
+    private readonly CommandRunner _Runner;
+    private readonly BuildLauncher _Launcher;
+    private readonly IReadOnlySet<string> _ExistingNames;
+    private readonly Action<string, StartedBuild> _BuildStarted;
+    private readonly RelayCommand _BuildCommand;
+    private IReadOnlyList<TemplateOption> _Templates = [];
+    private TemplateOption? _SelectedTemplate;
+    private string _Name = string.Empty;
+    private string _UserName = string.Empty;
+    private string _Status = string.Empty;
+    private bool _IsStarting;
 
     /// <param name="existingNames">The VMs there are already: a new VM needs a name of its own.</param>
     /// <param name="buildStarted">Called with the VM's name and its build once the build has started.</param>
     public BuildViewModel(CommandRunner runner, BuildLauncher launcher, IEnumerable<string> existingNames, Action<string, StartedBuild> buildStarted)
     {
-        this.runner = runner;
-        this.launcher = launcher;
-        this.existingNames = existingNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        this.buildStarted = buildStarted;
-        buildCommand = new RelayCommand(() => _ = BuildAsync(), () => !IsStarting);
+        this._Runner = runner;
+        this._Launcher = launcher;
+        this._ExistingNames = existingNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        this._BuildStarted = buildStarted;
+        _BuildCommand = new RelayCommand(() => _ = BuildAsync(), () => !IsStarting);
     }
 
     /// <summary>Raised when the build has started and the window should close.</summary>
@@ -43,57 +43,57 @@ public sealed partial class BuildViewModel : ViewModelBase
     /// <summary>The new VM's name: 1-15 letters, digits or hyphens, starting with a letter or digit.</summary>
     public string Name
     {
-        get => name;
-        set => SetProperty(ref name, value);
+        get => _Name;
+        set => SetProperty(ref _Name, value);
     }
 
     /// <summary>The administrator account inside the VM; empty for the default one.</summary>
     public string UserName
     {
-        get => userName;
-        set => SetProperty(ref userName, value);
+        get => _UserName;
+        set => SetProperty(ref _UserName, value);
     }
 
     public IReadOnlyList<TemplateOption> Templates
     {
-        get => templates;
-        private set => SetProperty(ref templates, value);
+        get => _Templates;
+        private set => SetProperty(ref _Templates, value);
     }
 
     public TemplateOption? SelectedTemplate
     {
-        get => selectedTemplate;
-        set => SetProperty(ref selectedTemplate, value);
+        get => _SelectedTemplate;
+        set => SetProperty(ref _SelectedTemplate, value);
     }
 
     /// <summary>What is wrong with what was typed, or why the build could not start; empty otherwise.</summary>
     public string Status
     {
-        get => status;
-        private set => SetProperty(ref status, value);
+        get => _Status;
+        private set => SetProperty(ref _Status, value);
     }
 
     public bool IsStarting
     {
-        get => isStarting;
+        get => _IsStarting;
         private set
         {
-            if (SetProperty(ref isStarting, value))
+            if (SetProperty(ref _IsStarting, value))
             {
-                buildCommand.RaiseCanExecuteChanged();
+                _BuildCommand.RaiseCanExecuteChanged();
             }
         }
     }
 
     /// <summary>Checks what was typed and starts the build.</summary>
-    public RelayCommand BuildCommand => buildCommand;
+    public RelayCommand BuildCommand => _BuildCommand;
 
     /// <summary>Reads the config templates to choose from, and chooses Developer when there is one.</summary>
     public async Task LoadAsync()
     {
         try
         {
-            var found = await runner.GetConfigTemplatesAsync(CancellationToken.None);
+            var found = await _Runner.GetConfigTemplatesAsync(CancellationToken.None);
             Templates = found.Select(template => new TemplateOption(template)).ToList();
             SelectedTemplate = Templates.FirstOrDefault(option => string.Equals(option.Name, DefaultTemplate, StringComparison.OrdinalIgnoreCase))
                 ?? Templates.FirstOrDefault();
@@ -122,9 +122,9 @@ public sealed partial class BuildViewModel : ViewModelBase
         try
         {
             var request = new BuildRequest(Name, SelectedTemplate?.Name, UserName.Length == 0 ? null : UserName);
-            var moduleFolder = await runner.GetModuleFolderAsync(CancellationToken.None);
-            var build = launcher.Start(request, moduleFolder);
-            buildStarted(Name, build);
+            var moduleFolder = await _Runner.GetModuleFolderAsync(CancellationToken.None);
+            var build = _Launcher.Start(request, moduleFolder);
+            _BuildStarted(Name, build);
             CloseRequested?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
@@ -148,7 +148,7 @@ public sealed partial class BuildViewModel : ViewModelBase
         {
             return $"'{Name}' cannot be used as a VM name: use 1-15 letters, digits or hyphens, starting with a letter or digit.";
         }
-        if (existingNames.Contains(Name))
+        if (_ExistingNames.Contains(Name))
         {
             return $"There is a VM named {Name} already. Choose another name.";
         }

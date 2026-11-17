@@ -5,16 +5,16 @@ namespace LazyVM.UI.Wpf.Tests;
 public sealed class BuildProgressViewModelTests
 {
     private const int Process = 4242;
-    private readonly FakeCommandRunner runner = new();
-    private readonly TaskCompletionSource<BuildResult> ending = new();
-    private readonly FixedClock clock = new(DateTimeOffset.UnixEpoch);
+    private readonly FakeCommandRunner _Runner = new();
+    private readonly TaskCompletionSource<BuildResult> _Ending = new();
+    private readonly FixedClock _Clock = new(DateTimeOffset.UnixEpoch);
 
     /// <summary>The phases Carry on was asked to start from.</summary>
-    private readonly List<int> carriedOn = [];
+    private readonly List<int> _CarriedOn = [];
 
-    private BuildProgressViewModel Started() => new(runner, "DevBox", new StartedBuild(Process, ending.Task), clock);
+    private BuildProgressViewModel Started() => new(_Runner, "DevBox", new StartedBuild(Process, _Ending.Task), _Clock);
 
-    private BuildProgressViewModel Following() => new(runner, "DevBox", started: null, clock);
+    private BuildProgressViewModel Following() => new(_Runner, "DevBox", started: null, _Clock);
 
     private static VMRun Running(int? phase, int? process = Process, bool stopRequested = false) => new()
     {
@@ -42,9 +42,9 @@ public sealed class BuildProgressViewModelTests
 
     /// <summary>A started build whose window offers Carry on, recording the phase it starts from.</summary>
     private BuildProgressViewModel StartedWithCarryOn(Exception? fails = null) =>
-        new(runner, "DevBox", new StartedBuild(Process, ending.Task), clock, phase =>
+        new(_Runner, "DevBox", new StartedBuild(Process, _Ending.Task), _Clock, phase =>
         {
-            carriedOn.Add(phase);
+            _CarriedOn.Add(phase);
             return fails is null ? Task.CompletedTask : Task.FromException(fails);
         });
 
@@ -55,8 +55,8 @@ public sealed class BuildProgressViewModelTests
     public async Task ABuildThatDidNotFinish_OffersToCarryOnFromItsPhase(string status)
     {
         var progress = await Loaded(StartedWithCarryOn());
-        ending.SetResult(new BuildResult(BuildResult.Failed, null, "It did not finish."));
-        runner.ReturnsRun(Ended(status, 7));
+        _Ending.SetResult(new BuildResult(BuildResult.Failed, null, "It did not finish."));
+        _Runner.ReturnsRun(Ended(status, 7));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -75,7 +75,7 @@ public sealed class BuildProgressViewModelTests
     public async Task ABuildThatFinishedOrCarriesOnByItself_OffersNoCarryOn(string status)
     {
         var progress = await Loaded(StartedWithCarryOn());
-        runner.ReturnsRun(Ended(status, 8));
+        _Runner.ReturnsRun(Ended(status, 8));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -87,7 +87,7 @@ public sealed class BuildProgressViewModelTests
     public async Task WhileTheBuildRuns_ThereIsNoCarryOn()
     {
         var progress = await Loaded(StartedWithCarryOn());
-        runner.ReturnsRun(Running(7));
+        _Runner.ReturnsRun(Running(7));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -99,12 +99,12 @@ public sealed class BuildProgressViewModelTests
     public async Task CarryOn_StartsTheBuildFromThePhaseItStoppedIn()
     {
         var progress = await Loaded(StartedWithCarryOn());
-        runner.ReturnsRun(Ended(VMRun.Stopped, 7));
+        _Runner.ReturnsRun(Ended(VMRun.Stopped, 7));
         await progress.PollAsync(CancellationToken.None);
 
         await progress.CarryOnAsync();
 
-        Assert.Equal([7], carriedOn);
+        Assert.Equal([7], _CarriedOn);
         Assert.Equal("Starting the build of DevBox from phase 7", progress.Status);
     }
 
@@ -112,7 +112,7 @@ public sealed class BuildProgressViewModelTests
     public async Task CarryOn_WhenTheBuildCannotStart_SaysWhy_AndCanBeTriedAgain()
     {
         var progress = await Loaded(StartedWithCarryOn(new InvalidOperationException("PowerShell 7.6 or later was not found.")));
-        runner.ReturnsRun(Ended(VMRun.Failed, 7));
+        _Runner.ReturnsRun(Ended(VMRun.Failed, 7));
         await progress.PollAsync(CancellationToken.None);
 
         await progress.CarryOnAsync();
@@ -125,8 +125,8 @@ public sealed class BuildProgressViewModelTests
     public async Task ABuildThatDidNotStartAtAll_OffersNoCarryOn()
     {
         var progress = await Loaded(StartedWithCarryOn());
-        ending.SetResult(new BuildResult(BuildResult.Failed, null, "There is no Windows ISO."));
-        runner.ReturnsRun(null);
+        _Ending.SetResult(new BuildResult(BuildResult.Failed, null, "There is no Windows ISO."));
+        _Runner.ReturnsRun(null);
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -150,7 +150,7 @@ public sealed class BuildProgressViewModelTests
     public async Task Running_ShowsThePhaseByNumberAndGoal_AndMarksTheEarlierOnesDone()
     {
         var progress = await Loaded(Started());
-        runner.ReturnsRun(Running(7));
+        _Runner.ReturnsRun(Running(7));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -166,7 +166,7 @@ public sealed class BuildProgressViewModelTests
     public async Task BeforeTheBuildRecordsItself_ThePreviousRunIsNotShown()
     {
         var progress = await Loaded(Started());
-        runner.ReturnsRun(Ended(VMRun.Failed, 7, process: 1111));
+        _Runner.ReturnsRun(Ended(VMRun.Failed, 7, process: 1111));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -181,8 +181,8 @@ public sealed class BuildProgressViewModelTests
         var progress = await Loaded(Started());
         var ended = 0;
         progress.Ended += (_, _) => ended++;
-        ending.SetResult(new BuildResult(BuildResult.Failed, null, "There is no Windows ISO."));
-        runner.ReturnsRun(null);
+        _Ending.SetResult(new BuildResult(BuildResult.Failed, null, "There is no Windows ISO."));
+        _Runner.ReturnsRun(null);
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -195,7 +195,7 @@ public sealed class BuildProgressViewModelTests
     public async Task Completed_SaysTheVMIsReady_AndMarksEveryPhaseDone()
     {
         var progress = await Loaded(Started());
-        runner.ReturnsRun(Ended(VMRun.Completed, 8));
+        _Runner.ReturnsRun(Ended(VMRun.Completed, 8));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -209,8 +209,8 @@ public sealed class BuildProgressViewModelTests
     public async Task Failed_SaysThePhaseAndTheReason_AndHowToCarryOn()
     {
         var progress = await Loaded(Started());
-        ending.SetResult(new BuildResult(BuildResult.Failed, null, "Visual Studio did not install."));
-        runner.ReturnsRun(Ended(VMRun.Failed, 7));
+        _Ending.SetResult(new BuildResult(BuildResult.Failed, null, "Visual Studio did not install."));
+        _Runner.ReturnsRun(Ended(VMRun.Failed, 7));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -223,15 +223,15 @@ public sealed class BuildProgressViewModelTests
     public async Task Cancel_AsksTheBuildToStop_AndShowsItIsStopping()
     {
         var progress = await Loaded(Started());
-        runner.ReturnsRun(Running(7));
+        _Runner.ReturnsRun(Running(7));
         await progress.PollAsync(CancellationToken.None);
-        runner.StopReturns(Running(7, stopRequested: true));
+        _Runner.StopReturns(Running(7, stopRequested: true));
 
         Assert.True(progress.CancelCommand.CanExecute(null));
         progress.CancelCommand.Execute(null);
         await Task.Yield();
 
-        Assert.Equal(["DevBox"], runner.StopCalls);
+        Assert.Equal(["DevBox"], _Runner.StopCalls);
         Assert.True(progress.IsStopping);
         Assert.StartsWith("Stopping at the next safe point in phase 7.", progress.Status);
         Assert.Contains("An install already started inside the VM finishes by itself.", progress.Status);
@@ -243,7 +243,7 @@ public sealed class BuildProgressViewModelTests
     public async Task StopRequested_ShowsStopping_EvenWhenAskedFromElsewhere()
     {
         var progress = await Loaded(Started());
-        runner.ReturnsRun(Running(7, stopRequested: true));
+        _Runner.ReturnsRun(Running(7, stopRequested: true));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -255,8 +255,8 @@ public sealed class BuildProgressViewModelTests
     public async Task Stopped_SaysToLetTheInstallFinish_ThenCarryOnFromThePhase()
     {
         var progress = await Loaded(Started());
-        ending.SetResult(new BuildResult(BuildResult.Stopped, "LazyVM.RunStopped", "The build of DevBox was stopped in phase 7, as asked."));
-        runner.ReturnsRun(Ended(VMRun.Stopped, 7));
+        _Ending.SetResult(new BuildResult(BuildResult.Stopped, "LazyVM.RunStopped", "The build of DevBox was stopped in phase 7, as asked."));
+        _Runner.ReturnsRun(Ended(VMRun.Stopped, 7));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -272,9 +272,9 @@ public sealed class BuildProgressViewModelTests
     public async Task Cancel_WhenNothingWasStopped_SaysWhy()
     {
         var progress = await Loaded(Started());
-        runner.ReturnsRun(Running(7));
+        _Runner.ReturnsRun(Running(7));
         await progress.PollAsync(CancellationToken.None);
-        runner.StopThrows(new InvalidOperationException("A run of DevBox is just starting and has not recorded itself yet, so nothing was stopped. Try again in a moment."));
+        _Runner.StopThrows(new InvalidOperationException("A run of DevBox is just starting and has not recorded itself yet, so nothing was stopped. Try again in a moment."));
 
         progress.CancelCommand.Execute(null);
         await Task.Yield();
@@ -288,7 +288,7 @@ public sealed class BuildProgressViewModelTests
     public async Task Cancel_IsOfferedOnlyForABuild_NotForMaintenance()
     {
         var progress = await Loaded(Following());
-        runner.ReturnsRun(Running(null) with { Command = "Maintenance" });
+        _Runner.ReturnsRun(Running(null) with { Command = "Maintenance" });
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -299,7 +299,7 @@ public sealed class BuildProgressViewModelTests
     public async Task AReadFailure_SaysSo_AndKeepsFollowing()
     {
         var progress = await Loaded(Started());
-        runner.VMThrows(new InvalidOperationException("The LazyVM folder could not be read."));
+        _Runner.VMThrows(new InvalidOperationException("The LazyVM folder could not be read."));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -311,7 +311,7 @@ public sealed class BuildProgressViewModelTests
     public async Task Following_ABuildTheAppDidNotStart_ShowsItsPhase()
     {
         var progress = await Loaded(Following());
-        runner.ReturnsRun(Running(7, process: 9999));
+        _Runner.ReturnsRun(Running(7, process: 9999));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -323,7 +323,7 @@ public sealed class BuildProgressViewModelTests
     public async Task Following_WhenNoBuildIsRunning_SaysSo()
     {
         var progress = await Loaded(Following());
-        runner.ReturnsRun(Ended(VMRun.Completed, 8, process: 9999));
+        _Runner.ReturnsRun(Ended(VMRun.Completed, 8, process: 9999));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -335,9 +335,9 @@ public sealed class BuildProgressViewModelTests
     public async Task Following_ABuildThatEnds_SaysHowItEnded()
     {
         var progress = await Loaded(Following());
-        runner.ReturnsRun(Running(7, process: 9999));
+        _Runner.ReturnsRun(Running(7, process: 9999));
         await progress.PollAsync(CancellationToken.None);
-        runner.ReturnsRun(Ended(VMRun.EndedUnexpectedly, 7, process: 9999));
+        _Runner.ReturnsRun(Ended(VMRun.EndedUnexpectedly, 7, process: 9999));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -349,7 +349,7 @@ public sealed class BuildProgressViewModelTests
     public async Task WaitingForRestart_SaysTheBuildCarriesOnByItself()
     {
         var progress = await Loaded(Started());
-        runner.ReturnsRun(Ended(VMRun.WaitingForRestart, 2));
+        _Runner.ReturnsRun(Ended(VMRun.WaitingForRestart, 2));
 
         await progress.PollAsync(CancellationToken.None);
 
@@ -361,23 +361,23 @@ public sealed class BuildProgressViewModelTests
     public async Task FollowAsync_EndsWhenTheBuildHasEnded()
     {
         var progress = Started();
-        ending.SetResult(new BuildResult(BuildResult.Failed, null, "Another run of DevBox is going."));
-        runner.ReturnsRun(null);
+        _Ending.SetResult(new BuildResult(BuildResult.Failed, null, "Another run of DevBox is going."));
+        _Runner.ReturnsRun(null);
 
         await progress.FollowAsync().WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.True(progress.IsFinished);
-        Assert.Equal(["DevBox"], runner.VMCalls);
+        Assert.Equal(["DevBox"], _Runner.VMCalls);
     }
 
     [Fact]
     public async Task FollowAsync_WhenTheProcessHasEndedAndTheReadFails_WaitsBeforeReadingAgain()
     {
         var progress = Started();
-        ending.SetResult(new BuildResult(BuildResult.Completed, null, null));
+        _Ending.SetResult(new BuildResult(BuildResult.Completed, null, null));
         for (var i = 0; i < 100; i++)
         {
-            runner.VMThrows(new InvalidOperationException("The LazyVM folder could not be read."));
+            _Runner.VMThrows(new InvalidOperationException("The LazyVM folder could not be read."));
         }
         var following = progress.FollowAsync();
 
@@ -385,20 +385,20 @@ public sealed class BuildProgressViewModelTests
         progress.StopFollowing();
         await following.WaitAsync(TimeSpan.FromSeconds(10));
 
-        Assert.Single(runner.VMCalls);
+        Assert.Single(_Runner.VMCalls);
     }
 
     [Fact]
     public async Task StopFollowing_EndsTheFollowing_WithoutStoppingTheBuild()
     {
         var progress = Started();
-        runner.ReturnsRun(Running(7));
+        _Runner.ReturnsRun(Running(7));
         var following = progress.FollowAsync();
 
         progress.StopFollowing();
         await following.WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.False(progress.IsFinished);
-        Assert.Empty(runner.StopCalls);
+        Assert.Empty(_Runner.StopCalls);
     }
 }

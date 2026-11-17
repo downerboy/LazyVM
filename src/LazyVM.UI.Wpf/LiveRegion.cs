@@ -14,7 +14,7 @@ public static class LiveRegion
     public static readonly DependencyProperty AnnounceProperty = DependencyProperty.RegisterAttached(
         "Announce", typeof(bool), typeof(LiveRegion), new PropertyMetadata(false, OnAnnounceChanged));
 
-    private static readonly DependencyPropertyDescriptor Text =
+    private static readonly DependencyPropertyDescriptor _Text =
         DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock));
 
     public static bool GetAnnounce(DependencyObject element) => (bool)element.GetValue(AnnounceProperty);
@@ -29,11 +29,11 @@ public static class LiveRegion
         }
         if ((bool)e.NewValue)
         {
-            Text.AddValueChanged(block, Announce);
+            _Text.AddValueChanged(block, Announce);
         }
         else
         {
-            Text.RemoveValueChanged(block, Announce);
+            _Text.RemoveValueChanged(block, Announce);
         }
     }
 

@@ -6,23 +6,23 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// </summary>
 public sealed class ChecksViewModel : ViewModelBase
 {
-    private readonly CommandRunner runner;
-    private readonly bool hostOnly;
-    private readonly RelayCommand runCommand;
-    private readonly RelayCommand cancelCommand;
-    private CancellationTokenSource? running;
-    private IReadOnlyList<CheckRowViewModel> checks = [];
-    private string status = string.Empty;
+    private readonly CommandRunner _Runner;
+    private readonly bool _HostOnly;
+    private readonly RelayCommand _RunCommand;
+    private readonly RelayCommand _CancelCommand;
+    private CancellationTokenSource? _Running;
+    private IReadOnlyList<CheckRowViewModel> _Checks = [];
+    private string _Status = string.Empty;
 
     /// <param name="vmName">The VM to check; empty for the host.</param>
     /// <param name="hostOnly">Check the host alone. Without it and without a VM, the only VM is checked too, or a note says there are none yet.</param>
     public ChecksViewModel(CommandRunner runner, string? vmName, bool hostOnly)
     {
-        this.runner = runner;
-        this.hostOnly = hostOnly;
+        this._Runner = runner;
+        this._HostOnly = hostOnly;
         VMName = vmName;
-        runCommand = new RelayCommand(() => _ = RunAsync(), () => !IsRunning);
-        cancelCommand = new RelayCommand(() => running?.Cancel(), () => IsRunning);
+        _RunCommand = new RelayCommand(() => _ = RunAsync(), () => !IsRunning);
+        _CancelCommand = new RelayCommand(() => _Running?.Cancel(), () => IsRunning);
     }
 
     /// <summary>The VM checked; empty for the host.</summary>
@@ -34,18 +34,18 @@ public sealed class ChecksViewModel : ViewModelBase
 
     public IReadOnlyList<CheckRowViewModel> Checks
     {
-        get => checks;
-        private set => SetProperty(ref checks, value);
+        get => _Checks;
+        private set => SetProperty(ref _Checks, value);
     }
 
     /// <summary>What the checks found, such as "8 checks: 1 failed, 2 warnings", or why they did not run.</summary>
     public string Status
     {
-        get => status;
-        private set => SetProperty(ref status, value);
+        get => _Status;
+        private set => SetProperty(ref _Status, value);
     }
 
-    public bool IsRunning => running is not null;
+    public bool IsRunning => _Running is not null;
 
     public bool HasFailures => Checks.Any(row => row.Status == VMCheck.Failed);
 
@@ -53,13 +53,13 @@ public sealed class ChecksViewModel : ViewModelBase
     public bool CouldNotRun { get; private set; }
 
     /// <summary>Runs the checks again.</summary>
-    public RelayCommand RunCommand => runCommand;
+    public RelayCommand RunCommand => _RunCommand;
 
-    public RelayCommand CancelCommand => cancelCommand;
+    public RelayCommand CancelCommand => _CancelCommand;
 
     public async Task RunAsync()
     {
-        if (running is not null)
+        if (_Running is not null)
         {
             return;
         }
@@ -69,7 +69,7 @@ public sealed class ChecksViewModel : ViewModelBase
         CouldNotRun = false;
         try
         {
-            var results = await runner.GetChecksAsync(VMName, hostOnly, cancel.Token);
+            var results = await _Runner.GetChecksAsync(VMName, _HostOnly, cancel.Token);
             Checks = results.Select(result => new CheckRowViewModel(result)).ToList();
             Status = Summary(Checks);
         }
@@ -110,10 +110,10 @@ public sealed class ChecksViewModel : ViewModelBase
 
     private void SetRunning(CancellationTokenSource? value)
     {
-        running = value;
+        _Running = value;
         OnPropertyChanged(nameof(IsRunning));
-        runCommand.RaiseCanExecuteChanged();
-        cancelCommand.RaiseCanExecuteChanged();
+        _RunCommand.RaiseCanExecuteChanged();
+        _CancelCommand.RaiseCanExecuteChanged();
     }
 }
 

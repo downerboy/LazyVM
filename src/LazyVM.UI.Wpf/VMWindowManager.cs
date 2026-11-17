@@ -6,18 +6,18 @@ namespace LazyVM.UI.Wpf;
 /// <summary>Keeps one window per VM: opening a VM whose window is open brings that window to the front.</summary>
 public class VMWindowManager(ToolWindows tools)
 {
-    private readonly Dictionary<string, VMViewModel> open = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, VMViewModel> _Open = new(StringComparer.OrdinalIgnoreCase);
 
     public void Open(VMDashboard entry)
     {
-        if (open.TryGetValue(entry.Name, out var existing))
+        if (_Open.TryGetValue(entry.Name, out var existing))
         {
             BringToFront(existing);
             return;
         }
         var viewModel = new VMViewModel(entry, tools);
-        open.Add(entry.Name, viewModel);
-        Show(viewModel, () => open.Remove(entry.Name));
+        _Open.Add(entry.Name, viewModel);
+        Show(viewModel, () => _Open.Remove(entry.Name));
         _ = viewModel.LoadAsync();
     }
 
@@ -26,7 +26,7 @@ public class VMWindowManager(ToolWindows tools)
     {
         foreach (var entry in entries)
         {
-            if (open.TryGetValue(entry.Name, out var viewModel))
+            if (_Open.TryGetValue(entry.Name, out var viewModel))
             {
                 viewModel.Update(entry);
             }

@@ -10,20 +10,20 @@ public sealed class VMViewModel : ViewModelBase
 {
     private const string MaintenanceNotScheduled = "Not registered";
 
-    private readonly ToolWindows tools;
-    private VMDashboard entry;
-    private IReadOnlyList<PhaseOption> phases = [];
-    private PhaseOption? selectedPhase;
-    private int? suggestedPhase;
-    private string status = string.Empty;
-    private bool isStarting;
+    private readonly ToolWindows _Tools;
+    private VMDashboard _Entry;
+    private IReadOnlyList<PhaseOption> _Phases = [];
+    private PhaseOption? _SelectedPhase;
+    private int? _SuggestedPhase;
+    private string _Status = string.Empty;
+    private bool _IsStarting;
 
     public VMViewModel(VMDashboard entry, ToolWindows tools)
     {
-        this.entry = entry;
-        this.tools = tools;
+        this._Entry = entry;
+        this._Tools = tools;
         Details = ReadDetails(entry);
-        suggestedPhase = CarryOnPhase(entry.LastBuild);
+        _SuggestedPhase = CarryOnPhase(entry.LastBuild);
         ChecksCommand = new RelayCommand(() => tools.OpenChecks(Name, hostOnly: false));
         LogCommand = new RelayCommand(() => tools.OpenLog(Name));
         BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(Name, started: null), () => IsBuilding);
@@ -41,21 +41,21 @@ public sealed class VMViewModel : ViewModelBase
     public RelayCommand MaintenanceCommand { get; }
 
     /// <summary>True while a build of the VM is running.</summary>
-    public bool IsBuilding => entry.Run is { IsRunning: true, Command: null or VMRun.Build };
+    public bool IsBuilding => _Entry.Run is { IsRunning: true, Command: null or VMRun.Build };
 
     /// <summary>True while a build, maintenance or rebuild of the VM is running: no other may start.</summary>
-    public bool IsBusy => entry.Run is { IsRunning: true };
+    public bool IsBusy => _Entry.Run is { IsRunning: true };
 
     /// <summary>False only when the dashboard says the maintenance task is not registered.</summary>
-    public bool IsMaintenanceScheduled => entry.MaintenanceTask != MaintenanceNotScheduled;
+    public bool IsMaintenanceScheduled => _Entry.MaintenanceTask != MaintenanceNotScheduled;
 
     /// <summary>True while a build or maintenance this window asked for is starting.</summary>
     public bool IsStarting
     {
-        get => isStarting;
+        get => _IsStarting;
         private set
         {
-            if (SetProperty(ref isStarting, value))
+            if (SetProperty(ref _IsStarting, value))
             {
                 RaiseRunCommandsChanged();
             }
@@ -65,17 +65,17 @@ public sealed class VMViewModel : ViewModelBase
     /// <summary>Every phase of a build, to choose the one it starts at.</summary>
     public IReadOnlyList<PhaseOption> Phases
     {
-        get => phases;
-        private set => SetProperty(ref phases, value);
+        get => _Phases;
+        private set => SetProperty(ref _Phases, value);
     }
 
     /// <summary>The phase a build starts at: the one the last build stopped or failed in, or else the first.</summary>
     public PhaseOption? SelectedPhase
     {
-        get => selectedPhase;
+        get => _SelectedPhase;
         set
         {
-            if (SetProperty(ref selectedPhase, value))
+            if (SetProperty(ref _SelectedPhase, value))
             {
                 BuildFromPhaseCommand.RaiseCanExecuteChanged();
             }
@@ -93,10 +93,10 @@ public sealed class VMViewModel : ViewModelBase
         {
             if (IsBusy)
             {
-                return $"{RunName(entry.Run!.Command)} of {Name} is running now. A build or maintenance can start once it has ended.";
+                return $"{RunName(_Entry.Run!.Command)} of {Name} is running now. A build or maintenance can start once it has ended.";
             }
             var notes = new List<string>();
-            if (suggestedPhase is { } phase && entry.LastBuild is { } last)
+            if (_SuggestedPhase is { } phase && _Entry.LastBuild is { } last)
             {
                 notes.Add($"The last build {EndedText(last.Status)} in phase {phase}, so phase {phase} is chosen. Let any install still running inside the VM finish first.");
             }
@@ -113,10 +113,10 @@ public sealed class VMViewModel : ViewModelBase
     /// <summary>What happened when a build or maintenance was asked for, such as why it did not start.</summary>
     public string Status
     {
-        get => status;
+        get => _Status;
         private set
         {
-            if (SetProperty(ref status, value))
+            if (SetProperty(ref _Status, value))
             {
                 OnPropertyChanged(nameof(HasStatus));
             }
@@ -130,7 +130,7 @@ public sealed class VMViewModel : ViewModelBase
     {
         try
         {
-            var found = await tools.GetBuildPhasesAsync(CancellationToken.None);
+            var found = await _Tools.GetBuildPhasesAsync(CancellationToken.None);
             Phases = found.Select(phase => new PhaseOption(phase)).ToList();
             SelectSuggestedPhase();
         }
@@ -151,7 +151,7 @@ public sealed class VMViewModel : ViewModelBase
         Status = $"Starting the build of {Name} from phase {phase.Number}";
         try
         {
-            await tools.StartBuildAsync(new BuildRequest(Name, null, null, phase.Number));
+            await _Tools.StartBuildAsync(new BuildRequest(Name, null, null, phase.Number));
             Status = $"The build of {Name} has started from phase {phase.Number}. Its progress is in its own window.";
         }
         catch (Exception exception)
@@ -175,7 +175,7 @@ public sealed class VMViewModel : ViewModelBase
         Status = $"Starting the maintenance of {Name}";
         try
         {
-            await tools.StartMaintenanceAsync(Name);
+            await _Tools.StartMaintenanceAsync(Name);
             Status = $"The maintenance of {Name} has started, as its nightly run does. Running now shows it once it has begun, and the Log says how it goes.";
         }
         catch (Exception exception)
@@ -195,7 +195,7 @@ public sealed class VMViewModel : ViewModelBase
             : null;
 
     private void SelectSuggestedPhase() =>
-        SelectedPhase = Phases.FirstOrDefault(option => option.Number == suggestedPhase) ?? Phases.FirstOrDefault();
+        SelectedPhase = Phases.FirstOrDefault(option => option.Number == _SuggestedPhase) ?? Phases.FirstOrDefault();
 
     private void RaiseRunCommandsChanged()
     {
@@ -224,11 +224,11 @@ public sealed class VMViewModel : ViewModelBase
     /// <summary>Opens the VM's log.</summary>
     public RelayCommand LogCommand { get; }
 
-    public string Name => entry.Name;
+    public string Name => _Entry.Name;
 
-    public string Title => $"{entry.Name} - LazyVM";
+    public string Title => $"{_Entry.Name} - LazyVM";
 
-    public string State => entry.State;
+    public string State => _Entry.State;
 
     /// <summary>The details, in the order the window shows them.</summary>
     public IReadOnlyList<VMDetail> Details { get; private set; }
@@ -236,13 +236,13 @@ public sealed class VMViewModel : ViewModelBase
     /// <summary>Shows what a newer refresh read for this VM.</summary>
     public void Update(VMDashboard entry)
     {
-        this.entry = entry;
+        this._Entry = entry;
         Details = ReadDetails(entry);
         // A build that has failed or stopped since: choose the phase to carry on from, as on opening.
         var suggested = CarryOnPhase(entry.LastBuild);
-        if (suggested != suggestedPhase)
+        if (suggested != _SuggestedPhase)
         {
-            suggestedPhase = suggested;
+            _SuggestedPhase = suggested;
             SelectSuggestedPhase();
         }
         OnPropertyChanged(string.Empty);

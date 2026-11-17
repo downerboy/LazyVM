@@ -13,39 +13,39 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <summary>How often the run state is read while the window is open.</summary>
     internal static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
 
-    private readonly CommandRunner runner;
-    private readonly StartedBuild? started;
-    private readonly TimeProvider clock;
-    private readonly RelayCommand cancelCommand;
-    private readonly Func<int, Task>? startFromPhase;
-    private readonly RelayCommand carryOnCommand;
-    private CancellationTokenSource? following;
-    private IReadOnlyList<BuildPhase> phases = [];
-    private IReadOnlyList<PhaseRowViewModel> phaseRows = [];
-    private VMRun? run;
-    private int? followedProcess;
-    private string status;
-    private string? advice;
-    private int? carryOnPhase;
-    private bool isFinished;
-    private bool isStopRequested;
-    private bool isCancelling;
-    private bool isCarryingOn;
+    private readonly CommandRunner _Runner;
+    private readonly StartedBuild? _Started;
+    private readonly TimeProvider _Clock;
+    private readonly RelayCommand _CancelCommand;
+    private readonly Func<int, Task>? _StartFromPhase;
+    private readonly RelayCommand _CarryOnCommand;
+    private CancellationTokenSource? _Following;
+    private IReadOnlyList<BuildPhase> _Phases = [];
+    private IReadOnlyList<PhaseRowViewModel> _PhaseRows = [];
+    private VMRun? _Run;
+    private int? _FollowedProcess;
+    private string _Status;
+    private string? _Advice;
+    private int? _CarryOnPhase;
+    private bool _IsFinished;
+    private bool _IsStopRequested;
+    private bool _IsCancelling;
+    private bool _IsCarryingOn;
 
     /// <param name="vmName">The VM whose build is followed.</param>
     /// <param name="started">The build process the app started; empty to follow the VM's build that is running now.</param>
     /// <param name="startFromPhase">Starts a new build of the VM from the phase it is given, and shows it; empty offers no Carry on.</param>
     public BuildProgressViewModel(CommandRunner runner, string vmName, StartedBuild? started, TimeProvider clock, Func<int, Task>? startFromPhase = null)
     {
-        this.runner = runner;
-        this.started = started;
-        this.clock = clock;
-        this.startFromPhase = startFromPhase;
+        this._Runner = runner;
+        this._Started = started;
+        this._Clock = clock;
+        this._StartFromPhase = startFromPhase;
         VMName = vmName;
-        followedProcess = started?.ProcessId;
-        status = $"Starting the build of {vmName}";
-        cancelCommand = new RelayCommand(() => _ = CancelAsync(), CanCancel);
-        carryOnCommand = new RelayCommand(() => _ = CarryOnAsync(), () => CarryOnPhase is not null && !isCarryingOn);
+        _FollowedProcess = started?.ProcessId;
+        _Status = $"Starting the build of {vmName}";
+        _CancelCommand = new RelayCommand(() => _ = CancelAsync(), CanCancel);
+        _CarryOnCommand = new RelayCommand(() => _ = CarryOnAsync(), () => CarryOnPhase is not null && !_IsCarryingOn);
     }
 
     /// <summary>
@@ -55,14 +55,14 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// </summary>
     public int? CarryOnPhase
     {
-        get => carryOnPhase;
+        get => _CarryOnPhase;
         private set
         {
-            if (SetProperty(ref carryOnPhase, value))
+            if (SetProperty(ref _CarryOnPhase, value))
             {
                 OnPropertyChanged(nameof(CanCarryOn));
                 OnPropertyChanged(nameof(CarryOnText));
-                carryOnCommand.RaiseCanExecuteChanged();
+                _CarryOnCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -73,7 +73,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     public string CarryOnText => CarryOnPhase is { } phase ? $"Carry on from phase {phase}" : string.Empty;
 
     /// <summary>Starts a new build of the VM from <see cref="CarryOnPhase"/>, in a window of its own.</summary>
-    public RelayCommand CarryOnCommand => carryOnCommand;
+    public RelayCommand CarryOnCommand => _CarryOnCommand;
 
     /// <summary>Raised once, when the build has ended.</summary>
     public event EventHandler? Ended;
@@ -87,24 +87,24 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <summary>Every phase, each with its number, its goal and how far it has got.</summary>
     public IReadOnlyList<PhaseRowViewModel> Phases
     {
-        get => phaseRows;
-        private set => SetProperty(ref phaseRows, value);
+        get => _PhaseRows;
+        private set => SetProperty(ref _PhaseRows, value);
     }
 
     /// <summary>Where the build is, such as "Phase 7: Install Windows and the tools", or how it ended.</summary>
     public string Status
     {
-        get => status;
-        private set => SetProperty(ref status, value);
+        get => _Status;
+        private set => SetProperty(ref _Status, value);
     }
 
     /// <summary>What to do next after a build that stopped or failed; empty otherwise.</summary>
     public string? Advice
     {
-        get => advice;
+        get => _Advice;
         private set
         {
-            if (SetProperty(ref advice, value))
+            if (SetProperty(ref _Advice, value))
             {
                 OnPropertyChanged(nameof(HasAdvice));
             }
@@ -115,12 +115,12 @@ public sealed class BuildProgressViewModel : ViewModelBase
 
     public bool IsFinished
     {
-        get => isFinished;
+        get => _IsFinished;
         private set
         {
-            if (SetProperty(ref isFinished, value))
+            if (SetProperty(ref _IsFinished, value))
             {
-                cancelCommand.RaiseCanExecuteChanged();
+                _CancelCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -128,20 +128,20 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <summary>True once the build has been asked to stop, until it has.</summary>
     public bool IsStopping
     {
-        get => isStopRequested && !IsFinished;
+        get => _IsStopRequested && !IsFinished;
         private set
         {
-            if (isStopRequested != value)
+            if (_IsStopRequested != value)
             {
-                isStopRequested = value;
+                _IsStopRequested = value;
                 OnPropertyChanged();
-                cancelCommand.RaiseCanExecuteChanged();
+                _CancelCommand.RaiseCanExecuteChanged();
             }
         }
     }
 
     /// <summary>Asks the build to stop at its next safe point (Stop-LazyVMBuild). The process is never killed.</summary>
-    public RelayCommand CancelCommand => cancelCommand;
+    public RelayCommand CancelCommand => _CancelCommand;
 
     /// <summary>
     /// Reads the phases, then the run state every few seconds until the build
@@ -149,12 +149,12 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// </summary>
     public async Task FollowAsync()
     {
-        if (following is not null || IsFinished)
+        if (_Following is not null || IsFinished)
         {
             return;
         }
         using var cancel = new CancellationTokenSource();
-        following = cancel;
+        _Following = cancel;
         try
         {
             await LoadPhasesAsync(cancel.Token);
@@ -166,8 +166,8 @@ public sealed class BuildProgressViewModel : ViewModelBase
                     break;
                 }
                 // Read again sooner when the process ends, but once it has, wait as usual, so a failing read never spins.
-                var wait = Task.Delay(PollInterval, clock, cancel.Token);
-                await (started is null || started.Ended.IsCompleted ? wait : Task.WhenAny(wait, started.Ended));
+                var wait = Task.Delay(PollInterval, _Clock, cancel.Token);
+                await (_Started is null || _Started.Ended.IsCompleted ? wait : Task.WhenAny(wait, _Started.Ended));
                 cancel.Token.ThrowIfCancellationRequested();
             }
         }
@@ -177,23 +177,23 @@ public sealed class BuildProgressViewModel : ViewModelBase
         }
         finally
         {
-            following = null;
+            _Following = null;
         }
     }
 
     /// <summary>Stops reading the run state, as when the window closes. The build carries on.</summary>
-    public void StopFollowing() => following?.Cancel();
+    public void StopFollowing() => _Following?.Cancel();
 
     internal async Task LoadPhasesAsync(CancellationToken cancellationToken)
     {
         try
         {
-            phases = await runner.GetBuildPhasesAsync(cancellationToken);
+            _Phases = await _Runner.GetBuildPhasesAsync(cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // The progress still shows, with the phase numbers alone.
-            phases = [];
+            _Phases = [];
         }
         ShowPhases();
     }
@@ -204,7 +204,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         VMRun? latest;
         try
         {
-            latest = (await runner.GetVMAsync(VMName, cancellationToken))?.Run;
+            latest = (await _Runner.GetVMAsync(VMName, cancellationToken))?.Run;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -212,7 +212,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
             return;
         }
 
-        if (started is not null)
+        if (_Started is not null)
         {
             ShowStartedBuild(latest);
         }
@@ -225,9 +225,9 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <summary>A build the app started: only the run of its own process counts, never the one before it.</summary>
     private void ShowStartedBuild(VMRun? latest)
     {
-        var processEnded = started!.Ended.IsCompleted;
-        var result = processEnded ? started.Ended.Result : null;
-        if (latest?.ProcessId == started.ProcessId)
+        var processEnded = _Started!.Ended.IsCompleted;
+        var result = processEnded ? _Started.Ended.Result : null;
+        if (latest?.ProcessId == _Started.ProcessId)
         {
             Show(latest, result);
         }
@@ -247,11 +247,11 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <summary>A build already running: the one running when the window opened.</summary>
     private void ShowRunningBuild(VMRun? latest)
     {
-        if (followedProcess is null && latest is { IsRunning: true, ProcessId: { } process } && latest.Command is null or VMRun.Build)
+        if (_FollowedProcess is null && latest is { IsRunning: true, ProcessId: { } process } && latest.Command is null or VMRun.Build)
         {
-            followedProcess = process;
+            _FollowedProcess = process;
         }
-        if (followedProcess is null)
+        if (_FollowedProcess is null)
         {
             if (latest is { IsRunning: true, ProcessId: null })
             {
@@ -261,7 +261,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
             Finish($"No build of {VMName} is running.", null);
             return;
         }
-        if (latest is null || latest.ProcessId != followedProcess)
+        if (latest is null || latest.ProcessId != _FollowedProcess)
         {
             Finish($"The build of {VMName} has ended.", null);
             return;
@@ -271,7 +271,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
 
     private void Show(VMRun latest, BuildResult? result)
     {
-        run = latest;
+        _Run = latest;
         IsStopping = latest.StopRequested;
         ShowPhases();
         if (!latest.IsRunning)
@@ -294,7 +294,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         var carryOn = phase switch
         {
             null => string.Empty,
-            { } number when startFromPhase is not null => $" Then choose Carry on from phase {number}.",
+            { } number when _StartFromPhase is not null => $" Then choose Carry on from phase {number}.",
             { } number => $" Then carry on from phase {number}: in PowerShell, run Build-LazyVM -Name {VMName} -FromPhase {number}",
         };
         switch (ended.Status)
@@ -329,7 +329,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         Status = text;
         Advice = next;
         IsFinished = true;
-        CarryOnPhase = startFromPhase is null ? null : carryOnFrom;
+        CarryOnPhase = _StartFromPhase is null ? null : carryOnFrom;
         OnPropertyChanged(nameof(IsStopping));
         ShowPhases();
         Ended?.Invoke(this, EventArgs.Empty);
@@ -338,16 +338,16 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <summary>Starts the build again from <see cref="CarryOnPhase"/>; its progress shows in a new window.</summary>
     internal async Task CarryOnAsync()
     {
-        if (CarryOnPhase is not { } phase || startFromPhase is null || isCarryingOn)
+        if (CarryOnPhase is not { } phase || _StartFromPhase is null || _IsCarryingOn)
         {
             return;
         }
-        isCarryingOn = true;
-        carryOnCommand.RaiseCanExecuteChanged();
+        _IsCarryingOn = true;
+        _CarryOnCommand.RaiseCanExecuteChanged();
         Status = $"Starting the build of {VMName} from phase {phase}";
         try
         {
-            await startFromPhase(phase);
+            await _StartFromPhase(phase);
         }
         catch (Exception exception)
         {
@@ -355,18 +355,18 @@ public sealed class BuildProgressViewModel : ViewModelBase
         }
         finally
         {
-            isCarryingOn = false;
-            carryOnCommand.RaiseCanExecuteChanged();
+            _IsCarryingOn = false;
+            _CarryOnCommand.RaiseCanExecuteChanged();
         }
     }
 
     private async Task CancelAsync()
     {
-        isCancelling = true;
-        cancelCommand.RaiseCanExecuteChanged();
+        _IsCancelling = true;
+        _CancelCommand.RaiseCanExecuteChanged();
         try
         {
-            var stopping = await runner.StopBuildAsync(VMName, CancellationToken.None);
+            var stopping = await _Runner.StopBuildAsync(VMName, CancellationToken.None);
             if (stopping is null)
             {
                 Status = $"No build of {VMName} is running, so there is nothing to stop.";
@@ -380,30 +380,30 @@ public sealed class BuildProgressViewModel : ViewModelBase
         }
         finally
         {
-            isCancelling = false;
-            cancelCommand.RaiseCanExecuteChanged();
+            _IsCancelling = false;
+            _CancelCommand.RaiseCanExecuteChanged();
         }
     }
 
     /// <summary>Only a build that has recorded its process can be asked to stop, and only once.</summary>
     private bool CanCancel() =>
-        !IsFinished && !isCancelling && !isStopRequested && run is { IsRunning: true, IsBuild: true, ProcessId: not null };
+        !IsFinished && !_IsCancelling && !_IsStopRequested && _Run is { IsRunning: true, IsBuild: true, ProcessId: not null };
 
     private void ShowPhases()
     {
-        var current = run?.Phase;
-        var finished = IsFinished && run is not null;
-        Phases = phases.Select(phase => new PhaseRowViewModel(phase, PhaseState(phase.Number))).ToList();
+        var current = _Run?.Phase;
+        var finished = IsFinished && _Run is not null;
+        Phases = _Phases.Select(phase => new PhaseRowViewModel(phase, PhaseState(phase.Number))).ToList();
 
         string PhaseState(int number)
         {
-            if (run is null || current is null)
+            if (_Run is null || current is null)
             {
                 return PhaseRowViewModel.NotStarted;
             }
-            if (finished && run.Status is VMRun.Completed or VMRun.CompletedWithProblems)
+            if (finished && _Run.Status is VMRun.Completed or VMRun.CompletedWithProblems)
             {
-                return run.Status == VMRun.CompletedWithProblems && number == current ? PhaseRowViewModel.DoneWithProblems : PhaseRowViewModel.Done;
+                return _Run.Status == VMRun.CompletedWithProblems && number == current ? PhaseRowViewModel.DoneWithProblems : PhaseRowViewModel.Done;
             }
             if (number < current)
             {
@@ -413,9 +413,9 @@ public sealed class BuildProgressViewModel : ViewModelBase
             {
                 return PhaseRowViewModel.NotStarted;
             }
-            return run.Status switch
+            return _Run.Status switch
             {
-                VMRun.Running when run.StopRequested => PhaseRowViewModel.Stopping,
+                VMRun.Running when _Run.StopRequested => PhaseRowViewModel.Stopping,
                 VMRun.Running => PhaseRowViewModel.InProgress,
                 VMRun.WaitingForRestart => PhaseRowViewModel.WaitingForRestart,
                 VMRun.Stopped => PhaseRowViewModel.Stopped,
@@ -425,7 +425,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     }
 
     private string PhaseText(int number) =>
-        phases.FirstOrDefault(phase => phase.Number == number) is { } phase
+        _Phases.FirstOrDefault(phase => phase.Number == number) is { } phase
             ? $"Phase {number}: {phase.Goal}"
             : $"Phase {number}";
 

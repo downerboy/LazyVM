@@ -13,7 +13,7 @@ namespace LazyVM.UI.Wpf;
 public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock)
 {
     private const string BuildKey = "build";
-    private readonly Dictionary<string, ViewModelBase> open = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ViewModelBase> _Open = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Raised when a build followed in a progress window has ended, so the list can be read again.</summary>
     public event EventHandler? BuildEnded;
@@ -99,7 +99,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     public void OpenProgress(string vmName, StartedBuild? started)
     {
         var key = "progress:" + vmName;
-        if (open.TryGetValue(key, out var existing))
+        if (_Open.TryGetValue(key, out var existing))
         {
             if (started is null || existing is BuildProgressViewModel { IsFinished: false })
             {
@@ -107,7 +107,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
                 return;
             }
             // A new build of the same VM: the window of the last one makes way for it.
-            open.Remove(key);
+            _Open.Remove(key);
             CloseWindow(existing);
         }
         var progress = new BuildProgressViewModel(runner, vmName, started, clock,
@@ -153,7 +153,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
 
     private bool BringToFrontIfOpen(string key)
     {
-        if (!open.TryGetValue(key, out var existing))
+        if (!_Open.TryGetValue(key, out var existing))
         {
             return false;
         }
@@ -163,13 +163,13 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
 
     private void Track(string key, ViewModelBase viewModel, Action? closed = null)
     {
-        open.Add(key, viewModel);
+        _Open.Add(key, viewModel);
         Show(viewModel, () =>
         {
             // Only this window's own entry: a newer window may have taken its key.
-            if (open.TryGetValue(key, out var current) && current == viewModel)
+            if (_Open.TryGetValue(key, out var current) && current == viewModel)
             {
-                open.Remove(key);
+                _Open.Remove(key);
             }
             closed?.Invoke();
         });

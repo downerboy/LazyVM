@@ -1,0 +1,10 @@
+<Project>
+
+  <!-- The build checks the code style rules in .editorconfig, such as the
+       naming of private fields and braces on every block (#449), so a break
+       fails the build here and in CI, not only in the editor. -->
+  <PropertyGroup>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>

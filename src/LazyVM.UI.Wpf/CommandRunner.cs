@@ -18,9 +18,9 @@ namespace LazyVM.UI.Wpf;
 /// </remarks>
 public class CommandRunner : IDisposable
 {
-    private readonly SemaphoreSlim oneAtATime = new(1, 1);
-    private Runspace? runspace;
-    private bool disposed;
+    private readonly SemaphoreSlim _OneAtATime = new(1, 1);
+    private Runspace? _Runspace;
+    private bool _Disposed;
 
     /// <summary>The installed module: %ProgramFiles%\LazyVM\Modules\LazyVM, which only administrators can change.</summary>
     internal static string ModulePath { get; } = System.IO.Path.Combine(
@@ -40,7 +40,7 @@ public class CommandRunner : IDisposable
         System.IO.Path.Combine(System.IO.Path.GetDirectoryName(typeof(PSObject).Assembly.Location)!, "Modules"));
 
     /// <summary>True once PowerShell has started and the module is imported.</summary>
-    internal bool IsStarted => runspace is not null;
+    internal bool IsStarted => _Runspace is not null;
 
     /// <summary>Runs <c>Get-LazyVMDashboard</c>: one entry per VM.</summary>
     public virtual async Task<IReadOnlyList<VMDashboard>> GetDashboardAsync(CancellationToken cancellationToken)
@@ -138,16 +138,16 @@ public class CommandRunner : IDisposable
 
     protected virtual void Dispose(bool disposing)
     {
-        if (disposed)
+        if (_Disposed)
         {
             return;
         }
         if (disposing)
         {
-            runspace?.Dispose();
-            oneAtATime.Dispose();
+            _Runspace?.Dispose();
+            _OneAtATime.Dispose();
         }
-        disposed = true;
+        _Disposed = true;
     }
 
     /// <summary>
@@ -233,14 +233,14 @@ public class CommandRunner : IDisposable
     private async Task<IReadOnlyList<PSObject>> InvokeAsync(
         string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken)
     {
-        ObjectDisposedException.ThrowIf(disposed, this);
-        await oneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
+        ObjectDisposedException.ThrowIf(_Disposed, this);
+        await _OneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // Importing the module takes a while; keep it off the caller's thread.
-            runspace ??= await Task.Run(OpenRunspace, cancellationToken).ConfigureAwait(false);
+            _Runspace ??= await Task.Run(OpenRunspace, cancellationToken).ConfigureAwait(false);
 
-            using var shell = PowerShell.Create(runspace);
+            using var shell = PowerShell.Create(_Runspace);
             shell.AddCommand(command);
             foreach (var (name, value) in parameters)
             {
@@ -264,7 +264,7 @@ public class CommandRunner : IDisposable
         }
         finally
         {
-            oneAtATime.Release();
+            _OneAtATime.Release();
         }
     }
 

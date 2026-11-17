@@ -11,22 +11,22 @@ public sealed class LogViewModel : ViewModelBase
     /// <summary>How many of the newest entries are read: a log grows for as long as the VM lives.</summary>
     public const int Tail = 1000;
 
-    private readonly CommandRunner runner;
-    private readonly RelayCommand reloadCommand;
-    private readonly RelayCommand nextProblemCommand;
-    private readonly RelayCommand previousProblemCommand;
-    private IReadOnlyList<LogEntryRowViewModel> entries = [];
-    private LogEntryRowViewModel? selectedEntry;
-    private string status = string.Empty;
-    private bool isLoading;
+    private readonly CommandRunner _Runner;
+    private readonly RelayCommand _ReloadCommand;
+    private readonly RelayCommand _NextProblemCommand;
+    private readonly RelayCommand _PreviousProblemCommand;
+    private IReadOnlyList<LogEntryRowViewModel> _Entries = [];
+    private LogEntryRowViewModel? _SelectedEntry;
+    private string _Status = string.Empty;
+    private bool _IsLoading;
 
     public LogViewModel(CommandRunner runner, string vmName)
     {
-        this.runner = runner;
+        this._Runner = runner;
         VMName = vmName;
-        reloadCommand = new RelayCommand(() => _ = LoadAsync(), () => !IsLoading);
-        nextProblemCommand = new RelayCommand(() => JumpToProblem(1), () => Entries.Count > 0);
-        previousProblemCommand = new RelayCommand(() => JumpToProblem(-1), () => Entries.Count > 0);
+        _ReloadCommand = new RelayCommand(() => _ = LoadAsync(), () => !IsLoading);
+        _NextProblemCommand = new RelayCommand(() => JumpToProblem(1), () => Entries.Count > 0);
+        _PreviousProblemCommand = new RelayCommand(() => JumpToProblem(-1), () => Entries.Count > 0);
     }
 
     /// <summary>Raised when an entry is selected by a jump, so the view can move keyboard focus to it and Narrator reads it.</summary>
@@ -40,50 +40,50 @@ public sealed class LogViewModel : ViewModelBase
 
     public IReadOnlyList<LogEntryRowViewModel> Entries
     {
-        get => entries;
+        get => _Entries;
         private set
         {
-            if (SetProperty(ref entries, value))
+            if (SetProperty(ref _Entries, value))
             {
-                nextProblemCommand.RaiseCanExecuteChanged();
-                previousProblemCommand.RaiseCanExecuteChanged();
+                _NextProblemCommand.RaiseCanExecuteChanged();
+                _PreviousProblemCommand.RaiseCanExecuteChanged();
             }
         }
     }
 
     public LogEntryRowViewModel? SelectedEntry
     {
-        get => selectedEntry;
-        set => SetProperty(ref selectedEntry, value);
+        get => _SelectedEntry;
+        set => SetProperty(ref _SelectedEntry, value);
     }
 
     /// <summary>How many entries, warnings and errors were read, or why the log could not be.</summary>
     public string Status
     {
-        get => status;
-        private set => SetProperty(ref status, value);
+        get => _Status;
+        private set => SetProperty(ref _Status, value);
     }
 
     public bool IsLoading
     {
-        get => isLoading;
+        get => _IsLoading;
         private set
         {
-            if (SetProperty(ref isLoading, value))
+            if (SetProperty(ref _IsLoading, value))
             {
-                reloadCommand.RaiseCanExecuteChanged();
+                _ReloadCommand.RaiseCanExecuteChanged();
             }
         }
     }
 
     /// <summary>Reads the log again, such as while a build is writing to it.</summary>
-    public RelayCommand ReloadCommand => reloadCommand;
+    public RelayCommand ReloadCommand => _ReloadCommand;
 
     /// <summary>Selects the next warning or error after the selected entry (F8).</summary>
-    public RelayCommand NextProblemCommand => nextProblemCommand;
+    public RelayCommand NextProblemCommand => _NextProblemCommand;
 
     /// <summary>Selects the warning or error before the selected entry (Shift+F8).</summary>
-    public RelayCommand PreviousProblemCommand => previousProblemCommand;
+    public RelayCommand PreviousProblemCommand => _PreviousProblemCommand;
 
     /// <summary>Reads the newest entries and selects the newest one.</summary>
     public async Task LoadAsync()
@@ -96,7 +96,7 @@ public sealed class LogViewModel : ViewModelBase
         Status = "Reading the log";
         try
         {
-            var read = await runner.GetLogAsync(VMName, Tail, CancellationToken.None);
+            var read = await _Runner.GetLogAsync(VMName, Tail, CancellationToken.None);
             Entries = read.Select(entry => new LogEntryRowViewModel(entry)).ToList();
             Status = Summary(Entries);
             SelectedEntry = Entries.Count > 0 ? Entries[^1] : null;
