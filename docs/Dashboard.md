@@ -2,7 +2,7 @@
 
 # LazyVM Dashboard — specification
 
-Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, the Checks and Log windows (delivery plan steps 3 and 4), and the Build window with build progress and Cancel (step 5.6); the rest is not built yet. Updated 2026-11-16 with the decisions for step 5.
+Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, the Checks and Log windows (delivery plan steps 3 and 4), and step 5: the Build window with build progress and Cancel, a build from a chosen phase, and run maintenance now. Steps 6 to 8 are not built yet. Updated 2026-11-17 when step 5 was finished.
 
 ## 1. Purpose
 
@@ -75,7 +75,9 @@ Not yet available: the name of the config template a VM was first created from. 
 - **Refresh.** On open, on F5 or a Refresh button, and after any action. No live polling in this step; a running build updates its own progress.
 - **Builds.** Each build runs in its own elevated `pwsh` process, started with `-File` and a script in the module folder (`Scripts\Start-AppBuild.ps1`), its arguments passed as a list, never as script text. pwsh 7.6 or later comes from `%ProgramFiles%\PowerShell\7`, or else from its Microsoft Store package in `%ProgramFiles%\WindowsApps`, never from PATH, and the script loads modules only from folders administrators control. Its output is not redirected, so a closed window cannot stall the build; the script writes how the build ended to a result file, which says why when a build ends before it records a run, such as when the Windows ISO is missing. Closing or crashing the window never stops a build. The window shows progress from the run state the module records (#425), not by reading the log's text, so it also follows a build the app did not start, such as one carrying on after a host restart. Other actions run in-process.
 - **Cancel.** Asks the build to stop (#426). It stops at the next safe point: between phases, between steps, or in a wait. The failed-build clean-up runs, so the answer-file disc is removed. Work already started inside the VM, such as an install, finishes by itself. The window says so. `Stop-LazyVMBuild` does this, and the dashboard's `Run.StopRequested` shows the build is stopping. The process is never killed, since that would skip the clean-up.
-- **Run maintenance now** starts the VM's maintenance task, so it runs exactly as the nightly run does.
+- **Run from phase N** (#428). The VM window lists the phases, each as its number and goal, and **Build from this phase** builds the VM from the one chosen, with its progress in a window of its own. After a build that failed, stopped or ended unexpectedly, the phase it was in is chosen, and the window says why. That build's progress window offers **Carry on from phase N** too. Both say to let any install still running inside the VM finish first.
+- **Run maintenance now** starts the VM's maintenance task, so it runs exactly as the nightly run does. `Start-LazyVMMaintenance` does this (#428). It starts nothing while a build, maintenance or rebuild of the VM is running, or when maintenance is not scheduled, and says why.
+- **Busy.** While a build, maintenance or rebuild of the VM is running (the dashboard's `Run`), Build from this phase and Run maintenance now are disabled, and the VM window says why in text of its own, since a disabled button cannot take focus for Narrator to read it. Checks, Log and Build progress stay available. The list is read again after a run starts, so the buttons follow; the module's run lock and `Start-LazyVMMaintenance`'s own checks still refuse a second run started in the moment before that.
 - **Checks.** On open, after the list, the app runs `Test-LazyVM -HostOnly`, or plain `Test-LazyVM` while there are no VMs, so the note on making the first one shows. The Checks window opens by itself only when there are no VMs, a check failed, or the checks could not run. A **Checks** button in the main window checks the host, and one in each VM window checks that VM. Each row reads as status, check, what was found, then the fix; Ctrl+C copies the fix.
 - **Log.** A **Log** button in each VM window shows the last 1000 entries of its log (`Get-LazyVMLog -Tail 1000`), oldest first, with the newest selected. Each entry reads as level, time, message. F8 and Shift+F8 go to the next and previous warning or error. The text is shown as plain text only, since the log is in the data folder.
 - Calls run off the UI thread and can be cancelled. A failure on one VM shows on that VM's row and does not blank the list.
@@ -171,14 +173,14 @@ Each screen needs its command first. Where a command is missing (for example the
 2. `Get-LazyVMDashboard` in the module, with tests, help, diagram and guide. Done.
 3. `LazyVM.UI.Wpf`: the command-runner class, theme dictionaries, the main list and the VM window (read-only), view-model tests first. Done.
 4. First-run checks and the log viewer. Done.
-5. Build, build progress and cancel, with each build in its own `pwsh` process; run from phase N; run maintenance now. Module pull requests first, then the app:
+5. Build, build progress and cancel, with each build in its own `pwsh` process; run from phase N; run maintenance now. Module pull requests first, then the app. Done:
    1. Each phase's goal, and `Get-LazyVMBuildPhase` (#422).
    2. `Get-LazyVMConfigTemplate`, the config templates to choose from (#423).
    3. `Build-LazyVM -UserName` for a new VM's account (#424).
    4. The run state: a running build or maintenance recorded, reported by `Get-LazyVMDashboard`, and a second build refused (#425).
    5. A clean stop of a running build (#426).
    6. The app: the Build window, progress and Cancel (#427). Done.
-   7. The app: run from phase N, and run maintenance now (#428).
+   7. The app: run from phase N, and run maintenance now (#428). Done.
 6. Dispose and restore.
 7. Recovery keys and the password.
 8. Security findings: view, approve, revoke.

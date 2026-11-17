@@ -8,11 +8,12 @@ public sealed class VMViewModelTests : IDisposable
 
     private readonly CultureScope culture = new("en-GB");
     private readonly FakeCommandRunner runner = new();
+    private readonly FakeBuildLauncher launcher = new();
     private readonly FakeToolWindows tools;
 
     public VMViewModelTests()
     {
-        tools = new FakeToolWindows(runner);
+        tools = new FakeToolWindows(runner, launcher);
     }
 
     public void Dispose() => culture.Dispose();
@@ -218,6 +219,181 @@ public sealed class VMViewModelTests : IDisposable
         var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(tools.Shown));
         Assert.Equal("DevEnv", progress.VMName);
         progress.StopFollowing();
+    }
+
+    private static VMRun LastBuild(string status, int phase) => new()
+    {
+        Command = VMRun.Build, Status = status, ProcessId = 9, Phase = phase, UnfinishedPhase = status == VMRun.Completed ? null : phase,
+    };
+
+    private static VMRun RunningNow(string command) => new() { Command = command, Status = VMRun.Running, ProcessId = 9, Phase = 7 };
+
+    private async Task<VMViewModel> Loaded(VMDashboard entry)
+    {
+        var vm = Open(entry);
+        await vm.LoadAsync();
+        return vm;
+    }
+
+    [Fact]
+    public async Task Load_ListsThePhasesByNumberAndGoal_AndChoosesTheFirst()
+    {
+        var vm = await Loaded(Sample.VM());
+
+        Assert.Equal([0, 1, 7, 8], vm.Phases.Select(phase => phase.Number));
+        Assert.Equal("Phase 7: Install Windows and the tools", vm.Phases[2].Text);
+        Assert.Equal(0, vm.SelectedPhase?.Number);
+        Assert.False(vm.HasRunNote);
+        Assert.True(vm.BuildFromPhaseCommand.CanExecute(null));
+    }
+
+    [Theory]
+    [InlineData(VMRun.Failed, "failed")]
+    [InlineData(VMRun.Stopped, "stopped")]
+    [InlineData(VMRun.EndedUnexpectedly, "ended unexpectedly")]
+    public async Task AfterABuildThatDidNotFinish_ItsPhaseIsChosen_AndTheNoteSaysWhy(string status, string said)
+    {
+        var vm = await Loaded(Sample.VM() with { LastBuild = LastBuild(status, 7) });
+
+        Assert.Equal(7, vm.SelectedPhase?.Number);
+        Assert.Equal($"The last build {said} in phase 7, so phase 7 is chosen. Let any install still running inside the VM finish first.", vm.RunNote);
+    }
+
+    [Fact]
+    public async Task AfterABuildThatCompleted_TheFirstPhaseIsChosen()
+    {
+        var vm = await Loaded(Sample.VM() with { LastBuild = LastBuild(VMRun.Completed, 8) });
+
+        Assert.Equal(0, vm.SelectedPhase?.Number);
+    }
+
+    [Fact]
+    public async Task Load_WhenThePhasesCannotBeRead_SaysWhy_AndOffersNoBuild()
+    {
+        runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
+
+        var vm = await Loaded(Sample.VM());
+
+        Assert.Equal("The build phases could not be read, so a build cannot start here: The LazyVM module could not be loaded.", vm.Status);
+        Assert.False(vm.BuildFromPhaseCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task BuildFromPhase_StartsTheBuildFromTheChosenPhase_AndShowsItsProgress()
+    {
+        var vm = await Loaded(Sample.VM("DevEnv"));
+        vm.SelectedPhase = vm.Phases.Single(phase => phase.Number == 7);
+        runner.ReturnsRun(null, "DevEnv");
+
+        await vm.BuildFromPhaseAsync();
+
+        Assert.Equal(new BuildRequest("DevEnv", null, null, 7), Assert.Single(launcher.Started).Request);
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(tools.Shown));
+        Assert.Equal("DevEnv", progress.VMName);
+        Assert.Equal("The build of DevEnv has started from phase 7. Its progress is in its own window.", vm.Status);
+        progress.StopFollowing();
+    }
+
+    [Fact]
+    public async Task BuildFromPhase_WhenItCannotStart_SaysWhy()
+    {
+        launcher.Fails = new InvalidOperationException("PowerShell 7.6 or later was not found.");
+        var vm = await Loaded(Sample.VM());
+
+        await vm.BuildFromPhaseAsync();
+
+        Assert.Equal("The build could not start: PowerShell 7.6 or later was not found.", vm.Status);
+        Assert.True(vm.BuildFromPhaseCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task RunMaintenance_StartsTheVMsMaintenance_AndSaysSo()
+    {
+        var vm = await Loaded(Sample.VM("DevEnv"));
+
+        await vm.RunMaintenanceAsync();
+
+        Assert.Equal(["DevEnv"], runner.MaintenanceCalls);
+        Assert.StartsWith("The maintenance of DevEnv has started, as its nightly run does.", vm.Status);
+    }
+
+    [Fact]
+    public async Task RunMaintenance_WhenTheModuleStartsNothing_SaysWhy()
+    {
+        runner.MaintenanceFails = new InvalidOperationException("The maintenance of DevBox is running already, so it was not started again.");
+        var vm = await Loaded(Sample.VM());
+
+        await vm.RunMaintenanceAsync();
+
+        Assert.Equal("Maintenance did not start: The maintenance of DevBox is running already, so it was not started again.", vm.Status);
+    }
+
+    [Theory]
+    [InlineData(VMRun.Build, "A build of DevBox is running now.")]
+    [InlineData("Maintenance", "Maintenance of DevBox is running now.")]
+    [InlineData("Rebuild", "A rebuild of DevBox is running now.")]
+    public async Task WhileARunIsGoing_NeitherCanStart_AndTheNoteSaysWhy(string command, string said)
+    {
+        var vm = await Loaded(Sample.VM() with { Run = RunningNow(command) });
+
+        Assert.False(vm.BuildFromPhaseCommand.CanExecute(null));
+        Assert.False(vm.MaintenanceCommand.CanExecute(null));
+        Assert.StartsWith(said, vm.RunNote);
+        Assert.True(vm.ChecksCommand.CanExecute(null));
+        Assert.True(vm.LogCommand.CanExecute(null));
+
+        await vm.RunMaintenanceAsync();
+        await vm.BuildFromPhaseAsync();
+        Assert.Empty(runner.MaintenanceCalls);
+        Assert.Empty(launcher.Started);
+    }
+
+    [Fact]
+    public async Task WhenARunStartsOrEnds_TheButtonsFollow()
+    {
+        var vm = await Loaded(Sample.VM());
+        var raised = 0;
+        vm.MaintenanceCommand.CanExecuteChanged += (_, _) => raised++;
+
+        vm.Update(Sample.VM() with { Run = RunningNow("Maintenance") });
+
+        Assert.False(vm.MaintenanceCommand.CanExecute(null));
+        Assert.True(raised > 0);
+
+        vm.Update(Sample.VM());
+
+        Assert.True(vm.MaintenanceCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task WithoutAMaintenanceTask_MaintenanceCannotStart_AndTheNoteSaysHowToScheduleIt()
+    {
+        var vm = await Loaded(Sample.VM() with { MaintenanceTask = "Not registered" });
+
+        Assert.False(vm.MaintenanceCommand.CanExecute(null));
+        Assert.True(vm.BuildFromPhaseCommand.CanExecute(null));
+        Assert.Equal("Maintenance of DevBox is not scheduled, so it cannot run now. In PowerShell, run Register-LazyVMMaintenance -Name DevBox", vm.RunNote);
+    }
+
+    [Fact]
+    public async Task Update_AfterABuildFails_ChoosesThePhaseItFailedIn()
+    {
+        var vm = await Loaded(Sample.VM());
+
+        vm.Update(Sample.VM() with { LastBuild = LastBuild(VMRun.Failed, 8) });
+
+        Assert.Equal(8, vm.SelectedPhase?.Number);
+    }
+
+    [Fact]
+    public async Task Update_KeepsAPhaseChosenByHand_WhenTheLastBuildIsTheSame()
+    {
+        var vm = await Loaded(Sample.VM() with { LastBuild = LastBuild(VMRun.Failed, 7) });
+        vm.SelectedPhase = vm.Phases[1];
+
+        vm.Update(Sample.VM() with { LastBuild = LastBuild(VMRun.Failed, 7) });
+
+        Assert.Equal(1, vm.SelectedPhase?.Number);
     }
 
     [Theory]

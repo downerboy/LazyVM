@@ -17,6 +17,8 @@ public sealed class BuildProgressViewModel : ViewModelBase
     private readonly StartedBuild? started;
     private readonly TimeProvider clock;
     private readonly RelayCommand cancelCommand;
+    private readonly Func<int, Task>? startFromPhase;
+    private readonly RelayCommand carryOnCommand;
     private CancellationTokenSource? following;
     private IReadOnlyList<BuildPhase> phases = [];
     private IReadOnlyList<PhaseRowViewModel> phaseRows = [];
@@ -24,22 +26,54 @@ public sealed class BuildProgressViewModel : ViewModelBase
     private int? followedProcess;
     private string status;
     private string? advice;
+    private int? carryOnPhase;
     private bool isFinished;
     private bool isStopRequested;
     private bool isCancelling;
+    private bool isCarryingOn;
 
     /// <param name="vmName">The VM whose build is followed.</param>
     /// <param name="started">The build process the app started; empty to follow the VM's build that is running now.</param>
-    public BuildProgressViewModel(CommandRunner runner, string vmName, StartedBuild? started, TimeProvider clock)
+    /// <param name="startFromPhase">Starts a new build of the VM from the phase it is given, and shows it; empty offers no Carry on.</param>
+    public BuildProgressViewModel(CommandRunner runner, string vmName, StartedBuild? started, TimeProvider clock, Func<int, Task>? startFromPhase = null)
     {
         this.runner = runner;
         this.started = started;
         this.clock = clock;
+        this.startFromPhase = startFromPhase;
         VMName = vmName;
         followedProcess = started?.ProcessId;
         status = $"Starting the build of {vmName}";
         cancelCommand = new RelayCommand(() => _ = CancelAsync(), CanCancel);
+        carryOnCommand = new RelayCommand(() => _ = CarryOnAsync(), () => CarryOnPhase is not null && !isCarryingOn);
     }
+
+    /// <summary>
+    /// The phase a build that stopped, failed or ended unexpectedly can carry
+    /// on from; empty while the build runs, after one that completed, and
+    /// when the phase is not known.
+    /// </summary>
+    public int? CarryOnPhase
+    {
+        get => carryOnPhase;
+        private set
+        {
+            if (SetProperty(ref carryOnPhase, value))
+            {
+                OnPropertyChanged(nameof(CanCarryOn));
+                OnPropertyChanged(nameof(CarryOnText));
+                carryOnCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool CanCarryOn => CarryOnPhase is not null;
+
+    /// <summary>The button's text, such as "Carry on from phase 7".</summary>
+    public string CarryOnText => CarryOnPhase is { } phase ? $"Carry on from phase {phase}" : string.Empty;
+
+    /// <summary>Starts a new build of the VM from <see cref="CarryOnPhase"/>, in a window of its own.</summary>
+    public RelayCommand CarryOnCommand => carryOnCommand;
 
     /// <summary>Raised once, when the build has ended.</summary>
     public event EventHandler? Ended;
@@ -257,9 +291,12 @@ public sealed class BuildProgressViewModel : ViewModelBase
     private void Ending(VMRun ended, BuildResult? result)
     {
         var phase = ended.UnfinishedPhase ?? ended.Phase;
-        var carryOn = phase is { } number
-            ? $" Then carry on from phase {number}: in PowerShell, run Build-LazyVM -Name {VMName} -FromPhase {number}"
-            : string.Empty;
+        var carryOn = phase switch
+        {
+            null => string.Empty,
+            { } number when startFromPhase is not null => $" Then choose Carry on from phase {number}.",
+            { } number => $" Then carry on from phase {number}: in PowerShell, run Build-LazyVM -Name {VMName} -FromPhase {number}",
+        };
         switch (ended.Status)
         {
             case VMRun.Completed:
@@ -273,27 +310,54 @@ public sealed class BuildProgressViewModel : ViewModelBase
                 break;
             case VMRun.Stopped:
                 Finish($"The build of {VMName} stopped{InPhase(phase)}, as asked.",
-                    "Let any install still running inside the VM finish first, so two installers do not run at once." + carryOn);
+                    "Let any install still running inside the VM finish first, so two installers do not run at once." + carryOn, phase);
                 break;
             case VMRun.EndedUnexpectedly:
                 Finish($"The build of {VMName} ended unexpectedly{InPhase(phase)}: its process was closed, crashed or lost power.",
-                    "The log says how far it got." + carryOn);
+                    "The log says how far it got." + carryOn, phase);
                 break;
             default:
                 var reason = result?.Message is { Length: > 0 } message ? $": {message}" : ".";
-                Finish($"The build of {VMName} failed{InPhase(phase)}{reason}", "The log says why. Fix the problem first." + carryOn);
+                Finish($"The build of {VMName} failed{InPhase(phase)}{reason}", "The log says why. Fix the problem first." + carryOn, phase);
                 break;
         }
     }
 
-    private void Finish(string text, string? next)
+    /// <param name="carryOnFrom">The phase the build can carry on from, for one that stopped or failed.</param>
+    private void Finish(string text, string? next, int? carryOnFrom = null)
     {
         Status = text;
         Advice = next;
         IsFinished = true;
+        CarryOnPhase = startFromPhase is null ? null : carryOnFrom;
         OnPropertyChanged(nameof(IsStopping));
         ShowPhases();
         Ended?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Starts the build again from <see cref="CarryOnPhase"/>; its progress shows in a new window.</summary>
+    internal async Task CarryOnAsync()
+    {
+        if (CarryOnPhase is not { } phase || startFromPhase is null || isCarryingOn)
+        {
+            return;
+        }
+        isCarryingOn = true;
+        carryOnCommand.RaiseCanExecuteChanged();
+        Status = $"Starting the build of {VMName} from phase {phase}";
+        try
+        {
+            await startFromPhase(phase);
+        }
+        catch (Exception exception)
+        {
+            Status = "The build could not start: " + exception.Message;
+        }
+        finally
+        {
+            isCarryingOn = false;
+            carryOnCommand.RaiseCanExecuteChanged();
+        }
     }
 
     private async Task CancelAsync()

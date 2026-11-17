@@ -142,6 +142,21 @@ public sealed class BuildLauncherTests
 
         Assert.DoesNotContain("-ConfigTemplate", arguments);
         Assert.DoesNotContain("-UserName", arguments);
+        Assert.DoesNotContain("-FromPhase", arguments);
+    }
+
+    [Theory]
+    [InlineData(0, "0")]
+    [InlineData(7, "7")]
+    public void Arguments_GiveThePhaseToStartAt_AsItsOwnItem(int phase, string expected)
+    {
+        using var culture = new CultureScope("ar-SA");
+
+        var arguments = BuildLauncher.Arguments(new BuildRequest("DevBox", null, null, phase), "script.ps1", "result.json");
+
+        Assert.Equal(
+            ["-NoProfile", "-NonInteractive", "-File", "script.ps1", "-Name", "DevBox", "-FromPhase", expected, "-ResultPath", "result.json"],
+            arguments);
     }
 
     private static string Arch => System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();

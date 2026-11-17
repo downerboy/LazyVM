@@ -3,10 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:LazyVM.UI.Wpf"
         xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:VMViewModel}"
-        Title="{Binding Title}" Width="760" Height="820" MinWidth="320"
+        Title="{Binding Title}" Width="760" Height="900" MinWidth="320"
         Style="{StaticResource LvWindow}">
     <Window.CommandBindings>
         <CommandBinding Command="Close" Executed="CloseWindow" />
@@ -32,6 +33,43 @@
                     <TextBlock Text="{Binding State}" Style="{StaticResource LvSubtitle}" />
                 </StackPanel>
             </DockPanel>
+        </Border>
+
+        <!-- Starting a build or maintenance. While a run of the VM is going, both buttons are disabled and the note says why. -->
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvPanel}" Margin="24,24,24,0">
+            <StackPanel>
+                <TextBlock Text="Build and maintain" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
+                <Label Content="_Phase to build from" Target="{Binding ElementName=PhaseList}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
+                <TextBlock Text="Phases before it are skipped. After a build that failed or stopped, choose the phase it was in." Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                <!-- A list rather than a drop-down, as in the Build window, so the arrow keys move through the phases and Narrator reads each one. -->
+                <ListBox x:Name="PhaseList" ItemsSource="{Binding Phases}" SelectedItem="{Binding SelectedPhase}"
+                         DisplayMemberPath="Text" Margin="0,4,0,8" MaxHeight="190"
+                         AutomationProperties.Name="Phase to build from"
+                         AutomationProperties.HelpText="Phases before it are skipped. After a build that failed or stopped, choose the phase it was in."
+                         BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
+                         Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+                <WrapPanel>
+                    <Button Content="_Build from this phase" Command="{Binding BuildFromPhaseCommand}" Margin="0,0,8,8"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Build {0} from the chosen phase'}"
+                            AutomationProperties.HelpText="Starts the build in its own process, and shows its progress. Closing the app does not stop it." />
+                    <Button Content="Run _maintenance now" Command="{Binding MaintenanceCommand}" Margin="0,0,8,8"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Run the maintenance of {0} now'}"
+                            AutomationProperties.HelpText="Starts the VM's maintenance task, so maintenance runs as its nightly run does." />
+                </WrapPanel>
+                <TextBlock Text="{Binding RunNote}" TextWrapping="Wrap"
+                           Visibility="{Binding HasRunNote, Converter={StaticResource VisibleWhenTrue}}"
+                           AutomationProperties.Name="{Binding RunNote}" local:LiveRegion.Announce="True" />
+                <TextBlock Text="{Binding Status}" Style="{StaticResource LvStatus}" Margin="0,8,0,0"
+                           Visibility="{Binding HasStatus, Converter={StaticResource VisibleWhenTrue}}"
+                           AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+            </StackPanel>
         </Border>
 
         <Border Style="{StaticResource LvPanel}" Margin="24">

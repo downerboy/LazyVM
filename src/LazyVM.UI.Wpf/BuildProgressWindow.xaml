@@ -36,6 +36,11 @@
                 <TextBlock Text="{Binding Advice}" TextWrapping="Wrap" Margin="0,8,0,0"
                            Visibility="{Binding HasAdvice, Converter={StaticResource VisibleWhenTrue}}"
                            AutomationProperties.Name="{Binding Advice}" local:LiveRegion.Announce="True" />
+                <!-- Only after a build that stopped, failed or ended unexpectedly: a new build from the phase it was in. -->
+                <Button Content="{Binding CarryOnText}" Command="{Binding CarryOnCommand}" HorizontalAlignment="Left" Margin="0,12,0,0"
+                        Visibility="{Binding CanCarryOn, Converter={StaticResource VisibleWhenTrue}}"
+                        AutomationProperties.Name="{Binding CarryOnText}"
+                        AutomationProperties.HelpText="Starts the build again from this phase, in a new progress window. Let any install still running inside the VM finish first." />
                 <TextBlock Text="Closing this window does not stop the build." Style="{StaticResource LvMuted}" Margin="0,8,0,0" />
             </StackPanel>
         </Border>

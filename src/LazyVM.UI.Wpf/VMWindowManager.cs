@@ -18,6 +18,7 @@ public class VMWindowManager(ToolWindows tools)
         var viewModel = new VMViewModel(entry, tools);
         open.Add(entry.Name, viewModel);
         Show(viewModel, () => open.Remove(entry.Name));
+        _ = viewModel.LoadAsync();
     }
 
     /// <summary>Shows what a refresh read in the windows that are open.</summary>

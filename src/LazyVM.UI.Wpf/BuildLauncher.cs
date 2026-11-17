@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 
@@ -116,6 +117,10 @@ public class BuildLauncher
         if (!string.IsNullOrEmpty(request.UserName))
         {
             arguments.AddRange(["-UserName", request.UserName]);
+        }
+        if (request.FromPhase is { } phase)
+        {
+            arguments.AddRange(["-FromPhase", phase.ToString(CultureInfo.InvariantCulture)]);
         }
         arguments.AddRange(["-ResultPath", resultPath]);
         return arguments;

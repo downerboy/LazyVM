@@ -95,7 +95,8 @@ internal sealed class FakeCommandRunner : CommandRunner
         return (await vms.Next(cancellationToken)).FirstOrDefault();
     }
 
-    public override Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken) => Task.FromResult(Phases);
+    public override Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken) =>
+        PhasesFail is { } failure ? Task.FromException<IReadOnlyList<BuildPhase>>(failure) : Task.FromResult(Phases);
 
     public override Task<IReadOnlyList<ConfigTemplate>> GetConfigTemplatesAsync(CancellationToken cancellationToken) =>
         TemplatesFail is { } failure ? Task.FromException<IReadOnlyList<ConfigTemplate>>(failure) : Task.FromResult(Templates);
@@ -104,6 +105,19 @@ internal sealed class FakeCommandRunner : CommandRunner
     {
         StopCalls.Add(name);
         return (await stops.Next(cancellationToken)).FirstOrDefault();
+    }
+
+    public List<string> MaintenanceCalls { get; } = [];
+
+    /// <summary>Start-LazyVMMaintenance fails with this, as the module does when it starts nothing.</summary>
+    public Exception? MaintenanceFails { get; set; }
+
+    public Exception? PhasesFail { get; set; }
+
+    public override Task StartMaintenanceAsync(string name, CancellationToken cancellationToken)
+    {
+        MaintenanceCalls.Add(name);
+        return MaintenanceFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
     }
 
     public override Task<string> GetModuleFolderAsync(CancellationToken cancellationToken) =>
