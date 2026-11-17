@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.22.0](https://github.com/downerboy/LazyVM/compare/v6.21.0...v6.22.0) (2026-11-17)
+
+
+### Features
+
+* **gui:** run a build from phase N, and run maintenance now ([#443](https://github.com/downerboy/LazyVM/issues/443)) ([2504ce3](https://github.com/downerboy/LazyVM/commit/2504ce3fea39fa77f70b0bf8ef370927ddaf1b56))
+
 ## [6.21.0](https://github.com/downerboy/LazyVM/compare/v6.20.0...v6.21.0) (2026-11-17)
 
 
