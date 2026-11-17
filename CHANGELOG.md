@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.23.0](https://github.com/downerboy/LazyVM/compare/v6.22.0...v6.23.0) (2026-11-17)
+
+
+### Features
+
+* report a VM's maximum memory, and show memory in use of the maximum ([#445](https://github.com/downerboy/LazyVM/issues/445)) ([c80b600](https://github.com/downerboy/LazyVM/commit/c80b60013e49b3d5c3f8e8317aca0d7f0bfba013))
+
 ## [6.22.0](https://github.com/downerboy/LazyVM/compare/v6.21.0...v6.22.0) (2026-11-17)
 
 
