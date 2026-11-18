@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.27.0](https://github.com/downerboy/LazyVM/compare/v6.26.0...v6.27.0) (2026-11-18)
+
+
+### Features
+
+* **gui:** delete a VM, after showing what goes ([#463](https://github.com/downerboy/LazyVM/issues/463)) ([634afda](https://github.com/downerboy/LazyVM/commit/634afdad54f57f4a2ae8bb36f089b0076aaf54cf))
+
 ## [6.26.0](https://github.com/downerboy/LazyVM/compare/v6.25.0...v6.26.0) (2026-11-18)
 
 
