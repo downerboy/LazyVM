@@ -334,6 +334,37 @@ internal sealed class FakeCommandRunner : CommandRunner
             : Task.FromResult(new RecoveryKeyExport(path, ExportWarnings));
     }
 
+    /// <summary>The user name Get-LazyVMCredential gives; empty for a VM with no credential stored, which fails as the module does.</summary>
+    public string? UserName { get; set; } = "devadmin";
+
+    /// <summary>The password Get-LazyVMCredential -AsPlainText gives.</summary>
+    public string Password { get; set; } = "Correct-Horse-9";
+
+    /// <summary>Get-LazyVMCredential -AsPlainText fails with this.</summary>
+    public Exception? PasswordFails
+    {
+        get; set;
+    }
+
+    public List<string> UserNameCalls { get; } = [];
+
+    public List<string> PasswordCalls { get; } = [];
+
+    public override Task<string> GetUserNameAsync(string name, CancellationToken cancellationToken)
+    {
+        UserNameCalls.Add(name);
+        return UserName is { } userName
+            ? Task.FromResult(userName)
+            : Task.FromException<string>(new InvalidOperationException(
+                $"No credential is stored for '{name}' yet. Build-LazyVM creates one, or store one with: Set-LazyVMCredential -Name {name}"));
+    }
+
+    public override Task<string> GetPasswordAsync(string name, CancellationToken cancellationToken)
+    {
+        PasswordCalls.Add(name);
+        return PasswordFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(Password);
+    }
+
     public override Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
     {
         return ModuleFolderFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(@"C:\Program Files\LazyVM\Modules\LazyVM\6.20.0");
@@ -396,7 +427,9 @@ internal sealed class FakeBuildLauncher : BuildLauncher
 }
 
 /// <summary>Records the windows shown, brought to the front and closed, without making windows.</summary>
-internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launcher = null) : ToolWindows(runner, launcher ?? new FakeBuildLauncher(), new FixedClock(DateTimeOffset.UnixEpoch))
+internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launcher = null, FakeSecretClipboard? clipboard = null)
+    : ToolWindows(runner, launcher ?? new FakeBuildLauncher(), new FixedClock(DateTimeOffset.UnixEpoch),
+        clipboard ?? new FakeSecretClipboard(new ManualClock(DateTimeOffset.UnixEpoch)))
 {
     private readonly Dictionary<ViewModelBase, Action> _Closers = [];
 
@@ -528,6 +561,113 @@ internal sealed class FakeVMWindowManager(ToolWindows tools) : VMWindowManager(t
     protected override void BringToFront(VMViewModel viewModel)
     {
         BroughtToFront.Add(viewModel);
+    }
+}
+
+/// <summary>A clock that moves only when a test says, firing the timers that are due then.</summary>
+internal sealed class ManualClock(DateTimeOffset start) : TimeProvider
+{
+    private readonly List<ManualTimer> _Timers = [];
+    private DateTimeOffset _Now = start;
+
+    public override DateTimeOffset GetUtcNow()
+    {
+        return _Now.ToUniversalTime();
+    }
+
+    public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        var timer = new ManualTimer(this, callback, state);
+        timer.Change(dueTime, period);
+        _Timers.Add(timer);
+        return timer;
+    }
+
+    /// <summary>Moves the clock on by <paramref name="by"/>, firing each timer that falls due.</summary>
+    public void Advance(TimeSpan by)
+    {
+        _Now += by;
+        foreach (var timer in _Timers.Where(timer => timer.Due is { } due && due <= _Now).ToList())
+        {
+            timer.Fire();
+        }
+    }
+
+    private sealed class ManualTimer(ManualClock clock, TimerCallback callback, object? state) : ITimer
+    {
+        public DateTimeOffset? Due
+        {
+            get; private set;
+        }
+
+        public bool Change(TimeSpan dueTime, TimeSpan period)
+        {
+            Due = dueTime == Timeout.InfiniteTimeSpan ? null : clock._Now + dueTime;
+            return true;
+        }
+
+        public void Fire()
+        {
+            Due = null;
+            callback(state);
+        }
+
+        public void Dispose()
+        {
+            Due = null;
+            clock._Timers.Remove(this);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
+}
+
+/// <summary>A clipboard in memory: what Windows' clipboard would hold, and every secret put on it.</summary>
+internal sealed class FakeSecretClipboard(TimeProvider clock) : SecretClipboard(clock)
+{
+    /// <summary>What the clipboard holds now; empty when it is clear.</summary>
+    public string? Holding
+    {
+        get; set;
+    }
+
+    public List<string> Written { get; } = [];
+
+    /// <summary>Putting a secret on the clipboard fails with this.</summary>
+    public Exception? WriteFails
+    {
+        get; set;
+    }
+
+    protected override void Write(string secret)
+    {
+        if (WriteFails is { } failure)
+        {
+            throw failure;
+        }
+        Written.Add(secret);
+        Holding = secret;
+    }
+
+    protected override bool Holds(string secret)
+    {
+        return Holding == secret;
+    }
+
+    protected override void Erase()
+    {
+        Holding = null;
+    }
+
+    protected override void OnUIThread(Action action)
+    {
+        action();
     }
 }
 

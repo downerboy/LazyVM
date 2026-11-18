@@ -12,9 +12,11 @@ namespace LazyVM.UI.Wpf;
 /// deletes a VM, once its delete dialog has had a Yes. One Restore window
 /// per VM lists its restore points, and returns the VM to one after asking.
 /// One Recovery keys window per VM lists its BitLocker recovery keys, shows
-/// a password only when asked, and exports the keys to a file.
+/// a password only when asked, and exports the keys to a file. One Password
+/// window per VM shows the account LazyVM signs in with, its password hidden
+/// until asked for, and copies it to the clipboard for three minutes.
 /// </summary>
-public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock)
+public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
 {
     private const string _BUILD_KEY = "build";
     private readonly Dictionary<string, ViewModelBase> _Open = new(StringComparer.OrdinalIgnoreCase);
@@ -218,6 +220,36 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
         return dialog.ShowDialog() == true;
     }
 
+    /// <summary>The clipboard a copied password goes on, for the whole app: the app clears it when it closes.</summary>
+    public SecretClipboard Clipboard { get; } = clipboard ?? new SecretClipboard(clock);
+
+    /// <summary>The user name LazyVM signs in to the VM with. Throws with the module's reason, such as when none is stored.</summary>
+    public virtual Task<string> GetUserNameAsync(string vmName)
+    {
+        return runner.GetUserNameAsync(vmName, CancellationToken.None);
+    }
+
+    /// <summary>The VM's password, read now, to be shown or copied.</summary>
+    public virtual Task<string> GetPasswordAsync(string vmName)
+    {
+        return runner.GetPasswordAsync(vmName, CancellationToken.None);
+    }
+
+    /// <summary>Shows the account LazyVM signs in to the VM with, or brings its open window to the front. Closing the window forgets the password.</summary>
+    public PasswordViewModel OpenPassword(VMDashboard entry)
+    {
+        var key = "password:" + entry.Name;
+        if (_Open.TryGetValue(key, out var existing) && existing is PasswordViewModel open)
+        {
+            BringToFront(open);
+            return open;
+        }
+        var password = new PasswordViewModel(entry, this);
+        Track(key, password, password.Forget);
+        _ = password.LoadAsync();
+        return password;
+    }
+
     /// <summary>Shows the checks of the VM <paramref name="vmName"/>, or of the host, and runs them.</summary>
     public void OpenChecks(string? vmName, bool hostOnly)
     {
@@ -301,6 +333,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
             BuildProgressViewModel => new BuildProgressWindow(),
             RestoreViewModel => new RestoreWindow(),
             RecoveryKeysViewModel => new RecoveryKeysWindow(),
+            PasswordViewModel => new PasswordWindow(),
             _ => throw new ArgumentException($"There is no window for {viewModel.GetType().Name}.", nameof(viewModel)),
         };
         window.DataContext = viewModel;

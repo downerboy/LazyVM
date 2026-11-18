@@ -194,6 +194,42 @@ public class CommandRunner : IDisposable
         return new RecoveryKeyExport(written, warnings);
     }
 
+    /// <summary>
+    /// Runs <c>Get-LazyVMCredential -Name</c> and gives only the user name
+    /// LazyVM signs in with. The password stays encrypted and is disposed of
+    /// at once. Throws with the module's reason, such as when no credential
+    /// is stored, which names Set-LazyVMCredential.
+    /// </summary>
+    public virtual async Task<string> GetUserNameAsync(string name, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMCredential", [("Name", name)], cancellationToken, failsOnlyByThrowing: true).ConfigureAwait(false);
+        return UserNameOf(output);
+    }
+
+    /// <summary>Runs <c>Get-LazyVMCredential -Name -AsPlainText</c> and gives only the password, for the moment it is shown or copied.</summary>
+    public virtual async Task<string> GetPasswordAsync(string name, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMCredential", [("Name", name), ("AsPlainText", true)], cancellationToken, failsOnlyByThrowing: true)
+            .ConfigureAwait(false);
+        return PasswordOf(output);
+    }
+
+    /// <summary>The user name of the credential in <paramref name="output"/>; its password is disposed of. Throws when there is none.</summary>
+    internal static string UserNameOf(IEnumerable<PSObject> output)
+    {
+        var credential = output.Select(item => item.BaseObject).OfType<PSCredential>().FirstOrDefault()
+            ?? throw new InvalidOperationException("Get-LazyVMCredential gave no account.");
+        credential.Password.Dispose();
+        return credential.UserName;
+    }
+
+    /// <summary>The password of the <c>LazyVM.PlainCredential</c> in <paramref name="output"/>. Throws, without it, when there is none.</summary>
+    internal static string PasswordOf(IEnumerable<PSObject> output)
+    {
+        return output.Select(item => Text(item, "Password")).FirstOrDefault(password => password.Length > 0)
+            ?? throw new InvalidOperationException("Get-LazyVMCredential gave no password.");
+    }
+
     /// <summary>Reads one <c>LazyVM.RecoveryKey</c> object. A date that cannot be read is left empty.</summary>
     internal static VMRecoveryKey ToRecoveryKey(PSObject key)
     {

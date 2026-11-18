@@ -16,6 +16,29 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
+    public void UserNameOf_ACredential_GivesItsUserName_AndDisposesThePassword()
+    {
+        using var password = new System.Security.SecureString();
+        password.AppendChar('x');
+        var credential = new PSCredential("devadmin", password);
+
+        Assert.Equal("devadmin", CommandRunner.UserNameOf([PSObject.AsPSObject(credential)]));
+        Assert.Throws<ObjectDisposedException>(() => password.Length);
+    }
+
+    [Fact]
+    public void PasswordOf_APlainCredential_GivesItsPassword()
+    {
+        Assert.Equal("Correct-Horse-9", CommandRunner.PasswordOf([Entry(("UserName", "devadmin"), ("Password", "Correct-Horse-9"))]));
+    }
+
+    [Fact]
+    public void UserNameOf_Nothing_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() => CommandRunner.UserNameOf([]));
+    }
+
+    [Fact]
     public void ToRecoveryKey_ReadsEveryField()
     {
         var recorded = new DateTime(2026, 10, 1, 9, 30, 0);

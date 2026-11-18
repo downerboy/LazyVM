@@ -34,6 +34,13 @@ public sealed class VMViewModel : ViewModelBase
         DeleteCommand = new RelayCommand(() => _ = DeleteAsync(), () => CanStart);
         RestorePointsCommand = new RelayCommand(() => _Restore = tools.OpenRestore(_Entry));
         RecoveryKeysCommand = new RelayCommand(() => tools.OpenRecoveryKeys(_Entry));
+        PasswordCommand = new RelayCommand(() => tools.OpenPassword(_Entry));
+    }
+
+    /// <summary>Opens the account LazyVM signs in to the VM with, its password hidden until asked for.</summary>
+    public RelayCommand PasswordCommand
+    {
+        get;
     }
 
     /// <summary>Opens the VM's recovery keys, to see one or export them.</summary>
