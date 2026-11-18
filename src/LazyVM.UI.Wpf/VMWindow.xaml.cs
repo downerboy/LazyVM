@@ -20,5 +20,8 @@ public partial class VMWindow : Window
     }
 
     /// <summary>Esc closes the window.</summary>
-    private void CloseWindow(object sender, ExecutedRoutedEventArgs e) => Close();
+    private void CloseWindow(object sender, ExecutedRoutedEventArgs e)
+    {
+        Close();
+    }
 }

@@ -1,6 +1,6 @@
+using LazyVM.UI.Wpf.ViewModels;
 using System.Windows;
 using System.Windows.Input;
-using LazyVM.UI.Wpf.ViewModels;
 
 namespace LazyVM.UI.Wpf;
 
@@ -24,8 +24,14 @@ public partial class LogWindow : Window
     }
 
     /// <summary>Esc closes the window.</summary>
-    private void CloseWindow(object sender, ExecutedRoutedEventArgs e) => Close();
+    private void CloseWindow(object sender, ExecutedRoutedEventArgs e)
+    {
+        Close();
+    }
 
     /// <summary>Puts keyboard focus on the entry jumped to, so Narrator reads it.</summary>
-    private void FocusEntry(LogEntryRowViewModel entry) => ListFocus.Focus(List, entry);
+    private void FocusEntry(LogEntryRowViewModel entry)
+    {
+        ListFocus.Focus(List, entry);
+    }
 }

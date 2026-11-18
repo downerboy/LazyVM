@@ -20,8 +20,8 @@ public sealed class VMViewModel : ViewModelBase
 
     public VMViewModel(VMDashboard entry, ToolWindows tools)
     {
-        this._Entry = entry;
-        this._Tools = tools;
+        _Entry = entry;
+        _Tools = tools;
         Details = ReadDetails(entry);
         _SuggestedPhase = CarryOnPhase(entry.LastBuild);
         ChecksCommand = new RelayCommand(() => tools.OpenChecks(Name, hostOnly: false));
@@ -32,13 +32,22 @@ public sealed class VMViewModel : ViewModelBase
     }
 
     /// <summary>Opens the progress of the build running now, including one the app did not start.</summary>
-    public RelayCommand BuildProgressCommand { get; }
+    public RelayCommand BuildProgressCommand
+    {
+        get;
+    }
 
     /// <summary>Builds the VM from <see cref="SelectedPhase"/>, in a pwsh process of its own, and shows its progress.</summary>
-    public RelayCommand BuildFromPhaseCommand { get; }
+    public RelayCommand BuildFromPhaseCommand
+    {
+        get;
+    }
 
     /// <summary>Starts the VM's maintenance task, so maintenance runs as the nightly run does.</summary>
-    public RelayCommand MaintenanceCommand { get; }
+    public RelayCommand MaintenanceCommand
+    {
+        get;
+    }
 
     /// <summary>True while a build of the VM is running.</summary>
     public bool IsBuilding => _Entry.Run is { IsRunning: true, Command: null or VMRun.Build };
@@ -189,13 +198,17 @@ public sealed class VMViewModel : ViewModelBase
     }
 
     /// <summary>The phase a build that stopped, failed or ended unexpectedly can carry on from; empty otherwise.</summary>
-    internal static int? CarryOnPhase(VMRun? lastBuild) =>
-        lastBuild is { Status: VMRun.Failed or VMRun.Stopped or VMRun.EndedUnexpectedly }
+    internal static int? CarryOnPhase(VMRun? lastBuild)
+    {
+        return lastBuild is { Status: VMRun.Failed or VMRun.Stopped or VMRun.EndedUnexpectedly }
             ? lastBuild.UnfinishedPhase ?? lastBuild.Phase
             : null;
+    }
 
-    private void SelectSuggestedPhase() =>
+    private void SelectSuggestedPhase()
+    {
         SelectedPhase = Phases.FirstOrDefault(option => option.Number == _SuggestedPhase) ?? Phases.FirstOrDefault();
+    }
 
     private void RaiseRunCommandsChanged()
     {
@@ -203,26 +216,38 @@ public sealed class VMViewModel : ViewModelBase
         MaintenanceCommand.RaiseCanExecuteChanged();
     }
 
-    private static string RunName(string? command) => command switch
+    private static string RunName(string? command)
     {
-        VMRun.Build => "A build",
-        "Maintenance" => "Maintenance",
-        "Rebuild" => "A rebuild",
-        _ => "A run",
-    };
+        return command switch
+        {
+            VMRun.Build => "A build",
+            "Maintenance" => "Maintenance",
+            "Rebuild" => "A rebuild",
+            _ => "A run",
+        };
+    }
 
-    private static string EndedText(string? status) => status switch
+    private static string EndedText(string? status)
     {
-        VMRun.Stopped => "stopped",
-        VMRun.EndedUnexpectedly => "ended unexpectedly",
-        _ => "failed",
-    };
+        return status switch
+        {
+            VMRun.Stopped => "stopped",
+            VMRun.EndedUnexpectedly => "ended unexpectedly",
+            _ => "failed",
+        };
+    }
 
     /// <summary>Opens the VM's checks (Test-LazyVM).</summary>
-    public RelayCommand ChecksCommand { get; }
+    public RelayCommand ChecksCommand
+    {
+        get;
+    }
 
     /// <summary>Opens the VM's log.</summary>
-    public RelayCommand LogCommand { get; }
+    public RelayCommand LogCommand
+    {
+        get;
+    }
 
     public string Name => _Entry.Name;
 
@@ -231,12 +256,15 @@ public sealed class VMViewModel : ViewModelBase
     public string State => _Entry.State;
 
     /// <summary>The details, in the order the window shows them.</summary>
-    public IReadOnlyList<VMDetail> Details { get; private set; }
+    public IReadOnlyList<VMDetail> Details
+    {
+        get; private set;
+    }
 
     /// <summary>Shows what a newer refresh read for this VM.</summary>
     public void Update(VMDashboard entry)
     {
-        this._Entry = entry;
+        _Entry = entry;
         Details = ReadDetails(entry);
         // A build that has failed or stopped since: choose the phase to carry on from, as on opening.
         var suggested = CarryOnPhase(entry.LastBuild);
@@ -308,11 +336,9 @@ public sealed class VMViewModel : ViewModelBase
             return "Nothing";
         }
         var what = run.Command ?? "A run, just starting";
-        if (run.StopRequested)
-        {
-            return $"{what}, stopping";
-        }
-        return run.Phase is { } phase
+        return run.StopRequested
+            ? $"{what}, stopping"
+            : run.Phase is { } phase
             ? $"{what}, in phase {phase}" + (run.PhaseName is { Length: > 0 } name ? $" ({name})" : string.Empty)
             : what;
     }
@@ -324,12 +350,15 @@ public sealed class VMViewModel : ViewModelBase
         return $"{time}, {task}";
     }
 
-    private static string GreenTemplateText(VMDashboard vm) => (vm.GreenTemplate, vm.GreenTemplateUpdated) switch
+    private static string GreenTemplateText(VMDashboard vm)
     {
-        (null, _) => "None yet",
-        ({ } name, { } updated) => $"{name}, updated {DashboardText.When(updated)}",
-        ({ } name, null) => name,
-    };
+        return (vm.GreenTemplate, vm.GreenTemplateUpdated) switch
+        {
+            (null, _) => "None yet",
+            ({ } name, { } updated) => $"{name}, updated {DashboardText.When(updated)}",
+            ({ } name, null) => name,
+        };
+    }
 }
 
 /// <summary>One line of a VM's details, such as "Memory in use: 8 GB".</summary>
@@ -347,5 +376,8 @@ public sealed class PhaseOption(BuildPhase phase)
     /// <summary>Such as "Phase 7: Install Windows, then the tools and Windows updates".</summary>
     public string Text => phase.Goal.Length > 0 ? $"Phase {phase.Number}: {phase.Goal}" : $"Phase {phase.Number}";
 
-    public override string ToString() => Text;
+    public override string ToString()
+    {
+        return Text;
+    }
 }

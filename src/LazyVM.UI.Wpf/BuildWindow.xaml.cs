@@ -1,6 +1,6 @@
+using LazyVM.UI.Wpf.ViewModels;
 using System.Windows;
 using System.Windows.Input;
-using LazyVM.UI.Wpf.ViewModels;
 
 namespace LazyVM.UI.Wpf;
 
@@ -25,8 +25,14 @@ public partial class BuildWindow : Window
     }
 
     /// <summary>Esc and Close close the window.</summary>
-    private void CloseWindow(object sender, ExecutedRoutedEventArgs e) => Close();
+    private void CloseWindow(object sender, ExecutedRoutedEventArgs e)
+    {
+        Close();
+    }
 
     /// <summary>The build has started and its progress window has opened.</summary>
-    private void CloseOnStart(object? sender, EventArgs e) => Close();
+    private void CloseOnStart(object? sender, EventArgs e)
+    {
+        Close();
+    }
 }

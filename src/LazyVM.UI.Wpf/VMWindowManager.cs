@@ -1,5 +1,5 @@
-using System.Windows;
 using LazyVM.UI.Wpf.ViewModels;
+using System.Windows;
 
 namespace LazyVM.UI.Wpf;
 

@@ -1,7 +1,7 @@
+using LazyVM.UI.Wpf.ViewModels;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
-using LazyVM.UI.Wpf.ViewModels;
 
 namespace LazyVM.UI.Wpf;
 
@@ -26,7 +26,10 @@ public partial class ChecksWindow : Window
     }
 
     /// <summary>Esc closes the window.</summary>
-    private void CloseWindow(object sender, ExecutedRoutedEventArgs e) => Close();
+    private void CloseWindow(object sender, ExecutedRoutedEventArgs e)
+    {
+        Close();
+    }
 
     /// <summary>When the checks come in, Narrator starts reading them from the first.</summary>
     private void FocusNewChecks(object? sender, PropertyChangedEventArgs e)

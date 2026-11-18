@@ -64,19 +64,20 @@ public class BuildLauncher
     private static Version? StorePackageVersion(string folder, string architecture)
     {
         var parts = folder.Split('_');
-        if (parts.Length != 5
+        return parts.Length != 5
             || parts[0] is not ("Microsoft.PowerShell" or "Microsoft.PowerShell-LTS")
             || !string.Equals(parts[2], architecture, StringComparison.OrdinalIgnoreCase)
             || parts[3].Length != 0
-            || parts[4] != MicrosoftPublisher)
-        {
-            return null;
-        }
-        return Version.TryParse(parts[1], out var version) ? version : null;
+            || parts[4] != MicrosoftPublisher
+            ? null
+            : Version.TryParse(parts[1], out var version) ? version : null;
     }
 
     /// <summary>The script, in the folder the module was imported from.</summary>
-    internal static string ScriptPath(string moduleFolder) => Path.Combine(moduleFolder, "Scripts", "Start-AppBuild.ps1");
+    internal static string ScriptPath(string moduleFolder)
+    {
+        return Path.Combine(moduleFolder, "Scripts", "Start-AppBuild.ps1");
+    }
 
     /// <summary>Starts building <paramref name="request"/> with the module in <paramref name="moduleFolder"/>.</summary>
     public virtual StartedBuild Start(BuildRequest request, string moduleFolder)

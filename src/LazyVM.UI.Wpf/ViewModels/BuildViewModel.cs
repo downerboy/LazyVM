@@ -28,10 +28,10 @@ public sealed partial class BuildViewModel : ViewModelBase
     /// <param name="buildStarted">Called with the VM's name and its build once the build has started.</param>
     public BuildViewModel(CommandRunner runner, BuildLauncher launcher, IEnumerable<string> existingNames, Action<string, StartedBuild> buildStarted)
     {
-        this._Runner = runner;
-        this._Launcher = launcher;
-        this._ExistingNames = existingNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        this._BuildStarted = buildStarted;
+        _Runner = runner;
+        _Launcher = launcher;
+        _ExistingNames = existingNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _BuildStarted = buildStarted;
         _BuildCommand = new RelayCommand(() => _ = BuildAsync(), () => !IsStarting);
     }
 
@@ -144,23 +144,13 @@ public sealed partial class BuildViewModel : ViewModelBase
         {
             return "Type a name for the new VM.";
         }
-        if (!VMNameRule().IsMatch(Name))
-        {
-            return $"'{Name}' cannot be used as a VM name: use 1-15 letters, digits or hyphens, starting with a letter or digit.";
-        }
-        if (_ExistingNames.Contains(Name))
-        {
-            return $"There is a VM named {Name} already. Choose another name.";
-        }
-        if (UserName.Length > 0 && !UserNameRule().IsMatch(UserName))
-        {
-            return $"'{UserName}' cannot be used as the account name: use 1-20 characters, without spaces or any of \" / \\ [ ] : ; | = , + * ? < > @.";
-        }
-        if (SelectedTemplate is null)
-        {
-            return "Choose a config template.";
-        }
-        return null;
+        return !VMNameRule().IsMatch(Name)
+            ? $"'{Name}' cannot be used as a VM name: use 1-15 letters, digits or hyphens, starting with a letter or digit."
+            : _ExistingNames.Contains(Name)
+            ? $"There is a VM named {Name} already. Choose another name."
+            : UserName.Length > 0 && !UserNameRule().IsMatch(UserName)
+            ? $"'{UserName}' cannot be used as the account name: use 1-20 characters, without spaces or any of \" / \\ [ ] : ; | = , + * ? < > @."
+            : SelectedTemplate is null ? "Choose a config template." : null;
     }
 
     /// <summary>New-LazyVM's rule for a VM name.</summary>
@@ -185,5 +175,8 @@ public sealed class TemplateOption(ConfigTemplate template)
         _ => $"{template.Name} (yours)",
     };
 
-    public override string ToString() => Text;
+    public override string ToString()
+    {
+        return Text;
+    }
 }

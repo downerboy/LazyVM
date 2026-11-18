@@ -7,7 +7,10 @@ public sealed class RelayCommand(Action execute, Func<bool>? canExecute = null) 
 {
     public event EventHandler? CanExecuteChanged;
 
-    public bool CanExecute(object? parameter) => canExecute?.Invoke() ?? true;
+    public bool CanExecute(object? parameter)
+    {
+        return canExecute?.Invoke() ?? true;
+    }
 
     public void Execute(object? parameter)
     {
@@ -18,5 +21,8 @@ public sealed class RelayCommand(Action execute, Func<bool>? canExecute = null) 
     }
 
     /// <summary>Tells the view to ask <see cref="CanExecute"/> again.</summary>
-    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    public void RaiseCanExecuteChanged()
+    {
+        CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    }
 }

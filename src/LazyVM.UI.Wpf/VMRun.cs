@@ -8,28 +8,55 @@ namespace LazyVM.UI.Wpf;
 public sealed record VMRun
 {
     /// <summary>Build, Maintenance or Rebuild; empty for a run just starting that has not recorded itself yet.</summary>
-    public string? Command { get; init; }
+    public string? Command
+    {
+        get; init;
+    }
 
     /// <summary>Running, Completed, CompletedWithProblems, WaitingForRestart, Failed, Stopped or EndedUnexpectedly.</summary>
-    public string? Status { get; init; }
+    public string? Status
+    {
+        get; init;
+    }
 
     /// <summary>The process the run is in; empty until it has recorded itself.</summary>
-    public int? ProcessId { get; init; }
+    public int? ProcessId
+    {
+        get; init;
+    }
 
-    public DateTime? Started { get; init; }
+    public DateTime? Started
+    {
+        get; init;
+    }
 
-    public DateTime? Ended { get; init; }
+    public DateTime? Ended
+    {
+        get; init;
+    }
 
     /// <summary>The phase the run is in, or was last in.</summary>
-    public int? Phase { get; init; }
+    public int? Phase
+    {
+        get; init;
+    }
 
-    public string? PhaseName { get; init; }
+    public string? PhaseName
+    {
+        get; init;
+    }
 
     /// <summary>The phase a failed or stopped run was in: the one to carry on from.</summary>
-    public int? UnfinishedPhase { get; init; }
+    public int? UnfinishedPhase
+    {
+        get; init;
+    }
 
     /// <summary>True while a running build has been asked to stop and has not stopped yet.</summary>
-    public bool StopRequested { get; init; }
+    public bool StopRequested
+    {
+        get; init;
+    }
 
     public bool IsRunning => Status == Running;
 

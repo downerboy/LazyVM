@@ -13,7 +13,10 @@ public sealed class LogViewModelTests : IDisposable
         _Log = new LogViewModel(_Runner, "DevBox");
     }
 
-    public void Dispose() => _Culture.Dispose();
+    public void Dispose()
+    {
+        _Culture.Dispose();
+    }
 
     [Fact]
     public void Title_NamesTheVM()

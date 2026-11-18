@@ -22,7 +22,7 @@ public sealed class LogViewModel : ViewModelBase
 
     public LogViewModel(CommandRunner runner, string vmName)
     {
-        this._Runner = runner;
+        _Runner = runner;
         VMName = vmName;
         _ReloadCommand = new RelayCommand(() => _ = LoadAsync(), () => !IsLoading);
         _NextProblemCommand = new RelayCommand(() => JumpToProblem(1), () => Entries.Count > 0);
@@ -32,7 +32,10 @@ public sealed class LogViewModel : ViewModelBase
     /// <summary>Raised when an entry is selected by a jump, so the view can move keyboard focus to it and Narrator reads it.</summary>
     public event Action<LogEntryRowViewModel>? JumpedTo;
 
-    public string VMName { get; }
+    public string VMName
+    {
+        get;
+    }
 
     public string Title => $"{VMName} log - LazyVM";
 

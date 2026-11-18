@@ -17,9 +17,15 @@ public static class LiveRegion
     private static readonly DependencyPropertyDescriptor _Text =
         DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock));
 
-    public static bool GetAnnounce(DependencyObject element) => (bool)element.GetValue(AnnounceProperty);
+    public static bool GetAnnounce(DependencyObject element)
+    {
+        return (bool)element.GetValue(AnnounceProperty);
+    }
 
-    public static void SetAnnounce(DependencyObject element, bool value) => element.SetValue(AnnounceProperty, value);
+    public static void SetAnnounce(DependencyObject element, bool value)
+    {
+        element.SetValue(AnnounceProperty, value);
+    }
 
     private static void OnAnnounceChanged(DependencyObject element, DependencyPropertyChangedEventArgs e)
     {
