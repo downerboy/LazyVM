@@ -22,6 +22,8 @@ LazyVM uses [GitHub Flow](https://docs.github.com/en/get-started/using-github/gi
    - Name private fields with a leading underscore and Pascal casing, such as `_Runner`, so a field can be told from a local or a parameter at a glance. Constants keep plain Pascal casing, such as `GB`.
    - Put every block in braces, even a one-line `if`, `else`, `for`, `foreach`, `while` or `using` body, so no block is implied.
 
+   Also use LINQ whenever it can do the job: to filter, map, find, count, order or build a collection, write a query, not a loop. A short list built with an `if` and `Add` for each item is a list of candidates filtered with LINQ, such as `new[] { a ? "x" : null, b ? "y" : null }.OfType<string>()`. Keep a loop only where LINQ does not fit: the loop changes something as it goes, such as adding to a collection LINQ cannot fill or calling a method for its effect, or it awaits, or a query would read worse. When you change code that does not follow this, refactor it as you go (#461). No analyzer checks this rule, so reviews do.
+
    Pass values to code that runs in a guest only through `-ArgumentList`, never in the script's text: every guest logs the text of each script it runs (event 4104), so a password in that text would be in the log. `tests/GuestScriptSafety.Tests.ps1` fails on a script block made from a string or an expandable string passed as `-ScriptBlock` or `-Work`.
 
 3. Push the branch and open a pull request into `main`, with a title in the form described under [Versioning](#versioning). Put `Fixes #42` in the description to close the issue when it merges.

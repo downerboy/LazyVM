@@ -158,12 +158,9 @@ public sealed class MainViewModel : ViewModelBase
     private void ShowInList(IReadOnlyList<VMDashboard> entries)
     {
         var names = entries.Select(entry => entry.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        for (var index = VMs.Count - 1; index >= 0; index--)
+        foreach (var gone in VMs.Where(row => !names.Contains(row.Name)).ToList())
         {
-            if (!names.Contains(VMs[index].Name))
-            {
-                VMs.RemoveAt(index);
-            }
+            VMs.Remove(gone);
         }
 
         for (var index = 0; index < entries.Count; index++)

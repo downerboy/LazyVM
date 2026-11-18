@@ -102,15 +102,11 @@ public sealed class ChecksViewModel : ViewModelBase
         var count = rows.Count == 1 ? "1 check" : $"{rows.Count} checks";
         var failed = rows.Count(row => row.Status == VMCheck.Failed);
         var warned = rows.Count(row => row.Status == VMCheck.Warning);
-        var found = new List<string>();
-        if (failed > 0)
+        var found = new[]
         {
-            found.Add($"{failed} failed");
-        }
-        if (warned > 0)
-        {
-            found.Add(warned == 1 ? "1 warning" : $"{warned} warnings");
-        }
+            failed > 0 ? $"{failed} failed" : null,
+            warned switch { 0 => null, 1 => "1 warning", _ => $"{warned} warnings" },
+        }.OfType<string>().ToList();
         return found.Count == 0 ? $"{count}: no problems found" : $"{count}: {string.Join(", ", found)}";
     }
 

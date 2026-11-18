@@ -118,15 +118,10 @@ public class CommandRunner : IDisposable
     /// </summary>
     public virtual async Task<IReadOnlyList<VMCheck>> GetChecksAsync(string? name, bool hostOnly, CancellationToken cancellationToken)
     {
-        var parameters = new List<(string, object)>();
-        if (name is not null)
-        {
-            parameters.Add(("Name", name));
-        }
-        if (hostOnly)
-        {
-            parameters.Add(("HostOnly", true));
-        }
+        var parameters = new (string Name, object? Value)[] { ("Name", name), ("HostOnly", hostOnly ? true : null) }
+            .Where(parameter => parameter.Value is not null)
+            .Select(parameter => (parameter.Name, parameter.Value!))
+            .ToList();
         var output = await InvokeAsync("Test-LazyVM", parameters, cancellationToken).ConfigureAwait(false);
         return output.Select(ToCheck).ToList();
     }
@@ -267,11 +262,7 @@ public class CommandRunner : IDisposable
             _Runspace ??= await Task.Run(OpenRunspace, cancellationToken).ConfigureAwait(false);
 
             using var shell = PowerShell.Create(_Runspace);
-            shell.AddCommand(command);
-            foreach (var (name, value) in parameters)
-            {
-                shell.AddParameter(name, value);
-            }
+            shell.AddCommand(command).AddParameters(parameters.ToDictionary(parameter => parameter.Name, parameter => parameter.Value));
             PSDataCollection<PSObject> output;
             using (cancellationToken.Register(() => _ = shell.StopAsync(null, null)))
             {
