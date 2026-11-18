@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.28.0](https://github.com/downerboy/LazyVM/compare/v6.27.0...v6.28.0) (2026-11-18)
+
+
+### Features
+
+* **gui:** restore a VM to a restore point ([#465](https://github.com/downerboy/LazyVM/issues/465)) ([ca20739](https://github.com/downerboy/LazyVM/commit/ca20739344d1433df23b1e7759301fac826978da))
+
 ## [6.27.0](https://github.com/downerboy/LazyVM/compare/v6.26.0...v6.27.0) (2026-11-18)
 
 
