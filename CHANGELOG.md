@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.29.0](https://github.com/downerboy/LazyVM/compare/v6.28.0...v6.29.0) (2026-11-18)
+
+
+### Features
+
+* report each VM's recovery key export status in Get-LazyVMDashboard ([#474](https://github.com/downerboy/LazyVM/issues/474)) ([8f2dce1](https://github.com/downerboy/LazyVM/commit/8f2dce1a68458dd150585160262472968e1588c4))
+
 ## [6.28.0](https://github.com/downerboy/LazyVM/compare/v6.27.0...v6.28.0) (2026-11-18)
 
 
