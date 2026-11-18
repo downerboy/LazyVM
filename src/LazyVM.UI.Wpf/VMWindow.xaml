@@ -89,6 +89,27 @@
             </StackPanel>
         </Border>
 
+        <!-- The BitLocker recovery keys: a notice when some are not exported yet, with the button that opens them beside it. -->
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvPanel}" Margin="24,24,24,0">
+            <StackPanel>
+                <TextBlock Text="Recovery keys" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
+                <Border Style="{StaticResource LvAttentionBadge}" Margin="0,0,0,8"
+                        Visibility="{Binding HasRecoveryKeyNotice, Converter={StaticResource VisibleWhenTrue}}">
+                    <TextBlock Foreground="{DynamicResource LvOnSev}" TextWrapping="Wrap" Focusable="True"
+                               AutomationProperties.Name="{Binding RecoveryKeyNotice}">
+                        <Run Text="&#x25C6;" /> <Run Text="{Binding RecoveryKeyNotice, Mode=OneWay}" />
+                    </TextBlock>
+                </Border>
+                <TextBlock Text="The BitLocker recovery password of each disk LazyVM encrypted. Shows one when you ask, and exports them to a file you keep offline."
+                           Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                <WrapPanel Margin="0,8,0,0">
+                    <Button Content="Recovery _keys..." Command="{Binding RecoveryKeysCommand}" Margin="0,0,8,0"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Recovery keys of {0}'}"
+                            AutomationProperties.HelpText="Lists the VM's BitLocker recovery keys, to see one or export them to a file." />
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
         <!-- What happened when a build, maintenance or delete was asked for. -->
         <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" Style="{StaticResource LvStatus}" Margin="24,12,24,0"
                    Visibility="{Binding HasStatus, Converter={StaticResource VisibleWhenTrue}}"

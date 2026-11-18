@@ -16,6 +16,54 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
+    public void ToRecoveryKey_ReadsEveryField()
+    {
+        var recorded = new DateTime(2026, 10, 1, 9, 30, 0);
+
+        var key = CommandRunner.ToRecoveryKey(Entry(
+            ("Name", "DevBox"),
+            ("Disk", "OS disk"),
+            ("DiskGuid", "{AAAAAAAA-0000-0000-0000-000000000001}"),
+            ("KeyId", "{33333333-0000-0000-0000-000000000000}"),
+            ("Recorded", recorded),
+            ("Exported", true)));
+
+        Assert.Equal(new VMRecoveryKey("OS disk", "{AAAAAAAA-0000-0000-0000-000000000001}", "{33333333-0000-0000-0000-000000000000}", recorded, true), key);
+    }
+
+    [Fact]
+    public void ToRecoveryKey_WithNoKeyIDOrDate_LeavesThemEmpty()
+    {
+        var key = CommandRunner.ToRecoveryKey(Entry(("Disk", "User disk"), ("DiskGuid", "{B}"), ("KeyId", ""), ("Recorded", null), ("Exported", false)));
+
+        Assert.Equal(string.Empty, key.KeyId);
+        Assert.Null(key.Recorded);
+        Assert.False(key.Exported);
+    }
+
+    [Fact]
+    public void RecoveryPasswordOf_GivesOnlyThatDisksPassword_WhateverTheCaseOfItsGuid()
+    {
+        var keys = new[]
+        {
+            Entry(("DiskGuid", "{AAAAAAAA-0000-0000-0000-000000000001}"), ("RecoveryPassword", "111111")),
+            Entry(("DiskGuid", "{BBBBBBBB-0000-0000-0000-000000000002}"), ("RecoveryPassword", "222222")),
+        };
+
+        Assert.Equal("222222", CommandRunner.RecoveryPasswordOf(keys, "{bbbbbbbb-0000-0000-0000-000000000002}"));
+    }
+
+    [Fact]
+    public void RecoveryPasswordOf_ADiskWithNoneStored_Throws()
+    {
+        var keys = new[] { Entry(("DiskGuid", "{A}"), ("RecoveryPassword", "111111")) };
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => CommandRunner.RecoveryPasswordOf(keys, "{B}"));
+
+        Assert.Equal("No recovery password is stored for that disk now. Close this window and open it again to see the keys stored now.", thrown.Message);
+    }
+
+    [Fact]
     public void ToDashboard_ReadsEveryField()
     {
         var created = new DateTime(2026, 10, 1, 9, 0, 0);
@@ -39,6 +87,9 @@ public sealed class CommandRunnerTests
             ("CreatedFromTemplate", "PlainWindows"),
             ("GreenTemplate", "DevBox-latest"),
             ("GreenTemplateUpdated", created),
+            ("RecoveryKeys", 3),
+            ("UnexportedRecoveryKeys", 1),
+            ("RecoveryKeysExported", created),
             ("Settings", "OK"),
             ("Problems", new[] { "Disks: access denied" })));
 
@@ -59,6 +110,9 @@ public sealed class CommandRunnerTests
         Assert.Equal("PlainWindows", vm.CreatedFromTemplate);
         Assert.Equal("DevBox-latest", vm.GreenTemplate);
         Assert.Equal(created, vm.GreenTemplateUpdated);
+        Assert.Equal(3, vm.RecoveryKeys);
+        Assert.Equal(1, vm.UnexportedRecoveryKeys);
+        Assert.Equal(created, vm.RecoveryKeysExported);
         Assert.Equal("OK", vm.Settings);
         Assert.Equal(["Disks: access denied"], vm.Problems);
     }

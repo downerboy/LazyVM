@@ -33,7 +33,24 @@ public sealed class VMViewModel : ViewModelBase
         MaintenanceCommand = new RelayCommand(() => _ = RunMaintenanceAsync(), () => CanStart && IsMaintenanceScheduled);
         DeleteCommand = new RelayCommand(() => _ = DeleteAsync(), () => CanStart);
         RestorePointsCommand = new RelayCommand(() => _Restore = tools.OpenRestore(_Entry));
+        RecoveryKeysCommand = new RelayCommand(() => tools.OpenRecoveryKeys(_Entry));
     }
+
+    /// <summary>Opens the VM's recovery keys, to see one or export them.</summary>
+    public RelayCommand RecoveryKeysCommand
+    {
+        get;
+    }
+
+    /// <summary>How many recovery passwords are not exported yet, with what to do; empty when none, or when that is not known.</summary>
+    public string RecoveryKeyNotice => _Entry.UnexportedRecoveryKeys switch
+    {
+        null or <= 0 => string.Empty,
+        1 => $"1 BitLocker recovery password of {Name} is not exported yet. Keep a copy offline, such as on a USB drive: choose Recovery keys.",
+        var count => $"{count} BitLocker recovery passwords of {Name} are not exported yet. Keep a copy offline, such as on a USB drive: choose Recovery keys.",
+    };
+
+    public bool HasRecoveryKeyNotice => RecoveryKeyNotice.Length > 0;
 
     /// <summary>Opens the VM's restore points, to return it to one. Always available: the Restore window itself says when a restore cannot start.</summary>
     public RelayCommand RestorePointsCommand
@@ -421,6 +438,7 @@ public sealed class VMViewModel : ViewModelBase
             new("Created from config template", vm.CreatedFromTemplate ?? "None recorded"),
             new("Configuration first built from", vm.OriginalConfig ?? DashboardText.NOT_KNOWN),
             new("Green template", GreenTemplateText(vm)),
+            new("Recovery keys", RecoveryKeysText(vm)),
             new("Settings", vm.Settings),
             .. vm.Problems.Select(problem => new VMDetail("Could not read", problem)),
         ];
@@ -446,6 +464,22 @@ public sealed class VMViewModel : ViewModelBase
         var time = vm.MaintenanceTime is null ? DashboardText.NOT_KNOWN : $"Daily at {vm.MaintenanceTime}";
         var task = vm.MaintenanceTask is null ? "task not known" : "task " + DashboardText.InSentence(vm.MaintenanceTask);
         return $"{time}, {task}";
+    }
+
+    /// <summary>Such as "3 stored, 1 not exported yet, last exported 15 November 2026 10:05", or "None stored yet".</summary>
+    private static string RecoveryKeysText(VMDashboard vm)
+    {
+        if (vm.RecoveryKeys is not { } stored || vm.UnexportedRecoveryKeys is not { } unexported)
+        {
+            return DashboardText.NOT_KNOWN;
+        }
+        if (stored == 0)
+        {
+            return "None stored yet";
+        }
+        var exported = unexported == 0 ? "all exported" : $"{unexported} not exported yet";
+        var last = vm.RecoveryKeysExported is { } when ? "last exported " + DashboardText.When(when) : "never exported";
+        return $"{stored} stored, {exported}, {last}";
     }
 
     private static string GreenTemplateText(VMDashboard vm)

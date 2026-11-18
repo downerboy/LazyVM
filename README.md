@@ -101,7 +101,7 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | `Get-LazyVM`                                                | Lists the VMs, their state and their maintenance.                                                      |
 | `Get-LazyVMSetting`                                         | Every setting as a VM uses it, where the value came from, and what it does.                            |
 | `Set-LazyVMCredential` / `Get-LazyVMCredential`           | The administrator account LazyVM uses inside the VM.                                                   |
-| `Export-LazyVMRecoveryKey`                                  | Writes the VMs' BitLocker recovery passwords to a file you keep offline, such as on a USB drive.       |
+| `Get-LazyVMRecoveryKey` / `Export-LazyVMRecoveryKey`    | Lists the VMs' BitLocker recovery keys and which are exported, and writes the passwords to a file you keep offline. |
 | `Get-LazyVMSecurityFinding`                                 | What the last nightly security scan of the VM found, with how to fix each finding. `-Approved` lists the approved ones. |
 | `Approve-LazyVMSecurityFinding` / `Revoke-LazyVMSecurityFinding` | Stops the nightly scan reporting a finding you expect until it changes, and undoes that.         |
 | `Get-LazyVMLicense`                                         | Evaluation days and rearms left, and what maintenance will do.                                         |

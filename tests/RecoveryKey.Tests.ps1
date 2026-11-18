@@ -558,3 +558,77 @@ Describe 'Export-LazyVMRecoveryKey' {
         $target | Should -Not -Exist
     }
 }
+
+Describe 'Get-LazyVMRecoveryKey (#468)' {
+    BeforeEach {
+        Use-MemorySecretStore
+        $root = New-TestRoot
+        Add-TestKey -Root $root -Guid $osGuid -Disk 'OS disk' -Recovery $osPassword -KeyId '{33333333-0000-0000-0000-000000000000}'
+        Add-TestKey -Root $root -Guid $sqlGuid -Disk 'SQL data disk' -Recovery $sqlPassword
+        Mock -ModuleName $module Assert-Administrator { }
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $root; Source = 'a test' } }.GetNewClosure()
+        Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ VMName = 'Alpha'; Settings = (New-TestSetting -Root $Root -Name 'Alpha') } }
+    }
+
+    It 'lists each stored key with its disk, disk GUID, key ID and date, and no password' {
+        $keys = @(Get-LazyVMRecoveryKey -Name Alpha)
+
+        $keys.Count | Should -Be 2
+        $keys[0].PSObject.TypeNames | Should -Contain 'LazyVM.RecoveryKey'
+        $keys[0].Name | Should -Be 'Alpha'
+        $keys[0].Disk | Should -Be 'OS disk'
+        $keys[0].DiskGuid | Should -Be $osGuid
+        $keys[0].KeyId | Should -Be '{33333333-0000-0000-0000-000000000000}'
+        $keys[0].Recorded | Should -BeOfType [datetime]
+        $keys[0].Recorded | Should -Be ([datetimeoffset]'2026-10-01T09:30:00Z').LocalDateTime
+        $keys[1].KeyId | Should -Be ''
+        $keys[0].PSObject.Properties.Name | Should -Not -Contain 'RecoveryPassword'
+        $json = ConvertTo-Json -InputObject $keys -Depth 4
+        $json | Should -Not -BeLike "*$osPassword*"
+        $json | Should -Not -BeLike "*$sqlPassword*"
+    }
+
+    It 'reads the VM''s settings read-only' {
+        $null = Get-LazyVMRecoveryKey -Name Alpha
+
+        Should -Invoke -ModuleName $module Read-VMSetting -Times 1 -Exactly -ParameterFilter { $ReadOnly -and $VMName -eq 'Alpha' }
+    }
+
+    It 'says which keys the last export held' {
+        InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } {
+            param($VM)
+            Save-RecoveryKeyExportRecord -VM $VM -Keys @(Get-StoredRecoveryKey -VM $VM | Where-Object Disk -EQ 'OS disk')
+        }
+
+        $keys = @(Get-LazyVMRecoveryKey -Name Alpha)
+
+        $keys[0].Exported | Should -BeTrue
+        $keys[1].Exported | Should -BeFalse
+    }
+
+    It 'counts as not exported every key when there has been no export' {
+        @(Get-LazyVMRecoveryKey -Name Alpha).Exported | Should -Be @($false, $false)
+    }
+
+    It 'agrees with the reminders on which keys are not exported' {
+        InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } {
+            param($VM)
+            Save-RecoveryKeyExportRecord -VM $VM -Keys @(Get-StoredRecoveryKey -VM $VM | Where-Object Disk -EQ 'OS disk')
+        }
+        $unexported = @(InModuleScope $module -Parameters @{ VM = (New-TestVM -Root $root) } { param($VM) Get-UnexportedRecoveryKey -VM $VM })
+
+        @(Get-LazyVMRecoveryKey -Name Alpha | Where-Object { -not $_.Exported }).DiskGuid | Should -Be @($unexported.DiskGuid)
+    }
+
+    It 'returns nothing, and no error, while no key is stored yet' {
+        $script:Secrets = @{}
+
+        @(Get-LazyVMRecoveryKey -Name Alpha).Count | Should -Be 0
+    }
+
+    It 'needs administrator rights, as the other recovery key commands do' {
+        $null = Get-LazyVMRecoveryKey -Name Alpha
+
+        Should -Invoke -ModuleName $module Assert-Administrator -Times 1 -Exactly
+    }
+}

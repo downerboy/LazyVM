@@ -91,7 +91,7 @@
             Caller   = 'New-DashboardEntry'
             Area     = 'Dashboard'
             Note     = 'how many recovery keys are stored and not exported yet, and when they last were; counts only, never a password'
-            Includes = @('Get-StoredRecoveryKey', 'Read-RecoveryKeyExportRecord', 'Select-UnexportedRecoveryKey')
+            Includes = @('Get-RecoveryKeyStatus', 'Read-RecoveryKeyExportRecord')
             Reads    = @(
                 @{ Label = 'recovery keys'; Kind = 'file'; Store = '<VM>\Credentials\'; Items = @('bitlocker.cred  (key IDs counted)') }
                 @{ Label = 'last export'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('RecoveryKeyExport.json') }

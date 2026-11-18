@@ -352,6 +352,20 @@ public sealed class MainViewModelTests : IDisposable
         Assert.Equal(1, _Runner.DashboardCalls);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnExport_EvenOneThatFailed_ReadsTheListAgain(bool fails)
+    {
+        _Runner.Returns(Sample.VM("DevBox"));
+        _Runner.ExportFails = fails ? new InvalidOperationException("The folder is not there.") : null;
+
+        await Record.ExceptionAsync(() => _Tools.ExportRecoveryKeysAsync("DevBox", @"E:\keys.txt", force: false));
+        await Task.Yield();
+
+        Assert.Equal(1, _Runner.DashboardCalls);
+    }
+
     [Fact]
     public async Task ADeletedVM_ClosesItsWindow()
     {

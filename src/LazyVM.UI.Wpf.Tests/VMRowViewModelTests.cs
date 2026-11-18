@@ -44,6 +44,33 @@ public sealed class VMRowViewModelTests : IDisposable
         Assert.Equal("Needs attention: settings problem", row.AttentionText);
     }
 
+    [Theory]
+    [InlineData(1, "Needs attention: 1 recovery key not exported")]
+    [InlineData(2, "Needs attention: 2 recovery keys not exported")]
+    public void RecoveryKeysNotExported_NeedAttention(int unexported, string said)
+    {
+        var row = new VMRowViewModel(Sample.VM() with
+        {
+            RecoveryKeys = 2,
+            UnexportedRecoveryKeys = unexported
+        });
+
+        Assert.True(row.NeedsAttention);
+        Assert.Equal(said, row.AttentionText);
+    }
+
+    [Fact]
+    public void EveryRecoveryKeyExported_DoesNotNeedAttention()
+    {
+        var row = new VMRowViewModel(Sample.VM() with
+        {
+            RecoveryKeys = 2,
+            UnexportedRecoveryKeys = 0
+        });
+
+        Assert.False(row.NeedsAttention);
+    }
+
     [Fact]
     public void FailedMaintenanceAndSettingsProblem_NamesBoth()
     {

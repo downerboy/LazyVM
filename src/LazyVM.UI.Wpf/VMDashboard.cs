@@ -97,6 +97,24 @@ public sealed record VMDashboard
         get; init;
     }
 
+    /// <summary>How many BitLocker recovery passwords LazyVM stores for the VM; empty when the key store could not be read.</summary>
+    public int? RecoveryKeys
+    {
+        get; init;
+    }
+
+    /// <summary>How many of them the last export did not hold; empty when the key store could not be read.</summary>
+    public int? UnexportedRecoveryKeys
+    {
+        get; init;
+    }
+
+    /// <summary>When the VM's keys were last exported; empty when they never were.</summary>
+    public DateTime? RecoveryKeysExported
+    {
+        get; init;
+    }
+
     /// <summary>OK, or what is wrong with the VM's settings files.</summary>
     public string Settings { get; init; } = SETTINGS_OK;
 

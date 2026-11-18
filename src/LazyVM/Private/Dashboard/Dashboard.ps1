@@ -181,9 +181,10 @@ function Get-RecoveryKeySummary {
     [OutputType([pscustomobject])]
     param([Parameter(Mandatory)][VMContext]$VM)
 
-    $keys = @(Get-StoredRecoveryKey -VM $VM)
+    # The same keys, counted the same way, as Get-LazyVMRecoveryKey lists (#468).
+    $keys = @(Get-RecoveryKeyStatus -VM $VM)
+    $unexported = @($keys | Where-Object { -not $_.Exported })
     $record = Read-RecoveryKeyExportRecord -VM $VM
-    $unexported = @(Select-UnexportedRecoveryKey -Keys $keys -Record $record)
 
     # Save-RecoveryKeyExportRecord writes the date in this format, in the current culture.
     $exported = [datetime]::MinValue
