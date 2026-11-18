@@ -1,4 +1,4 @@
-# RunState.ps1 - Which long run a VM has going: its build, maintenance or a rebuild (#425).
+# RunState.ps1 - Which long run a VM has going: its build, maintenance, a rebuild, a restore or its removal (#425, #453).
 # Dot-sourced by LazyVM.psm1; not meant to be run on its own.
 #
 # A run that changes a VM for a long time holds <VM>\Config\Run.lock open,
@@ -13,7 +13,8 @@
 # Run.json holds the latest run of each command, so the nightly maintenance
 # never hides where a failed build stopped:
 #   Last                the command of the latest run
-#   Runs                one entry per command, Build, Maintenance or Rebuild:
+#   Runs                one entry per command, Build, Maintenance, Rebuild,
+#                       Restore (Restore-LazyVMTooling) or Remove:
 #   Command             the command
 #   Status              Running; at the end Completed, CompletedWithProblems,
 #                       WaitingForRestart (the host restarts for Hyper-V and
@@ -27,6 +28,10 @@
 # the run's ProcessId and Started (#426). The run checks for it at its safe
 # points (Assert-VMRunNotStopped): between phases, between steps and in its
 # wait loops. A request naming another run, one already ended, is ignored.
+#
+# A run that turns out to do nothing, such as a restore or removal the user
+# did not confirm, calls Undo-VMRunRecord: Run.json is put back as it was,
+# so the dashboard goes on showing the run before it.
 
 $script:VMRun = $null
 # The dashboard opens the lock for a moment to see whether it is held, so a
@@ -62,8 +67,8 @@ function Test-SharingViolation {
 function Enter-VMRun {
     <#
       Takes the VM's run lock for this process's $Command (Build,
-      Maintenance or Rebuild) and records it as running. False, writing
-      nothing, when another run holds it. Runs never nest (maintenance runs
+      Maintenance, Rebuild, Restore or Remove) and records it as running.
+      False, writing nothing, when another run holds it. Runs never nest (maintenance runs
       a rebuild inside its own run), so a run started inside another one in
       this process is refused the same way, and the outer run's lock and
       state are left alone.
@@ -92,7 +97,9 @@ function Enter-VMRun {
         }
     }
 
-    # The other commands' latest runs are kept. Nothing else writes the file while the lock is held.
+    # As it was, for Undo-VMRunRecord. Nothing else writes the file while the lock is held.
+    $previous = if (Test-Path -LiteralPath $paths.State -PathType Leaf) { [IO.File]::ReadAllText($paths.State) } else { $null }
+    # The other commands' latest runs are kept.
     $runs = [ordered]@{}
     foreach ($earlier in (Read-VMRunDocument -Path $paths.State).Runs) {
         if ($earlier.Command -and $earlier.Command -ne $Command) { $runs[$earlier.Command] = $earlier }
@@ -106,6 +113,8 @@ function Enter-VMRun {
         VMName   = $VM.Name
         Stopping = $false
         Outcome  = $null
+        Undo     = $false
+        Previous = $previous
         Runs     = $runs
         State   = [ordered]@{
             Command            = $Command
@@ -181,17 +190,40 @@ function Set-VMRunOutcome {
     if ($script:VMRun) { $script:VMRun.Outcome = $Status }
 }
 
+function Undo-VMRunRecord {
+    <#
+      The run is not to be recorded, since it did nothing, or the VM's
+      record goes with it: when it ends, Exit-VMRun puts Run.json back as it
+      was before the run, or leaves none if there was none, and frees the
+      lock. Nothing in a process that holds no run lock.
+    #>
+    if ($script:VMRun) { $script:VMRun.Undo = $true }
+}
+
 function Exit-VMRun {
     <#
       Records how the run ended and frees the lock. $Status is Completed
       (or the outcome the run set), Failed or Stopped; a failed or stopped
-      run also records the phase it was in. Nothing in a process that holds
-      no run lock, so a run that was refused never writes.
+      run also records the phase it was in. After Undo-VMRunRecord it puts
+      Run.json back as it was instead. Nothing in a process that holds no
+      run lock, so a run that was refused never writes.
     #>
     param([Parameter(Mandatory)][ValidateSet('Completed', 'Failed', 'Stopped')][string]$Status)
 
     if (-not $script:VMRun) { return }
     try {
+        if ($script:VMRun.Undo) {
+            # Logged, not thrown, as Save-VMRunState does.
+            try {
+                if ($null -ne $script:VMRun.Previous) { Write-TextFileAtomic -Path $script:VMRun.Path -Text $script:VMRun.Previous }
+                elseif (Test-Path -LiteralPath $script:VMRun.Path -PathType Leaf) { Remove-Item -LiteralPath $script:VMRun.Path -Force -ErrorAction Stop }
+            }
+            catch {
+                Write-LogEntry "Could not put back the record of the run before this one in $($script:VMRun.Path): $($_.Exception.Message)" 'WARN'
+            }
+            Remove-VMRunStopRequest -Path $script:VMRun.StopPath
+            return
+        }
         $state = $script:VMRun.State
         $state.Status = if ($Status -eq 'Completed' -and $script:VMRun.Outcome) { $script:VMRun.Outcome } else { $Status }
         if ($Status -ne 'Completed') { $state.UnfinishedPhase = $state.Phase }
@@ -307,6 +339,24 @@ function Get-VMRunState {
     return [pscustomobject]$run
 }
 
+function Get-VMRunCommandText {
+    <# A run's command as the start of a sentence, such as "A build"; $Unknown for a run that has not recorded itself yet. #>
+    [OutputType([string])]
+    param(
+        [AllowEmptyString()][string]$Command,
+        [string]$Unknown = 'A run'
+    )
+
+    switch ($Command) {
+        'Build' { 'A build' }
+        'Maintenance' { 'Maintenance' }
+        'Rebuild' { 'A rebuild' }
+        'Restore' { 'A restore' }
+        'Remove' { 'A removal' }
+        default { $Unknown }
+    }
+}
+
 function Get-VMRunBusyMessage {
     <# Why $Title of the VM $VM did not start: the run already going, as Get-VMRunState reads it. #>
     [OutputType([string])]
@@ -317,12 +367,7 @@ function Get-VMRunBusyMessage {
 
     $running = $null
     try { $running = Get-VMRunState -Settings $VM.Settings } catch { $null = $_ }
-    $what = switch ($running.Command) {
-        'Build' { 'A build' }
-        'Maintenance' { 'Maintenance' }
-        'Rebuild' { 'A rebuild' }
-        default { 'Another long run' }
-    }
+    $what = Get-VMRunCommandText -Command $running.Command -Unknown 'Another long run'
     $since = if ($running.Started) { " (started $(([datetime]$running.Started).ToString('g')), process $($running.ProcessId))" } else { '' }
     return "$what of $($VM.Name) is already running$since, so this $($Title.ToLowerInvariant()) did not start. Wait for it to finish, then run it again."
 }

@@ -3,9 +3,9 @@
     Title      = 'Run maintenance now'
     Command    = 'Start-LazyVMMaintenance'
     Parameters = @('-Name <VM>  (optional with one VM)')
-    Summary    = 'Starts the VM''s maintenance task, so maintenance runs exactly as its nightly run does, and returns at once. Starts nothing while a build, maintenance or rebuild of the VM is running, or when maintenance is not scheduled. Never takes the run lock: the task''s run does.'
+    Summary    = 'Starts the VM''s maintenance task, so maintenance runs exactly as its nightly run does, and returns at once. Starts nothing while a build, maintenance, rebuild, restore or removal of the VM is running, or when maintenance is not scheduled. Never takes the run lock: the task''s run does.'
     Covers     = @('Start-LazyVMMaintenance')
-    Omits      = @{}
+    Omits      = @{ 'Get-VMRunCommandText' = 'names the run going in the message' }
     Steps      = @(
         @{
             Function = 'Resolve-LazyVMRoot'

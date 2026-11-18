@@ -91,7 +91,7 @@ It is extended by:
 
 It does nothing that night while the VM's build is still in progress: a build waits to carry on after a host restart, or the VM is not there yet.
 
-Schedule daily maintenance (`Register-LazyVMMaintenance`) registers the task with Task Scheduler. Build a VM does this too. Run maintenance now (`Start-LazyVMMaintenance`, or the button in the app's VM window) starts that task, so the run is the same as the nightly one. It starts nothing while a build, maintenance or rebuild of the VM is running.
+Schedule daily maintenance (`Register-LazyVMMaintenance`) registers the task with Task Scheduler. Build a VM does this too. Run maintenance now (`Start-LazyVMMaintenance`, or the button in the app's VM window) starts that task, so the run is the same as the nightly one. It starts nothing while a build, maintenance, rebuild, restore or removal of the VM is running.
 
 ## 4. Rebuild the VM
 

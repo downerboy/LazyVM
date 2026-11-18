@@ -51,7 +51,7 @@ function Stop-LazyVMBuild {
             return
         }
         if ($run.Command -and $run.Command -ne 'Build') {
-            $what = if ($run.Command -eq 'Rebuild') { 'A rebuild' } else { $run.Command }
+            $what = Get-VMRunCommandText -Command $run.Command
             $message = "$what of $vmName is running, not a build, so nothing was stopped. Stop-LazyVMBuild stops only a build."
             $PSCmdlet.WriteError([System.Management.Automation.ErrorRecord]::new([InvalidOperationException]::new($message), 'LazyVM.NotABuild', [System.Management.Automation.ErrorCategory]::InvalidOperation, $vmName))
             return

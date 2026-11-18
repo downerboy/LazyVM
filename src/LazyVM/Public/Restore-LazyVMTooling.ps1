@@ -12,6 +12,10 @@ function Restore-LazyVMTooling {
     then are lost. A checkpoint of the current state is taken first, so the
     revert itself can be undone.
 
+    Nothing is changed while a build, maintenance or rebuild of the VM is
+    running: wait for it to end. While the revert runs, the dashboard shows
+    it as a Restore.
+
     .PARAMETER Name
     The VM.
 
@@ -45,11 +49,13 @@ function Restore-LazyVMTooling {
 
     process {
         Set-ForceConfirmation -Force:$Force -BoundParameters $PSBoundParameters
-        Invoke-CommandRun -Title 'Revert tooling' -Name $Name -FailureMessage 'The revert failed' -Cmdlet $PSCmdlet -ScriptBlock {
+        # Holds the run lock as Restore, so the VM is not reverted while a build, maintenance or rebuild of it runs (#453).
+        Invoke-CommandRun -Title 'Restore' -Name $Name -FailureMessage 'The revert failed' -Cmdlet $PSCmdlet -Exclusive:(-not $WhatIfPreference) -ScriptBlock {
             param($VM)
             $action = "Return to tooling version $RestorePoint. ALL its disks go back to then, including the Dev Drive and SQL data disk"
             if (-not $PSCmdlet.ShouldProcess($VM.Name, $action)) {
                 Write-LogEntry 'Revert cancelled' 'INFO'
+                Undo-VMRunRecord
                 return
             }
             Invoke-ToolingRevert -VM $VM -Stamp $RestorePoint

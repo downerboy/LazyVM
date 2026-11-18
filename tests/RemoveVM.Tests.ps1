@@ -265,6 +265,28 @@ Describe 'Invoke-VMRemoval' {
         Test-Path -LiteralPath $vmRoot | Should -BeFalse
     }
 
+    It 'lets go of the run lock in the Config folder before deleting it, and leaves no run record (#453)' {
+        $settings.ResumeFile = Join-Path -Path $vmRoot -ChildPath 'Config\Resume.json'
+
+        $result = InModuleScope $module -Parameters @{ Settings = $settings; Context = $context } {
+            param($Settings, $Context)
+            $vm = [VMContext]::new($Settings)
+            $null = Enter-VMRun -VM $vm -Command 'Remove'
+            try {
+                Start-Log -Path $Settings.LogFile -MaxSizeMB 10
+                [pscustomobject]@{ Outcome = Invoke-VMRemoval -VM $vm -Context $Context 6>$null; Held = Test-VMRunEntered }
+            }
+            finally {
+                # A failing test must not leave the lock held for the next.
+                if ($script:VMRun) { $script:VMRun.Lock.Dispose(); $script:VMRun = $null }
+            }
+        }
+
+        "$($result.Outcome)" | Should -Be 'Removed'
+        $result.Held | Should -BeFalse
+        Test-Path -LiteralPath $vmRoot | Should -BeFalse
+    }
+
     It 'deletes the copy of the tooling list the VM was built from, with its Config folder (#71)' {
         $templateCopy = Join-Path -Path $vmRoot -ChildPath 'Config\Tooling.Template.json'
         $templateCopy | Should -Exist

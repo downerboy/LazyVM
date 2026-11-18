@@ -3,9 +3,9 @@
     Title      = 'Return to an earlier tooling version'
     Command    = 'Restore-LazyVMTooling'
     Parameters = @('-Name <VM>', '-RestorePoint yyyyMMdd-HHmmss', '-Force  (optional)')
-    Summary    = 'Returns ALL the VM''s disks to that checkpoint, Dev Drive and data disk included. The revert itself can be undone.'
+    Summary    = 'Returns ALL the VM''s disks to that checkpoint, Dev Drive and data disk included. The revert itself can be undone. Holds the run lock as a Restore, so it is refused while a build, maintenance or rebuild of the VM runs.'
     Covers     = @('Restore-LazyVMTooling', 'Invoke-ToolingRevert')
-    Omits      = @{}
+    Omits      = @{ 'Undo-VMRunRecord' = 'a revert you do not confirm leaves Run.json as it was' }
     Steps      = @(
         @{
             Function = 'Initialize-CommandRun'
