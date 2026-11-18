@@ -93,6 +93,70 @@ Describe 'Remove-LazyVM' {
     }
 }
 
+Describe 'Get-LazyVMRemovalPlan (#454)' {
+    BeforeEach {
+        Mock -ModuleName $module Assert-Administrator { }
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = 'D:\DevVM'; Source = 'test' } }
+        Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ Settings = @{ VMName = 'Alpha'; Root = 'D:\DevVM' } } }
+        Mock -ModuleName $module Start-Log { }
+        Mock -ModuleName $module Write-LogEntry { }
+        Mock -ModuleName $module Get-VMRemovalPreview {
+            [pscustomobject]@{
+                Machine         = [pscustomobject]@{ State = 'Off' }
+                CheckpointCount = 3
+                Tasks           = @('LazyVM-Maintain-Alpha')
+                Items           = @(
+                    [pscustomobject]@{ Kind = 'Folder'; Path = 'D:\DevVM\Alpha'; Size = [double]2GB }
+                    [pscustomobject]@{ Kind = 'File'; Path = 'E:\Alpha-SQL.vhdx'; Size = [double]1GB }
+                )
+                Total           = [double]3GB
+                Kept            = @([pscustomobject]@{ Path = 'E:\Shared'; Reason = 'VM ''Beta'' also uses E:\Shared' })
+                WorkDisks       = @([pscustomobject]@{ Name = 'The Dev Drive'; Path = 'D:\DevVM\Alpha\Disks\Alpha-DevDrive.vhdx'; Size = [double]1GB; Advice = 'Push it first.' })
+            }
+        }
+    }
+
+    It 'returns what would be deleted and kept as one object, reading everything read-only' {
+        $plan = Get-LazyVMRemovalPlan -Name Alpha
+
+        $plan.PSObject.TypeNames | Should -Contain 'LazyVM.RemovalPlan'
+        $plan.Name | Should -Be 'Alpha'
+        $plan.HyperVState | Should -Be 'Off'
+        $plan.CheckpointCount | Should -Be 3
+        $plan.Tasks | Should -Be @('LazyVM-Maintain-Alpha')
+        @($plan.Items | ForEach-Object { "$($_.Kind) $($_.Path)" }) | Should -Be @('Folder D:\DevVM\Alpha', 'File E:\Alpha-SQL.vhdx')
+        $plan.Items[0].PSObject.TypeNames | Should -Contain 'LazyVM.RemovalItem'
+        $plan.Total | Should -Be ([double]3GB)
+        $plan.Kept[0].Reason | Should -BeLike '*Beta*'
+        $plan.WorkDisks[0].Name | Should -Be 'The Dev Drive'
+        Should -Invoke -ModuleName $module Read-VMSetting -Times 1 -Exactly -ParameterFilter { $ReadOnly -and $VMName -eq 'Alpha' }
+        Should -Invoke -ModuleName $module Get-VMRemovalPreview -Times 1 -Exactly -ParameterFilter { $ReadOnly }
+    }
+
+    It 'writes nothing to the VM''s log' {
+        $null = Get-LazyVMRemovalPlan -Name Alpha
+
+        Should -Invoke -ModuleName $module Start-Log -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly
+    }
+
+    It 'returns an empty plan when nothing of the VM is left' {
+        Mock -ModuleName $module Get-VMRemovalPreview { }
+
+        $plan = Get-LazyVMRemovalPlan -Name Alpha
+
+        $plan.Name | Should -Be 'Alpha'
+        $plan.HyperVState | Should -BeNullOrEmpty
+        @($plan.Items).Count | Should -Be 0
+        @($plan.Tasks).Count | Should -Be 0
+        $plan.Total | Should -Be 0
+    }
+
+    It 'always needs the VM''s name, as Remove-LazyVM does' {
+        (Get-Command -Name Get-LazyVMRemovalPlan).Parameters['Name'].Attributes.Where({ $_ -is [System.Management.Automation.ParameterAttribute] }).Mandatory | Should -BeTrue
+    }
+}
+
 Describe 'Invoke-LazyVMMaintenance' {
     BeforeEach {
         Mock -ModuleName $module Assert-Administrator { }

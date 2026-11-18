@@ -39,7 +39,7 @@ Actors: Host user, Administrator (a Host user), Task Scheduler running as SYSTEM
   - Build and maintain: Build a VM (`Build-LazyVM`), Schedule daily maintenance (`Register-LazyVMMaintenance`), Run daily maintenance (`Invoke-LazyVMMaintenance`), Run maintenance now (`Start-LazyVMMaintenance`), Rebuild the VM (`Invoke-LazyVMRebuild`).
   - Tooling: View installed tooling (`Get-LazyVMTooling`), Record tooling changes (`Save-LazyVMTooling`), List tooling restore points (`Get-LazyVMRestorePoint`), Return to a tooling version (`Restore-LazyVMTooling`).
   - State: Capture state (`Save-LazyVMState`), Restore state (`Restore-LazyVMState`).
-  - Remove a VM (`Remove-LazyVM`).
+  - Remove a VM (`Remove-LazyVM`), and list what it would delete first (`Get-LazyVMRemovalPlan`).
 - Task Scheduler: Run daily maintenance (task `LazyVM-Maintain-<VM>`), and Build a VM again after the host restarts to turn on Hyper-V (task `LazyVM-ResumeAfterReboot-<VM>`).
 
 ## 2. Build a VM

@@ -9,7 +9,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance, a rebuild and a restore (`Restore-LazyVMTooling`) also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Remove-LazyVM` holds it too, until the Hyper-V VM is gone and just before the folder that holds it is deleted. A restore or removal you do not confirm leaves `Run.json` as it was. `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Start-LazyVMMaintenance`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance, a rebuild and a restore (`Restore-LazyVMTooling`) also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Remove-LazyVM` holds it too, until the Hyper-V VM is gone and just before the folder that holds it is deleted. A restore or removal you do not confirm leaves `Run.json` as it was. `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMRemovalPlan`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Start-LazyVMMaintenance`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
@@ -21,7 +21,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - Tooling: [Record tooling now](#tooling-record), [See installed tooling](#tooling-view), [List tooling restore points](#restore-points), [Return to an earlier tooling version](#tooling-revert)
 - State: [Capture state](#capture), [Restore state](#restore)
 - Templates: [List the config templates](#config-templates), [Save a VM as a config template](#export-template)
-- Remove: [Remove a VM](#remove)
+- Remove: [List what removing a VM deletes](#removal-plan), [Remove a VM](#remove)
 - Check: [List VMs](#status), [See the dashboard data](#dashboard), [Read a VM's log](#log), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [Export the recovery passwords](#recovery-key-export), [See the security findings](#security-finding), [Approve a security finding](#security-approve), [Revoke a security finding approval](#security-revoke), [Check a VM end to end](#test)
 
 <a id="install-from-repo"></a>
@@ -739,6 +739,29 @@ Saves a VM's settings and tooling list as a config template that new VMs can sta
    - Writes D5, config template: Shared\Templates\ (<Template>.json)
    - Writes D6, the new file: Pipeline (FileInfo)
 
+<a id="removal-plan"></a>
+
+## List what removing a VM deletes
+
+`Get-LazyVMRemovalPlan` `-Name <VM>`
+
+What Remove-LazyVM would delete, with sizes, what it would keep and why, and the disks with your own work that go too, as one object. Only reads, and writes nothing, not even the log.
+
+![List what removing a VM deletes: call order and data flow](diagrams/removal-plan.svg)
+
+1. `Resolve-LazyVMRoot` (Settings): the LazyVM folder
+   - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root)
+2. `Read-VMSetting` (Settings): read-only: the VM's settings, and in Get-VMRemovalPreview every other VM's, so nothing they use is listed
+   - Reads D2, settings: Settings files (Shared\Config\LazyVM.Settings.json, *\Config\VM.json)
+3. `Get-VMRemovalPreview` (Maintenance): what Remove-LazyVM deletes and keeps, as it decides it, with each item's size
+   - Also runs `Get-VMProfileName`, `Get-DiskChain`, `Get-PathSize`
+   - Reads D3, disks and checkpoints: Hyper-V (disks of <VM>, disks of other VMs)
+   - Reads D4, tasks: Task Scheduler (LazyVM-Maintain-<VM>, LazyVM-ResumeAfterReboot-<VM>)
+   - Reads D5, files and sizes: VM folder (<VM>\ and anything a setting put elsewhere)
+4. `Get-VMRemovalPlan` (Maintenance, called by Get-VMRemovalPreview): decides what goes and what is kept, and why; stops when the VM folder holds something another VM uses
+   - Also runs `Assert-VMRootFolder`, `Get-VMOwnedPath`, `Get-ParentFolder`
+   - Writes D6, removal plan: Pipeline (LazyVM.RemovalPlan: HyperVState,, CheckpointCount, Tasks, Items, Total,, Kept, WorkDisks)
+
 <a id="remove"></a>
 
 ## Remove a VM
@@ -752,7 +775,8 @@ Deletes the VM and everything created for it, Dev Drive and User disk included. 
 1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
    - Reads D1, settings, VM profile, guest user name: VM context sources (HKCU:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
    - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
-2. `Get-VMRemovalContext` (Maintenance): Get-VMRemovalPlan decides what to delete and keep; lists it with sizes
+2. `Get-VMRemovalContext` (Maintenance): Get-VMRemovalPlan decides what to delete and keep; lists it with sizes, as Get-LazyVMRemovalPlan returns it
+   - Also runs `Get-VMRemovalPreview`
    - Reads D3, other VMs' paths: *\Config\ (other VMs' VM.json)
    - Reads D4, attached disks: Hyper-V (disks of <VM>, disks of other VMs)
    - Writes D5, removal list: Log and screen (what will be deleted, what is kept, and why)
@@ -801,7 +825,7 @@ Lists the VMs in the LazyVM folder with their state and maintenance. No administ
 
 `Get-LazyVMDashboard` `-Name  (wildcards, default *)`
 
-Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's disks, memory, last maintenance, open findings, templates, and the build, maintenance or rebuild going now with the latest build. Only reads. No administrator rights needed.
+Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's disks, memory, last maintenance, open findings, templates, and the build, maintenance, rebuild, restore or removal going now with the latest build. Only reads. No administrator rights needed.
 
 ![See the dashboard data: call order and data flow](diagrams/dashboard.svg)
 

@@ -14,8 +14,10 @@ function Get-LazyVMDashboard {
     LazyVM keeps up to date with every change to the VM, to build another VM
     just like it.
 
-    Run is the build, maintenance or rebuild going now, or the latest one,
-    and LastBuild the latest build: each with its Command, Status (Running,
+    Run is the build, maintenance, rebuild, restore (Restore-LazyVMTooling)
+    or removal going now, or the latest one, and LastBuild the latest
+    build: each with its Command (Build, Maintenance, Rebuild, Restore or
+    Remove), Status (Running,
     Completed, CompletedWithProblems, WaitingForRestart, Failed, Stopped or
     EndedUnexpectedly), ProcessId, Started, Ended, the Phase and PhaseName
     it is in or was last in, the UnfinishedPhase a failed or stopped run

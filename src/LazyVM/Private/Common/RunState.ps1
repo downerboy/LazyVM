@@ -284,7 +284,7 @@ function Get-VMRunState {
       Started, Ended, Phase, PhaseName, UnfinishedPhase,
       PhasesWithProblems and StopRequested, true while a running run has
       been asked to stop and has not stopped yet. The latest run, or with -Command the latest run
-      of that command (Build, Maintenance or Rebuild). Status is Running
+      of that command (Build, Maintenance, Rebuild, Restore or Remove). Status is Running
       while a run holds the lock, even one that has not written its state
       yet, and EndedUnexpectedly for one recorded as running whose lock is
       free: its process was killed, crashed or lost power. Nothing when

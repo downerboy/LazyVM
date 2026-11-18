@@ -112,7 +112,7 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | `Save-LazyVMState` / `Restore-LazyVMState`                | Captures the VM's state to the host, and puts it back.                                                 |
 | `Invoke-LazyVMRebuild`                                      | Rebuilds the VM from scratch, keeping your work.                                                       |
 | `Invoke-LazyVMMaintenance` / `Register-LazyVMMaintenance` | The daily maintenance run, and scheduling it.                                                          |
-| `Remove-LazyVM`                                             | Deletes a VM and everything created for it. `-WhatIf` lists it all first.                            |
+| `Get-LazyVMRemovalPlan` / `Remove-LazyVM`                 | Lists what deleting a VM removes and keeps, and deletes it. `-WhatIf` lists it all first.            |
 
 Commands that change something support `-WhatIf` and `-Confirm`.
 

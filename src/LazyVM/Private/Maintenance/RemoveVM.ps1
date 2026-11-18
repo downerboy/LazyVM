@@ -277,19 +277,22 @@ function Remove-PathWithRetry {
     }
 }
 
-function Get-VMRemovalContext {
+function Get-VMRemovalPreview {
     <#
-      Works out everything removing the VM would delete, lists it in the
-      log, and returns it for Invoke-VMRemoval. Changes nothing. Returns
-      $null when nothing of the VM exists.
+      Works out everything removing the VM would delete, with sizes, what it
+      keeps and why, and the disks holding the user's own work that go too.
+      Changes nothing and writes nothing, not even to the log; with
+      -ReadOnly it reads the other VMs' settings without writing anything
+      either, as Get-LazyVMDashboard does. Returns $null when nothing of the
+      VM exists.
     #>
     param(
         [Parameter(Mandatory)][VMContext]$VM,
-        [Parameter(Mandatory)][string]$ScriptDir
+        [Parameter(Mandatory)][string]$ScriptDir,
+        [switch]$ReadOnly
     )
 
     $settings = $VM.Settings
-    Write-LogEntry "REMOVE VM - $($VM.Name)" 'PHASE'
 
     # Every other VM's settings, read the way a run for that VM would read
     # them, so nothing they use is deleted.
@@ -297,7 +300,7 @@ function Get-VMRemovalContext {
     foreach ($name in @(Get-VMProfileName -Root $settings.Root)) {
         if ($name -eq $VM.Name) { continue }
         try {
-            $otherSettings += (Read-VMSetting -Root $settings.Root -VMName $name).Settings
+            $otherSettings += (Read-VMSetting -Root $settings.Root -VMName $name -ReadOnly:$ReadOnly).Settings
         }
         catch {
             throw "Cannot tell what VM '$name' uses, so nothing has been removed. Fix its settings first:`n  $($_.Exception.Message)"
@@ -343,51 +346,87 @@ function Get-VMRemovalContext {
     $vmRoot = if (Test-Path -LiteralPath $plan.VMRoot -PathType Container) { $plan.VMRoot } else { $null }
 
     if (-not $machine -and $tasks.Count -eq 0 -and -not $vmRoot -and $files.Count + $folders.Count -eq 0) {
+        return $null
+    }
+
+    $items = @(foreach ($path in @($vmRoot | Where-Object { $_ }) + $files + $folders) {
+            [pscustomobject]@{
+                Kind = if ($files -contains $path) { 'File' } else { 'Folder' }
+                Path = $path
+                Size = [double](Get-PathSize -Path $path)
+            }
+        })
+    $total = [double]0
+    foreach ($item in $items) { $total += $item.Size }
+
+    # The disks that hold the user's own work get a warning of their own.
+    $candidates = @(
+        @{ Path = $settings.DevDrivePath; Name = 'The Dev Drive'; Advice = 'It holds this VM''s source code. Push or copy anything not yet in source control first.' }
+        @{ Path = $settings.UserDiskPath; Name = 'The User disk'; Advice = 'It holds this VM''s Documents, Desktop, Downloads, .ssh and source\repos. Copy anything you need first.' }
+    )
+    $workDisks = @(foreach ($disk in $candidates) {
+            $inRoot = $vmRoot -and $disk.Path -and (Test-PathWithin -Path $disk.Path -Folder $vmRoot)
+            $goes = ($files -contains $disk.Path) -or ($inRoot -and (Test-Path -LiteralPath $disk.Path -PathType Leaf))
+            if ($disk.Path -and $goes) {
+                [pscustomobject]@{ Name = $disk.Name; Path = $disk.Path; Size = [double](Get-PathSize -Path $disk.Path); Advice = $disk.Advice }
+            }
+        })
+
+    return [pscustomobject]@{
+        Machine         = $machine
+        CheckpointCount = $checkpointCount
+        Tasks           = $tasks
+        VMRoot          = $vmRoot
+        Files           = $files
+        Folders         = $folders
+        RotatedLogs     = $rotatedLogs
+        Items           = $items
+        Total           = $total
+        Kept            = @($plan.Kept)
+        WorkDisks       = $workDisks
+    }
+}
+
+function Get-VMRemovalContext {
+    <#
+      Works out everything removing the VM would delete
+      (Get-VMRemovalPreview), lists it in the log, and returns it for
+      Invoke-VMRemoval. Changes nothing. Returns $null when nothing of the
+      VM exists.
+    #>
+    param(
+        [Parameter(Mandatory)][VMContext]$VM,
+        [Parameter(Mandatory)][string]$ScriptDir
+    )
+
+    Write-LogEntry "REMOVE VM - $($VM.Name)" 'PHASE'
+    $context = Get-VMRemovalPreview -VM $VM -ScriptDir $ScriptDir
+    if (-not $context) {
         Write-LogEntry "Nothing of '$($VM.Name)' was found to remove." 'INFO'
         return $null
     }
 
     Write-LogEntry "Removing '$($VM.Name)' deletes all of this, and it cannot be undone:" 'WARN'
-    if ($machine) {
-        Write-LogEntry "  Hyper-V VM   $($VM.Name) ($($machine.State), $checkpointCount checkpoint(s))" 'INFO'
+    if ($context.Machine) {
+        Write-LogEntry "  Hyper-V VM   $($VM.Name) ($($context.Machine.State), $($context.CheckpointCount) checkpoint(s))" 'INFO'
     }
-    foreach ($task in $tasks) { Write-LogEntry "  Task         $task" 'INFO' }
-    $total = 0
-    foreach ($path in @($vmRoot | Where-Object { $_ }) + $files + $folders) {
-        $size = Get-PathSize -Path $path
-        $total += $size
-        Write-LogEntry ("  {0,-12} {1}  ({2})" -f $(if ($files -contains $path) { 'File' } else { 'Folder' }), $path, (Format-Size $size)) 'INFO'
+    foreach ($task in $context.Tasks) { Write-LogEntry "  Task         $task" 'INFO' }
+    foreach ($item in $context.Items) {
+        Write-LogEntry ("  {0,-12} {1}  ({2})" -f $item.Kind, $item.Path, (Format-Size $item.Size)) 'INFO'
     }
-    Write-LogEntry "  Total        $(Format-Size $total)" 'INFO'
+    Write-LogEntry "  Total        $(Format-Size $context.Total)" 'INFO'
 
-    foreach ($item in $plan.Kept) {
+    foreach ($item in $context.Kept) {
         Write-LogEntry "  Kept         $($item.Path) - $($item.Reason)" 'INFO'
     }
 
-    # The disks that hold the user's own work get a warning of their own.
-    $workDisks = @(
-        @{ Path = $settings.DevDrivePath; Name = 'The Dev Drive'; Advice = 'It holds this VM''s source code. Push or copy anything not yet in source control first.' }
-        @{ Path = $settings.UserDiskPath; Name = 'The User disk'; Advice = 'It holds this VM''s Documents, Desktop, Downloads, .ssh and source\repos. Copy anything you need first.' }
-    )
-    foreach ($disk in $workDisks) {
-        $inRoot = $vmRoot -and $disk.Path -and (Test-PathWithin -Path $disk.Path -Folder $vmRoot)
-        $goes = ($files -contains $disk.Path) -or ($inRoot -and (Test-Path -LiteralPath $disk.Path -PathType Leaf))
-        if ($disk.Path -and $goes) {
-            Write-LogEntry '' 'INFO'
-            Write-LogEntry "$($disk.Name) is deleted too: $($disk.Path) ($(Format-Size (Get-PathSize -Path $disk.Path)))." 'WARN'
-            Write-LogEntry "  $($disk.Advice)" 'WARN'
-        }
+    foreach ($disk in $context.WorkDisks) {
+        Write-LogEntry '' 'INFO'
+        Write-LogEntry "$($disk.Name) is deleted too: $($disk.Path) ($(Format-Size $disk.Size))." 'WARN'
+        Write-LogEntry "  $($disk.Advice)" 'WARN'
     }
 
-    return [pscustomobject]@{
-        Machine     = $machine
-        Tasks       = $tasks
-        VMRoot      = $vmRoot
-        Files       = $files
-        Folders     = $folders
-        RotatedLogs = $rotatedLogs
-        Total       = $total
-    }
+    return $context
 }
 
 function Invoke-VMRemoval {
