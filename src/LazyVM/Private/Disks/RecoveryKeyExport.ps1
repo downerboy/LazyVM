@@ -99,6 +99,44 @@ function Get-UnexportedRecoveryKey {
     return Select-UnexportedRecoveryKey -Keys @(Get-StoredRecoveryKey -VM $VM) -Record (Read-RecoveryKeyExportRecord -VM $VM)
 }
 
+function Get-RecoveryKeyStatus {
+    <#
+      Each of the VM's stored recovery keys without its password: its VM,
+      disk, disk GUID, BitLocker key ID, when it was recorded (Recorded, a
+      date, empty when it cannot be read), and whether the last export held
+      it (Exported), counted as the reminders count it (#468). Nothing when
+      no key is stored. Throws when the key store cannot be read.
+    #>
+    [OutputType('LazyVM.RecoveryKey')]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $keys = @(Get-StoredRecoveryKey -VM $VM)
+    $unexported = @(Select-UnexportedRecoveryKey -Keys $keys -Record (Read-RecoveryKeyExportRecord -VM $VM) | ForEach-Object { Get-RecoveryKeyStamp -Key $_ })
+    foreach ($key in $keys) {
+        [pscustomobject]@{
+            PSTypeName = 'LazyVM.RecoveryKey'
+            Name       = $key.Name
+            Disk       = $key.Disk
+            DiskGuid   = $key.DiskGuid
+            KeyId      = $key.KeyId
+            Recorded   = ConvertTo-RecoveryKeyDate -Value $key.Recorded
+            Exported   = $unexported -notcontains (Get-RecoveryKeyStamp -Key $key)
+        }
+    }
+}
+
+function ConvertTo-RecoveryKeyDate {
+    <# When a key was recorded, in local time: the store gives it as a date or as round-trip text, depending on how it was read. Empty when it cannot be read. #>
+    [OutputType([datetime])]
+    param([AllowNull()][object]$Value)
+
+    if ($Value -is [datetime]) { return $Value }
+    if ($Value -is [datetimeoffset]) { return $Value.LocalDateTime }
+    $parsed = [datetimeoffset]::MinValue
+    if ([datetimeoffset]::TryParse("$Value", [cultureinfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeLocal, [ref]$parsed)) { return $parsed.LocalDateTime }
+    return $null
+}
+
 function Write-RecoveryKeyReminder {
     <#
       Reminds, in one line with the command to run, when a recovery password

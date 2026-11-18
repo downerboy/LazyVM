@@ -277,6 +277,63 @@ internal sealed class FakeCommandRunner : CommandRunner
         }
     }
 
+    private readonly Answers<VMRecoveryKey> _RecoveryKeys = new();
+
+    public List<string> RecoveryKeyCalls { get; } = [];
+
+    /// <summary>The recovery password Get-LazyVMCredential -RecoveryPassword gives for each disk GUID.</summary>
+    public Dictionary<string, string> RecoveryPasswords { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public List<(string Name, string DiskGuid)> RecoveryPasswordCalls { get; } = [];
+
+    /// <summary>Get-LazyVMCredential -RecoveryPassword fails with this.</summary>
+    public Exception? RecoveryPasswordFails
+    {
+        get; set;
+    }
+
+    public List<(string Name, string Path, bool Force)> ExportCalls { get; } = [];
+
+    /// <summary>Export-LazyVMRecoveryKey fails with this.</summary>
+    public Exception? ExportFails
+    {
+        get; set;
+    }
+
+    /// <summary>The warnings Export-LazyVMRecoveryKey writes.</summary>
+    public IReadOnlyList<string> ExportWarnings { get; set; } = [];
+
+    /// <summary>The next Get-LazyVMRecoveryKey returns these keys.</summary>
+    public void ReturnsRecoveryKeys(params VMRecoveryKey[] keys)
+    {
+        _RecoveryKeys.Returns(keys);
+    }
+
+    public void RecoveryKeysThrow(Exception exception)
+    {
+        _RecoveryKeys.Throws(exception);
+    }
+
+    public override Task<IReadOnlyList<VMRecoveryKey>> GetRecoveryKeysAsync(string name, CancellationToken cancellationToken)
+    {
+        RecoveryKeyCalls.Add(name);
+        return _RecoveryKeys.Next(cancellationToken);
+    }
+
+    public override Task<string> GetRecoveryPasswordAsync(string name, string diskGuid, CancellationToken cancellationToken)
+    {
+        RecoveryPasswordCalls.Add((name, diskGuid));
+        return RecoveryPasswordFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(RecoveryPasswords[diskGuid]);
+    }
+
+    public override Task<RecoveryKeyExport> ExportRecoveryKeysAsync(string name, string path, bool force)
+    {
+        ExportCalls.Add((name, path, force));
+        return ExportFails is { } failure
+            ? Task.FromException<RecoveryKeyExport>(failure)
+            : Task.FromResult(new RecoveryKeyExport(path, ExportWarnings));
+    }
+
     public override Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
     {
         return ModuleFolderFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(@"C:\Program Files\LazyVM\Modules\LazyVM\6.20.0");
@@ -377,6 +434,44 @@ internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launc
     {
         RestoreQuestions.Add(question);
         return ConfirmsRestore;
+    }
+
+    /// <summary>The file the Save dialog gives back; empty for Cancel.</summary>
+    public string? ChosenExportFile
+    {
+        get; set;
+    }
+
+    /// <summary>The file name each Save dialog suggested.</summary>
+    public List<string> ExportFileSuggestions { get; } = [];
+
+    public override string? ChooseExportFile(RecoveryKeysViewModel keys, string suggestedName)
+    {
+        ExportFileSuggestions.Add(suggestedName);
+        return ChosenExportFile;
+    }
+
+    /// <summary>The files there are already.</summary>
+    public HashSet<string> ExistingFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public override bool FileExists(string path)
+    {
+        return ExistingFiles.Contains(path);
+    }
+
+    /// <summary>The answer to "Do you want to replace it?": Yes when true.</summary>
+    public bool ConfirmsReplace
+    {
+        get; set;
+    }
+
+    /// <summary>Every replace question asked.</summary>
+    public List<string> ReplaceQuestions { get; } = [];
+
+    public override bool ConfirmReplace(RecoveryKeysViewModel keys, string question)
+    {
+        ReplaceQuestions.Add(question);
+        return ConfirmsReplace;
     }
 
     public void Close(ViewModelBase window)

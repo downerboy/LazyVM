@@ -120,6 +120,89 @@ public sealed class VMViewModelTests : IDisposable
         Assert.Equal("PlainWindows", Detail(vm, "Created from config template"));
     }
 
+    [Theory]
+    [InlineData(3, 1, true, "3 stored, 1 not exported yet, last exported 15 November 2026 10:05")]
+    [InlineData(2, 0, true, "2 stored, all exported, last exported 15 November 2026 10:05")]
+    [InlineData(2, 2, false, "2 stored, 2 not exported yet, never exported")]
+    [InlineData(0, 0, false, "None stored yet")]
+    public void RecoveryKeys_SayHowManyAreStored_AndNotExported(int stored, int unexported, bool everExported, string said)
+    {
+        var vm = Open(Sample.VM() with
+        {
+            RecoveryKeys = stored,
+            UnexportedRecoveryKeys = unexported,
+            RecoveryKeysExported = everExported ? new DateTime(2026, 11, 15, 10, 5, 0) : null,
+        });
+
+        Assert.Equal(said, Detail(vm, "Recovery keys"));
+    }
+
+    [Fact]
+    public void RecoveryKeys_NotKnown_SayNotKnown()
+    {
+        Assert.Equal("Not known", Detail(Open(Sample.VM()), "Recovery keys"));
+    }
+
+    [Theory]
+    [InlineData(1, "1 BitLocker recovery password of DevBox is not exported yet. Keep a copy offline, such as on a USB drive: choose Recovery keys.")]
+    [InlineData(3, "3 BitLocker recovery passwords of DevBox are not exported yet. Keep a copy offline, such as on a USB drive: choose Recovery keys.")]
+    public void KeysNotExported_ShowANotice_SayingHowMany(int unexported, string said)
+    {
+        var vm = Open(Sample.VM() with { RecoveryKeys = 3, UnexportedRecoveryKeys = unexported });
+
+        Assert.Equal(said, vm.RecoveryKeyNotice);
+        Assert.True(vm.HasRecoveryKeyNotice);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(null)]
+    public void EveryKeyExported_OrNotKnown_ShowsNoNotice(int? unexported)
+    {
+        var vm = Open(Sample.VM() with { RecoveryKeys = 2, UnexportedRecoveryKeys = unexported });
+
+        Assert.False(vm.HasRecoveryKeyNotice);
+        Assert.Equal(string.Empty, vm.RecoveryKeyNotice);
+    }
+
+    [Fact]
+    public void ARefresh_AfterAnExport_TakesTheNoticeAway()
+    {
+        var vm = Open(Sample.VM() with { RecoveryKeys = 2, UnexportedRecoveryKeys = 2 });
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        vm.Update(Sample.VM() with { RecoveryKeys = 2, UnexportedRecoveryKeys = 0 });
+
+        Assert.False(vm.HasRecoveryKeyNotice);
+        Assert.Contains(string.Empty, changed);
+    }
+
+    [Fact]
+    public void RecoveryKeys_OpensTheVMsRecoveryKeysWindow_AndReadsTheKeys()
+    {
+        _Runner.ReturnsRecoveryKeys();
+        var vm = Open(Sample.VM());
+
+        vm.RecoveryKeysCommand.Execute(null);
+
+        Assert.Equal("DevBox", Assert.IsType<RecoveryKeysViewModel>(Assert.Single(_Tools.Shown)).Name);
+        Assert.Equal(["DevBox"], _Runner.RecoveryKeyCalls);
+    }
+
+    [Fact]
+    public void RecoveryKeys_Twice_BringsTheOpenWindowToTheFront()
+    {
+        _Runner.ReturnsRecoveryKeys();
+        var vm = Open(Sample.VM());
+
+        vm.RecoveryKeysCommand.Execute(null);
+        vm.RecoveryKeysCommand.Execute(null);
+
+        Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
+        Assert.Single(_Runner.RecoveryKeyCalls);
+    }
+
     [Fact]
     public void ConfigTemplate_NotRecorded_SaysSo()
     {

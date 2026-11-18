@@ -9,7 +9,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance, a rebuild and a restore (`Restore-LazyVMTooling`) also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Remove-LazyVM` holds it too, until the Hyper-V VM is gone and just before the folder that holds it is deleted. A restore or removal you do not confirm leaves `Run.json` as it was. `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMRemovalPlan`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Start-LazyVMMaintenance`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance, a rebuild and a restore (`Restore-LazyVMTooling`) also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Remove-LazyVM` holds it too, until the Hyper-V VM is gone and just before the folder that holds it is deleted. A restore or removal you do not confirm leaves `Run.json` as it was. `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMRecoveryKey`, `Get-LazyVMRemovalPlan`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Start-LazyVMMaintenance`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
@@ -22,7 +22,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - State: [Capture state](#capture), [Restore state](#restore)
 - Templates: [List the config templates](#config-templates), [Save a VM as a config template](#export-template)
 - Remove: [List what removing a VM deletes](#removal-plan), [Remove a VM](#remove)
-- Check: [List VMs](#status), [See the dashboard data](#dashboard), [Read a VM's log](#log), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [Export the recovery passwords](#recovery-key-export), [See the security findings](#security-finding), [Approve a security finding](#security-approve), [Revoke a security finding approval](#security-revoke), [Check a VM end to end](#test)
+- Check: [List VMs](#status), [See the dashboard data](#dashboard), [Read a VM's log](#log), [View settings](#settings), [Check the license](#license), [See the guest account](#credential-view), [List the recovery keys](#recovery-keys), [Export the recovery passwords](#recovery-key-export), [See the security findings](#security-finding), [Approve a security finding](#security-approve), [Revoke a security finding approval](#security-revoke), [Check a VM end to end](#test)
 
 <a id="install-from-repo"></a>
 
@@ -850,7 +850,7 @@ Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's d
    - Also runs `Get-VMRunPath`, `Test-VMRunLockHeld`, `Read-VMRunDocument`
    - Reads D9, run lock and state: <VM>\Config\ (Run.lock  (opened for a moment, never created), Run.json)
 10. `Get-RecoveryKeySummary` (Dashboard, called by New-DashboardEntry): how many recovery keys are stored and not exported yet, and when they last were; counts only, never a password
-   - Also runs `Get-StoredRecoveryKey`, `Read-RecoveryKeyExportRecord`, `Select-UnexportedRecoveryKey`
+   - Also runs `Get-RecoveryKeyStatus`, `Read-RecoveryKeyExportRecord`
    - Reads D10, recovery keys: <VM>\Credentials\ (bitlocker.cred  (key IDs counted))
    - Reads D11, last export: <VM>\Config\ (RecoveryKeyExport.json)
 11. `Get-VMTemplateSummary` (Dashboard, called by New-DashboardEntry): the configuration first built from, and the green template
@@ -944,6 +944,28 @@ Returns the account LazyVM uses inside the VM. -AsPlainText shows the password; 
    - Writes D5, recovery passwords: Pipeline (Disk, DiskGuid, KeyId,, Recorded, RecoveryPassword)
 4. `Set-ClipboardSecret` (Credentials): with -ToClipboard: the password, kept out of clipboard history and sync
    - Writes D6, password: Clipboard (not in history or sync)
+
+<a id="recovery-keys"></a>
+
+## List the recovery keys
+
+`Get-LazyVMRecoveryKey` `-Name <VM>  (optional while there is only one)`
+
+Lists each BitLocker recovery key LazyVM stores for the VM: its disk, disk GUID, key ID and date, and whether the last export held it. Never the passwords. Only reads.
+
+![List the recovery keys: call order and data flow](diagrams/recovery-keys.svg)
+
+1. `Resolve-LazyVMRoot` (Settings): the LazyVM folder
+   - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root)
+2. `Read-VMSetting` (Settings): the VM's settings, read only
+   - Reads D2, settings: Settings files (Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json)
+3. `Get-RecoveryKeyStatus` (Disks): each stored key, and whether the last export held it, as the reminders count it; its password is dropped
+   - Also runs `ConvertTo-RecoveryKeyDate`, `Select-UnexportedRecoveryKey`, `Get-RecoveryKeyStamp`
+4. `Get-StoredRecoveryKey` (Disks, called by Get-RecoveryKeyStatus): every disk's key ID and date; nothing when none is stored
+   - Reads D3, recovery keys: Credential store (<VM>\Credentials\bitlocker.cred)
+5. `Read-RecoveryKeyExportRecord` (Disks, called by Get-RecoveryKeyStatus): which keys the last export held; none when there is no record or it cannot be read
+   - Reads D4, export record: <VM>\Config\ (RecoveryKeyExport.json)
+   - Writes D5, the keys: Pipeline (LazyVM.RecoveryKey per disk, no password)
 
 <a id="recovery-key-export"></a>
 

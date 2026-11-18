@@ -11,6 +11,8 @@ namespace LazyVM.UI.Wpf;
 /// a chosen phase, shown in its progress window, and maintenance; and
 /// deletes a VM, once its delete dialog has had a Yes. One Restore window
 /// per VM lists its restore points, and returns the VM to one after asking.
+/// One Recovery keys window per VM lists its BitLocker recovery keys, shows
+/// a password only when asked, and exports the keys to a file.
 /// </summary>
 public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock)
 {
@@ -134,6 +136,88 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
         return dialog.ShowDialog() == true;
     }
 
+    /// <summary>Raised when an export of recovery keys has ended, even one that failed, so the list can be read again.</summary>
+    public event EventHandler? RecoveryKeysExported;
+
+    /// <summary>The VM's recovery keys, without their passwords.</summary>
+    public virtual Task<IReadOnlyList<VMRecoveryKey>> GetRecoveryKeysAsync(string vmName)
+    {
+        return runner.GetRecoveryKeysAsync(vmName, CancellationToken.None);
+    }
+
+    /// <summary>The recovery password of one of the VM's disks, read now, to be shown.</summary>
+    public virtual Task<string> GetRecoveryPasswordAsync(string vmName, string diskGuid)
+    {
+        return runner.GetRecoveryPasswordAsync(vmName, diskGuid, CancellationToken.None);
+    }
+
+    /// <summary>Writes the VM's recovery keys to <paramref name="path"/>, replacing it when <paramref name="force"/>. Throws with the module's reason when it did not.</summary>
+    public virtual async Task<RecoveryKeyExport> ExportRecoveryKeysAsync(string vmName, string path, bool force)
+    {
+        try
+        {
+            return await runner.ExportRecoveryKeysAsync(vmName, path, force);
+        }
+        finally
+        {
+            RecoveryKeysExported?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Shows the VM's recovery keys, or brings its open window to the front.
+    /// Closing the window forgets every password it showed.
+    /// </summary>
+    public RecoveryKeysViewModel OpenRecoveryKeys(VMDashboard entry)
+    {
+        var key = "recovery-keys:" + entry.Name;
+        if (_Open.TryGetValue(key, out var existing) && existing is RecoveryKeysViewModel open)
+        {
+            BringToFront(open);
+            return open;
+        }
+        var keys = new RecoveryKeysViewModel(entry, this);
+        Track(key, keys, keys.Forget);
+        _ = keys.LoadAsync();
+        return keys;
+    }
+
+    /// <summary>
+    /// Asks for the file to export to with a Save dialog over the recovery
+    /// keys window; empty for Cancel. It does not ask about a file that
+    /// exists: <see cref="ConfirmReplace"/> does, with No the default.
+    /// </summary>
+    public virtual string? ChooseExportFile(RecoveryKeysViewModel keys, string suggestedName)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = $"Export the recovery keys of {keys.Name}",
+            FileName = suggestedName,
+            DefaultExt = ".txt",
+            Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
+            OverwritePrompt = false,
+            AddExtension = true,
+        };
+        return dialog.ShowDialog(WindowOf(keys)) == true ? dialog.FileName : null;
+    }
+
+    /// <summary>True when there is a file at <paramref name="path"/>.</summary>
+    public virtual bool FileExists(string path)
+    {
+        return System.IO.File.Exists(path);
+    }
+
+    /// <summary>Asks <paramref name="question"/> with Yes and No, No the default, over the recovery keys window. True for Yes.</summary>
+    public virtual bool ConfirmReplace(RecoveryKeysViewModel keys, string question)
+    {
+        var dialog = new QuestionWindow
+        {
+            DataContext = new QuestionViewModel($"Export the recovery keys of {keys.Name} - LazyVM", question),
+            Owner = WindowOf(keys),
+        };
+        return dialog.ShowDialog() == true;
+    }
+
     /// <summary>Shows the checks of the VM <paramref name="vmName"/>, or of the host, and runs them.</summary>
     public void OpenChecks(string? vmName, bool hostOnly)
     {
@@ -216,6 +300,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
             BuildViewModel => new BuildWindow(),
             BuildProgressViewModel => new BuildProgressWindow(),
             RestoreViewModel => new RestoreWindow(),
+            RecoveryKeysViewModel => new RecoveryKeysWindow(),
             _ => throw new ArgumentException($"There is no window for {viewModel.GetType().Name}.", nameof(viewModel)),
         };
         window.DataContext = viewModel;

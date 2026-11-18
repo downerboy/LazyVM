@@ -34,7 +34,7 @@ Actors: Host user, Administrator (a Host user), Task Scheduler running as SYSTEM
 
 - Host user: Show LazyVM and its commands (`Show-LazyVM`, or just `LazyVM`), List VMs (`Get-LazyVM`), See the dashboard data (`Get-LazyVMDashboard`), View settings (`Get-LazyVMSetting`), Create a VM profile (`New-LazyVM`), Save a VM as a config template (`Export-LazyVMTemplate`).
 - Administrator, also:
-  - Look up: Check the license (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`), Check a VM end to end (`Test-LazyVM`).
+  - Look up: Check the license (`Get-LazyVMLicense`), View the guest account (`Get-LazyVMCredential`), List the recovery keys (`Get-LazyVMRecoveryKey`), Check a VM end to end (`Test-LazyVM`).
   - Set up: Choose the LazyVM folder (`Set-LazyVMRoot`), Store the guest account (`Set-LazyVMCredential`), Move an install made for every user to your account (`Convert-LazyVMInstallation`).
   - Build and maintain: Build a VM (`Build-LazyVM`), Schedule daily maintenance (`Register-LazyVMMaintenance`), Run daily maintenance (`Invoke-LazyVMMaintenance`), Run maintenance now (`Start-LazyVMMaintenance`), Rebuild the VM (`Invoke-LazyVMRebuild`).
   - Tooling: View installed tooling (`Get-LazyVMTooling`), Record tooling changes (`Save-LazyVMTooling`), List tooling restore points (`Get-LazyVMRestorePoint`), Return to a tooling version (`Restore-LazyVMTooling`).
@@ -153,6 +153,7 @@ Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Window
 
 - List VMs (`Get-LazyVM`), See the dashboard data (`Get-LazyVMDashboard`) and View settings (`Get-LazyVMSetting`), by any Host user. List VMs reads VM state from Hyper-V and the task from Task Scheduler. See the dashboard data includes List VMs, and also reads each VM's disks and memory from Hyper-V, its last maintenance run from Task Scheduler, its findings and templates from its files, and its recovery key IDs and last export record, never the passwords.
 - View the guest account (`Get-LazyVMCredential`).
+- List the recovery keys (`Get-LazyVMRecoveryKey`): each disk's key ID, when it was recorded and whether it is exported, from the credential store and `Config\RecoveryKeyExport.json`. Never the passwords. Read-only.
 - Check the license (`Get-LazyVMLicense`) reads the license inside the guest. Extended by **Start the VM** when the VM is off.
 - See the security findings (`Get-LazyVMSecurityFinding`), or the approved ones (`-Approved`). Read-only.
 - Approve a security finding you expect (`Approve-LazyVMSecurityFinding`), and revoke an approval (`Revoke-LazyVMSecurityFinding`). Both change only `Config\SecurityBaseline.json` and support `-WhatIf`.

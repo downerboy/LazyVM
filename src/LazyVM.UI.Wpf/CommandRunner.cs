@@ -157,6 +157,65 @@ public class CommandRunner : IDisposable
             Read<bool?>(point, "HasToolingList", "HasToolingList", []) ?? false);
     }
 
+    /// <summary>Runs <c>Get-LazyVMRecoveryKey -Name</c>: the VM's recovery keys, without their passwords. None while none is stored.</summary>
+    public virtual async Task<IReadOnlyList<VMRecoveryKey>> GetRecoveryKeysAsync(string name, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMRecoveryKey", [("Name", name)], cancellationToken, failsOnlyByThrowing: true).ConfigureAwait(false);
+        return output.Select(ToRecoveryKey).ToList();
+    }
+
+    /// <summary>
+    /// Runs <c>Get-LazyVMCredential -Name -RecoveryPassword</c> and gives
+    /// only the password of the disk <paramref name="diskGuid"/>, for the
+    /// moment it is shown. The others are not kept.
+    /// </summary>
+    public virtual async Task<string> GetRecoveryPasswordAsync(string name, string diskGuid, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMCredential", [("Name", name), ("RecoveryPassword", true)], cancellationToken, failsOnlyByThrowing: true)
+            .ConfigureAwait(false);
+        return RecoveryPasswordOf(output, diskGuid);
+    }
+
+    /// <summary>
+    /// Runs <c>Export-LazyVMRecoveryKey -Name -Path</c>, with <c>-Force</c>
+    /// when <paramref name="force"/>, which the app passes only after asking.
+    /// Never cancelled. Gives the file written and the module's warnings.
+    /// Throws with the module's reason when nothing was written.
+    /// </summary>
+    public virtual async Task<RecoveryKeyExport> ExportRecoveryKeysAsync(string name, string path, bool force)
+    {
+        var parameters = new (string Name, object? Value)[] { ("Name", name), ("Path", path), ("Force", force ? true : null) }
+            .Where(parameter => parameter.Value is not null)
+            .Select(parameter => (parameter.Name, parameter.Value!))
+            .ToList();
+        var (output, warnings) = await InvokeWithWarningsAsync("Export-LazyVMRecoveryKey", parameters, CancellationToken.None, failsOnlyByThrowing: true)
+            .ConfigureAwait(false);
+        var written = output.Select(file => Text(file, "FullName")).FirstOrDefault(full => full.Length > 0) ?? path;
+        return new RecoveryKeyExport(written, warnings);
+    }
+
+    /// <summary>Reads one <c>LazyVM.RecoveryKey</c> object. A date that cannot be read is left empty.</summary>
+    internal static VMRecoveryKey ToRecoveryKey(PSObject key)
+    {
+        return new(
+            Text(key, "Disk"),
+            Text(key, "DiskGuid"),
+            Text(key, "KeyId"),
+            ReadDate(key, "Recorded", "Recorded", []),
+            Read<bool?>(key, "Exported", "Exported", []) ?? false);
+    }
+
+    /// <summary>The recovery password of the disk <paramref name="diskGuid"/> among <paramref name="keys"/>. Throws when it has none.</summary>
+    internal static string RecoveryPasswordOf(IEnumerable<PSObject> keys, string diskGuid)
+    {
+        return keys
+            .Where(key => string.Equals(Text(key, "DiskGuid"), diskGuid, StringComparison.OrdinalIgnoreCase))
+            .Select(key => Text(key, "RecoveryPassword"))
+            .FirstOrDefault(password => password.Length > 0)
+            ?? throw new InvalidOperationException(
+                "No recovery password is stored for that disk now. Close this window and open it again to see the keys stored now.");
+    }
+
     /// <summary>The folder the module was imported from, which holds the script each build runs with.</summary>
     public virtual async Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
     {
@@ -248,6 +307,9 @@ public class CommandRunner : IDisposable
             CreatedFromTemplate = Value<string>(entry, "CreatedFromTemplate", "Config template"),
             GreenTemplate = Value<string>(entry, "GreenTemplate", "Green template"),
             GreenTemplateUpdated = Date("GreenTemplateUpdated", "Green template updated"),
+            RecoveryKeys = Value<int?>(entry, "RecoveryKeys", "Recovery keys"),
+            UnexportedRecoveryKeys = Value<int?>(entry, "UnexportedRecoveryKeys", "Recovery keys not exported"),
+            RecoveryKeysExported = Date("RecoveryKeysExported", "Recovery keys exported"),
             Settings = Value<string>(entry, "Settings", "Settings") ?? "Not known",
             Run = ReadRun(entry, "Run", problems),
             LastBuild = ReadRun(entry, "LastBuild", problems),
@@ -336,6 +398,14 @@ public class CommandRunner : IDisposable
     private async Task<IReadOnlyList<PSObject>> InvokeAsync(
         string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool failsOnlyByThrowing = false)
     {
+        var (output, _) = await InvokeWithWarningsAsync(command, parameters, cancellationToken, failsOnlyByThrowing).ConfigureAwait(false);
+        return output;
+    }
+
+    /// <summary>As <see cref="InvokeAsync"/>, and also gives the warnings the command wrote, each as its text.</summary>
+    private async Task<(IReadOnlyList<PSObject> Output, IReadOnlyList<string> Warnings)> InvokeWithWarningsAsync(
+        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool failsOnlyByThrowing = false)
+    {
         ObjectDisposedException.ThrowIf(_Disposed, this);
         await _OneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -359,7 +429,7 @@ public class CommandRunner : IDisposable
             }
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfFailed(output, shell.Streams.Error, failsOnlyByThrowing);
-            return [.. output];
+            return ([.. output], shell.Streams.Warning.Select(warning => warning.Message).ToList());
         }
         finally
         {

@@ -1,0 +1,12 @@
+namespace LazyVM.UI.Wpf;
+
+/// <summary>
+/// One BitLocker recovery key <c>Get-LazyVMRecoveryKey</c> lists, without
+/// its password: the disk, its GPT disk GUID, the key ID BitLocker's
+/// recovery screen shows (empty until the guest has reported it), when it
+/// was recorded, and whether the last export held it.
+/// </summary>
+public sealed record VMRecoveryKey(string Disk, string DiskGuid, string KeyId, DateTime? Recorded, bool Exported);
+
+/// <summary>What <c>Export-LazyVMRecoveryKey</c> did: the file it wrote, and the warnings it gave, such as for a file in OneDrive.</summary>
+public sealed record RecoveryKeyExport(string Path, IReadOnlyList<string> Warnings);

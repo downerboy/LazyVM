@@ -9,7 +9,7 @@ public sealed class VMRowViewModel(VMDashboard entry) : ViewModelBase
 
     public string State => Entry.State;
 
-    /// <summary>True when the last maintenance failed or the VM's settings have a problem.</summary>
+    /// <summary>True when the last maintenance failed, the VM's settings have a problem, or recovery keys are not exported.</summary>
     public bool NeedsAttention => AttentionText is not null;
 
     /// <summary>What needs attention, such as "Needs attention: last maintenance failed"; empty when nothing does.</summary>
@@ -21,6 +21,12 @@ public sealed class VMRowViewModel(VMDashboard entry) : ViewModelBase
             {
                 DashboardText.MaintenanceFailed(Entry) ? "last maintenance failed" : null,
                 DashboardText.SettingsProblem(Entry) ? "settings problem" : null,
+                Entry.UnexportedRecoveryKeys switch
+                {
+                    null or <= 0 => null,
+                    1 => "1 recovery key not exported",
+                    var count => $"{count} recovery keys not exported",
+                },
             }.OfType<string>().ToList();
             return reasons.Count == 0 ? null : "Needs attention: " + string.Join(", ", reasons);
         }
