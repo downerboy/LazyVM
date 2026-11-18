@@ -3,7 +3,7 @@
     Title      = 'See the dashboard data'
     Command    = 'Get-LazyVMDashboard'
     Parameters = @('-Name  (wildcards, default *)')
-    Summary    = 'Lists every VM with what the dashboard shows: Get-LazyVM''s list, and each VM''s disks, memory, last maintenance, open findings, templates, and the build, maintenance or rebuild going now with the latest build. Only reads. No administrator rights needed.'
+    Summary    = 'Lists every VM with what the dashboard shows: Get-LazyVM''s list, and each VM''s disks, memory, last maintenance, open findings, templates, and the build, maintenance, rebuild, restore or removal going now with the latest build. Only reads. No administrator rights needed.'
     Covers     = @('Get-LazyVMDashboard', 'New-DashboardEntry', 'Get-VMDiskUsage', 'Get-MaintenanceRunSummary', 'Get-SecurityFindingSummary', 'Get-VMTemplateSummary')
     Omits      = @{}
     Steps      = @(

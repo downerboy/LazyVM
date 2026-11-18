@@ -23,6 +23,7 @@
         'Get-LazyVMDashboard'
         'Get-LazyVMLicense'
         'Get-LazyVMLog'
+        'Get-LazyVMRemovalPlan'
         'Get-LazyVMRestorePoint'
         'Get-LazyVMSecurityFinding'
         'Get-LazyVMSetting'

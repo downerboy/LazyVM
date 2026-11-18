@@ -95,7 +95,8 @@ text{font-family:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;fill:var(
 <line class="div" x1="335" y1="346" x2="640" y2="346"/>
 <g class="sn"><circle cx="351" cy="330" r="10"/><text x="351" y="334" text-anchor="middle">2</text></g>
 <text class="at" x="345" y="361">Get-VMRemovalPlan decides what to delete</text>
-<text class="at" x="345" y="378">and keep; lists it with sizes</text>
+<text class="at" x="345" y="378">and keep; lists it with sizes, as</text>
+<text class="at" x="345" y="395">Get-LazyVMRemovalPlan returns it</text>
 </g>
 <g class="bx-store"><rect x="20" y="309" width="255" height="84" rx="3"/>
 <text class="st" x="147.5" y="323" text-anchor="middle">«file»</text>

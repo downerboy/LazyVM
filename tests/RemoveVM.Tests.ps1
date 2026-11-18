@@ -326,6 +326,107 @@ Describe 'Invoke-VMRemoval' {
     }
 }
 
+Describe 'Get-VMRemovalPreview (#454)' {
+    BeforeEach {
+        # A VM folder with a Dev Drive in it, and a SQL disk a setting put outside it.
+        $root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $vmRoot = Join-Path -Path $root -ChildPath 'Alpha'
+        New-Item -ItemType Directory -Path (Join-Path -Path $vmRoot -ChildPath 'Disks') -Force | Out-Null
+        $devDrive = Join-Path -Path $vmRoot -ChildPath 'Disks\Alpha-DevDrive.vhdx'
+        [IO.File]::WriteAllBytes($devDrive, [byte[]]::new(100))
+        $outside = Join-Path -Path $root -ChildPath 'Elsewhere\Alpha-SQL.vhdx'
+        New-Item -ItemType Directory -Path (Split-Path -Path $outside -Parent) | Out-Null
+        [IO.File]::WriteAllBytes($outside, [byte[]]::new(50))
+
+        $settings = @{
+            VMName       = 'Alpha'
+            Root         = $root
+            LogFile      = Join-Path -Path $vmRoot -ChildPath 'Logs\Alpha.log'
+            OSDiskPath   = Join-Path -Path $vmRoot -ChildPath 'Disks\Alpha-OS.vhdx'
+            VMConfigDir  = Join-Path -Path $vmRoot -ChildPath 'Virtual Machines'
+            DevDrivePath = $devDrive
+            UserDiskPath = Join-Path -Path $vmRoot -ChildPath 'Disks\Alpha-User.vhdx'
+        }
+        $plan = [pscustomobject]@{
+            Tasks   = @('LazyVM-Maintain-Alpha')
+            VMRoot  = $vmRoot
+            Files   = @($outside)
+            Folders = @()
+            Kept    = @([pscustomobject]@{ Path = 'E:\Shared.vhdx'; Reason = 'VM ''Beta'' also uses E:\Shared.vhdx' })
+        }
+        Mock -ModuleName $module Get-VMProfileName { @('Alpha') }
+        Mock -ModuleName $module Get-Command { } -ParameterFilter { $Name -eq 'Get-VM' }
+        Mock -ModuleName $module Get-ScheduledTask { [pscustomobject]@{ TaskName = $TaskName } }
+        Mock -ModuleName $module Get-VMRemovalPlan { $plan }.GetNewClosure()
+        Mock -ModuleName $module Write-LogEntry { }
+    }
+
+    It 'lists each item with its size, the total, what is kept, and the work disks that go, and writes nothing to the log' {
+        $preview = InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            Get-VMRemovalPreview -VM ([VMContext]::new($Settings)) -ScriptDir 'D:\Scripts' -ReadOnly
+        }
+
+        @($preview.Items | ForEach-Object { "$($_.Kind) $($_.Path) $($_.Size)" }) | Should -Be @("Folder $vmRoot 100", "File $outside 50")
+        $preview.Total | Should -Be 150
+        $preview.Tasks | Should -Be @('LazyVM-Maintain-Alpha')
+        $preview.Kept.Reason | Should -Be 'VM ''Beta'' also uses E:\Shared.vhdx'
+        # The User disk was never made, so only the Dev Drive is warned about.
+        @($preview.WorkDisks).Count | Should -Be 1
+        $preview.WorkDisks[0].Name | Should -Be 'The Dev Drive'
+        $preview.WorkDisks[0].Size | Should -Be 100
+        $preview.WorkDisks[0].Advice | Should -BeLike '*Push or copy*'
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly
+    }
+
+    It 'returns nothing when nothing of the VM is left' {
+        Remove-Item -LiteralPath $vmRoot, $outside -Recurse -Force
+        Mock -ModuleName $module Get-ScheduledTask { }
+
+        $preview = InModuleScope $module -Parameters @{ Settings = $settings } {
+            param($Settings)
+            Get-VMRemovalPreview -VM ([VMContext]::new($Settings)) -ScriptDir 'D:\Scripts'
+        }
+
+        $preview | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-VMRemovalContext' {
+    BeforeEach {
+        Mock -ModuleName $module Write-LogEntry { }
+    }
+
+    It 'lists what the preview found in the log, the work disks last, and returns it for the removal' {
+        $preview = [pscustomobject]@{
+            Machine         = [pscustomobject]@{ State = 'Running' }
+            CheckpointCount = 2
+            Tasks           = @('LazyVM-Maintain-Alpha')
+            Items           = @([pscustomobject]@{ Kind = 'Folder'; Path = 'D:\DevVM\Alpha'; Size = [double]2GB })
+            Total           = [double]2GB
+            Kept            = @()
+            WorkDisks       = @([pscustomobject]@{ Name = 'The Dev Drive'; Path = 'D:\DevVM\Alpha\Disks\Alpha-DevDrive.vhdx'; Size = [double]1GB; Advice = 'Push it first.' })
+        }
+        Mock -ModuleName $module Get-VMRemovalPreview { $preview }.GetNewClosure()
+
+        $context = InModuleScope $module { Get-VMRemovalContext -VM ([VMContext]::new(@{ VMName = 'Alpha' })) -ScriptDir 'D:\Scripts' }
+
+        $context.Total | Should -Be ([double]2GB)
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Hyper-V VM   Alpha (Running, 2 checkpoint(s))' }
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*Folder*D:\DevVM\Alpha  (2.00 GB)' }
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -eq 'The Dev Drive is deleted too: D:\DevVM\Alpha\Disks\Alpha-DevDrive.vhdx (1.00 GB).' -and $Level -eq 'WARN' }
+    }
+
+    It 'says so in the log when nothing of the VM is left' {
+        Mock -ModuleName $module Get-VMRemovalPreview { }
+
+        $context = InModuleScope $module { Get-VMRemovalContext -VM ([VMContext]::new(@{ VMName = 'Alpha' })) -ScriptDir 'D:\Scripts' }
+
+        $context | Should -BeNullOrEmpty
+        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like 'Nothing of*Alpha*' }
+    }
+}
+
 Describe 'Get-PathSize (#180)' {
     It 'counts an empty folder as 0, rather than failing' {
         $folder = Join-Path $TestDrive 'Empty'

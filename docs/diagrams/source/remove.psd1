@@ -25,7 +25,8 @@
         @{
             Function = 'Get-VMRemovalContext'
             Area     = 'Maintenance'
-            Note     = 'Get-VMRemovalPlan decides what to delete and keep; lists it with sizes'
+            Note     = 'Get-VMRemovalPlan decides what to delete and keep; lists it with sizes, as Get-LazyVMRemovalPlan returns it'
+            Includes = @('Get-VMRemovalPreview')
             Reads    = @(
                 @{ Label = 'other VMs'' paths'; Kind = 'file'; Store = '*\Config\'; Items = @('other VMs'' VM.json') }
                 @{ Label = 'attached disks'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('disks of <VM>', 'disks of other VMs') }

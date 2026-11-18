@@ -84,7 +84,7 @@ function New-DashboardEntry {
         }
         catch { $problems.Add("Security findings: $($_.Exception.Message)") }
 
-        # A build, maintenance or rebuild going now, or the latest one, and the latest build (#425).
+        # A build, maintenance, rebuild, restore or removal going now, or the latest one, and the latest build (#425).
         try {
             $entry.Run = Get-VMRunState -Settings $settings
             $entry.LastBuild = Get-VMRunState -Settings $settings -Command 'Build'

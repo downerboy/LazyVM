@@ -1,13 +1,13 @@
 namespace LazyVM.UI.Wpf;
 
 /// <summary>
-/// A build, maintenance or rebuild of a VM, as <c>Get-LazyVMDashboard</c>
+/// A build, maintenance, rebuild, restore or removal of a VM, as <c>Get-LazyVMDashboard</c>
 /// reports it in <c>Run</c> and <c>LastBuild</c>: the one going now, or the
 /// latest one.
 /// </summary>
 public sealed record VMRun
 {
-    /// <summary>Build, Maintenance or Rebuild; empty for a run just starting that has not recorded itself yet.</summary>
+    /// <summary>Build, Maintenance, Rebuild, Restore or Remove; empty for a run just starting that has not recorded itself yet.</summary>
     public string? Command
     {
         get; init;
