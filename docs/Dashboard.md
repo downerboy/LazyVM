@@ -2,7 +2,7 @@
 
 # LazyVM Dashboard — specification
 
-Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, the Checks and Log windows (delivery plan steps 3 and 4), and step 5: the Build window with build progress and Cancel, a build from a chosen phase, and run maintenance now. Step 6, deleting a VM and restoring it to a restore point, is built too. Steps 7 and 8 are not built yet. Updated 2026-11-18 when step 6 was finished.
+Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, the Checks and Log windows (delivery plan steps 3 and 4), and step 5: the Build window with build progress and Cancel, a build from a chosen phase, and run maintenance now. Step 6, deleting a VM and restoring it to a restore point, is built too. Steps 7 and 8 are not built yet; step 7's issues are written. Updated 2026-11-18 when step 7 was planned.
 
 ## 1. Purpose
 
@@ -190,7 +190,10 @@ Each screen needs its command first. Where a command is missing (for example the
    2. What `Remove-LazyVM` would delete, returned as objects (#454). Done.
    3. The app: delete a VM, after showing what goes (#455). Done.
    4. The app: restore a VM to a restore point (#456). Done.
-7. Recovery keys and the password.
+7. Recovery keys and the password. Module pull request first, then the app. Every password, the guest password and the disks' recovery passwords alike, is hidden by default and shown only when asked for. Decided 2026-11-18.
+   1. `Get-LazyVMDashboard` reports each VM's recovery key export status: how many keys are stored, how many are not exported, and when they were last exported. It never reads a password (#467).
+   2. The app: a VM's recovery keys, each disk's recovery password hidden until shown, export to a file, and a "keys not exported" notice (#468).
+   3. The app: the VM's password, hidden until shown, and Copy, which keeps it out of clipboard history and clears it after three minutes (#469).
 8. Security findings: view, approve, revoke.
 9. Accessibility pass with Narrator, and zoom and High Contrast checks.
 10. Packaging: the release zip, `Install.ps1`, the launcher and the Start menu shortcut.
