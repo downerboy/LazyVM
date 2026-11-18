@@ -103,6 +103,30 @@ public class CommandRunner : IDisposable
         await InvokeAsync("Start-LazyVMMaintenance", [("Name", name)], cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Runs <c>Get-LazyVMRemovalPlan -Name</c>: what deleting the VM would
+    /// delete and keep. Throws with the module's reason when nothing could be
+    /// removed, such as when another VM's settings cannot be read.
+    /// </summary>
+    public virtual async Task<RemovalPlan> GetRemovalPlanAsync(string name, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMRemovalPlan", [("Name", name)], cancellationToken).ConfigureAwait(false);
+        return output.Select(ToRemovalPlan).FirstOrDefault()
+            ?? throw new InvalidOperationException($"Get-LazyVMRemovalPlan said nothing about {name}.");
+    }
+
+    /// <summary>
+    /// Runs <c>Remove-LazyVM -Name -Force</c>: deletes the VM, without the
+    /// question the app has already asked. Never cancelled: a removal stopped
+    /// half way leaves more behind. Throws with the module's reason when it
+    /// removed nothing or only part, such as while another run of the VM is
+    /// going.
+    /// </summary>
+    public virtual async Task RemoveVMAsync(string name)
+    {
+        await InvokeAsync("Remove-LazyVM", [("Name", name), ("Force", true)], CancellationToken.None, returnsNothing: true).ConfigureAwait(false);
+    }
+
     /// <summary>The folder the module was imported from, which holds the script each build runs with.</summary>
     public virtual async Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
     {
@@ -230,6 +254,29 @@ public class CommandRunner : IDisposable
         };
     }
 
+    /// <summary>Reads one <c>LazyVM.RemovalPlan</c> object. A size that cannot be read counts as 0.</summary>
+    internal static RemovalPlan ToRemovalPlan(PSObject plan)
+    {
+        long Size(PSObject source, string name)
+        {
+            return (long)(Read<double?>(source, name, name, []) ?? 0);
+        }
+
+        return new()
+        {
+            Name = Text(plan, "Name"),
+            HyperVState = Text(plan, "HyperVState") is { Length: > 0 } state ? state : null,
+            CheckpointCount = Read<int?>(plan, "CheckpointCount", "CheckpointCount", []) ?? 0,
+            Tasks = ReadList(plan, "Tasks").Select(task => task.BaseObject.ToString() ?? string.Empty).ToList(),
+            Items = ReadList(plan, "Items").Select(item => new RemovalItem(Text(item, "Kind"), Text(item, "Path"), Size(item, "Size"))).ToList(),
+            Total = Size(plan, "Total"),
+            Kept = ReadList(plan, "Kept").Select(kept => new KeptItem(Text(kept, "Path"), Text(kept, "Reason"))).ToList(),
+            WorkDisks = ReadList(plan, "WorkDisks")
+                .Select(disk => new WorkDisk(Text(disk, "Name"), Text(disk, "Path"), Size(disk, "Size"), Text(disk, "Advice")))
+                .ToList(),
+        };
+    }
+
     /// <summary>Reads one <c>LazyVM.Check</c> object.</summary>
     internal static VMCheck ToCheck(PSObject check)
     {
@@ -250,9 +297,13 @@ public class CommandRunner : IDisposable
         Text(entry, "Message"));
     }
 
-    /// <summary>Runs <paramref name="command"/> with each parameter added by name, never as script text.</summary>
+    /// <summary>
+    /// Runs <paramref name="command"/> with each parameter added by name,
+    /// never as script text. <paramref name="returnsNothing"/>: a command
+    /// that never returns anything, so only an error it throws is its failure.
+    /// </summary>
     private async Task<IReadOnlyList<PSObject>> InvokeAsync(
-        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken)
+        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool returnsNothing = false)
     {
         ObjectDisposedException.ThrowIf(_Disposed, this);
         await _OneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -276,7 +327,7 @@ public class CommandRunner : IDisposable
                 }
             }
             cancellationToken.ThrowIfCancellationRequested();
-            ThrowIfFailed(output, shell.Streams.Error);
+            ThrowIfFailed(output, shell.Streams.Error, returnsNothing);
             return [.. output];
         }
         finally
@@ -289,11 +340,12 @@ public class CommandRunner : IDisposable
     /// A terminating error already threw. Non-terminating errors count only
     /// when the command returned nothing: the error stream also holds errors a
     /// command silenced with -ErrorAction SilentlyContinue, and the module
-    /// reports each VM's own failures in its Problems.
+    /// reports each VM's own failures in its Problems. A command that
+    /// <paramref name="returnsNothing"/> fails only by throwing.
     /// </summary>
-    internal static void ThrowIfFailed(IList<PSObject> output, IList<ErrorRecord> errors)
+    internal static void ThrowIfFailed(IList<PSObject> output, IList<ErrorRecord> errors, bool returnsNothing = false)
     {
-        if (output.Count == 0 && errors.Count > 0)
+        if (!returnsNothing && output.Count == 0 && errors.Count > 0)
         {
             throw new InvalidOperationException(errors[0].ToString());
         }

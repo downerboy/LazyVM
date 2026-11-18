@@ -2,7 +2,7 @@
 
 # LazyVM Dashboard — specification
 
-Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, the Checks and Log windows (delivery plan steps 3 and 4), and step 5: the Build window with build progress and Cancel, a build from a chosen phase, and run maintenance now. Steps 6 to 8 are not built yet. Updated 2026-11-17 when step 5 was finished.
+Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, the Checks and Log windows (delivery plan steps 3 and 4), and step 5: the Build window with build progress and Cancel, a build from a chosen phase, and run maintenance now. Of step 6, deleting a VM is built; restoring one is not yet, nor are steps 7 and 8. Updated 2026-11-17 when delete was finished.
 
 ## 1. Purpose
 
@@ -80,6 +80,7 @@ The VM window names the config template the VM was created from, or says "None r
 - **Run from phase N** (#428). The VM window lists the phases, each as its number and goal, and **Build from this phase** builds the VM from the one chosen, with its progress in a window of its own. After a build that failed, stopped or ended unexpectedly, the phase it was in is chosen, and the window says why. That build's progress window offers **Carry on from phase N** too. Both say to let any install still running inside the VM finish first.
 - **Run maintenance now** starts the VM's maintenance task, so it runs exactly as the nightly run does. `Start-LazyVMMaintenance` does this (#428). It starts nothing while a build, maintenance or rebuild of the VM is running, or when maintenance is not scheduled, and says why.
 - **Busy.** While a build, maintenance or rebuild of the VM is running (the dashboard's `Run`), Build from this phase and Run maintenance now are disabled, and the VM window says why in text of its own, since a disabled button cannot take focus for Narrator to read it. Checks, Log and Build progress stay available. The list is read again after a run starts, so the buttons follow; the module's run lock and `Start-LazyVMMaintenance`'s own checks still refuse a second run started in the moment before that.
+- **Delete** (#455). **Delete this VM...** in the VM window reads `Get-LazyVMRemovalPlan` and opens a dialog listing what goes: the Dev Drive and User disk warnings first, then the Hyper-V VM with its state and checkpoints, its scheduled tasks, each file and folder with its size, the total, and what is kept and why. It then asks "Do you really want to delete this VM?" with Yes and No. No is the default and the cancel button, and focus starts on the first line of the list, so Enter and Esc both answer No. Yes runs `Remove-LazyVM -Force` in the app's runspace, off the UI thread, and never cancels it. When it is done, the VM window closes and the list is read again. A delete that did not finish keeps the window open, gives the module's reason, and names what is still there, from the removal plan read again. Delete is disabled while any run of the VM is going, with a note of its own saying why. While a delete runs, other calls to the module wait for it.
 - **Checks.** On open, after the list, the app runs `Test-LazyVM -HostOnly`, or plain `Test-LazyVM` while there are no VMs, so the note on making the first one shows. The Checks window opens by itself only when there are no VMs, a check failed, or the checks could not run. A **Checks** button in the main window checks the host, and one in each VM window checks that VM. Each row reads as status, check, what was found, then the fix; Ctrl+C copies the fix.
 - **Log.** A **Log** button in each VM window shows the last 1000 entries of its log (`Get-LazyVMLog -Tail 1000`), oldest first, with the newest selected. Each entry reads as level, time, message. F8 and Shift+F8 go to the next and previous warning or error. The text is shown as plain text only, since the log is in the data folder.
 - Calls run off the UI thread and can be cancelled. A failure on one VM shows on that VM's row and does not blank the list.
@@ -184,9 +185,9 @@ Each screen needs its command first. Where a command is missing (for example the
    6. The app: the Build window, progress and Cancel (#427). Done.
    7. The app: run from phase N, and run maintenance now (#428). Done.
 6. Dispose and restore. Module pull requests first, then the app:
-   1. `Remove-LazyVM` and `Restore-LazyVMTooling` hold the run lock, so neither runs while a build, maintenance or rebuild of the VM does (#453).
-   2. What `Remove-LazyVM` would delete, returned as objects (#454).
-   3. The app: delete a VM, after showing what goes (#455).
+   1. `Remove-LazyVM` and `Restore-LazyVMTooling` hold the run lock, so neither runs while a build, maintenance or rebuild of the VM does (#453). Done.
+   2. What `Remove-LazyVM` would delete, returned as objects (#454). Done.
+   3. The app: delete a VM, after showing what goes (#455). Done.
    4. The app: restore a VM to a restore point (#456).
 7. Recovery keys and the password.
 8. Security findings: view, approve, revoke.
