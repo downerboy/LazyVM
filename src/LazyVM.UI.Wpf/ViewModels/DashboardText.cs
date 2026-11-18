@@ -5,13 +5,13 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// <summary>The words the list and the VM window use for the dashboard's values, so both say the same thing.</summary>
 internal static class DashboardText
 {
-    public const string NotKnown = "Not known";
+    public const string NOT_KNOWN = "Not known";
 
-    private const double BytesPerGB = 1024d * 1024 * 1024;
+    private const double _BYTES_PER_GB = 1024d * 1024 * 1024;
 
     public static string Size(long bytes)
     {
-        return (bytes / BytesPerGB).ToString("0.#", CultureInfo.CurrentCulture) + " GB";
+        return (bytes / _BYTES_PER_GB).ToString("0.#", CultureInfo.CurrentCulture) + " GB";
     }
 
     /// <summary>A day and time without the weekday, such as "12 November 2026 02:10".</summary>
@@ -25,7 +25,7 @@ internal static class DashboardText
     {
         return command switch
         {
-            VMRun.Build => "A build",
+            VMRun.BUILD => "A build",
             "Maintenance" => "Maintenance",
             "Rebuild" => "A rebuild",
             "Remove" => "A delete",
@@ -59,7 +59,7 @@ internal static class DashboardText
 
     public static bool SettingsProblem(VMDashboard vm)
     {
-        return vm.Settings != VMDashboard.SettingsOK;
+        return vm.Settings != VMDashboard.SETTINGS_OK;
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ internal static class DashboardText
     public static string LastMaintenance(VMDashboard vm, Func<DateTime, string> when)
     {
         return vm.LastMaintenanceResult is null
-            ? vm.MaintenanceTask == "Registered" ? NotKnown : "No maintenance task"
+            ? vm.MaintenanceTask == "Registered" ? NOT_KNOWN : "No maintenance task"
             : vm.LastMaintenance is { } ran ? $"{vm.LastMaintenanceResult}, {when(ran)}" : vm.LastMaintenanceResult;
     }
 

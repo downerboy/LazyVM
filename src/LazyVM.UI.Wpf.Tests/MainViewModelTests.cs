@@ -174,7 +174,7 @@ public sealed class MainViewModelTests : IDisposable
     public async Task Start_WithNoVMs_ShowsTheChecks_WithTheNoteOnTheFirstVM()
     {
         _Runner.Returns();
-        _Runner.ReturnsChecks(Sample.Check(), Sample.Check(VMCheck.Info, "VMs", "none yet", "Create the first one with: New-LazyVM -Name <Name>"));
+        _Runner.ReturnsChecks(Sample.Check(), Sample.Check(VMCheck.INFO, "VMs", "none yet", "Create the first one with: New-LazyVM -Name <Name>"));
 
         await _Main.StartAsync();
 
@@ -187,7 +187,7 @@ public sealed class MainViewModelTests : IDisposable
     public async Task Start_WhenAHostCheckFails_ShowsTheChecks()
     {
         _Runner.Returns(Sample.VM("DevBox"));
-        _Runner.ReturnsChecks(Sample.Check(VMCheck.Failed, "Folder access", "others can change it"));
+        _Runner.ReturnsChecks(Sample.Check(VMCheck.FAILED, "Folder access", "others can change it"));
 
         await _Main.StartAsync();
 
@@ -199,7 +199,7 @@ public sealed class MainViewModelTests : IDisposable
     public async Task Start_WithVMsAndNoFailedCheck_ShowsNoChecks()
     {
         _Runner.Returns(Sample.VM("DevBox"));
-        _Runner.ReturnsChecks(Sample.Check(VMCheck.OK), Sample.Check(VMCheck.Info), Sample.Check(VMCheck.Warning));
+        _Runner.ReturnsChecks(Sample.Check(VMCheck.OK), Sample.Check(VMCheck.INFO), Sample.Check(VMCheck.WARNING));
 
         await _Main.StartAsync();
 

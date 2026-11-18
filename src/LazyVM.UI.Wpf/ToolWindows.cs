@@ -14,7 +14,7 @@ namespace LazyVM.UI.Wpf;
 /// </summary>
 public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock)
 {
-    private const string BuildKey = "build";
+    private const string _BUILD_KEY = "build";
     private readonly Dictionary<string, ViewModelBase> _Open = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Raised when a build followed in a progress window has ended, so the list can be read again.</summary>
@@ -171,12 +171,12 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     /// <summary>Shows the Build new VM window. <paramref name="existingNames"/> are the VMs there are already.</summary>
     public void OpenBuild(IEnumerable<string> existingNames)
     {
-        if (BringToFrontIfOpen(BuildKey))
+        if (BringToFrontIfOpen(_BUILD_KEY))
         {
             return;
         }
         var build = new BuildViewModel(runner, launcher, existingNames, (name, started) => OpenProgress(name, started));
-        Track(BuildKey, build);
+        Track(_BUILD_KEY, build);
         _ = build.LoadAsync();
     }
 

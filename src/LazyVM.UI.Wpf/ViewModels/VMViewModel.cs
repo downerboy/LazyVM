@@ -8,7 +8,7 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// </summary>
 public sealed class VMViewModel : ViewModelBase
 {
-    private const string MaintenanceNotScheduled = "Not registered";
+    private const string _MAINTENANCE_NOT_SCHEDULED = "Not registered";
 
     private readonly ToolWindows _Tools;
     private VMDashboard _Entry;
@@ -91,13 +91,13 @@ public sealed class VMViewModel : ViewModelBase
     }
 
     /// <summary>True while a build of the VM is running.</summary>
-    public bool IsBuilding => _Entry.Run is { IsRunning: true, Command: null or VMRun.Build };
+    public bool IsBuilding => _Entry.Run is { IsRunning: true, Command: null or VMRun.BUILD };
 
     /// <summary>True while a build, maintenance or rebuild of the VM is running: no other may start.</summary>
     public bool IsBusy => _Entry.Run is { IsRunning: true };
 
     /// <summary>False only when the dashboard says the maintenance task is not registered.</summary>
-    public bool IsMaintenanceScheduled => _Entry.MaintenanceTask != MaintenanceNotScheduled;
+    public bool IsMaintenanceScheduled => _Entry.MaintenanceTask != _MAINTENANCE_NOT_SCHEDULED;
 
     /// <summary>True while a build or maintenance this window asked for is starting.</summary>
     public bool IsStarting
@@ -304,7 +304,7 @@ public sealed class VMViewModel : ViewModelBase
     /// <summary>The phase a build that stopped, failed or ended unexpectedly can carry on from; empty otherwise.</summary>
     internal static int? CarryOnPhase(VMRun? lastBuild)
     {
-        return lastBuild is { Status: VMRun.Failed or VMRun.Stopped or VMRun.EndedUnexpectedly }
+        return lastBuild is { Status: VMRun.FAILED or VMRun.STOPPED or VMRun.ENDED_UNEXPECTEDLY }
             ? lastBuild.UnfinishedPhase ?? lastBuild.Phase
             : null;
     }
@@ -330,8 +330,8 @@ public sealed class VMViewModel : ViewModelBase
     {
         return status switch
         {
-            VMRun.Stopped => "stopped",
-            VMRun.EndedUnexpectedly => "ended unexpectedly",
+            VMRun.STOPPED => "stopped",
+            VMRun.ENDED_UNEXPECTEDLY => "ended unexpectedly",
             _ => "failed",
         };
     }
@@ -396,7 +396,7 @@ public sealed class VMViewModel : ViewModelBase
     private static List<VMDetail> ReadDetails(VMDashboard vm)
     {
         // Hyper-V has nothing to say about a VM that is not built yet; say why.
-        var missing = vm.State == "Not built" ? "Not built yet" : DashboardText.NotKnown;
+        var missing = vm.State == "Not built" ? "Not built yet" : DashboardText.NOT_KNOWN;
         return
         [
             new("State", vm.State),
@@ -419,7 +419,7 @@ public sealed class VMViewModel : ViewModelBase
                 : "Not scanned yet"),
             // Empty both for a VM made without a template and for one made before LazyVM recorded it (#421).
             new("Created from config template", vm.CreatedFromTemplate ?? "None recorded"),
-            new("Configuration first built from", vm.OriginalConfig ?? DashboardText.NotKnown),
+            new("Configuration first built from", vm.OriginalConfig ?? DashboardText.NOT_KNOWN),
             new("Green template", GreenTemplateText(vm)),
             new("Settings", vm.Settings),
             .. vm.Problems.Select(problem => new VMDetail("Could not read", problem)),
@@ -443,7 +443,7 @@ public sealed class VMViewModel : ViewModelBase
 
     private static string MaintenanceText(VMDashboard vm)
     {
-        var time = vm.MaintenanceTime is null ? DashboardText.NotKnown : $"Daily at {vm.MaintenanceTime}";
+        var time = vm.MaintenanceTime is null ? DashboardText.NOT_KNOWN : $"Daily at {vm.MaintenanceTime}";
         var task = vm.MaintenanceTask is null ? "task not known" : "task " + DashboardText.InSentence(vm.MaintenanceTask);
         return $"{time}, {task}";
     }

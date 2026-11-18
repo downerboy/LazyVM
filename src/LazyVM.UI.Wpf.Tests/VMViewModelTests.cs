@@ -4,7 +4,7 @@ namespace LazyVM.UI.Wpf.Tests;
 
 public sealed class VMViewModelTests : IDisposable
 {
-    private const long GB = 1024L * 1024 * 1024;
+    private const long _GB = 1024L * 1024 * 1024;
 
     private readonly CultureScope _Culture = new("en-GB");
     private readonly FakeCommandRunner _Runner = new();
@@ -68,7 +68,7 @@ public sealed class VMViewModelTests : IDisposable
     {
         var vm = Open(Sample.VM() with
         {
-            MemoryAssigned = 8 * GB
+            MemoryAssigned = 8 * _GB
         });
 
         Assert.Equal("8 GB", Detail(vm, "Memory in use"));
@@ -90,8 +90,8 @@ public sealed class VMViewModelTests : IDisposable
     {
         var vm = Open(Sample.VM() with
         {
-            MemoryAssigned = 6 * GB,
-            MemoryMaximum = 16 * GB
+            MemoryAssigned = 6 * _GB,
+            MemoryMaximum = 16 * _GB
         });
 
         Assert.Equal("6 GB of 16 GB", Detail(vm, "Memory in use"));
@@ -103,7 +103,7 @@ public sealed class VMViewModelTests : IDisposable
         var vm = Open(Sample.VM(state: "Off") with
         {
             MemoryAssigned = 0,
-            MemoryMaximum = 16 * GB
+            MemoryMaximum = 16 * _GB
         });
 
         Assert.Equal("None of 16 GB", Detail(vm, "Memory in use"));
@@ -137,7 +137,7 @@ public sealed class VMViewModelTests : IDisposable
         var vm = Open(Sample.VM() with
         {
             MemoryAssigned = null,
-            MemoryMaximum = 16 * GB
+            MemoryMaximum = 16 * _GB
         });
 
         Assert.DoesNotContain("16 GB", Detail(vm, "Memory in use"));
@@ -148,11 +148,11 @@ public sealed class VMViewModelTests : IDisposable
     {
         var vm = Open(Sample.VM() with
         {
-            DiskSpaceUsed = (214 * GB) + (GB / 2),
+            DiskSpaceUsed = (214 * _GB) + (_GB / 2),
             Disks =
             [
-                new VMDisk("DevBox.vhdx", @"D:\VMs\DevBox\DevBox.vhdx", 200 * GB, 512 * GB),
-                new VMDisk("Data.vhdx", @"D:\VMs\DevBox\Data.vhdx", (14 * GB) + (GB / 2), 64 * GB),
+                new VMDisk("DevBox.vhdx", @"D:\VMs\DevBox\DevBox.vhdx", 200 * _GB, 512 * _GB),
+                new VMDisk("Data.vhdx", @"D:\VMs\DevBox\Data.vhdx", (14 * _GB) + (_GB / 2), 64 * _GB),
             ],
         });
 
@@ -167,8 +167,8 @@ public sealed class VMViewModelTests : IDisposable
         // Used counts the disk's checkpoint files too, so it can be more than the disk's size.
         var vm = Open(Sample.VM() with
         {
-            DiskSpaceUsed = 148 * GB,
-            Disks = [new VMDisk("DevBox-OS.vhdx", @"D:\VMs\DevBox\DevBox-OS.vhdx", 148 * GB, 120 * GB)],
+            DiskSpaceUsed = 148 * _GB,
+            Disks = [new VMDisk("DevBox-OS.vhdx", @"D:\VMs\DevBox\DevBox-OS.vhdx", 148 * _GB, 120 * _GB)],
         });
 
         Assert.Equal(@"148 GB used with its checkpoints, disk size 120 GB, D:\VMs\DevBox\DevBox-OS.vhdx", Detail(vm, "Disk DevBox-OS.vhdx"));
@@ -290,11 +290,11 @@ public sealed class VMViewModelTests : IDisposable
         var idle = Open(Sample.VM());
         var building = Open(Sample.VM() with
         {
-            Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 }
+            Run = new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 }
         });
         var maintaining = Open(Sample.VM() with
         {
-            Run = new VMRun { Command = "Maintenance", Status = VMRun.Running, ProcessId = 9 }
+            Run = new VMRun { Command = "Maintenance", Status = VMRun.RUNNING, ProcessId = 9 }
         });
 
         Assert.False(idle.BuildProgressCommand.CanExecute(null));
@@ -307,10 +307,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void BuildProgress_OpensTheProgressOfTheRunningBuild()
     {
-        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 }, "DevEnv");
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 }, "DevEnv");
         var vm = Open(Sample.VM("DevEnv") with
         {
-            Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 }
+            Run = new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 }
         });
 
         vm.BuildProgressCommand.Execute(null);
@@ -324,11 +324,11 @@ public sealed class VMViewModelTests : IDisposable
     {
         return new()
         {
-            Command = VMRun.Build,
+            Command = VMRun.BUILD,
             Status = status,
             ProcessId = 9,
             Phase = phase,
-            UnfinishedPhase = status == VMRun.Completed ? null : phase,
+            UnfinishedPhase = status == VMRun.COMPLETED ? null : phase,
         };
     }
 
@@ -337,7 +337,7 @@ public sealed class VMViewModelTests : IDisposable
         return new()
         {
             Command = command,
-            Status = VMRun.Running,
+            Status = VMRun.RUNNING,
             ProcessId = 9,
             Phase = 7
         };
@@ -363,9 +363,9 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Theory]
-    [InlineData(VMRun.Failed, "failed")]
-    [InlineData(VMRun.Stopped, "stopped")]
-    [InlineData(VMRun.EndedUnexpectedly, "ended unexpectedly")]
+    [InlineData(VMRun.FAILED, "failed")]
+    [InlineData(VMRun.STOPPED, "stopped")]
+    [InlineData(VMRun.ENDED_UNEXPECTEDLY, "ended unexpectedly")]
     public async Task AfterABuildThatDidNotFinish_ItsPhaseIsChosen_AndTheNoteSaysWhy(string status, string said)
     {
         var vm = await Loaded(Sample.VM() with
@@ -382,7 +382,7 @@ public sealed class VMViewModelTests : IDisposable
     {
         var vm = await Loaded(Sample.VM() with
         {
-            LastBuild = LastBuild(VMRun.Completed, 8)
+            LastBuild = LastBuild(VMRun.COMPLETED, 8)
         });
 
         Assert.Equal(0, vm.SelectedPhase?.Number);
@@ -450,7 +450,7 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Theory]
-    [InlineData(VMRun.Build, "A build of DevBox is running now.")]
+    [InlineData(VMRun.BUILD, "A build of DevBox is running now.")]
     [InlineData("Maintenance", "Maintenance of DevBox is running now.")]
     [InlineData("Rebuild", "A rebuild of DevBox is running now.")]
     public async Task WhileARunIsGoing_NeitherCanStart_AndTheNoteSaysWhy(string command, string said)
@@ -512,7 +512,7 @@ public sealed class VMViewModelTests : IDisposable
 
         vm.Update(Sample.VM() with
         {
-            LastBuild = LastBuild(VMRun.Failed, 8)
+            LastBuild = LastBuild(VMRun.FAILED, 8)
         });
 
         Assert.Equal(8, vm.SelectedPhase?.Number);
@@ -523,13 +523,13 @@ public sealed class VMViewModelTests : IDisposable
     {
         var vm = await Loaded(Sample.VM() with
         {
-            LastBuild = LastBuild(VMRun.Failed, 7)
+            LastBuild = LastBuild(VMRun.FAILED, 7)
         });
         vm.SelectedPhase = vm.Phases[1];
 
         vm.Update(Sample.VM() with
         {
-            LastBuild = LastBuild(VMRun.Failed, 7)
+            LastBuild = LastBuild(VMRun.FAILED, 7)
         });
 
         Assert.Equal(1, vm.SelectedPhase?.Number);
@@ -545,7 +545,7 @@ public sealed class VMViewModelTests : IDisposable
         var run = command is null ? null : new VMRun
         {
             Command = command,
-            Status = VMRun.Running,
+            Status = VMRun.RUNNING,
             ProcessId = 9,
             Phase = phase,
             PhaseName = phase is null ? null : "Windows",
@@ -566,8 +566,8 @@ public sealed class VMViewModelTests : IDisposable
         {
             Name = name,
             HyperVState = "Off",
-            Items = [new("Folder", $@"C:\LazyVM\{name}", 50 * GB)],
-            Total = 50 * GB,
+            Items = [new("Folder", $@"C:\LazyVM\{name}", 50 * _GB)],
+            Total = 50 * _GB,
         };
     }
 
@@ -630,7 +630,7 @@ public sealed class VMViewModelTests : IDisposable
     public async Task Delete_ThatOnlyPartlyRemoved_SaysWhatIsLeft_AndKeepsTheWindow()
     {
         _Runner.ReturnsRemovalPlan(PlanOf());
-        _Runner.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", Items = [new(RemovalItem.File, @"E:\Disks\DevBox\SQL.vhdx", GB)] });
+        _Runner.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", Items = [new(RemovalItem.FILE, @"E:\Disks\DevBox\SQL.vhdx", _GB)] });
         _Runner.RemoveFails = new InvalidOperationException(@"'DevBox' was only partly removed. The log lists what is left: C:\LazyVM\DevBox\Logs\DevBox.log");
         _Tools.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
@@ -689,7 +689,7 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Theory]
-    [InlineData(VMRun.Build, "A build of DevBox is running now, so DevBox cannot be deleted until it has ended.")]
+    [InlineData(VMRun.BUILD, "A build of DevBox is running now, so DevBox cannot be deleted until it has ended.")]
     [InlineData("Remove", "A delete of DevBox is running now, so DevBox cannot be deleted until it has ended.")]
     [InlineData("Restore", "A restore of the tooling of DevBox is running now, so DevBox cannot be deleted until it has ended.")]
     public async Task WhileARunIsGoing_DeleteIsDisabled_AndItsNoteSaysWhy(string command, string said)
@@ -762,7 +762,7 @@ public sealed class VMViewModelTests : IDisposable
         var restore = Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Shown));
         await Task.Yield();
 
-        vm.Update(Sample.VM() with { Run = RunningNow(VMRun.Build) });
+        vm.Update(Sample.VM() with { Run = RunningNow(VMRun.BUILD) });
 
         Assert.False(restore.RestoreCommand.CanExecute(null));
     }

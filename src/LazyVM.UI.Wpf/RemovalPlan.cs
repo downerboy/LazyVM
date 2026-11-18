@@ -45,7 +45,7 @@ public sealed record RemovalPlan
 /// <summary>A file or folder that goes. <see cref="Kind"/> is File or Folder.</summary>
 public sealed record RemovalItem(string Kind, string Path, long Size)
 {
-    public const string File = "File";
+    public const string FILE = "File";
 }
 
 /// <summary>Something the VM uses that is kept, and why, such as a disk another VM uses too.</summary>

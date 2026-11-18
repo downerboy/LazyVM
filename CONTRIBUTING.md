@@ -18,8 +18,9 @@ LazyVM uses [GitHub Flow](https://docs.github.com/en/get-started/using-github/gi
 
    If the change adds, removes or reorders what a command calls, update that command's diagram source in `docs/diagrams/source` and run `./Update-Diagram.ps1`; the tests fail until the diagrams match the code. Update the [guide](docs/Guide.md), the [use cases](docs/UseCases.md) and the command's own help in the same pull request.
 
-   In the C# code (the app in `src/LazyVM.UI.Wpf` and its tests), follow two rules. `src/.editorconfig` sets them, and the build fails on a break, in Visual Studio and in CI:
-   - Name private fields with a leading underscore and Pascal casing, such as `_Runner`, so a field can be told from a local or a parameter at a glance. Constants keep plain Pascal casing, such as `GB`.
+   In the C# code (the app in `src/LazyVM.UI.Wpf` and its tests), follow these rules. `src/.editorconfig` sets them, and the build fails on a break, in Visual Studio and in CI:
+   - Name private fields with a leading underscore and Pascal casing, such as `_Runner`, so a field can be told from a local or a parameter at a glance.
+   - Name constants in all caps, with an underscore between words, so a constant can be told from a property or a variable at a glance. A constant other classes use (public, internal or protected) has no prefix, such as `NOT_STARTED`. A private constant, used only in its own class, and a local constant, used only in its own method, start with an underscore, such as `_BYTES_PER_GB` (#470).
    - Put every block in braces, even a one-line `if`, `else`, `for`, `foreach`, `while` or `using` body, so no block is implied.
 
    Also use LINQ whenever it can do the job: to filter, map, find, count, order or build a collection, write a query, not a loop. A short list built with an `if` and `Add` for each item is a list of candidates filtered with LINQ, such as `new[] { a ? "x" : null, b ? "y" : null }.OfType<string>()`. Keep a loop only where LINQ does not fit: the loop changes something as it goes, such as adding to a collection LINQ cannot fill or calling a method for its effect, or it awaits, or a query would read worse. When you change code that does not follow this, refactor it as you go (#461). No analyzer checks this rule, so reviews do.

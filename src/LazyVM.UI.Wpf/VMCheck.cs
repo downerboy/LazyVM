@@ -12,9 +12,9 @@ namespace LazyVM.UI.Wpf;
 public sealed record VMCheck(string Area, string Check, string Status, string Detail, string Fix)
 {
     public const string OK = "OK";
-    public const string Info = "INFO";
-    public const string Warning = "WARN";
-    public const string Failed = "FAIL";
+    public const string INFO = "INFO";
+    public const string WARNING = "WARN";
+    public const string FAILED = "FAIL";
 }
 
 /// <summary>One entry of a VM's log, as <c>Get-LazyVMLog</c> reads it.</summary>
@@ -23,6 +23,6 @@ public sealed record VMCheck(string Area, string Check, string Status, string De
 /// <param name="Message">The message; it may run over several lines.</param>
 public sealed record VMLogEntry(DateTime? Time, string Level, string Message)
 {
-    public const string Warning = "Warning";
-    public const string Error = "Error";
+    public const string WARNING = "Warning";
+    public const string ERROR = "Error";
 }

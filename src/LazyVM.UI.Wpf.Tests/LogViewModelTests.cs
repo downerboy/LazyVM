@@ -32,7 +32,7 @@ public sealed class LogViewModelTests : IDisposable
 
         await _Log.LoadAsync();
 
-        Assert.Equal([("DevBox", LogViewModel.Tail)], _Runner.LogCalls);
+        Assert.Equal([("DevBox", LogViewModel.TAIL)], _Runner.LogCalls);
     }
 
     [Fact]
@@ -83,11 +83,11 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task Load_OfAFullTail_SaysOnlyTheLastAreShown()
     {
-        _Runner.ReturnsLog([.. Enumerable.Range(0, LogViewModel.Tail).Select(_ => Sample.Log("Info", "a"))]);
+        _Runner.ReturnsLog([.. Enumerable.Range(0, LogViewModel.TAIL).Select(_ => Sample.Log("Info", "a"))]);
 
         await _Log.LoadAsync();
 
-        Assert.Equal($"The last {LogViewModel.Tail} entries: no warnings or errors", _Log.Status);
+        Assert.Equal($"The last {LogViewModel.TAIL} entries: no warnings or errors", _Log.Status);
     }
 
     [Fact]

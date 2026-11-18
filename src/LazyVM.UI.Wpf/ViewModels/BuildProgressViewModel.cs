@@ -240,7 +240,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         else if (processEnded)
         {
             // It ended before it recorded a run, such as when the Windows ISO is missing or another run is going.
-            Finish(result!.Outcome == BuildResult.Completed
+            Finish(result!.Outcome == BuildResult.COMPLETED
                 ? $"The build of {VMName} ended."
                 : $"The build of {VMName} did not start: {result.Message}", null);
         }
@@ -253,7 +253,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <summary>A build already running: the one running when the window opened.</summary>
     private void ShowRunningBuild(VMRun? latest)
     {
-        if (_FollowedProcess is null && latest is { IsRunning: true, ProcessId: { } process } && latest.Command is null or VMRun.Build)
+        if (_FollowedProcess is null && latest is { IsRunning: true, ProcessId: { } process } && latest.Command is null or VMRun.BUILD)
         {
             _FollowedProcess = process;
         }
@@ -305,20 +305,20 @@ public sealed class BuildProgressViewModel : ViewModelBase
         };
         switch (ended.Status)
         {
-            case VMRun.Completed:
+            case VMRun.COMPLETED:
                 Finish($"The build of {VMName} is complete. {VMName} is ready.", null);
                 break;
-            case VMRun.CompletedWithProblems:
+            case VMRun.COMPLETED_WITH_PROBLEMS:
                 Finish($"All phases ran, but some steps failed. {VMName} can be used.", "The log says which steps failed and how to fix them.");
                 break;
-            case VMRun.WaitingForRestart:
+            case VMRun.WAITING_FOR_RESTART:
                 Finish("The host is restarting to finish turning on Hyper-V.", "The build carries on by itself after the restart.");
                 break;
-            case VMRun.Stopped:
+            case VMRun.STOPPED:
                 Finish($"The build of {VMName} stopped{InPhase(phase)}, as asked.",
                     "Let any install still running inside the VM finish first, so two installers do not run at once." + carryOn, phase);
                 break;
-            case VMRun.EndedUnexpectedly:
+            case VMRun.ENDED_UNEXPECTEDLY:
                 Finish($"The build of {VMName} ended unexpectedly{InPhase(phase)}: its process was closed, crashed or lost power.",
                     "The log says how far it got." + carryOn, phase);
                 break;
@@ -406,20 +406,20 @@ public sealed class BuildProgressViewModel : ViewModelBase
         string PhaseState(int number)
         {
             return _Run is null || current is null
-                ? PhaseRowViewModel.NotStarted
-                : finished && _Run.Status is VMRun.Completed or VMRun.CompletedWithProblems
-                ? _Run.Status == VMRun.CompletedWithProblems && number == current ? PhaseRowViewModel.DoneWithProblems : PhaseRowViewModel.Done
+                ? PhaseRowViewModel.NOT_STARTED
+                : finished && _Run.Status is VMRun.COMPLETED or VMRun.COMPLETED_WITH_PROBLEMS
+                ? _Run.Status == VMRun.COMPLETED_WITH_PROBLEMS && number == current ? PhaseRowViewModel.DONE_WITH_PROBLEMS : PhaseRowViewModel.DONE
                 : number < current
-                ? PhaseRowViewModel.Done
+                ? PhaseRowViewModel.DONE
                 : number > current
-                ? PhaseRowViewModel.NotStarted
+                ? PhaseRowViewModel.NOT_STARTED
                 : _Run.Status switch
                 {
-                    VMRun.Running when _Run.StopRequested => PhaseRowViewModel.Stopping,
-                    VMRun.Running => PhaseRowViewModel.InProgress,
-                    VMRun.WaitingForRestart => PhaseRowViewModel.WaitingForRestart,
-                    VMRun.Stopped => PhaseRowViewModel.Stopped,
-                    _ => PhaseRowViewModel.Failed,
+                    VMRun.RUNNING when _Run.StopRequested => PhaseRowViewModel.STOPPING,
+                    VMRun.RUNNING => PhaseRowViewModel.IN_PROGRESS,
+                    VMRun.WAITING_FOR_RESTART => PhaseRowViewModel.WAITING_FOR_RESTART,
+                    VMRun.STOPPED => PhaseRowViewModel.STOPPED,
+                    _ => PhaseRowViewModel.FAILED,
                 };
         }
     }
@@ -440,14 +440,14 @@ public sealed class BuildProgressViewModel : ViewModelBase
 /// <summary>One phase of the build: its number, its goal and how far it has got.</summary>
 public sealed class PhaseRowViewModel(BuildPhase phase, string state)
 {
-    public const string NotStarted = "Not started";
-    public const string InProgress = "In progress";
-    public const string Stopping = "Stopping";
-    public const string Done = "Done";
-    public const string DoneWithProblems = "Done, with problems";
-    public const string WaitingForRestart = "Waiting for the host to restart";
-    public const string Stopped = "Stopped";
-    public const string Failed = "Failed";
+    public const string NOT_STARTED = "Not started";
+    public const string IN_PROGRESS = "In progress";
+    public const string STOPPING = "Stopping";
+    public const string DONE = "Done";
+    public const string DONE_WITH_PROBLEMS = "Done, with problems";
+    public const string WAITING_FOR_RESTART = "Waiting for the host to restart";
+    public const string STOPPED = "Stopped";
+    public const string FAILED = "Failed";
 
     public int Number => phase.Number;
 
@@ -456,15 +456,15 @@ public sealed class PhaseRowViewModel(BuildPhase phase, string state)
     public string State => state;
 
     /// <summary>True for the phase the build is in, or ended in.</summary>
-    public bool IsCurrent => state is not (NotStarted or Done);
+    public bool IsCurrent => state is not (NOT_STARTED or DONE);
 
     /// <summary>A shape for the state, so it is never told by color alone.</summary>
     public string Symbol => state switch
     {
-        Done => "✓",
-        NotStarted => "○",
-        InProgress or Stopping or WaitingForRestart => "▶",
-        DoneWithProblems => "▲",
+        DONE => "✓",
+        NOT_STARTED => "○",
+        IN_PROGRESS or STOPPING or WAITING_FOR_RESTART => "▶",
+        DONE_WITH_PROBLEMS => "▲",
         _ => "✖",
     };
 

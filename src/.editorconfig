@@ -9,25 +9,44 @@
 csharp_prefer_braces = true:error
 dotnet_diagnostic.IDE0011.severity = error
 
-# Private fields: a leading underscore and Pascal casing, such as _Runner, so
-# a field can be told from a local or a parameter at a glance. Constants are
-# not variables, so they keep plain Pascal casing, such as GB.
-dotnet_naming_rule.private_constants_pascal.symbols = private_constants
-dotnet_naming_rule.private_constants_pascal.style = pascal
-dotnet_naming_rule.private_constants_pascal.severity = error
+# Constants (#470): all caps, words joined by an underscore, so a constant
+# can be told from a property or a variable at a glance. A constant other
+# classes use (public, internal or protected) is plain, such as NOT_STARTED.
+# A private constant, used only in its own class, and a local constant, used
+# only in its own method, have a leading underscore, such as _BYTES_PER_GB.
+# These rules come before the private field rule, so a private constant
+# follows them and not that one.
+dotnet_naming_rule.private_constants_underscore_upper.symbols = private_constants
+dotnet_naming_rule.private_constants_underscore_upper.style = underscore_upper
+dotnet_naming_rule.private_constants_underscore_upper.severity = error
 
+dotnet_naming_rule.shared_constants_upper.symbols = shared_constants
+dotnet_naming_rule.shared_constants_upper.style = upper
+dotnet_naming_rule.shared_constants_upper.severity = error
+
+# Private fields: a leading underscore and Pascal casing, such as _Runner, so
+# a field can be told from a local or a parameter at a glance.
 dotnet_naming_rule.private_fields_underscore_pascal.symbols = private_fields
 dotnet_naming_rule.private_fields_underscore_pascal.style = underscore_pascal
 dotnet_naming_rule.private_fields_underscore_pascal.severity = error
 
-dotnet_naming_symbols.private_constants.applicable_kinds = field
-dotnet_naming_symbols.private_constants.applicable_accessibilities = private
+dotnet_naming_symbols.private_constants.applicable_kinds = field, local
+dotnet_naming_symbols.private_constants.applicable_accessibilities = private, local
 dotnet_naming_symbols.private_constants.required_modifiers = const
+
+dotnet_naming_symbols.shared_constants.applicable_kinds = field
+dotnet_naming_symbols.shared_constants.applicable_accessibilities = public, internal, protected, protected_internal, private_protected
+dotnet_naming_symbols.shared_constants.required_modifiers = const
 
 dotnet_naming_symbols.private_fields.applicable_kinds = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 
-dotnet_naming_style.pascal.capitalization = pascal_case
+dotnet_naming_style.upper.capitalization = all_upper
+dotnet_naming_style.upper.word_separator = _
+
+dotnet_naming_style.underscore_upper.required_prefix = _
+dotnet_naming_style.underscore_upper.capitalization = all_upper
+dotnet_naming_style.underscore_upper.word_separator = _
 
 dotnet_naming_style.underscore_pascal.required_prefix = _
 dotnet_naming_style.underscore_pascal.capitalization = pascal_case

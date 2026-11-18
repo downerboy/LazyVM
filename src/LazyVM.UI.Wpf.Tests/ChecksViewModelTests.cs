@@ -51,10 +51,10 @@ public sealed class ChecksViewModelTests
     public async Task Run_SaysHowManyFailedAndWarned()
     {
         _Runner.ReturnsChecks(
-            Sample.Check(VMCheck.Failed),
-            Sample.Check(VMCheck.Warning),
-            Sample.Check(VMCheck.Warning),
-            Sample.Check(VMCheck.Info),
+            Sample.Check(VMCheck.FAILED),
+            Sample.Check(VMCheck.WARNING),
+            Sample.Check(VMCheck.WARNING),
+            Sample.Check(VMCheck.INFO),
             Sample.Check(VMCheck.OK));
         var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
 
@@ -67,7 +67,7 @@ public sealed class ChecksViewModelTests
     [Fact]
     public async Task Run_WithNothingWrong_SaysSo()
     {
-        _Runner.ReturnsChecks(Sample.Check(VMCheck.OK), Sample.Check(VMCheck.Info));
+        _Runner.ReturnsChecks(Sample.Check(VMCheck.OK), Sample.Check(VMCheck.INFO));
         var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
 
         await checks.RunAsync();
@@ -109,7 +109,7 @@ public sealed class ChecksViewModelTests
     [Fact]
     public async Task Row_ReadsStatusCheckDetailAndFix()
     {
-        _Runner.ReturnsChecks(Sample.Check(VMCheck.Failed, "Folder access", "others can change it", "Lock it with: Set-LazyVMRoot -Path C:\\LazyVM"));
+        _Runner.ReturnsChecks(Sample.Check(VMCheck.FAILED, "Folder access", "others can change it", "Lock it with: Set-LazyVMRoot -Path C:\\LazyVM"));
         var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
 
         await checks.RunAsync();
@@ -123,9 +123,9 @@ public sealed class ChecksViewModelTests
 
     [Theory]
     [InlineData(VMCheck.OK, "OK", false)]
-    [InlineData(VMCheck.Info, "Note", false)]
-    [InlineData(VMCheck.Warning, "Warning", true)]
-    [InlineData(VMCheck.Failed, "Failed", true)]
+    [InlineData(VMCheck.INFO, "Note", false)]
+    [InlineData(VMCheck.WARNING, "Warning", true)]
+    [InlineData(VMCheck.FAILED, "Failed", true)]
     public void Row_StatusIsInWords(string status, string words, bool needsAttention)
     {
         var row = new CheckRowViewModel(Sample.Check(status));
@@ -147,7 +147,7 @@ public sealed class ChecksViewModelTests
     public void Row_ANoteWithAFix_ShowsTheFix()
     {
         // Before the first VM, the note that there are none says how to make one.
-        var row = new CheckRowViewModel(Sample.Check(VMCheck.Info, "VMs", "none yet", "Create the first one with: New-LazyVM -Name <Name>"));
+        var row = new CheckRowViewModel(Sample.Check(VMCheck.INFO, "VMs", "none yet", "Create the first one with: New-LazyVM -Name <Name>"));
 
         Assert.True(row.HasFix);
         Assert.False(row.NeedsAttention);

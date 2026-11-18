@@ -58,18 +58,18 @@ public sealed record VMRun
         get; init;
     }
 
-    public bool IsRunning => Status == Running;
+    public bool IsRunning => Status == RUNNING;
 
-    public bool IsBuild => Command == Build;
+    public bool IsBuild => Command == BUILD;
 
-    public const string Build = "Build";
-    public const string Running = "Running";
-    public const string Completed = "Completed";
-    public const string CompletedWithProblems = "CompletedWithProblems";
-    public const string WaitingForRestart = "WaitingForRestart";
-    public const string Failed = "Failed";
-    public const string Stopped = "Stopped";
-    public const string EndedUnexpectedly = "EndedUnexpectedly";
+    public const string BUILD = "Build";
+    public const string RUNNING = "Running";
+    public const string COMPLETED = "Completed";
+    public const string COMPLETED_WITH_PROBLEMS = "CompletedWithProblems";
+    public const string WAITING_FOR_RESTART = "WaitingForRestart";
+    public const string FAILED = "Failed";
+    public const string STOPPED = "Stopped";
+    public const string ENDED_UNEXPECTEDLY = "EndedUnexpectedly";
 }
 
 /// <summary>One phase of a build, from <c>Get-LazyVMBuildPhase</c>.</summary>
@@ -92,7 +92,7 @@ public sealed record BuildRequest(string Name, string? ConfigTemplate, string? U
 /// </summary>
 public sealed record BuildResult(string Outcome, string? ErrorId, string? Message)
 {
-    public const string Completed = "Completed";
-    public const string Stopped = "Stopped";
-    public const string Failed = "Failed";
+    public const string COMPLETED = "Completed";
+    public const string STOPPED = "Stopped";
+    public const string FAILED = "Failed";
 }
