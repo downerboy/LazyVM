@@ -241,6 +241,20 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
 
         Assert.Equal(_Runner.ExportWarnings, window.Warnings);
         Assert.True(window.HasWarnings);
+        Assert.EndsWith("somewhere safe. 1 warning is shown below.", window.Status);
+    }
+
+    [Fact]
+    public async Task Export_WithSeveralWarnings_SaysHowManyInTheStatus()
+    {
+        var window = await Loaded(_UserKey);
+        _Tools.ChosenExportFile = _FILE;
+        _Runner.ExportWarnings = ["One.", "Two."];
+        _Runner.ReturnsRecoveryKeys(_UserKey with { Exported = true });
+
+        await window.ExportAsync();
+
+        Assert.EndsWith("somewhere safe. 2 warnings are shown below.", window.Status);
     }
 
     [Fact]

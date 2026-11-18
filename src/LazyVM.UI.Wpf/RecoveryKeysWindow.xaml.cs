@@ -33,6 +33,12 @@ public partial class RecoveryKeysWindow : Window
         }
     }
 
+    /// <summary>A recovery password is never copied or dragged out of its box, by Ctrl+C or any other way.</summary>
+    private void BlockCopy(object sender, DataObjectCopyingEventArgs e)
+    {
+        e.CancelCommand();
+    }
+
     /// <summary>Esc closes the window.</summary>
     private void CloseWindow(object sender, ExecutedRoutedEventArgs e)
     {

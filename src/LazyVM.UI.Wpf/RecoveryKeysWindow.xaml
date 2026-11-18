@@ -37,7 +37,7 @@
                     <DataTemplate>
                         <Border Style="{StaticResource LvAttentionBadge}" Margin="0,8,0,0" HorizontalAlignment="Stretch">
                             <TextBlock Text="{Binding StringFormat='Warning: {0}'}" TextWrapping="Wrap" Focusable="True" Foreground="{DynamicResource LvOnSev}"
-                                       AutomationProperties.Name="{Binding StringFormat='Warning: {0}'}" local:LiveRegion.Announce="True" />
+                                       AutomationProperties.Name="{Binding StringFormat='Warning: {0}'}" />
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -72,8 +72,10 @@
                                 <DockPanel Margin="0,4,0,0">
                                     <Button DockPanel.Dock="Left" Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" MinWidth="72" Margin="0,0,12,0"
                                             AutomationProperties.Name="{Binding ToggleName}" />
-                                    <!-- Read-only text, so Narrator can read the password a character at a time once shown. -->
+                                    <!-- Read-only text, so Narrator can read the password a character at a time once shown. It cannot be copied or
+                                         dragged out: the ordinary clipboard keeps it in its history and syncs it, and nothing would clear it. -->
                                     <TextBox Text="{Binding PasswordText, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+                                             DataObject.Copying="BlockCopy" ContextMenuService.IsEnabled="False"
                                              Foreground="{DynamicResource LvInk}" FontFamily="Consolas" VerticalAlignment="Center" TextWrapping="Wrap"
                                              AutomationProperties.Name="{Binding PasswordName}" />
                                 </DockPanel>

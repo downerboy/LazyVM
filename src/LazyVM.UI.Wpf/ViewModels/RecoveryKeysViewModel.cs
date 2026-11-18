@@ -171,7 +171,14 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
             {
                 var export = await _Tools.ExportRecoveryKeysAsync(Name, path, replace);
                 Warnings = export.Warnings;
-                done = $"The recovery passwords of {Name} were written to {export.Path}. Keep that file offline, such as on a USB drive, somewhere safe.";
+                // The status line is what Narrator announces, so it says there are warnings to read.
+                var warned = export.Warnings.Count switch
+                {
+                    0 => string.Empty,
+                    1 => " 1 warning is shown below.",
+                    var count => $" {count} warnings are shown below.",
+                };
+                done = $"The recovery passwords of {Name} were written to {export.Path}. Keep that file offline, such as on a USB drive, somewhere safe.{warned}";
             }
             catch (Exception exception)
             {
