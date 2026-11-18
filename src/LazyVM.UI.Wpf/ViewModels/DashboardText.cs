@@ -20,6 +20,20 @@ internal static class DashboardText
         return value.ToString("d MMMM yyyy ", CultureInfo.CurrentCulture) + value.ToString("t", CultureInfo.CurrentCulture);
     }
 
+    /// <summary>The run going now, to start a sentence, such as "A build" or "Maintenance".</summary>
+    public static string RunName(string? command)
+    {
+        return command switch
+        {
+            VMRun.Build => "A build",
+            "Maintenance" => "Maintenance",
+            "Rebuild" => "A rebuild",
+            "Remove" => "A delete",
+            "Restore" => "A restore of the tooling",
+            _ => "A run",
+        };
+    }
+
     /// <summary>A day without the year, such as "12 November".</summary>
     public static string Day(DateTime value)
     {

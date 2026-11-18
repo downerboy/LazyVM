@@ -1,0 +1,63 @@
+<Window x:Class="LazyVM.UI.Wpf.RestoreWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:LazyVM.UI.Wpf"
+        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:RestoreViewModel}"
+        Title="{Binding Title}" Width="760" Height="600" MinWidth="320"
+        Style="{StaticResource LvWindow}">
+    <Window.CommandBindings>
+        <CommandBinding Command="Close" Executed="CloseWindow" />
+    </Window.CommandBindings>
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="Close" />
+    </Window.InputBindings>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
+            <TextBlock Text="{Binding Name, StringFormat='Restore points of {0}'}" Style="{StaticResource LvTitle}" />
+        </Border>
+
+        <!-- While a run of the VM is going, or for a point without its tooling list, Restore is disabled and the note says why. -->
+        <StackPanel DockPanel.Dock="Bottom" Margin="24,0,24,24">
+            <WrapPanel>
+                <Button Content="_Restore to this point..." Command="{Binding RestoreCommand}" Margin="0,0,8,8"
+                        AutomationProperties.Name="{Binding Name, StringFormat='Restore {0} to the chosen point'}"
+                        AutomationProperties.HelpText="Asks first. All of the VM's disks go back to then, including the Dev Drive and the SQL data disk." />
+            </WrapPanel>
+            <TextBlock Text="{Binding RestoreNote}" TextWrapping="Wrap"
+                       Visibility="{Binding HasRestoreNote, Converter={StaticResource VisibleWhenTrue}}"
+                       AutomationProperties.Name="{Binding RestoreNote}" />
+            <TextBlock Text="{Binding Status}" Style="{StaticResource LvStatus}" Margin="0,8,0,0"
+                       Visibility="{Binding HasStatus, Converter={StaticResource VisibleWhenTrue}}"
+                       AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+        </StackPanel>
+
+        <Border Style="{StaticResource LvPanel}" Margin="24">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="A restore point is taken each time a change to the VM's tooling is recorded. Newest first."
+                           Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <!-- A list, so the arrow keys move through the points and Narrator reads each one. -->
+                <ListBox x:Name="List" ItemsSource="{Binding Points}" SelectedItem="{Binding SelectedPoint}"
+                         AutomationProperties.Name="Restore points"
+                         BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
+                         Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:RestorePointOption">
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+    </DockPanel>
+</Window>

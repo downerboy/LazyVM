@@ -229,6 +229,54 @@ internal sealed class FakeCommandRunner : CommandRunner
         }
     }
 
+    private readonly Answers<VMRestorePoint> _RestorePoints = new();
+
+    public List<string> RestorePointCalls { get; } = [];
+
+    public List<(string Name, string Stamp)> RestoreCalls { get; } = [];
+
+    /// <summary>Restore-LazyVMTooling fails with this.</summary>
+    public Exception? RestoreFails
+    {
+        get; set;
+    }
+
+    /// <summary>When set, Restore-LazyVMTooling runs until the test completes it.</summary>
+    public TaskCompletionSource? RestoreGate
+    {
+        get; set;
+    }
+
+    /// <summary>The next Get-LazyVMRestorePoint returns these points, oldest first as the module does.</summary>
+    public void ReturnsRestorePoints(params VMRestorePoint[] points)
+    {
+        _RestorePoints.Returns(points);
+    }
+
+    public void RestorePointsThrow(Exception exception)
+    {
+        _RestorePoints.Throws(exception);
+    }
+
+    public override Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(string name, CancellationToken cancellationToken)
+    {
+        RestorePointCalls.Add(name);
+        return _RestorePoints.Next(cancellationToken);
+    }
+
+    public override async Task RestoreToolingAsync(string name, string stamp)
+    {
+        RestoreCalls.Add((name, stamp));
+        if (RestoreGate is { } gate)
+        {
+            await gate.Task;
+        }
+        if (RestoreFails is { } failure)
+        {
+            throw failure;
+        }
+    }
+
     public override Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
     {
         return ModuleFolderFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(@"C:\Program Files\LazyVM\Modules\LazyVM\6.20.0");
@@ -314,6 +362,21 @@ internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launc
     {
         RemovalsAsked.Add(removal);
         return ConfirmsRemoval;
+    }
+
+    /// <summary>The answer to the restore question: Yes when true.</summary>
+    public bool ConfirmsRestore
+    {
+        get; set;
+    }
+
+    /// <summary>Every restore question asked.</summary>
+    public List<string> RestoreQuestions { get; } = [];
+
+    public override bool ConfirmRestore(RestoreViewModel restore, string question)
+    {
+        RestoreQuestions.Add(question);
+        return ConfirmsRestore;
     }
 
     public void Close(ViewModelBase window)

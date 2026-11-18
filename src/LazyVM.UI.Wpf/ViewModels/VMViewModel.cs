@@ -18,6 +18,7 @@ public sealed class VMViewModel : ViewModelBase
     private string _Status = string.Empty;
     private bool _IsStarting;
     private bool _IsDeleting;
+    private RestoreViewModel? _Restore;
 
     public VMViewModel(VMDashboard entry, ToolWindows tools)
     {
@@ -31,6 +32,13 @@ public sealed class VMViewModel : ViewModelBase
         BuildFromPhaseCommand = new RelayCommand(() => _ = BuildFromPhaseAsync(), () => CanStart && SelectedPhase is not null);
         MaintenanceCommand = new RelayCommand(() => _ = RunMaintenanceAsync(), () => CanStart && IsMaintenanceScheduled);
         DeleteCommand = new RelayCommand(() => _ = DeleteAsync(), () => CanStart);
+        RestorePointsCommand = new RelayCommand(() => _Restore = tools.OpenRestore(_Entry));
+    }
+
+    /// <summary>Opens the VM's restore points, to return it to one. Always available: the Restore window itself says when a restore cannot start.</summary>
+    public RelayCommand RestorePointsCommand
+    {
+        get;
     }
 
     /// <summary>Raised when the VM has been deleted, so its window closes.</summary>
@@ -315,15 +323,7 @@ public sealed class VMViewModel : ViewModelBase
 
     private static string RunName(string? command)
     {
-        return command switch
-        {
-            VMRun.Build => "A build",
-            "Maintenance" => "Maintenance",
-            "Rebuild" => "A rebuild",
-            "Remove" => "A delete",
-            "Restore" => "A restore of the tooling",
-            _ => "A run",
-        };
+        return DashboardText.RunName(command);
     }
 
     private static string EndedText(string? status)
@@ -375,6 +375,8 @@ public sealed class VMViewModel : ViewModelBase
         OnPropertyChanged(string.Empty);
         BuildProgressCommand.RaiseCanExecuteChanged();
         RaiseRunCommandsChanged();
+        // Its Restore window, if it has opened one, follows the runs too; one since closed just keeps it.
+        _Restore?.Update(entry);
     }
 
     /// <summary>Memory in use against the most the VM can use, for example "6 GB of 16 GB" (#420).</summary>

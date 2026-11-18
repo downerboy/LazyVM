@@ -9,7 +9,8 @@ namespace LazyVM.UI.Wpf;
 /// one progress window per VM. Opening one that is open brings it to the
 /// front instead. It also starts the runs a VM window offers: a build from
 /// a chosen phase, shown in its progress window, and maintenance; and
-/// deletes a VM, once its delete dialog has had a Yes.
+/// deletes a VM, once its delete dialog has had a Yes. One Restore window
+/// per VM lists its restore points, and returns the VM to one after asking.
 /// </summary>
 public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock)
 {
@@ -79,6 +80,57 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
         var owner = Application.Current.Windows.OfType<VMWindow>()
             .FirstOrDefault(window => window.DataContext is VMViewModel vm && string.Equals(vm.Name, removal.Name, StringComparison.OrdinalIgnoreCase));
         var dialog = new RemovalWindow { DataContext = removal, Owner = owner ?? Application.Current.MainWindow };
+        return dialog.ShowDialog() == true;
+    }
+
+    /// <summary>Raised when a restore has ended, even one that failed, so the list can be read again.</summary>
+    public event EventHandler? ToolingRestored;
+
+    /// <summary>The VM's restore points, oldest first.</summary>
+    public virtual Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(string vmName)
+    {
+        return runner.GetRestorePointsAsync(vmName, CancellationToken.None);
+    }
+
+    /// <summary>Returns the VM to a restore point, without asking: <see cref="ConfirmRestore"/> has. Throws with the module's reason when it did not.</summary>
+    public virtual async Task RestoreToolingAsync(string vmName, string stamp)
+    {
+        try
+        {
+            await runner.RestoreToolingAsync(vmName, stamp);
+        }
+        finally
+        {
+            ToolingRestored?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Shows the VM's restore points, or brings its open window to the front,
+    /// and returns the window's view model, so a refresh can reach it.
+    /// </summary>
+    public RestoreViewModel OpenRestore(VMDashboard entry)
+    {
+        var key = "restore:" + entry.Name;
+        if (_Open.TryGetValue(key, out var existing) && existing is RestoreViewModel open)
+        {
+            BringToFront(open);
+            return open;
+        }
+        var restore = new RestoreViewModel(entry, this);
+        Track(key, restore);
+        _ = restore.LoadAsync();
+        return restore;
+    }
+
+    /// <summary>Asks <paramref name="question"/> with Yes and No, No the default, over the restore window. True for Yes.</summary>
+    public virtual bool ConfirmRestore(RestoreViewModel restore, string question)
+    {
+        var dialog = new QuestionWindow
+        {
+            DataContext = new QuestionViewModel($"Restore {restore.Name} - LazyVM", question),
+            Owner = WindowOf(restore),
+        };
         return dialog.ShowDialog() == true;
     }
 
@@ -163,6 +215,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
             LogViewModel => new LogWindow(),
             BuildViewModel => new BuildWindow(),
             BuildProgressViewModel => new BuildProgressWindow(),
+            RestoreViewModel => new RestoreWindow(),
             _ => throw new ArgumentException($"There is no window for {viewModel.GetType().Name}.", nameof(viewModel)),
         };
         window.DataContext = viewModel;

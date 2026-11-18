@@ -729,6 +729,44 @@ public sealed class VMViewModelTests : IDisposable
         Assert.True(changed > 0);
     }
 
+    [Fact]
+    public async Task RestorePoints_OpensTheVMsRestoreWindow_AndReadsThePoints()
+    {
+        _Runner.ReturnsRestorePoints();
+        var vm = await Loaded(Sample.VM());
+
+        vm.RestorePointsCommand.Execute(null);
+
+        Assert.Equal("DevBox", Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Shown)).Name);
+        Assert.Equal(["DevBox"], _Runner.RestorePointCalls);
+    }
+
+    [Fact]
+    public async Task RestorePoints_Twice_BringsTheOpenWindowToTheFront()
+    {
+        _Runner.ReturnsRestorePoints();
+        var vm = await Loaded(Sample.VM());
+
+        vm.RestorePointsCommand.Execute(null);
+        vm.RestorePointsCommand.Execute(null);
+
+        Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
+    }
+
+    [Fact]
+    public async Task ARefresh_ReachesTheOpenRestoreWindow()
+    {
+        _Runner.ReturnsRestorePoints(new VMRestorePoint("20261008-193000", new DateTime(2026, 10, 8), true));
+        var vm = await Loaded(Sample.VM());
+        vm.RestorePointsCommand.Execute(null);
+        var restore = Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Shown));
+        await Task.Yield();
+
+        vm.Update(Sample.VM() with { Run = RunningNow(VMRun.Build) });
+
+        Assert.False(restore.RestoreCommand.CanExecute(null));
+    }
+
     [Theory]
     [InlineData("Remove", "A delete of DevBox is running now.")]
     [InlineData("Restore", "A restore of the tooling of DevBox is running now.")]
