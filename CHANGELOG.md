@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.30.0](https://github.com/downerboy/LazyVM/compare/v6.29.0...v6.30.0) (2026-11-18)
+
+
+### Features
+
+* **gui:** show a VM's recovery keys and export them ([#476](https://github.com/downerboy/LazyVM/issues/476)) ([12e75a5](https://github.com/downerboy/LazyVM/commit/12e75a5faf6745b70d263aa7e0c11edbe66430f1))
+
 ## [6.29.0](https://github.com/downerboy/LazyVM/compare/v6.28.0...v6.29.0) (2026-11-18)
 
 
