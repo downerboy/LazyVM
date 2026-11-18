@@ -18,15 +18,18 @@ public sealed class ChecksViewModel : ViewModelBase
     /// <param name="hostOnly">Check the host alone. Without it and without a VM, the only VM is checked too, or a note says there are none yet.</param>
     public ChecksViewModel(CommandRunner runner, string? vmName, bool hostOnly)
     {
-        this._Runner = runner;
-        this._HostOnly = hostOnly;
+        _Runner = runner;
+        _HostOnly = hostOnly;
         VMName = vmName;
         _RunCommand = new RelayCommand(() => _ = RunAsync(), () => !IsRunning);
         _CancelCommand = new RelayCommand(() => _Running?.Cancel(), () => IsRunning);
     }
 
     /// <summary>The VM checked; empty for the host.</summary>
-    public string? VMName { get; }
+    public string? VMName
+    {
+        get;
+    }
 
     public string Title => VMName is null ? "Host checks - LazyVM" : $"{VMName} checks - LazyVM";
 
@@ -50,7 +53,10 @@ public sealed class ChecksViewModel : ViewModelBase
     public bool HasFailures => Checks.Any(row => row.Status == VMCheck.Failed);
 
     /// <summary>True when the last run failed as a whole, rather than any one check failing.</summary>
-    public bool CouldNotRun { get; private set; }
+    public bool CouldNotRun
+    {
+        get; private set;
+    }
 
     /// <summary>Runs the checks again.</summary>
     public RelayCommand RunCommand => _RunCommand;

@@ -12,27 +12,39 @@ public sealed class BuildProgressViewModelTests
     /// <summary>The phases Carry on was asked to start from.</summary>
     private readonly List<int> _CarriedOn = [];
 
-    private BuildProgressViewModel Started() => new(_Runner, "DevBox", new StartedBuild(Process, _Ending.Task), _Clock);
-
-    private BuildProgressViewModel Following() => new(_Runner, "DevBox", started: null, _Clock);
-
-    private static VMRun Running(int? phase, int? process = Process, bool stopRequested = false) => new()
+    private BuildProgressViewModel Started()
     {
-        Command = VMRun.Build,
-        Status = VMRun.Running,
-        ProcessId = process,
-        Phase = phase,
-        StopRequested = stopRequested,
-    };
+        return new(_Runner, "DevBox", new StartedBuild(Process, _Ending.Task), _Clock);
+    }
 
-    private static VMRun Ended(string status, int? phase, int? process = Process) => new()
+    private BuildProgressViewModel Following()
     {
-        Command = VMRun.Build,
-        Status = status,
-        ProcessId = process,
-        Phase = phase,
-        UnfinishedPhase = status is VMRun.Stopped or VMRun.Failed or VMRun.EndedUnexpectedly ? phase : null,
-    };
+        return new(_Runner, "DevBox", started: null, _Clock);
+    }
+
+    private static VMRun Running(int? phase, int? process = Process, bool stopRequested = false)
+    {
+        return new()
+        {
+            Command = VMRun.Build,
+            Status = VMRun.Running,
+            ProcessId = process,
+            Phase = phase,
+            StopRequested = stopRequested,
+        };
+    }
+
+    private static VMRun Ended(string status, int? phase, int? process = Process)
+    {
+        return new()
+        {
+            Command = VMRun.Build,
+            Status = status,
+            ProcessId = process,
+            Phase = phase,
+            UnfinishedPhase = status is VMRun.Stopped or VMRun.Failed or VMRun.EndedUnexpectedly ? phase : null,
+        };
+    }
 
     private static async Task<BuildProgressViewModel> Loaded(BuildProgressViewModel progress)
     {
@@ -41,12 +53,14 @@ public sealed class BuildProgressViewModelTests
     }
 
     /// <summary>A started build whose window offers Carry on, recording the phase it starts from.</summary>
-    private BuildProgressViewModel StartedWithCarryOn(Exception? fails = null) =>
-        new(_Runner, "DevBox", new StartedBuild(Process, _Ending.Task), _Clock, phase =>
+    private BuildProgressViewModel StartedWithCarryOn(Exception? fails = null)
+    {
+        return new(_Runner, "DevBox", new StartedBuild(Process, _Ending.Task), _Clock, phase =>
         {
             _CarriedOn.Add(phase);
             return fails is null ? Task.CompletedTask : Task.FromException(fails);
         });
+    }
 
     [Theory]
     [InlineData(VMRun.Failed)]
@@ -288,7 +302,10 @@ public sealed class BuildProgressViewModelTests
     public async Task Cancel_IsOfferedOnlyForABuild_NotForMaintenance()
     {
         var progress = await Loaded(Following());
-        _Runner.ReturnsRun(Running(null) with { Command = "Maintenance" });
+        _Runner.ReturnsRun(Running(null) with
+        {
+            Command = "Maintenance"
+        });
 
         await progress.PollAsync(CancellationToken.None);
 

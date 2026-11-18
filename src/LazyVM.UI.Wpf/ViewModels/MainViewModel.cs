@@ -20,10 +20,10 @@ public sealed class MainViewModel : ViewModelBase
 
     public MainViewModel(CommandRunner runner, VMWindowManager windows, ToolWindows tools, TimeProvider clock)
     {
-        this._Runner = runner;
-        this._Windows = windows;
-        this._Tools = tools;
-        this._Clock = clock;
+        _Runner = runner;
+        _Windows = windows;
+        _Tools = tools;
+        _Clock = clock;
         HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, HostOnly()));
         BuildCommand = new RelayCommand(() => tools.OpenBuild(VMs.Select(row => row.Name).ToList()));
         // A build that ended, or a build or maintenance that started, changed the list: read it again.
@@ -66,10 +66,16 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand OpenVMCommand => _OpenVMCommand;
 
     /// <summary>Opens the checks of this host (Test-LazyVM).</summary>
-    public RelayCommand HostChecksCommand { get; }
+    public RelayCommand HostChecksCommand
+    {
+        get;
+    }
 
     /// <summary>Opens the Build new VM window.</summary>
-    public RelayCommand BuildCommand { get; }
+    public RelayCommand BuildCommand
+    {
+        get;
+    }
 
     /// <summary>
     /// Reads the list, then checks the host. The checks show by themselves
@@ -88,13 +94,19 @@ public sealed class MainViewModel : ViewModelBase
     }
 
     /// <summary>True only once a refresh has found no VMs; a failed refresh says nothing about them.</summary>
-    private bool NoVMs() => _ListIsKnown && VMs.Count == 0;
+    private bool NoVMs()
+    {
+        return _ListIsKnown && VMs.Count == 0;
+    }
 
     /// <summary>
     /// The host alone, unless there are no VMs: then Test-LazyVM adds a
     /// note that there are none yet, saying how to make the first.
     /// </summary>
-    private bool HostOnly() => !NoVMs();
+    private bool HostOnly()
+    {
+        return !NoVMs();
+    }
 
     /// <summary>
     /// Reads every VM and updates the list and the open VM windows. A failure

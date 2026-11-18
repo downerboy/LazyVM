@@ -1,5 +1,5 @@
-using System.Windows;
 using LazyVM.UI.Wpf.ViewModels;
+using System.Windows;
 
 namespace LazyVM.UI.Wpf;
 
@@ -22,8 +22,10 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     public event EventHandler? RunStarted;
 
     /// <summary>Every phase of a build, for choosing the one a build starts at.</summary>
-    public virtual Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken) =>
-        runner.GetBuildPhasesAsync(cancellationToken);
+    public virtual Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken)
+    {
+        return runner.GetBuildPhasesAsync(cancellationToken);
+    }
 
     /// <summary>
     /// Starts building an existing VM, such as from the phase a failed build
@@ -144,12 +146,20 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     }
 
     /// <summary>Closes the window of <paramref name="viewModel"/>.</summary>
-    protected virtual void CloseWindow(ViewModelBase viewModel) => WindowOf(viewModel).Close();
+    protected virtual void CloseWindow(ViewModelBase viewModel)
+    {
+        WindowOf(viewModel).Close();
+    }
 
-    private static Window WindowOf(ViewModelBase viewModel) =>
-        Application.Current.Windows.OfType<Window>().First(window => window.DataContext == viewModel);
+    private static Window WindowOf(ViewModelBase viewModel)
+    {
+        return Application.Current.Windows.OfType<Window>().First(window => window.DataContext == viewModel);
+    }
 
-    private static string ChecksKey(string? vmName) => "checks:" + (vmName ?? string.Empty);
+    private static string ChecksKey(string? vmName)
+    {
+        return "checks:" + (vmName ?? string.Empty);
+    }
 
     private bool BringToFrontIfOpen(string key)
     {

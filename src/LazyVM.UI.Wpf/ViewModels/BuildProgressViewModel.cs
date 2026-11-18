@@ -37,10 +37,10 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <param name="startFromPhase">Starts a new build of the VM from the phase it is given, and shows it; empty offers no Carry on.</param>
     public BuildProgressViewModel(CommandRunner runner, string vmName, StartedBuild? started, TimeProvider clock, Func<int, Task>? startFromPhase = null)
     {
-        this._Runner = runner;
-        this._Started = started;
-        this._Clock = clock;
-        this._StartFromPhase = startFromPhase;
+        _Runner = runner;
+        _Started = started;
+        _Clock = clock;
+        _StartFromPhase = startFromPhase;
         VMName = vmName;
         _FollowedProcess = started?.ProcessId;
         _Status = $"Starting the build of {vmName}";
@@ -78,7 +78,10 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <summary>Raised once, when the build has ended.</summary>
     public event EventHandler? Ended;
 
-    public string VMName { get; }
+    public string VMName
+    {
+        get;
+    }
 
     public string Title => $"Build of {VMName} - LazyVM";
 
@@ -182,7 +185,10 @@ public sealed class BuildProgressViewModel : ViewModelBase
     }
 
     /// <summary>Stops reading the run state, as when the window closes. The build carries on.</summary>
-    public void StopFollowing() => _Following?.Cancel();
+    public void StopFollowing()
+    {
+        _Following?.Cancel();
+    }
 
     internal async Task LoadPhasesAsync(CancellationToken cancellationToken)
     {
@@ -386,8 +392,10 @@ public sealed class BuildProgressViewModel : ViewModelBase
     }
 
     /// <summary>Only a build that has recorded its process can be asked to stop, and only once.</summary>
-    private bool CanCancel() =>
-        !IsFinished && !_IsCancelling && !_IsStopRequested && _Run is { IsRunning: true, IsBuild: true, ProcessId: not null };
+    private bool CanCancel()
+    {
+        return !IsFinished && !_IsCancelling && !_IsStopRequested && _Run is { IsRunning: true, IsBuild: true, ProcessId: not null };
+    }
 
     private void ShowPhases()
     {
@@ -397,39 +405,36 @@ public sealed class BuildProgressViewModel : ViewModelBase
 
         string PhaseState(int number)
         {
-            if (_Run is null || current is null)
-            {
-                return PhaseRowViewModel.NotStarted;
-            }
-            if (finished && _Run.Status is VMRun.Completed or VMRun.CompletedWithProblems)
-            {
-                return _Run.Status == VMRun.CompletedWithProblems && number == current ? PhaseRowViewModel.DoneWithProblems : PhaseRowViewModel.Done;
-            }
-            if (number < current)
-            {
-                return PhaseRowViewModel.Done;
-            }
-            if (number > current)
-            {
-                return PhaseRowViewModel.NotStarted;
-            }
-            return _Run.Status switch
-            {
-                VMRun.Running when _Run.StopRequested => PhaseRowViewModel.Stopping,
-                VMRun.Running => PhaseRowViewModel.InProgress,
-                VMRun.WaitingForRestart => PhaseRowViewModel.WaitingForRestart,
-                VMRun.Stopped => PhaseRowViewModel.Stopped,
-                _ => PhaseRowViewModel.Failed,
-            };
+            return _Run is null || current is null
+                ? PhaseRowViewModel.NotStarted
+                : finished && _Run.Status is VMRun.Completed or VMRun.CompletedWithProblems
+                ? _Run.Status == VMRun.CompletedWithProblems && number == current ? PhaseRowViewModel.DoneWithProblems : PhaseRowViewModel.Done
+                : number < current
+                ? PhaseRowViewModel.Done
+                : number > current
+                ? PhaseRowViewModel.NotStarted
+                : _Run.Status switch
+                {
+                    VMRun.Running when _Run.StopRequested => PhaseRowViewModel.Stopping,
+                    VMRun.Running => PhaseRowViewModel.InProgress,
+                    VMRun.WaitingForRestart => PhaseRowViewModel.WaitingForRestart,
+                    VMRun.Stopped => PhaseRowViewModel.Stopped,
+                    _ => PhaseRowViewModel.Failed,
+                };
         }
     }
 
-    private string PhaseText(int number) =>
-        _Phases.FirstOrDefault(phase => phase.Number == number) is { } phase
+    private string PhaseText(int number)
+    {
+        return _Phases.FirstOrDefault(phase => phase.Number == number) is { } phase
             ? $"Phase {number}: {phase.Goal}"
             : $"Phase {number}";
+    }
 
-    private static string InPhase(int? phase) => phase is { } number ? $" in phase {number}" : string.Empty;
+    private static string InPhase(int? phase)
+    {
+        return phase is { } number ? $" in phase {number}" : string.Empty;
+    }
 }
 
 /// <summary>One phase of the build: its number, its goal and how far it has got.</summary>

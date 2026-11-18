@@ -17,7 +17,10 @@ public sealed class MainViewModelTests : IDisposable
         _Main = new MainViewModel(_Runner, _Windows, _Tools, new FixedClock(new DateTimeOffset(2026, 11, 14, 14, 52, 0, TimeSpan.Zero)));
     }
 
-    public void Dispose() => _Culture.Dispose();
+    public void Dispose()
+    {
+        _Culture.Dispose();
+    }
 
     [Fact]
     public async Task Refresh_ShowsOneRowPerVM()

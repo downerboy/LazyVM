@@ -12,28 +12,55 @@ internal sealed class FakeCommandRunner : CommandRunner
     private readonly Answers<VMCheck> _Checks = new();
     private readonly Answers<VMLogEntry> _Logs = new();
 
-    public int DashboardCalls { get; private set; }
+    public int DashboardCalls
+    {
+        get; private set;
+    }
 
     public List<(string? Name, bool HostOnly)> CheckCalls { get; } = [];
 
     public List<(string Name, int Tail)> LogCalls { get; } = [];
 
-    public void Returns(params VMDashboard[] entries) => _Dashboards.Returns(entries);
+    public void Returns(params VMDashboard[] entries)
+    {
+        _Dashboards.Returns(entries);
+    }
 
-    public void Throws(Exception exception) => _Dashboards.Throws(exception);
+    public void Throws(Exception exception)
+    {
+        _Dashboards.Throws(exception);
+    }
 
     /// <summary>The next call waits until it is cancelled.</summary>
-    public void WaitsForCancel() => _Dashboards.WaitsForCancel();
+    public void WaitsForCancel()
+    {
+        _Dashboards.WaitsForCancel();
+    }
 
-    public void ReturnsChecks(params VMCheck[] results) => _Checks.Returns(results);
+    public void ReturnsChecks(params VMCheck[] results)
+    {
+        _Checks.Returns(results);
+    }
 
-    public void ChecksThrow(Exception exception) => _Checks.Throws(exception);
+    public void ChecksThrow(Exception exception)
+    {
+        _Checks.Throws(exception);
+    }
 
-    public void ChecksWaitForCancel() => _Checks.WaitsForCancel();
+    public void ChecksWaitForCancel()
+    {
+        _Checks.WaitsForCancel();
+    }
 
-    public void ReturnsLog(params VMLogEntry[] entries) => _Logs.Returns(entries);
+    public void ReturnsLog(params VMLogEntry[] entries)
+    {
+        _Logs.Returns(entries);
+    }
 
-    public void LogThrows(Exception exception) => _Logs.Throws(exception);
+    public void LogThrows(Exception exception)
+    {
+        _Logs.Throws(exception);
+    }
 
     public override Task<IReadOnlyList<VMDashboard>> GetDashboardAsync(CancellationToken cancellationToken)
     {
@@ -56,7 +83,10 @@ internal sealed class FakeCommandRunner : CommandRunner
     private readonly Answers<VMDashboard> _VMs = new();
     private readonly Answers<VMRun> _Stops = new();
 
-    public IReadOnlyList<BuildPhase> Phases { get; set; } =
+    public IReadOnlyList<BuildPhase> Phases
+    {
+        get; set;
+    } =
     [
         new(0, "HyperVHealth", "Check Hyper-V is working"),
         new(1, "Readiness", "Check the host is ready"),
@@ -64,30 +94,51 @@ internal sealed class FakeCommandRunner : CommandRunner
         new(8, "Finish", "Finish SQL Server and Visual Studio"),
     ];
 
-    public IReadOnlyList<ConfigTemplate> Templates { get; set; } =
+    public IReadOnlyList<ConfigTemplate> Templates
+    {
+        get; set;
+    } =
     [
         new("DevBox-latest", BuiltIn: false, Automatic: true),
         new("Developer", BuiltIn: true, Automatic: false),
         new("PlainWindows", BuiltIn: true, Automatic: false),
     ];
 
-    public Exception? TemplatesFail { get; set; }
+    public Exception? TemplatesFail
+    {
+        get; set;
+    }
 
-    public Exception? ModuleFolderFails { get; set; }
+    public Exception? ModuleFolderFails
+    {
+        get; set;
+    }
 
     public List<string> VMCalls { get; } = [];
 
     public List<string> StopCalls { get; } = [];
 
     /// <summary>The next Get-LazyVMDashboard -Name finds the VM with this run.</summary>
-    public void ReturnsRun(VMRun? run, string name = "DevBox") => _VMs.Returns([Sample.VM(name) with { Run = run }]);
+    public void ReturnsRun(VMRun? run, string name = "DevBox")
+    {
+        _VMs.Returns([Sample.VM(name) with { Run = run }]);
+    }
 
-    public void VMThrows(Exception exception) => _VMs.Throws(exception);
+    public void VMThrows(Exception exception)
+    {
+        _VMs.Throws(exception);
+    }
 
     /// <summary>The next Stop-LazyVMBuild returns this run.</summary>
-    public void StopReturns(VMRun? run) => _Stops.Returns(run is null ? [] : [run]);
+    public void StopReturns(VMRun? run)
+    {
+        _Stops.Returns(run is null ? [] : [run]);
+    }
 
-    public void StopThrows(Exception exception) => _Stops.Throws(exception);
+    public void StopThrows(Exception exception)
+    {
+        _Stops.Throws(exception);
+    }
 
     public override async Task<VMDashboard?> GetVMAsync(string name, CancellationToken cancellationToken)
     {
@@ -95,11 +146,15 @@ internal sealed class FakeCommandRunner : CommandRunner
         return (await _VMs.Next(cancellationToken)).FirstOrDefault();
     }
 
-    public override Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken) =>
-        PhasesFail is { } failure ? Task.FromException<IReadOnlyList<BuildPhase>>(failure) : Task.FromResult(Phases);
+    public override Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken)
+    {
+        return PhasesFail is { } failure ? Task.FromException<IReadOnlyList<BuildPhase>>(failure) : Task.FromResult(Phases);
+    }
 
-    public override Task<IReadOnlyList<ConfigTemplate>> GetConfigTemplatesAsync(CancellationToken cancellationToken) =>
-        TemplatesFail is { } failure ? Task.FromException<IReadOnlyList<ConfigTemplate>>(failure) : Task.FromResult(Templates);
+    public override Task<IReadOnlyList<ConfigTemplate>> GetConfigTemplatesAsync(CancellationToken cancellationToken)
+    {
+        return TemplatesFail is { } failure ? Task.FromException<IReadOnlyList<ConfigTemplate>>(failure) : Task.FromResult(Templates);
+    }
 
     public override async Task<VMRun?> StopBuildAsync(string name, CancellationToken cancellationToken)
     {
@@ -110,9 +165,15 @@ internal sealed class FakeCommandRunner : CommandRunner
     public List<string> MaintenanceCalls { get; } = [];
 
     /// <summary>Start-LazyVMMaintenance fails with this, as the module does when it starts nothing.</summary>
-    public Exception? MaintenanceFails { get; set; }
+    public Exception? MaintenanceFails
+    {
+        get; set;
+    }
 
-    public Exception? PhasesFail { get; set; }
+    public Exception? PhasesFail
+    {
+        get; set;
+    }
 
     public override Task StartMaintenanceAsync(string name, CancellationToken cancellationToken)
     {
@@ -120,25 +181,38 @@ internal sealed class FakeCommandRunner : CommandRunner
         return MaintenanceFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
     }
 
-    public override Task<string> GetModuleFolderAsync(CancellationToken cancellationToken) =>
-        ModuleFolderFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(@"C:\Program Files\LazyVM\Modules\LazyVM\6.20.0");
+    public override Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
+    {
+        return ModuleFolderFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(@"C:\Program Files\LazyVM\Modules\LazyVM\6.20.0");
+    }
 
     private sealed class Answers<T>
     {
         private readonly Queue<Func<CancellationToken, Task<IReadOnlyList<T>>>> _Queue = new();
 
-        public void Returns(T[] values) => _Queue.Enqueue(_ => Task.FromResult<IReadOnlyList<T>>(values));
+        public void Returns(T[] values)
+        {
+            _Queue.Enqueue(_ => Task.FromResult<IReadOnlyList<T>>(values));
+        }
 
-        public void Throws(Exception exception) => _Queue.Enqueue(_ => Task.FromException<IReadOnlyList<T>>(exception));
+        public void Throws(Exception exception)
+        {
+            _Queue.Enqueue(_ => Task.FromException<IReadOnlyList<T>>(exception));
+        }
 
-        public void WaitsForCancel() =>
+        public void WaitsForCancel()
+        {
             _Queue.Enqueue(async token =>
             {
                 await Task.Delay(Timeout.Infinite, token);
                 return [];
             });
+        }
 
-        public Task<IReadOnlyList<T>> Next(CancellationToken cancellationToken) => _Queue.Dequeue()(cancellationToken);
+        public Task<IReadOnlyList<T>> Next(CancellationToken cancellationToken)
+        {
+            return _Queue.Dequeue()(cancellationToken);
+        }
     }
 }
 
@@ -149,7 +223,10 @@ internal sealed class FakeBuildLauncher : BuildLauncher
 
     public TaskCompletionSource<BuildResult> Ending { get; private set; } = new();
 
-    public Exception? Fails { get; set; }
+    public Exception? Fails
+    {
+        get; set;
+    }
 
     public int ProcessId { get; set; } = 4242;
 
@@ -176,7 +253,10 @@ internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launc
 
     public List<ViewModelBase> Closed { get; } = [];
 
-    public void Close(ViewModelBase window) => _Closers[window]();
+    public void Close(ViewModelBase window)
+    {
+        _Closers[window]();
+    }
 
     protected override void CloseWindow(ViewModelBase viewModel)
     {
@@ -190,7 +270,10 @@ internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launc
         _Closers[viewModel] = closed;
     }
 
-    protected override void BringToFront(ViewModelBase viewModel) => BroughtToFront.Add(viewModel);
+    protected override void BringToFront(ViewModelBase viewModel)
+    {
+        BroughtToFront.Add(viewModel);
+    }
 }
 
 /// <summary>Records the VM windows shown and brought to the front, without making windows.</summary>
@@ -202,7 +285,10 @@ internal sealed class FakeVMWindowManager(ToolWindows tools) : VMWindowManager(t
 
     public List<VMViewModel> BroughtToFront { get; } = [];
 
-    public void Close(VMViewModel window) => _Closers[window]();
+    public void Close(VMViewModel window)
+    {
+        _Closers[window]();
+    }
 
     protected override void Show(VMViewModel viewModel, Action closed)
     {
@@ -210,34 +296,47 @@ internal sealed class FakeVMWindowManager(ToolWindows tools) : VMWindowManager(t
         _Closers[viewModel] = closed;
     }
 
-    protected override void BringToFront(VMViewModel viewModel) => BroughtToFront.Add(viewModel);
+    protected override void BringToFront(VMViewModel viewModel)
+    {
+        BroughtToFront.Add(viewModel);
+    }
 }
 
 /// <summary>A clock that always says the same time.</summary>
 internal sealed class FixedClock(DateTimeOffset now) : TimeProvider
 {
-    public override DateTimeOffset GetUtcNow() => now.ToUniversalTime();
+    public override DateTimeOffset GetUtcNow()
+    {
+        return now.ToUniversalTime();
+    }
 
     public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
 }
 
 internal static class Sample
 {
-    public static VMDashboard VM(string name = "DevBox", string state = "Running") => new()
+    public static VMDashboard VM(string name = "DevBox", string state = "Running")
     {
-        Name = name,
-        State = state,
-        MaintenanceTask = "Registered",
-        LastMaintenance = new DateTime(2026, 11, 12, 2, 10, 0),
-        LastMaintenanceResult = "Succeeded",
-        OpenFindings = 0,
-    };
+        return new()
+        {
+            Name = name,
+            State = state,
+            MaintenanceTask = "Registered",
+            LastMaintenance = new DateTime(2026, 11, 12, 2, 10, 0),
+            LastMaintenanceResult = "Succeeded",
+            OpenFindings = 0,
+        };
+    }
 
-    public static VMCheck Check(string status = VMCheck.OK, string check = "LazyVM folder", string detail = @"C:\Users\me\LazyVM", string fix = "") =>
-        new("Host", check, status, detail, fix);
+    public static VMCheck Check(string status = VMCheck.OK, string check = "LazyVM folder", string detail = @"C:\Users\me\LazyVM", string fix = "")
+    {
+        return new("Host", check, status, detail, fix);
+    }
 
-    public static VMLogEntry Log(string level, string message, int minute = 0) =>
-        new(new DateTime(2026, 11, 12, 2, minute, 5), level, message);
+    public static VMLogEntry Log(string level, string message, int minute = 0)
+    {
+        return new(new DateTime(2026, 11, 12, 2, minute, 5), level, message);
+    }
 }
 
 /// <summary>Runs a test with a fixed culture, so dates and numbers read the same on every machine.</summary>

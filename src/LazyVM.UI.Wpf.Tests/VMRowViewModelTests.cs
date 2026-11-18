@@ -6,7 +6,10 @@ public sealed class VMRowViewModelTests : IDisposable
 {
     private readonly CultureScope _Culture = new("en-GB");
 
-    public void Dispose() => _Culture.Dispose();
+    public void Dispose()
+    {
+        _Culture.Dispose();
+    }
 
     [Fact]
     public void HealthyVM_DoesNotNeedAttention()
@@ -20,7 +23,10 @@ public sealed class VMRowViewModelTests : IDisposable
     [Fact]
     public void FailedMaintenance_NeedsAttention()
     {
-        var row = new VMRowViewModel(Sample.VM() with { LastMaintenanceResult = "Failed (0x1)" });
+        var row = new VMRowViewModel(Sample.VM() with
+        {
+            LastMaintenanceResult = "Failed (0x1)"
+        });
 
         Assert.True(row.NeedsAttention);
         Assert.Equal("Needs attention: last maintenance failed", row.AttentionText);
@@ -29,7 +35,10 @@ public sealed class VMRowViewModelTests : IDisposable
     [Fact]
     public void SettingsProblem_NeedsAttention()
     {
-        var row = new VMRowViewModel(Sample.VM() with { Settings = "VM.json is not valid JSON." });
+        var row = new VMRowViewModel(Sample.VM() with
+        {
+            Settings = "VM.json is not valid JSON."
+        });
 
         Assert.True(row.NeedsAttention);
         Assert.Equal("Needs attention: settings problem", row.AttentionText);
@@ -38,7 +47,11 @@ public sealed class VMRowViewModelTests : IDisposable
     [Fact]
     public void FailedMaintenanceAndSettingsProblem_NamesBoth()
     {
-        var row = new VMRowViewModel(Sample.VM() with { LastMaintenanceResult = "Failed (0x1)", Settings = "Bad." });
+        var row = new VMRowViewModel(Sample.VM() with
+        {
+            LastMaintenanceResult = "Failed (0x1)",
+            Settings = "Bad."
+        });
 
         Assert.Equal("Needs attention: last maintenance failed, settings problem", row.AttentionText);
     }
@@ -50,7 +63,10 @@ public sealed class VMRowViewModelTests : IDisposable
     [InlineData(null, "Not scanned yet")]
     public void OpenFindings_ReadsAsWords(int? count, string expected)
     {
-        var row = new VMRowViewModel(Sample.VM() with { OpenFindings = count });
+        var row = new VMRowViewModel(Sample.VM() with
+        {
+            OpenFindings = count
+        });
 
         Assert.Equal(expected, row.OpenFindingsText);
     }
@@ -66,7 +82,11 @@ public sealed class VMRowViewModelTests : IDisposable
     [Fact]
     public void LastMaintenance_NotRunYet()
     {
-        var row = new VMRowViewModel(Sample.VM() with { LastMaintenance = null, LastMaintenanceResult = "Not run yet" });
+        var row = new VMRowViewModel(Sample.VM() with
+        {
+            LastMaintenance = null,
+            LastMaintenanceResult = "Not run yet"
+        });
 
         Assert.Equal("Not run yet", row.LastMaintenanceText);
     }
@@ -87,7 +107,10 @@ public sealed class VMRowViewModelTests : IDisposable
     [Fact]
     public void Row_ReadsAsOneSentence()
     {
-        var row = new VMRowViewModel(Sample.VM() with { OpenFindings = 2 });
+        var row = new VMRowViewModel(Sample.VM() with
+        {
+            OpenFindings = 2
+        });
 
         Assert.Equal("DevBox, Running, last maintenance succeeded 12 November, 2 open findings", row.AutomationName);
     }
@@ -109,7 +132,10 @@ public sealed class VMRowViewModelTests : IDisposable
     [Fact]
     public void WhatCouldNotBeRead_ShowsOnThatRowOnly()
     {
-        var broken = new VMRowViewModel(Sample.VM("DevBox") with { Problems = ["Disks: access denied"] });
+        var broken = new VMRowViewModel(Sample.VM("DevBox") with
+        {
+            Problems = ["Disks: access denied"]
+        });
         var fine = new VMRowViewModel(Sample.VM("TestBox"));
 
         Assert.Equal("Could not read: Disks: access denied", broken.ProblemText);
@@ -123,7 +149,10 @@ public sealed class VMRowViewModelTests : IDisposable
         Assert.Equal("DevBox", new VMRowViewModel(Sample.VM()).NameCellText);
         Assert.Equal(
             "DevBox, could not read: Disks: access denied",
-            new VMRowViewModel(Sample.VM() with { Problems = ["Disks: access denied"] }).NameCellText);
+            new VMRowViewModel(Sample.VM() with
+            {
+                Problems = ["Disks: access denied"]
+            }).NameCellText);
     }
 
     [Fact]
@@ -132,7 +161,10 @@ public sealed class VMRowViewModelTests : IDisposable
         Assert.Equal("Running", new VMRowViewModel(Sample.VM()).StateCellText);
         Assert.Equal(
             "Off, needs attention: last maintenance failed",
-            new VMRowViewModel(Sample.VM(state: "Off") with { LastMaintenanceResult = "Failed (0x1)" }).StateCellText);
+            new VMRowViewModel(Sample.VM(state: "Off") with
+            {
+                LastMaintenanceResult = "Failed (0x1)"
+            }).StateCellText);
     }
 
     [Fact]

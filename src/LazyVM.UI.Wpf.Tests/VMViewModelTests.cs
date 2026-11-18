@@ -16,9 +16,15 @@ public sealed class VMViewModelTests : IDisposable
         _Tools = new FakeToolWindows(_Runner, _Launcher);
     }
 
-    public void Dispose() => _Culture.Dispose();
+    public void Dispose()
+    {
+        _Culture.Dispose();
+    }
 
-    private VMViewModel Open(VMDashboard entry) => new(entry, _Tools);
+    private VMViewModel Open(VMDashboard entry)
+    {
+        return new(entry, _Tools);
+    }
 
     [Fact]
     public void Checks_OpensTheVMsChecks()
@@ -43,8 +49,10 @@ public sealed class VMViewModelTests : IDisposable
         Assert.Equal("DevEnv", Assert.IsType<LogViewModel>(Assert.Single(_Tools.Shown)).VMName);
     }
 
-    private static string? Detail(VMViewModel vm, string label) =>
-        vm.Details.SingleOrDefault(detail => detail.Label == label)?.Value;
+    private static string? Detail(VMViewModel vm, string label)
+    {
+        return vm.Details.SingleOrDefault(detail => detail.Label == label)?.Value;
+    }
 
     [Fact]
     public void Title_NamesTheVM()
@@ -58,7 +66,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Memory_IsShownInGB()
     {
-        var vm = Open(Sample.VM() with { MemoryAssigned = 8 * GB });
+        var vm = Open(Sample.VM() with
+        {
+            MemoryAssigned = 8 * GB
+        });
 
         Assert.Equal("8 GB", Detail(vm, "Memory in use"));
     }
@@ -66,7 +77,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Memory_OfAVMThatIsOff_IsNone()
     {
-        var vm = Open(Sample.VM(state: "Off") with { MemoryAssigned = 0 });
+        var vm = Open(Sample.VM(state: "Off") with
+        {
+            MemoryAssigned = 0
+        });
 
         Assert.Equal("None", Detail(vm, "Memory in use"));
     }
@@ -74,7 +88,11 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Memory_IsShownOfTheMostTheVMCanUse()
     {
-        var vm = Open(Sample.VM() with { MemoryAssigned = 6 * GB, MemoryMaximum = 16 * GB });
+        var vm = Open(Sample.VM() with
+        {
+            MemoryAssigned = 6 * GB,
+            MemoryMaximum = 16 * GB
+        });
 
         Assert.Equal("6 GB of 16 GB", Detail(vm, "Memory in use"));
     }
@@ -82,7 +100,11 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Memory_OfAVMThatIsOff_IsNoneOfTheMost()
     {
-        var vm = Open(Sample.VM(state: "Off") with { MemoryAssigned = 0, MemoryMaximum = 16 * GB });
+        var vm = Open(Sample.VM(state: "Off") with
+        {
+            MemoryAssigned = 0,
+            MemoryMaximum = 16 * GB
+        });
 
         Assert.Equal("None of 16 GB", Detail(vm, "Memory in use"));
     }
@@ -90,7 +112,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void ConfigTemplate_IsNamed()
     {
-        var vm = Open(Sample.VM() with { CreatedFromTemplate = "PlainWindows" });
+        var vm = Open(Sample.VM() with
+        {
+            CreatedFromTemplate = "PlainWindows"
+        });
 
         Assert.Equal("PlainWindows", Detail(vm, "Created from config template"));
     }
@@ -98,7 +123,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void ConfigTemplate_NotRecorded_SaysSo()
     {
-        var vm = Open(Sample.VM() with { CreatedFromTemplate = null });
+        var vm = Open(Sample.VM() with
+        {
+            CreatedFromTemplate = null
+        });
 
         Assert.Equal("None recorded", Detail(vm, "Created from config template"));
     }
@@ -106,7 +134,11 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Memory_NotKnown_DoesNotShowTheMostOnItsOwn()
     {
-        var vm = Open(Sample.VM() with { MemoryAssigned = null, MemoryMaximum = 16 * GB });
+        var vm = Open(Sample.VM() with
+        {
+            MemoryAssigned = null,
+            MemoryMaximum = 16 * GB
+        });
 
         Assert.DoesNotContain("16 GB", Detail(vm, "Memory in use"));
     }
@@ -116,11 +148,11 @@ public sealed class VMViewModelTests : IDisposable
     {
         var vm = Open(Sample.VM() with
         {
-            DiskSpaceUsed = 214 * GB + GB / 2,
+            DiskSpaceUsed = (214 * GB) + (GB / 2),
             Disks =
             [
                 new VMDisk("DevBox.vhdx", @"D:\VMs\DevBox\DevBox.vhdx", 200 * GB, 512 * GB),
-                new VMDisk("Data.vhdx", @"D:\VMs\DevBox\Data.vhdx", 14 * GB + GB / 2, 64 * GB),
+                new VMDisk("Data.vhdx", @"D:\VMs\DevBox\Data.vhdx", (14 * GB) + (GB / 2), 64 * GB),
             ],
         });
 
@@ -153,7 +185,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Maintenance_GivesTimeAndTask()
     {
-        var vm = Open(Sample.VM() with { MaintenanceTime = "02:00" });
+        var vm = Open(Sample.VM() with
+        {
+            MaintenanceTime = "02:00"
+        });
 
         Assert.Equal("Daily at 02:00, task registered", Detail(vm, "Maintenance"));
     }
@@ -161,7 +196,11 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void SecurityScan_GivesDayAndOpenFindings()
     {
-        var vm = Open(Sample.VM() with { LastSecurityScan = new DateTime(2026, 11, 13, 3, 0, 0), OpenFindings = 3 });
+        var vm = Open(Sample.VM() with
+        {
+            LastSecurityScan = new DateTime(2026, 11, 13, 3, 0, 0),
+            OpenFindings = 3
+        });
 
         Assert.Equal("13 November 2026 03:00, 3 open findings", Detail(vm, "Last security scan"));
     }
@@ -169,7 +208,11 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void SecurityScan_BeforeTheFirstScan()
     {
-        var vm = Open(Sample.VM() with { LastSecurityScan = null, OpenFindings = null });
+        var vm = Open(Sample.VM() with
+        {
+            LastSecurityScan = null,
+            OpenFindings = null
+        });
 
         Assert.Equal("Not scanned yet", Detail(vm, "Last security scan"));
     }
@@ -177,7 +220,11 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void GreenTemplate_GivesNameAndWhenItChanged()
     {
-        var vm = Open(Sample.VM() with { GreenTemplate = "DevBox-latest", GreenTemplateUpdated = new DateTime(2026, 11, 13, 3, 5, 0) });
+        var vm = Open(Sample.VM() with
+        {
+            GreenTemplate = "DevBox-latest",
+            GreenTemplateUpdated = new DateTime(2026, 11, 13, 3, 5, 0)
+        });
 
         Assert.Equal("DevBox-latest, updated 13 November 2026 03:05", Detail(vm, "Green template"));
     }
@@ -205,7 +252,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void WhatCouldNotBeRead_IsListed()
     {
-        var vm = Open(Sample.VM() with { Problems = ["Hyper-V: access denied", "Disks: access denied"] });
+        var vm = Open(Sample.VM() with
+        {
+            Problems = ["Hyper-V: access denied", "Disks: access denied"]
+        });
 
         Assert.Equal(
             ["Hyper-V: access denied", "Disks: access denied"],
@@ -238,8 +288,14 @@ public sealed class VMViewModelTests : IDisposable
     public void BuildProgress_IsOfferedOnlyWhileABuildRuns()
     {
         var idle = Open(Sample.VM());
-        var building = Open(Sample.VM() with { Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 } });
-        var maintaining = Open(Sample.VM() with { Run = new VMRun { Command = "Maintenance", Status = VMRun.Running, ProcessId = 9 } });
+        var building = Open(Sample.VM() with
+        {
+            Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 }
+        });
+        var maintaining = Open(Sample.VM() with
+        {
+            Run = new VMRun { Command = "Maintenance", Status = VMRun.Running, ProcessId = 9 }
+        });
 
         Assert.False(idle.BuildProgressCommand.CanExecute(null));
         Assert.True(building.BuildProgressCommand.CanExecute(null));
@@ -252,7 +308,10 @@ public sealed class VMViewModelTests : IDisposable
     public void BuildProgress_OpensTheProgressOfTheRunningBuild()
     {
         _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 }, "DevEnv");
-        var vm = Open(Sample.VM("DevEnv") with { Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 } });
+        var vm = Open(Sample.VM("DevEnv") with
+        {
+            Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 }
+        });
 
         vm.BuildProgressCommand.Execute(null);
 
@@ -261,12 +320,28 @@ public sealed class VMViewModelTests : IDisposable
         progress.StopFollowing();
     }
 
-    private static VMRun LastBuild(string status, int phase) => new()
+    private static VMRun LastBuild(string status, int phase)
     {
-        Command = VMRun.Build, Status = status, ProcessId = 9, Phase = phase, UnfinishedPhase = status == VMRun.Completed ? null : phase,
-    };
+        return new()
+        {
+            Command = VMRun.Build,
+            Status = status,
+            ProcessId = 9,
+            Phase = phase,
+            UnfinishedPhase = status == VMRun.Completed ? null : phase,
+        };
+    }
 
-    private static VMRun RunningNow(string command) => new() { Command = command, Status = VMRun.Running, ProcessId = 9, Phase = 7 };
+    private static VMRun RunningNow(string command)
+    {
+        return new()
+        {
+            Command = command,
+            Status = VMRun.Running,
+            ProcessId = 9,
+            Phase = 7
+        };
+    }
 
     private async Task<VMViewModel> Loaded(VMDashboard entry)
     {
@@ -293,7 +368,10 @@ public sealed class VMViewModelTests : IDisposable
     [InlineData(VMRun.EndedUnexpectedly, "ended unexpectedly")]
     public async Task AfterABuildThatDidNotFinish_ItsPhaseIsChosen_AndTheNoteSaysWhy(string status, string said)
     {
-        var vm = await Loaded(Sample.VM() with { LastBuild = LastBuild(status, 7) });
+        var vm = await Loaded(Sample.VM() with
+        {
+            LastBuild = LastBuild(status, 7)
+        });
 
         Assert.Equal(7, vm.SelectedPhase?.Number);
         Assert.Equal($"The last build {said} in phase 7, so phase 7 is chosen. Let any install still running inside the VM finish first.", vm.RunNote);
@@ -302,7 +380,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task AfterABuildThatCompleted_TheFirstPhaseIsChosen()
     {
-        var vm = await Loaded(Sample.VM() with { LastBuild = LastBuild(VMRun.Completed, 8) });
+        var vm = await Loaded(Sample.VM() with
+        {
+            LastBuild = LastBuild(VMRun.Completed, 8)
+        });
 
         Assert.Equal(0, vm.SelectedPhase?.Number);
     }
@@ -374,7 +455,10 @@ public sealed class VMViewModelTests : IDisposable
     [InlineData("Rebuild", "A rebuild of DevBox is running now.")]
     public async Task WhileARunIsGoing_NeitherCanStart_AndTheNoteSaysWhy(string command, string said)
     {
-        var vm = await Loaded(Sample.VM() with { Run = RunningNow(command) });
+        var vm = await Loaded(Sample.VM() with
+        {
+            Run = RunningNow(command)
+        });
 
         Assert.False(vm.BuildFromPhaseCommand.CanExecute(null));
         Assert.False(vm.MaintenanceCommand.CanExecute(null));
@@ -395,7 +479,10 @@ public sealed class VMViewModelTests : IDisposable
         var raised = 0;
         vm.MaintenanceCommand.CanExecuteChanged += (_, _) => raised++;
 
-        vm.Update(Sample.VM() with { Run = RunningNow("Maintenance") });
+        vm.Update(Sample.VM() with
+        {
+            Run = RunningNow("Maintenance")
+        });
 
         Assert.False(vm.MaintenanceCommand.CanExecute(null));
         Assert.True(raised > 0);
@@ -408,7 +495,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task WithoutAMaintenanceTask_MaintenanceCannotStart_AndTheNoteSaysHowToScheduleIt()
     {
-        var vm = await Loaded(Sample.VM() with { MaintenanceTask = "Not registered" });
+        var vm = await Loaded(Sample.VM() with
+        {
+            MaintenanceTask = "Not registered"
+        });
 
         Assert.False(vm.MaintenanceCommand.CanExecute(null));
         Assert.True(vm.BuildFromPhaseCommand.CanExecute(null));
@@ -420,7 +510,10 @@ public sealed class VMViewModelTests : IDisposable
     {
         var vm = await Loaded(Sample.VM());
 
-        vm.Update(Sample.VM() with { LastBuild = LastBuild(VMRun.Failed, 8) });
+        vm.Update(Sample.VM() with
+        {
+            LastBuild = LastBuild(VMRun.Failed, 8)
+        });
 
         Assert.Equal(8, vm.SelectedPhase?.Number);
     }
@@ -428,10 +521,16 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task Update_KeepsAPhaseChosenByHand_WhenTheLastBuildIsTheSame()
     {
-        var vm = await Loaded(Sample.VM() with { LastBuild = LastBuild(VMRun.Failed, 7) });
+        var vm = await Loaded(Sample.VM() with
+        {
+            LastBuild = LastBuild(VMRun.Failed, 7)
+        });
         vm.SelectedPhase = vm.Phases[1];
 
-        vm.Update(Sample.VM() with { LastBuild = LastBuild(VMRun.Failed, 7) });
+        vm.Update(Sample.VM() with
+        {
+            LastBuild = LastBuild(VMRun.Failed, 7)
+        });
 
         Assert.Equal(1, vm.SelectedPhase?.Number);
     }
@@ -445,10 +544,18 @@ public sealed class VMViewModelTests : IDisposable
     {
         var run = command is null ? null : new VMRun
         {
-            Command = command, Status = VMRun.Running, ProcessId = 9, Phase = phase, PhaseName = phase is null ? null : "Windows", StopRequested = stopping,
+            Command = command,
+            Status = VMRun.Running,
+            ProcessId = 9,
+            Phase = phase,
+            PhaseName = phase is null ? null : "Windows",
+            StopRequested = stopping,
         };
 
-        var vm = Open(Sample.VM() with { Run = run });
+        var vm = Open(Sample.VM() with
+        {
+            Run = run
+        });
 
         Assert.Equal(expected, Detail(vm, "Running now"));
     }

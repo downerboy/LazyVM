@@ -167,8 +167,10 @@ public sealed class CommandRunnerTests
         CommandRunner.ThrowIfFailed([], []);
     }
 
-    private static ErrorRecord Error(string message) =>
-        new(new InvalidOperationException(message), "Test", ErrorCategory.NotSpecified, null);
+    private static ErrorRecord Error(string message)
+    {
+        return new(new InvalidOperationException(message), "Test", ErrorCategory.NotSpecified, null);
+    }
 
     [Fact]
     public void ModuleSearchPath_HoldsOnlyFoldersAdministratorsControl()
@@ -254,7 +256,13 @@ public sealed class CommandRunnerTests
 
         var expected = new VMRun
         {
-            Command = "Build", Status = "Running", ProcessId = 4242, Started = started, Phase = 7, PhaseName = "Windows", StopRequested = true,
+            Command = "Build",
+            Status = "Running",
+            ProcessId = 4242,
+            Started = started,
+            Phase = 7,
+            PhaseName = "Windows",
+            StopRequested = true,
         };
         Assert.Equal(expected, vm.Run);
         Assert.Equal(expected, vm.LastBuild);

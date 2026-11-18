@@ -23,7 +23,10 @@ public class CommandRunner : IDisposable
     private bool _Disposed;
 
     /// <summary>The installed module: %ProgramFiles%\LazyVM\Modules\LazyVM, which only administrators can change.</summary>
-    internal static string ModulePath { get; } = System.IO.Path.Combine(
+    internal static string ModulePath
+    {
+        get;
+    } = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LazyVM", "Modules", "LazyVM");
 
     /// <summary>
@@ -33,7 +36,10 @@ public class CommandRunner : IDisposable
     /// load into it. LazyVM's folder comes first, then the Windows modules
     /// (Hyper-V, ScheduledTasks), then the modules shipped with the app.
     /// </summary>
-    internal static string ModuleSearchPath { get; } = string.Join(
+    internal static string ModuleSearchPath
+    {
+        get;
+    } = string.Join(
         System.IO.Path.PathSeparator,
         System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LazyVM", "Modules"),
         System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "Modules"),
@@ -92,8 +98,10 @@ public class CommandRunner : IDisposable
     /// reason when nothing was started, such as while another run of the VM
     /// is going or when maintenance is not scheduled.
     /// </summary>
-    public virtual async Task StartMaintenanceAsync(string name, CancellationToken cancellationToken) =>
+    public virtual async Task StartMaintenanceAsync(string name, CancellationToken cancellationToken)
+    {
         await InvokeAsync("Start-LazyVMMaintenance", [("Name", name)], cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>The folder the module was imported from, which holds the script each build runs with.</summary>
     public virtual async Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
@@ -158,8 +166,15 @@ public class CommandRunner : IDisposable
     internal static VMDashboard ToDashboard(PSObject entry)
     {
         var problems = ReadList(entry, "Problems").Select(problem => problem.BaseObject.ToString() ?? string.Empty).ToList();
-        T? Value<T>(PSObject source, string name, string label) => Read<T>(source, name, label, problems);
-        DateTime? Date(string name, string label) => ReadDate(entry, name, label, problems);
+        T? Value<T>(PSObject source, string name, string label)
+        {
+            return Read<T>(source, name, label, problems);
+        }
+
+        DateTime? Date(string name, string label)
+        {
+            return ReadDate(entry, name, label, problems);
+        }
 
         return new()
         {
@@ -192,42 +207,53 @@ public class CommandRunner : IDisposable
     }
 
     /// <summary>Reads one <c>LazyVM.VMRun</c> object. A value that cannot be read is left empty and named in <paramref name="problems"/>.</summary>
-    internal static VMRun ToRun(PSObject run, List<string> problems) => new()
+    internal static VMRun ToRun(PSObject run, List<string> problems)
     {
-        Command = Read<string>(run, "Command", "Run command", problems),
-        Status = Read<string>(run, "Status", "Run status", problems),
-        ProcessId = Read<int?>(run, "ProcessId", "Run process", problems),
-        Started = ReadDate(run, "Started", "Run started", problems),
-        Ended = ReadDate(run, "Ended", "Run ended", problems),
-        Phase = Read<int?>(run, "Phase", "Run phase", problems),
-        PhaseName = Read<string>(run, "PhaseName", "Run phase name", problems),
-        UnfinishedPhase = Read<int?>(run, "UnfinishedPhase", "Unfinished phase", problems),
-        StopRequested = Read<bool?>(run, "StopRequested", "Stop requested", problems) ?? false,
-    };
+        return new()
+        {
+            Command = Read<string>(run, "Command", "Run command", problems),
+            Status = Read<string>(run, "Status", "Run status", problems),
+            ProcessId = Read<int?>(run, "ProcessId", "Run process", problems),
+            Started = ReadDate(run, "Started", "Run started", problems),
+            Ended = ReadDate(run, "Ended", "Run ended", problems),
+            Phase = Read<int?>(run, "Phase", "Run phase", problems),
+            PhaseName = Read<string>(run, "PhaseName", "Run phase name", problems),
+            UnfinishedPhase = Read<int?>(run, "UnfinishedPhase", "Unfinished phase", problems),
+            StopRequested = Read<bool?>(run, "StopRequested", "Stop requested", problems) ?? false,
+        };
+    }
 
     /// <summary>The run as it came: a [pscustomobject] keeps its properties only on its PSObject, never on what it wraps.</summary>
-    private static VMRun? ReadRun(PSObject entry, string name, List<string> problems) =>
-        entry.Properties[name]?.Value switch
+    private static VMRun? ReadRun(PSObject entry, string name, List<string> problems)
+    {
+        return entry.Properties[name]?.Value switch
         {
             null => null,
             PSObject { BaseObject: null } => null,
             PSObject run => ToRun(run, problems),
             var other => ToRun(PSObject.AsPSObject(other), problems),
         };
+    }
 
     /// <summary>Reads one <c>LazyVM.Check</c> object.</summary>
-    internal static VMCheck ToCheck(PSObject check) => new(
+    internal static VMCheck ToCheck(PSObject check)
+    {
+        return new(
         Text(check, "Area"),
         Text(check, "Check"),
         Text(check, "Status"),
         Text(check, "Detail"),
         Text(check, "Fix"));
+    }
 
     /// <summary>Reads one <c>LazyVM.LogEntry</c> object. A time that cannot be read is left empty.</summary>
-    internal static VMLogEntry ToLogEntry(PSObject entry) => new(
+    internal static VMLogEntry ToLogEntry(PSObject entry)
+    {
+        return new(
         ReadDate(entry, "Time", "Time", []),
         Text(entry, "Level"),
         Text(entry, "Message"));
+    }
 
     /// <summary>Runs <paramref name="command"/> with each parameter added by name, never as script text.</summary>
     private async Task<IReadOnlyList<PSObject>> InvokeAsync(
@@ -336,10 +362,12 @@ public class CommandRunner : IDisposable
     }
 
     /// <summary>A date, in local time. The module gives some as DateTimeOffset, such as the security scan time.</summary>
-    private static DateTime? ReadDate(PSObject source, string name, string label, List<string> problems) =>
-        Unwrap(source.Properties[name]?.Value) is DateTimeOffset offset
+    private static DateTime? ReadDate(PSObject source, string name, string label, List<string> problems)
+    {
+        return Unwrap(source.Properties[name]?.Value) is DateTimeOffset offset
             ? offset.LocalDateTime
             : Read<DateTime?>(source, name, label, problems);
+    }
 
     private static IEnumerable<PSObject> ReadList(PSObject source, string name)
     {
@@ -353,8 +381,13 @@ public class CommandRunner : IDisposable
     }
 
     /// <summary>A property as text; empty when it is missing or empty.</summary>
-    private static string Text(PSObject source, string name) =>
-        Unwrap(source.Properties[name]?.Value)?.ToString() ?? string.Empty;
+    private static string Text(PSObject source, string name)
+    {
+        return Unwrap(source.Properties[name]?.Value)?.ToString() ?? string.Empty;
+    }
 
-    private static object? Unwrap(object? value) => value is PSObject wrapped ? wrapped.BaseObject : value;
+    private static object? Unwrap(object? value)
+    {
+        return value is PSObject wrapped ? wrapped.BaseObject : value;
+    }
 }
