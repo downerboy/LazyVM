@@ -9,9 +9,10 @@ function Start-LazyVMMaintenance {
     the task's own time limit and settings. Get-LazyVMDashboard shows it in
     Run while it runs, and its log says how it went.
 
-    Nothing is started while a build, maintenance or rebuild of the VM is
-    running, or while the task is running already, or when maintenance is
-    not scheduled: Register-LazyVMMaintenance schedules it.
+    Nothing is started while a build, maintenance, rebuild, restore or
+    removal of the VM is running, or while the task is running already, or
+    when maintenance is not scheduled: Register-LazyVMMaintenance schedules
+    it.
 
     .PARAMETER Name
     The VM. May be left out while there is only one.
@@ -38,12 +39,7 @@ function Start-LazyVMMaintenance {
         # The task would start, find the run lock taken and record a failed maintenance: refuse here instead.
         $run = Get-VMRunState -Settings $settings
         if ($run -and $run.Status -eq 'Running') {
-            $what = switch ($run.Command) {
-                'Build' { 'A build' }
-                'Rebuild' { 'A rebuild' }
-                'Maintenance' { 'Maintenance' }
-                default { 'A run' }
-            }
+            $what = Get-VMRunCommandText -Command $run.Command
             $message = "$what of $vmName is running, so maintenance was not started. Run it again once that has ended."
             $PSCmdlet.WriteError([System.Management.Automation.ErrorRecord]::new([InvalidOperationException]::new($message), 'LazyVM.RunBusy', [System.Management.Automation.ErrorCategory]::ResourceBusy, $vmName))
             return

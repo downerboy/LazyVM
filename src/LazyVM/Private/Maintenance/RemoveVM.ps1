@@ -426,6 +426,14 @@ function Invoke-VMRemoval {
         }
     }
 
+    # The run lock and Run.json are in the VM's Config folder, which goes
+    # next: the lock is let go first, and the run leaves no record (#453).
+    # Its tasks and the Hyper-V VM are gone by now, so only a build started
+    # by hand in the moment the folders take to delete could begin, and it
+    # would stop on its missing files.
+    Undo-VMRunRecord
+    Exit-VMRun -Status Completed
+
     # The log is written to until the very end, so it and its rotated copies go last.
     $files = @($Context.Files)
     $logFiles = @($files | Where-Object { $_ -eq $VM.Settings.LogFile -or @($Context.RotatedLogs) -contains $_ })

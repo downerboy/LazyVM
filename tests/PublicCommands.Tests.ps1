@@ -45,6 +45,7 @@ Describe 'Remove-LazyVM' {
 
         Should -Invoke -ModuleName $module Get-VMRemovalContext -Times 1
         Should -Invoke -ModuleName $module Invoke-VMRemoval -Times 0
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { -not $Exclusive }
     }
 
     It 'deletes without asking with -Force' {
@@ -53,12 +54,29 @@ Describe 'Remove-LazyVM' {
         Should -Invoke -ModuleName $module Invoke-VMRemoval -Times 1
     }
 
-    It 'does nothing more when there is nothing to remove' {
+    It 'holds the VM''s run lock as Remove, so it is refused while another run holds it (#453)' {
+        Remove-LazyVM -Name Alpha -Force
+
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { $Exclusive -and -not $SkipWhenBusy -and $Title -eq 'Remove' }
+    }
+
+    It 'does nothing more, and leaves no run record, when there is nothing to remove' {
         Mock -ModuleName $module Get-VMRemovalContext { $null }
+        Mock -ModuleName $module Undo-VMRunRecord { }
 
         Remove-LazyVM -Name Alpha -Force
 
         Should -Invoke -ModuleName $module Invoke-VMRemoval -Times 0
+        Should -Invoke -ModuleName $module Undo-VMRunRecord -Times 1 -Exactly
+    }
+
+    It 'leaves no run record when the removal is not confirmed, which -WhatIf stands in for here (#453)' {
+        Mock -ModuleName $module Undo-VMRunRecord { }
+
+        Remove-LazyVM -Name Alpha -WhatIf
+
+        Should -Invoke -ModuleName $module Invoke-VMRemoval -Times 0
+        Should -Invoke -ModuleName $module Undo-VMRunRecord -Times 1 -Exactly
     }
 
     It 'reports a removal that could not finish as an error' {
@@ -362,9 +380,20 @@ Describe 'Restore-LazyVMTooling' {
     }
 
     It 'changes nothing with -WhatIf' {
+        Mock -ModuleName $module Undo-VMRunRecord { }
+
         Restore-LazyVMTooling -Name Alpha -RestorePoint 20261008-193000 -WhatIf
 
         Should -Invoke -ModuleName $module Invoke-ToolingRevert -Times 0
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { -not $Exclusive }
+        # The branch a "No" to the question takes, too: no run is recorded (#453).
+        Should -Invoke -ModuleName $module Undo-VMRunRecord -Times 1 -Exactly
+    }
+
+    It 'holds the VM''s run lock as Restore, so it is refused while another run holds it (#453)' {
+        Restore-LazyVMTooling -Name Alpha -RestorePoint 20261008-193000 -Force
+
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 1 -Exactly -ParameterFilter { $Exclusive -and -not $SkipWhenBusy -and $Title -eq 'Restore' }
     }
 
     It 'takes a restore point from Get-LazyVMRestorePoint through the pipeline' {

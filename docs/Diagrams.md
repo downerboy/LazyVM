@@ -9,7 +9,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance and a rebuild also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Start-LazyVMMaintenance`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance, a rebuild and a restore (`Restore-LazyVMTooling`) also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Remove-LazyVM` holds it too, until the Hyper-V VM is gone and just before the folder that holds it is deleted. A restore or removal you do not confirm leaves `Run.json` as it was. `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Start-LazyVMMaintenance`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
@@ -458,7 +458,7 @@ Build-LazyVM already does this. Use it after changing MaintenanceTime, or if sch
 
 `Start-LazyVMMaintenance` `-Name <VM>  (optional with one VM)`
 
-Starts the VM's maintenance task, so maintenance runs exactly as its nightly run does, and returns at once. Starts nothing while a build, maintenance or rebuild of the VM is running, or when maintenance is not scheduled. Never takes the run lock: the task's run does.
+Starts the VM's maintenance task, so maintenance runs exactly as its nightly run does, and returns at once. Starts nothing while a build, maintenance, rebuild, restore or removal of the VM is running, or when maintenance is not scheduled. Never takes the run lock: the task's run does.
 
 ![Run maintenance now: call order and data flow](diagrams/start-maintenance.svg)
 
@@ -590,7 +590,7 @@ Lists the recorded tooling versions you can return to.
 
 `Restore-LazyVMTooling` `-Name <VM>` `-RestorePoint yyyyMMdd-HHmmss` `-Force  (optional)`
 
-Returns ALL the VM's disks to that checkpoint, Dev Drive and data disk included. The revert itself can be undone.
+Returns ALL the VM's disks to that checkpoint, Dev Drive and data disk included. The revert itself can be undone. Holds the run lock as a Restore, so it is refused while a build, maintenance or rebuild of the VM runs.
 
 ![Return to an earlier tooling version: call order and data flow](diagrams/tooling-revert.svg)
 
@@ -745,7 +745,7 @@ Saves a VM's settings and tooling list as a config template that new VMs can sta
 
 `Remove-LazyVM` `-Name <VM>` `-WhatIf  (lists everything)` `-Force  (optional)`
 
-Deletes the VM and everything created for it, Dev Drive and User disk included. Anything another VM also uses is kept and listed with the reason.
+Deletes the VM and everything created for it, Dev Drive and User disk included. Anything another VM also uses is kept and listed with the reason. Refused while a build, maintenance, rebuild or restore of the VM runs.
 
 ![Remove a VM: call order and data flow](diagrams/remove.svg)
 
@@ -759,14 +759,17 @@ Deletes the VM and everything created for it, Dev Drive and User disk included. 
 3. `Invoke-VMRemoval` (Maintenance): after you confirm; stops at the VM if it cannot be removed
    - Writes D6, tasks deleted: Task Scheduler (LazyVM-Maintain-<VM>, LazyVM-ResumeAfterReboot-<VM>)
    - Writes D7, VM deleted: Hyper-V (VM <VM> turned off, removed)
-4. `Remove-PathWithRetry` (Maintenance, called by Invoke-VMRemoval): what is outside the VM folder first, then the folder; the log goes last, after Stop-Log closes it
+4. `Exit-VMRun` (Common, called by Invoke-VMRemoval): lets go of the run lock before the Config folder that holds it is deleted; the removal leaves no run record
+   - Also runs `Undo-VMRunRecord`
+   - Writes D8, run lock freed: <VM>\Config\ (Run.lock, Run.json  (as it was before))
+5. `Remove-PathWithRetry` (Maintenance, called by Invoke-VMRemoval): what is outside the VM folder first, then the folder; the log goes last, after Stop-Log closes it
    - Also runs `Stop-Log`
-   - Writes D8, files deleted: Files outside the VM folder (disks, state or backups that a setting put elsewhere; anything another VM uses is kept)
-   - Writes D9, VM folder deleted: VM folder (<VM>\ and everything in it: Config, Disks, Checkpoints, State, Backups, Credentials, Logs, Virtual Machines; the log last)
-5. `Get-UserTemplatePath` (Settings, called by Invoke-VMRemoval): the VM's <VM>-latest config template is kept; the last line says where it is
+   - Writes D9, files deleted: Files outside the VM folder (disks, state or backups that a setting put elsewhere; anything another VM uses is kept)
+   - Writes D10, VM folder deleted: VM folder (<VM>\ and everything in it: Config, Disks, Checkpoints, State, Backups, Credentials, Logs, Virtual Machines; the log last)
+6. `Get-UserTemplatePath` (Settings, called by Invoke-VMRemoval): the VM's <VM>-latest config template is kept; the last line says where it is
    - Also runs `Get-AutomaticTemplateName`
-   - Reads D10, kept template: Shared\Templates\ (<VM>-latest.json  (kept))
-   - Writes D11, where it is: Information (the template's path)
+   - Reads D11, kept template: Shared\Templates\ (<VM>-latest.json  (kept))
+   - Writes D12, where it is: Information (the template's path)
 
 <a id="status"></a>
 

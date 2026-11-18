@@ -192,6 +192,31 @@ Describe 'Enter-VMRun and Exit-VMRun' {
         (Read-TestRunState $vm).Status | Should -Be 'Failed'
     }
 
+    It 'puts Run.json back as it was after Undo-VMRunRecord, and frees the lock (#453)' {
+        $before = Set-TestRunState $vm @(@{ Command = 'Build'; Status = 'Failed'; UnfinishedPhase = 6 })
+
+        InModuleScope $module -Parameters @{ VM = $vm } {
+            param($VM)
+            $null = Enter-VMRun -VM $VM -Command 'Restore'
+            Undo-VMRunRecord
+            Exit-VMRun -Status 'Completed'
+        }
+
+        Get-Content -LiteralPath (Get-TestRunPath $vm).State -Raw | Should -Be $before
+        { (Lock-TestRun $vm).Dispose() } | Should -Not -Throw
+    }
+
+    It 'leaves no Run.json after Undo-VMRunRecord when there was none before the run (#453)' {
+        InModuleScope $module -Parameters @{ VM = $vm } {
+            param($VM)
+            $null = Enter-VMRun -VM $VM -Command 'Remove'
+            Undo-VMRunRecord
+            Exit-VMRun -Status 'Completed'
+        }
+
+        Test-Path -LiteralPath (Get-TestRunPath $vm).State | Should -BeFalse
+    }
+
     It 'does nothing in a process that does not hold the lock' {
         { InModuleScope $module { Set-VMRunPhase -Number 3 -Name 'Folders'; Exit-VMRun -Status 'Completed' } } | Should -Not -Throw
         Test-Path -LiteralPath (Get-TestRunPath $vm).State | Should -BeFalse
@@ -342,6 +367,23 @@ Describe 'Invoke-CommandRun -Exclusive' {
         # Nothing in the running one's log, where it would read as that run failing.
         Should -Invoke -ModuleName $module Start-Log -Times 0 -Exactly
         Should -Invoke -ModuleName $module Write-LogError -Times 0 -Exactly
+    }
+
+    It 'names a <Command> that holds the lock as <Expected> when it refuses another run (#453)' -ForEach @(
+        @{ Command = 'Restore'; Expected = 'A restore' }
+        @{ Command = 'Remove'; Expected = 'A removal' }
+    ) {
+        $null = Set-TestRunState $vm @(@{ Command = $Command; Status = 'Running'; Started = '2026-11-17T02:00:00+00:00'; ProcessId = 42 })
+        $other = Lock-TestRun $vm
+        try {
+            $thrown = InModuleScope $module {
+                function Test-Command { [CmdletBinding()] param() Invoke-CommandRun -Title 'Build' -Name 'Alpha' -FailureMessage 'Build stopped' -Cmdlet $PSCmdlet -Exclusive -ScriptBlock { } }
+                try { Test-Command; $null } catch { $_.Exception.Message }
+            }
+        }
+        finally { $other.Dispose() }
+
+        $thrown | Should -BeLike "$Expected of Alpha is already running*"
     }
 
     It 'records the run as Stopped when it is stopped, as by Ctrl+C, which runs no catch block' {

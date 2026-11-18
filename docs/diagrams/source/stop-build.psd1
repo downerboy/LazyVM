@@ -5,7 +5,7 @@
     Parameters = @('-Name <VM>  (optional with one VM)')
     Summary    = 'Asks the build running now to stop, and returns at once. The build stops at its next safe point: before the next phase or step, or while it waits for the VM or for work in the guest. It cleans up as a failed build does and records itself as Stopped. Work already started in the guest carries on by itself. Stops only a build: with maintenance or a rebuild running, it says so and changes nothing. Never takes the run lock.'
     Covers     = @('Stop-LazyVMBuild', 'Request-VMRunStop')
-    Omits      = @{}
+    Omits      = @{ 'Get-VMRunCommandText' = 'names the run that is not a build in the message' }
     Steps      = @(
         @{
             Function = 'Resolve-LazyVMRoot'

@@ -17,6 +17,9 @@ function Remove-LazyVM {
     asked to confirm. Use -WhatIf to see the list without deleting anything.
     This cannot be undone.
 
+    Nothing is removed while a build, maintenance, rebuild or restore of the
+    VM is running: wait for it to end.
+
     .PARAMETER Name
     The VM to remove. Always required, so the wrong VM is never removed by
     accident.
@@ -45,13 +48,18 @@ function Remove-LazyVM {
     process {
         Set-ForceConfirmation -Force:$Force -BoundParameters $PSBoundParameters
         $moduleDir = $MyInvocation.MyCommand.Module.ModuleBase
-        Invoke-CommandRun -Title 'Remove' -Name $Name -FailureMessage 'Remove stopped' -Cmdlet $PSCmdlet -ScriptBlock {
+        # Holds the run lock, so nothing is deleted while a build, maintenance, rebuild or restore of the VM runs (#453).
+        Invoke-CommandRun -Title 'Remove' -Name $Name -FailureMessage 'Remove stopped' -Cmdlet $PSCmdlet -Exclusive:(-not $WhatIfPreference) -ScriptBlock {
             param($VM)
             $context = Get-VMRemovalContext -VM $VM -ScriptDir $moduleDir
-            if (-not $context) { return }
+            if (-not $context) {
+                Undo-VMRunRecord
+                return
+            }
 
             if (-not $PSCmdlet.ShouldProcess($VM.Name, 'Delete the VM and everything listed above, which cannot be undone')) {
                 Write-LogEntry 'Removal cancelled - nothing has been changed.' 'INFO'
+                Undo-VMRunRecord
                 return
             }
             if ((Invoke-VMRemoval -VM $VM -Context $context) -eq [RemovalOutcome]::Incomplete) {

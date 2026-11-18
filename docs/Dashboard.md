@@ -61,7 +61,7 @@ The VM window names the config template the VM was created from, or says "None r
 
 1. **App shell.** The VM list; the Windows evaluation expiry date and renewals left; first-run checks (`Test-LazyVM`) with plain-language fixes; a log viewer; Connect. Buttons are disabled, with an explanation, while maintenance or another build is running.
 2. **Build.** A form with the VM name, the template (Developer, PlainWindows, saved templates such as `DevEnv-latest`) and an optional user name. Progress by phase, each shown as its number and goal (for example "Phase 6: Create the VM and its answer-file disc"), cancel, and run from phase N after a failure. A manual "run maintenance now". A build keeps running if the window closes.
-3. **Dispose and restore.** Dispose asks "Do you really want to delete this VM?" with Yes and No, and No is the default. Restore shows the last backups and puts one back.
+3. **Dispose and restore.** Dispose first shows what will be deleted, with sizes, and the Dev Drive and User disk warnings, then asks "Do you really want to delete this VM?" with Yes and No, and No is the default. Restore lists the VM's restore points (the tooling checkpoints) and puts one back, after a question that says all its disks go back, the Dev Drive and SQL data disk included. Decided 2026-11-17.
 4. **Credentials.** Recovery key export and a "keys not exported" notice. The guest password is hidden by default, revealed only on request, never written to a log, and the clipboard is cleared three minutes after a copy.
 5. **Security findings.** View, approve and revoke.
 
@@ -183,7 +183,11 @@ Each screen needs its command first. Where a command is missing (for example the
    5. A clean stop of a running build (#426).
    6. The app: the Build window, progress and Cancel (#427). Done.
    7. The app: run from phase N, and run maintenance now (#428). Done.
-6. Dispose and restore.
+6. Dispose and restore. Module pull requests first, then the app:
+   1. `Remove-LazyVM` and `Restore-LazyVMTooling` hold the run lock, so neither runs while a build, maintenance or rebuild of the VM does (#453).
+   2. What `Remove-LazyVM` would delete, returned as objects (#454).
+   3. The app: delete a VM, after showing what goes (#455).
+   4. The app: restore a VM to a restore point (#456).
 7. Recovery keys and the password.
 8. Security findings: view, approve, revoke.
 9. Accessibility pass with Narrator, and zoom and High Contrast checks.

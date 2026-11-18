@@ -3,7 +3,7 @@
     Title      = 'Remove a VM'
     Command    = 'Remove-LazyVM'
     Parameters = @('-Name <VM>', '-WhatIf  (lists everything)', '-Force  (optional)')
-    Summary    = 'Deletes the VM and everything created for it, Dev Drive and User disk included. Anything another VM also uses is kept and listed with the reason.'
+    Summary    = 'Deletes the VM and everything created for it, Dev Drive and User disk included. Anything another VM also uses is kept and listed with the reason. Refused while a build, maintenance, rebuild or restore of the VM runs.'
     Covers     = @('Remove-LazyVM', 'Invoke-VMRemoval')
     Omits      = @{
         'Test-PathWithin' = 'a path test used to sort what to delete'
@@ -42,6 +42,14 @@
                 @{ Label = 'tasks deleted'; Kind = 'task'; Store = 'Task Scheduler'; Items = @('LazyVM-Maintain-<VM>', 'LazyVM-ResumeAfterReboot-<VM>') }
                 @{ Label = 'VM deleted'; Kind = 'Hyper-V'; Store = 'Hyper-V'; Items = @('VM <VM> turned off', 'removed') }
             )
+        }
+        @{
+            Function = 'Exit-VMRun'
+            Area     = 'Common'
+            Caller   = 'Invoke-VMRemoval'
+            Note     = 'lets go of the run lock before the Config folder that holds it is deleted; the removal leaves no run record'
+            Includes = @('Undo-VMRunRecord')
+            Writes   = @(@{ Label = 'run lock freed'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Run.lock', 'Run.json  (as it was before)') })
         }
         @{
             Function = 'Remove-PathWithRetry'
