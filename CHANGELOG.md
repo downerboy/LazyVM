@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.25.0](https://github.com/downerboy/LazyVM/compare/v6.24.0...v6.25.0) (2026-11-18)
+
+
+### Features
+
+* refuse to delete or restore a VM while a run of it is going ([#457](https://github.com/downerboy/LazyVM/issues/457)) ([f3fb27b](https://github.com/downerboy/LazyVM/commit/f3fb27b4a67c06b67e66830bf121410568fdbf83))
+
 ## [6.24.0](https://github.com/downerboy/LazyVM/compare/v6.23.0...v6.24.0) (2026-11-17)
 
 
