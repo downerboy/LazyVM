@@ -181,6 +181,54 @@ internal sealed class FakeCommandRunner : CommandRunner
         return MaintenanceFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
     }
 
+    private readonly Answers<RemovalPlan> _RemovalPlans = new();
+
+    public List<string> RemovalPlanCalls { get; } = [];
+
+    public List<string> RemoveCalls { get; } = [];
+
+    /// <summary>Remove-LazyVM fails with this, as the module does for a partial removal.</summary>
+    public Exception? RemoveFails
+    {
+        get; set;
+    }
+
+    /// <summary>When set, Remove-LazyVM runs until the test completes it.</summary>
+    public TaskCompletionSource? RemoveGate
+    {
+        get; set;
+    }
+
+    /// <summary>The next Get-LazyVMRemovalPlan returns this plan.</summary>
+    public void ReturnsRemovalPlan(RemovalPlan plan)
+    {
+        _RemovalPlans.Returns([plan]);
+    }
+
+    public void RemovalPlanThrows(Exception exception)
+    {
+        _RemovalPlans.Throws(exception);
+    }
+
+    public override async Task<RemovalPlan> GetRemovalPlanAsync(string name, CancellationToken cancellationToken)
+    {
+        RemovalPlanCalls.Add(name);
+        return (await _RemovalPlans.Next(cancellationToken))[0];
+    }
+
+    public override async Task RemoveVMAsync(string name)
+    {
+        RemoveCalls.Add(name);
+        if (RemoveGate is { } gate)
+        {
+            await gate.Task;
+        }
+        if (RemoveFails is { } failure)
+        {
+            throw failure;
+        }
+    }
+
     public override Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
     {
         return ModuleFolderFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(@"C:\Program Files\LazyVM\Modules\LazyVM\6.20.0");
@@ -253,6 +301,21 @@ internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launc
 
     public List<ViewModelBase> Closed { get; } = [];
 
+    /// <summary>The answer to "Do you really want to delete this VM?": Yes when true.</summary>
+    public bool ConfirmsRemoval
+    {
+        get; set;
+    }
+
+    /// <summary>Every delete dialog shown, with what it listed.</summary>
+    public List<RemovalViewModel> RemovalsAsked { get; } = [];
+
+    public override bool ConfirmRemoval(RemovalViewModel removal)
+    {
+        RemovalsAsked.Add(removal);
+        return ConfirmsRemoval;
+    }
+
     public void Close(ViewModelBase window)
     {
         _Closers[window]();
@@ -285,9 +348,17 @@ internal sealed class FakeVMWindowManager(ToolWindows tools) : VMWindowManager(t
 
     public List<VMViewModel> BroughtToFront { get; } = [];
 
+    public List<VMViewModel> Closed { get; } = [];
+
     public void Close(VMViewModel window)
     {
         _Closers[window]();
+    }
+
+    protected override void CloseWindow(VMViewModel viewModel)
+    {
+        Closed.Add(viewModel);
+        _Closers[viewModel]();
     }
 
     protected override void Show(VMViewModel viewModel, Action closed)

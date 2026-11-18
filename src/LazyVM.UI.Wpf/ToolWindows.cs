@@ -8,7 +8,8 @@ namespace LazyVM.UI.Wpf;
 /// for the host and one per VM, one Log window per VM, one Build window, and
 /// one progress window per VM. Opening one that is open brings it to the
 /// front instead. It also starts the runs a VM window offers: a build from
-/// a chosen phase, shown in its progress window, and maintenance.
+/// a chosen phase, shown in its progress window, and maintenance; and
+/// deletes a VM, once its delete dialog has had a Yes.
 /// </summary>
 public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock)
 {
@@ -45,6 +46,40 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     {
         await runner.StartMaintenanceAsync(vmName, CancellationToken.None);
         RunStarted?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Raised when a delete has ended, even one that removed only part of the VM, so the list can be read again.</summary>
+    public event EventHandler? VMRemoved;
+
+    /// <summary>What deleting the VM would delete and keep. Throws with the reason when it cannot be deleted.</summary>
+    public virtual Task<RemovalPlan> GetRemovalPlanAsync(string vmName)
+    {
+        return runner.GetRemovalPlanAsync(vmName, CancellationToken.None);
+    }
+
+    /// <summary>Deletes the VM, without asking: <see cref="ConfirmRemoval"/> has. Throws with what went wrong, such as what is left.</summary>
+    public virtual async Task RemoveVMAsync(string vmName)
+    {
+        try
+        {
+            await runner.RemoveVMAsync(vmName);
+        }
+        finally
+        {
+            VMRemoved?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Shows what deleting the VM deletes, and asks "Do you really want to
+    /// delete this VM?", in a dialog over the VM's window. True for Yes.
+    /// </summary>
+    public virtual bool ConfirmRemoval(RemovalViewModel removal)
+    {
+        var owner = Application.Current.Windows.OfType<VMWindow>()
+            .FirstOrDefault(window => window.DataContext is VMViewModel vm && string.Equals(vm.Name, removal.Name, StringComparison.OrdinalIgnoreCase));
+        var dialog = new RemovalWindow { DataContext = removal, Owner = owner ?? Application.Current.MainWindow };
+        return dialog.ShowDialog() == true;
     }
 
     /// <summary>Shows the checks of the VM <paramref name="vmName"/>, or of the host, and runs them.</summary>

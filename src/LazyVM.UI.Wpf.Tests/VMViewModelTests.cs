@@ -559,4 +559,186 @@ public sealed class VMViewModelTests : IDisposable
 
         Assert.Equal(expected, Detail(vm, "Running now"));
     }
+
+    private static RemovalPlan PlanOf(string name = "DevBox")
+    {
+        return new()
+        {
+            Name = name,
+            HyperVState = "Off",
+            Items = [new("Folder", $@"C:\LazyVM\{name}", 50 * GB)],
+            Total = 50 * GB,
+        };
+    }
+
+    [Fact]
+    public async Task Delete_ShowsWhatGoes_AndOnYes_RemovesTheVM()
+    {
+        _Runner.ReturnsRemovalPlan(PlanOf());
+        _Tools.ConfirmsRemoval = true;
+        var vm = await Loaded(Sample.VM());
+        var removed = 0;
+        vm.Removed += (_, _) => removed++;
+        var listChanged = 0;
+        _Tools.VMRemoved += (_, _) => listChanged++;
+
+        await vm.DeleteAsync();
+
+        var asked = Assert.Single(_Tools.RemovalsAsked);
+        Assert.Equal("DevBox", asked.Name);
+        Assert.Contains(@"Folder C:\LazyVM\DevBox, 50 GB", asked.Lines.Select(line => line.Text));
+        Assert.Equal(["DevBox"], _Runner.RemovalPlanCalls);
+        Assert.Equal(["DevBox"], _Runner.RemoveCalls);
+        Assert.Equal(1, removed);
+        Assert.Equal(1, listChanged);
+        Assert.Equal("DevBox has been deleted.", vm.Status);
+        Assert.False(vm.IsDeleting);
+    }
+
+    [Fact]
+    public async Task Delete_OnNo_DeletesNothing()
+    {
+        _Runner.ReturnsRemovalPlan(PlanOf());
+        _Tools.ConfirmsRemoval = false;
+        var vm = await Loaded(Sample.VM());
+        var removed = 0;
+        vm.Removed += (_, _) => removed++;
+
+        await vm.DeleteAsync();
+
+        Assert.Single(_Tools.RemovalsAsked);
+        Assert.Empty(_Runner.RemoveCalls);
+        Assert.Equal(0, removed);
+        Assert.Equal("DevBox was not deleted.", vm.Status);
+        Assert.True(vm.DeleteCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Delete_WhenWhatGoesCannotBeRead_AsksNothing_AndSaysWhy()
+    {
+        _Runner.RemovalPlanThrows(new InvalidOperationException("Cannot tell what VM 'Other' uses, so nothing has been removed."));
+        var vm = await Loaded(Sample.VM());
+
+        await vm.DeleteAsync();
+
+        Assert.Empty(_Tools.RemovalsAsked);
+        Assert.Empty(_Runner.RemoveCalls);
+        Assert.Equal("DevBox cannot be deleted now: Cannot tell what VM 'Other' uses, so nothing has been removed.", vm.Status);
+    }
+
+    [Fact]
+    public async Task Delete_ThatOnlyPartlyRemoved_SaysWhatIsLeft_AndKeepsTheWindow()
+    {
+        _Runner.ReturnsRemovalPlan(PlanOf());
+        _Runner.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", Items = [new(RemovalItem.File, @"E:\Disks\DevBox\SQL.vhdx", GB)] });
+        _Runner.RemoveFails = new InvalidOperationException(@"'DevBox' was only partly removed. The log lists what is left: C:\LazyVM\DevBox\Logs\DevBox.log");
+        _Tools.ConfirmsRemoval = true;
+        var vm = await Loaded(Sample.VM());
+        var removed = 0;
+        vm.Removed += (_, _) => removed++;
+        var listChanged = 0;
+        _Tools.VMRemoved += (_, _) => listChanged++;
+
+        await vm.DeleteAsync();
+
+        Assert.Equal(0, removed);
+        Assert.Equal(1, listChanged);
+        Assert.Equal(
+            @"Deleting DevBox did not finish: 'DevBox' was only partly removed. The log lists what is left: C:\LazyVM\DevBox\Logs\DevBox.log Still there: E:\Disks\DevBox\SQL.vhdx.",
+            vm.Status);
+        Assert.True(vm.DeleteCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Delete_ThatFailed_WhenWhatIsLeftCannotBeRead_GivesTheModulesReason()
+    {
+        _Runner.ReturnsRemovalPlan(PlanOf());
+        _Runner.RemovalPlanThrows(new InvalidOperationException("There is no VM named DevBox."));
+        _Runner.RemoveFails = new InvalidOperationException("'DevBox' was only partly removed.");
+        _Tools.ConfirmsRemoval = true;
+        var vm = await Loaded(Sample.VM());
+
+        await vm.DeleteAsync();
+
+        Assert.Equal("Deleting DevBox did not finish: 'DevBox' was only partly removed.", vm.Status);
+    }
+
+    [Fact]
+    public async Task WhileDeleting_NothingElseCanStart()
+    {
+        _Runner.ReturnsRemovalPlan(PlanOf());
+        _Runner.RemoveGate = new TaskCompletionSource();
+        _Tools.ConfirmsRemoval = true;
+        var vm = await Loaded(Sample.VM());
+
+        var deleting = vm.DeleteAsync();
+
+        Assert.True(vm.IsDeleting);
+        Assert.Equal("Deleting DevBox", vm.Status);
+        Assert.False(vm.DeleteCommand.CanExecute(null));
+        Assert.False(vm.BuildFromPhaseCommand.CanExecute(null));
+        Assert.False(vm.MaintenanceCommand.CanExecute(null));
+        await vm.BuildFromPhaseAsync();
+        await vm.RunMaintenanceAsync();
+        Assert.Empty(_Launcher.Started);
+        Assert.Empty(_Runner.MaintenanceCalls);
+
+        _Runner.RemoveGate.SetResult();
+        await deleting;
+        Assert.Equal(["DevBox"], _Runner.RemoveCalls);
+    }
+
+    [Theory]
+    [InlineData(VMRun.Build, "A build of DevBox is running now, so DevBox cannot be deleted until it has ended.")]
+    [InlineData("Remove", "A delete of DevBox is running now, so DevBox cannot be deleted until it has ended.")]
+    [InlineData("Restore", "A restore of the tooling of DevBox is running now, so DevBox cannot be deleted until it has ended.")]
+    public async Task WhileARunIsGoing_DeleteIsDisabled_AndItsNoteSaysWhy(string command, string said)
+    {
+        var vm = await Loaded(Sample.VM() with
+        {
+            Run = RunningNow(command)
+        });
+
+        Assert.False(vm.DeleteCommand.CanExecute(null));
+        Assert.Equal(said, vm.DeleteNote);
+        Assert.True(vm.HasDeleteNote);
+
+        await vm.DeleteAsync();
+        Assert.Empty(_Runner.RemovalPlanCalls);
+    }
+
+    [Fact]
+    public async Task WhenNothingIsRunning_DeleteCanStart_WithNoNote()
+    {
+        var vm = await Loaded(Sample.VM());
+
+        Assert.True(vm.DeleteCommand.CanExecute(null));
+        Assert.False(vm.HasDeleteNote);
+    }
+
+    [Fact]
+    public async Task ARunThatStartsLater_DisablesDelete()
+    {
+        var vm = await Loaded(Sample.VM());
+        var changed = 0;
+        vm.DeleteCommand.CanExecuteChanged += (_, _) => changed++;
+
+        vm.Update(Sample.VM() with { Run = RunningNow("Maintenance") });
+
+        Assert.False(vm.DeleteCommand.CanExecute(null));
+        Assert.True(changed > 0);
+    }
+
+    [Theory]
+    [InlineData("Remove", "A delete of DevBox is running now.")]
+    [InlineData("Restore", "A restore of the tooling of DevBox is running now.")]
+    public async Task TheRunNote_NamesADeleteOrARestore(string command, string said)
+    {
+        var vm = await Loaded(Sample.VM() with
+        {
+            Run = RunningNow(command)
+        });
+
+        Assert.StartsWith(said, vm.RunNote);
+    }
 }

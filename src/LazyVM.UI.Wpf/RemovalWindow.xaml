@@ -1,0 +1,52 @@
+<Window x:Class="LazyVM.UI.Wpf.RemovalWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:RemovalViewModel}"
+        Title="{Binding Title}" Width="720" Height="620" MinWidth="320"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        AutomationProperties.HelpText="{Binding Question}"
+        Style="{StaticResource LvWindow}">
+    <!-- No is both the default and the cancel button: Enter and Esc both answer No. Only Yes, by click, Alt+Y or Space on it, deletes. -->
+    <DockPanel Margin="24">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Heading}" Style="{StaticResource LvHeading}" TextWrapping="Wrap" Margin="0,0,0,12" />
+
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
+            <TextBlock Text="{Binding Question}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,12" />
+            <WrapPanel HorizontalAlignment="Right">
+                <Button Content="_Yes" Click="AnswerYes" MinWidth="88" Margin="0,0,8,0"
+                        AutomationProperties.Name="{Binding Name, StringFormat='Yes, delete {0}'}"
+                        AutomationProperties.HelpText="{Binding Question}" />
+                <Button x:Name="NoButton" Content="_No" IsDefault="True" IsCancel="True" MinWidth="88"
+                        AutomationProperties.Name="{Binding Name, StringFormat='No, keep {0}'}"
+                        AutomationProperties.HelpText="{Binding Question}" />
+            </WrapPanel>
+        </StackPanel>
+
+        <!-- A list, so the arrow keys move from one line to the next and Narrator reads each one. -->
+        <ListBox x:Name="List" ItemsSource="{Binding Lines}"
+                 AutomationProperties.Name="What goes, and what is kept"
+                 BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
+                 Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
+                    <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:RemovalLine">
+                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</Window>

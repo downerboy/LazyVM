@@ -323,4 +323,41 @@ public sealed class MainViewModelTests : IDisposable
 
         Assert.Equal(1, _Runner.DashboardCalls);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ADelete_EvenOneThatOnlyPartlyRemoved_ReadsTheListAgain(bool fails)
+    {
+        _Runner.Returns(Sample.VM("PlainWin"));
+        _Runner.RemoveFails = fails ? new InvalidOperationException("'DevBox' was only partly removed.") : null;
+
+        await Record.ExceptionAsync(() => _Tools.RemoveVMAsync("DevBox"));
+        await Task.Yield();
+
+        Assert.Equal(1, _Runner.DashboardCalls);
+    }
+
+    [Fact]
+    public async Task ADeletedVM_ClosesItsWindow()
+    {
+        _Runner.Returns(Sample.VM("DevBox"));
+        await _Main.RefreshAsync();
+        _Main.SelectedVM = _Main.VMs[0];
+        _Main.OpenVMCommand.Execute(null);
+        var window = Assert.Single(_Windows.Shown);
+        _Runner.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", HyperVState = "Off" });
+        _Runner.Returns();
+        _Tools.ConfirmsRemoval = true;
+
+        await window.DeleteAsync();
+
+        Assert.Same(window, Assert.Single(_Windows.Closed));
+        // Its window is gone, so opening the VM again makes a new one.
+        _Runner.Returns(Sample.VM("DevBox"));
+        await _Main.RefreshAsync();
+        _Main.SelectedVM = _Main.VMs[0];
+        _Main.OpenVMCommand.Execute(null);
+        Assert.Equal(2, _Windows.Shown.Count);
+    }
 }

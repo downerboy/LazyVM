@@ -2,9 +2,9 @@ namespace LazyVM.UI.Wpf.ViewModels;
 
 /// <summary>
 /// A VM's own window: every detail the dashboard has about it, its checks
-/// and log, and the runs it can start: a build from a chosen phase, and
-/// maintenance now. Neither starts while a build, maintenance or rebuild of
-/// the VM is running.
+/// and log, the runs it can start: a build from a chosen phase, and
+/// maintenance now, and deleting it, after showing what goes. None starts
+/// while another run of the VM is going.
 /// </summary>
 public sealed class VMViewModel : ViewModelBase
 {
@@ -17,6 +17,7 @@ public sealed class VMViewModel : ViewModelBase
     private int? _SuggestedPhase;
     private string _Status = string.Empty;
     private bool _IsStarting;
+    private bool _IsDeleting;
 
     public VMViewModel(VMDashboard entry, ToolWindows tools)
     {
@@ -27,9 +28,41 @@ public sealed class VMViewModel : ViewModelBase
         ChecksCommand = new RelayCommand(() => tools.OpenChecks(Name, hostOnly: false));
         LogCommand = new RelayCommand(() => tools.OpenLog(Name));
         BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(Name, started: null), () => IsBuilding);
-        BuildFromPhaseCommand = new RelayCommand(() => _ = BuildFromPhaseAsync(), () => !IsBusy && !IsStarting && SelectedPhase is not null);
-        MaintenanceCommand = new RelayCommand(() => _ = RunMaintenanceAsync(), () => !IsBusy && !IsStarting && IsMaintenanceScheduled);
+        BuildFromPhaseCommand = new RelayCommand(() => _ = BuildFromPhaseAsync(), () => CanStart && SelectedPhase is not null);
+        MaintenanceCommand = new RelayCommand(() => _ = RunMaintenanceAsync(), () => CanStart && IsMaintenanceScheduled);
+        DeleteCommand = new RelayCommand(() => _ = DeleteAsync(), () => CanStart);
     }
+
+    /// <summary>Raised when the VM has been deleted, so its window closes.</summary>
+    public event EventHandler? Removed;
+
+    /// <summary>Shows what deleting the VM deletes, asks, and on Yes deletes it.</summary>
+    public RelayCommand DeleteCommand
+    {
+        get;
+    }
+
+    /// <summary>True from reading what a delete would delete until the delete has ended.</summary>
+    public bool IsDeleting
+    {
+        get => _IsDeleting;
+        private set
+        {
+            if (SetProperty(ref _IsDeleting, value))
+            {
+                RaiseRunCommandsChanged();
+            }
+        }
+    }
+
+    /// <summary>Why Delete is disabled, as text of its own beside it; empty when it is not.</summary>
+    public string DeleteNote => IsBusy
+        ? $"{RunName(_Entry.Run!.Command)} of {Name} is running now, so {Name} cannot be deleted until it has ended."
+        : string.Empty;
+
+    public bool HasDeleteNote => DeleteNote.Length > 0;
+
+    private bool CanStart => !IsBusy && !IsStarting && !IsDeleting;
 
     /// <summary>Opens the progress of the build running now, including one the app did not start.</summary>
     public RelayCommand BuildProgressCommand
@@ -152,7 +185,7 @@ public sealed class VMViewModel : ViewModelBase
     /// <summary>Builds the VM from the chosen phase, and shows the build's progress.</summary>
     public async Task BuildFromPhaseAsync()
     {
-        if (IsBusy || IsStarting || SelectedPhase is not { } phase)
+        if (!CanStart || SelectedPhase is not { } phase)
         {
             return;
         }
@@ -176,7 +209,7 @@ public sealed class VMViewModel : ViewModelBase
     /// <summary>Starts the VM's maintenance task, as the nightly run does.</summary>
     public async Task RunMaintenanceAsync()
     {
-        if (IsBusy || IsStarting || !IsMaintenanceScheduled)
+        if (!CanStart || !IsMaintenanceScheduled)
         {
             return;
         }
@@ -197,6 +230,69 @@ public sealed class VMViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Shows what deleting the VM deletes and asks; on Yes, deletes it with
+    /// Remove-LazyVM -Force. A delete that did not finish says why, as the
+    /// module reports it, and what is still there.
+    /// </summary>
+    public async Task DeleteAsync()
+    {
+        if (!CanStart)
+        {
+            return;
+        }
+        IsDeleting = true;
+        Status = $"Reading what deleting {Name} would delete";
+        try
+        {
+            RemovalPlan plan;
+            try
+            {
+                plan = await _Tools.GetRemovalPlanAsync(Name);
+            }
+            catch (Exception exception)
+            {
+                Status = $"{Name} cannot be deleted now: {exception.Message}";
+                return;
+            }
+            if (!_Tools.ConfirmRemoval(new RemovalViewModel(plan)))
+            {
+                Status = $"{Name} was not deleted.";
+                return;
+            }
+            Status = $"Deleting {Name}";
+            try
+            {
+                await _Tools.RemoveVMAsync(Name);
+            }
+            catch (Exception exception)
+            {
+                var left = await LeftAsync();
+                Status = string.Join(" ", new[] { $"Deleting {Name} did not finish: {exception.Message}", left }.Where(text => text.Length > 0));
+                return;
+            }
+            Status = $"{Name} has been deleted.";
+            Removed?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            IsDeleting = false;
+        }
+    }
+
+    /// <summary>What a delete that did not finish left, read again; empty when that cannot be read, such as once the VM's settings are gone.</summary>
+    private async Task<string> LeftAsync()
+    {
+        try
+        {
+            return RemovalViewModel.Left(await _Tools.GetRemovalPlanAsync(Name));
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
+    }
+
     /// <summary>The phase a build that stopped, failed or ended unexpectedly can carry on from; empty otherwise.</summary>
     internal static int? CarryOnPhase(VMRun? lastBuild)
     {
@@ -214,6 +310,7 @@ public sealed class VMViewModel : ViewModelBase
     {
         BuildFromPhaseCommand.RaiseCanExecuteChanged();
         MaintenanceCommand.RaiseCanExecuteChanged();
+        DeleteCommand.RaiseCanExecuteChanged();
     }
 
     private static string RunName(string? command)
@@ -223,6 +320,8 @@ public sealed class VMViewModel : ViewModelBase
             VMRun.Build => "A build",
             "Maintenance" => "Maintenance",
             "Rebuild" => "A rebuild",
+            "Remove" => "A delete",
+            "Restore" => "A restore of the tooling",
             _ => "A run",
         };
     }

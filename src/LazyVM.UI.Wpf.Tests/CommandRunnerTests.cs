@@ -167,6 +167,64 @@ public sealed class CommandRunnerTests
         CommandRunner.ThrowIfFailed([], []);
     }
 
+    [Fact]
+    public void ThrowIfFailed_ForACommandThatReturnsNothing_IgnoresTheErrorsItSilenced()
+    {
+        // Remove-LazyVM returns nothing, and asks for tasks and checkpoints
+        // that may not be there with -ErrorAction SilentlyContinue: only an
+        // error it throws is its failure.
+        var errors = new[] { Error("No MSFT_ScheduledTask objects found.") };
+
+        CommandRunner.ThrowIfFailed([], errors, returnsNothing: true);
+    }
+
+    [Fact]
+    public void ToRemovalPlan_ReadsEveryField()
+    {
+        var plan = CommandRunner.ToRemovalPlan(Entry(
+            ("Name", "DevBox"),
+            ("HyperVState", "Running"),
+            ("CheckpointCount", 2),
+            ("Tasks", new object[] { @"LazyVM\DevBox maintenance" }),
+            ("Items", new object[]
+            {
+                Entry(("Kind", "Folder"), ("Path", @"C:\LazyVM\DevBox"), ("Size", 1073741824.0)),
+                Entry(("Kind", "File"), ("Path", @"E:\Disks\DevBox\SQL.vhdx"), ("Size", 2048.0)),
+            }),
+            ("Total", 1073743872.0),
+            ("Kept", new object[] { Entry(("Path", @"C:\LazyVM\Shared"), ("Reason", "Every VM uses it.")) }),
+            ("WorkDisks", new object[] { Entry(("Name", "The Dev Drive"), ("Path", @"C:\LazyVM\DevBox\Dev.vhdx"), ("Size", 512.0), ("Advice", "Push first.")) })));
+
+        Assert.Equal("DevBox", plan.Name);
+        Assert.Equal("Running", plan.HyperVState);
+        Assert.Equal(2, plan.CheckpointCount);
+        Assert.Equal([@"LazyVM\DevBox maintenance"], plan.Tasks);
+        Assert.Equal(
+            [new RemovalItem("Folder", @"C:\LazyVM\DevBox", 1073741824), new RemovalItem("File", @"E:\Disks\DevBox\SQL.vhdx", 2048)],
+            plan.Items);
+        Assert.Equal(1073743872, plan.Total);
+        Assert.Equal([new KeptItem(@"C:\LazyVM\Shared", "Every VM uses it.")], plan.Kept);
+        Assert.Equal([new WorkDisk("The Dev Drive", @"C:\LazyVM\DevBox\Dev.vhdx", 512, "Push first.")], plan.WorkDisks);
+    }
+
+    [Fact]
+    public void ToRemovalPlan_WithNothingLeft_IsEmpty()
+    {
+        var plan = CommandRunner.ToRemovalPlan(Entry(
+            ("Name", "DevBox"),
+            ("HyperVState", null),
+            ("CheckpointCount", 0),
+            ("Tasks", Array.Empty<object>()),
+            ("Items", Array.Empty<object>()),
+            ("Total", 0.0),
+            ("Kept", Array.Empty<object>()),
+            ("WorkDisks", Array.Empty<object>())));
+
+        Assert.True(plan.IsEmpty);
+        Assert.Null(plan.HyperVState);
+        Assert.Empty(plan.WorkDisks);
+    }
+
     private static ErrorRecord Error(string message)
     {
         return new(new InvalidOperationException(message), "Test", ErrorCategory.NotSpecified, null);
