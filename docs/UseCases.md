@@ -151,7 +151,7 @@ Actors: Host user, Administrator.
 
 Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Windows.
 
-- List VMs (`Get-LazyVM`), See the dashboard data (`Get-LazyVMDashboard`) and View settings (`Get-LazyVMSetting`), by any Host user. List VMs reads VM state from Hyper-V and the task from Task Scheduler. See the dashboard data includes List VMs, and also reads each VM's disks and memory from Hyper-V, its last maintenance run from Task Scheduler, and its findings and templates from its files.
+- List VMs (`Get-LazyVM`), See the dashboard data (`Get-LazyVMDashboard`) and View settings (`Get-LazyVMSetting`), by any Host user. List VMs reads VM state from Hyper-V and the task from Task Scheduler. See the dashboard data includes List VMs, and also reads each VM's disks and memory from Hyper-V, its last maintenance run from Task Scheduler, its findings and templates from its files, and its recovery key IDs and last export record, never the passwords.
 - View the guest account (`Get-LazyVMCredential`).
 - Check the license (`Get-LazyVMLicense`) reads the license inside the guest. Extended by **Start the VM** when the VM is off.
 - See the security findings (`Get-LazyVMSecurityFinding`), or the approved ones (`-Approved`). Read-only.

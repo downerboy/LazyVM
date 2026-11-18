@@ -825,7 +825,7 @@ Lists the VMs in the LazyVM folder with their state and maintenance. No administ
 
 `Get-LazyVMDashboard` `-Name  (wildcards, default *)`
 
-Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's disks, memory, last maintenance, open findings, templates, and the build, maintenance, rebuild, restore or removal going now with the latest build. Only reads. No administrator rights needed.
+Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's disks, memory, last maintenance, open findings, templates, the build, maintenance, rebuild, restore or removal going now with the latest build, and how many recovery keys are not exported yet. Only reads; never a recovery password. No administrator rights needed.
 
 ![See the dashboard data: call order and data flow](diagrams/dashboard.svg)
 
@@ -849,10 +849,14 @@ Lists every VM with what the dashboard shows: Get-LazyVM's list, and each VM's d
 9. `Get-VMRunState` (Common, called by New-DashboardEntry): twice: the latest run, then the latest build; a run is Running while its lock is held, and EndedUnexpectedly when recorded as running with its lock free
    - Also runs `Get-VMRunPath`, `Test-VMRunLockHeld`, `Read-VMRunDocument`
    - Reads D9, run lock and state: <VM>\Config\ (Run.lock  (opened for a moment, never created), Run.json)
-10. `Get-VMTemplateSummary` (Dashboard, called by New-DashboardEntry): the configuration first built from, and the green template
+10. `Get-RecoveryKeySummary` (Dashboard, called by New-DashboardEntry): how many recovery keys are stored and not exported yet, and when they last were; counts only, never a password
+   - Also runs `Get-StoredRecoveryKey`, `Read-RecoveryKeyExportRecord`, `Select-UnexportedRecoveryKey`
+   - Reads D10, recovery keys: <VM>\Credentials\ (bitlocker.cred  (key IDs counted))
+   - Reads D11, last export: <VM>\Config\ (RecoveryKeyExport.json)
+11. `Get-VMTemplateSummary` (Dashboard, called by New-DashboardEntry): the configuration first built from, and the green template
    - Also runs `Get-VMAsBuiltProfilePath`, `Get-AutomaticTemplateName`, `Get-UserTemplatePath`
-   - Reads D10, templates: Templates (<VM>\Config\VM.Template.json, Shared\Templates\<VM>-latest.json)
-   - Writes D11, dashboard rows: Pipeline (LazyVM.Dashboard per VM)
+   - Reads D12, templates: Templates (<VM>\Config\VM.Template.json, Shared\Templates\<VM>-latest.json)
+   - Writes D13, dashboard rows: Pipeline (LazyVM.Dashboard per VM)
 
 <a id="log"></a>
 
