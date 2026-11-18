@@ -124,7 +124,37 @@ public class CommandRunner : IDisposable
     /// </summary>
     public virtual async Task RemoveVMAsync(string name)
     {
-        await InvokeAsync("Remove-LazyVM", [("Name", name), ("Force", true)], CancellationToken.None, returnsNothing: true).ConfigureAwait(false);
+        await InvokeAsync("Remove-LazyVM", [("Name", name), ("Force", true)], CancellationToken.None, failsOnlyByThrowing: true).ConfigureAwait(false);
+    }
+
+    /// <summary>Runs <c>Get-LazyVMRestorePoint -Name</c>: the VM's restore points, oldest first. None before the first.</summary>
+    public virtual async Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(string name, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMRestorePoint", [("Name", name)], cancellationToken, failsOnlyByThrowing: true).ConfigureAwait(false);
+        return output.Select(ToRestorePoint).ToList();
+    }
+
+    /// <summary>
+    /// Runs <c>Restore-LazyVMTooling -Name -RestorePoint -Force</c>: returns
+    /// the VM to the restore point <paramref name="stamp"/>, without the
+    /// question the app has already asked. Never cancelled: a revert stopped
+    /// half way leaves the VM between the two. Throws with the module's
+    /// reason when it did not, such as while another run of the VM is going.
+    /// </summary>
+    public virtual async Task RestoreToolingAsync(string name, string stamp)
+    {
+        await InvokeAsync(
+            "Restore-LazyVMTooling", [("Name", name), ("RestorePoint", stamp), ("Force", true)], CancellationToken.None, failsOnlyByThrowing: true)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Reads one <c>LazyVM.RestorePoint</c> object. A time that cannot be read is left empty.</summary>
+    internal static VMRestorePoint ToRestorePoint(PSObject point)
+    {
+        return new(
+            Text(point, "RestorePoint"),
+            ReadDate(point, "Taken", "Taken", []),
+            Read<bool?>(point, "HasToolingList", "HasToolingList", []) ?? false);
     }
 
     /// <summary>The folder the module was imported from, which holds the script each build runs with.</summary>
@@ -299,11 +329,12 @@ public class CommandRunner : IDisposable
 
     /// <summary>
     /// Runs <paramref name="command"/> with each parameter added by name,
-    /// never as script text. <paramref name="returnsNothing"/>: a command
-    /// that never returns anything, so only an error it throws is its failure.
+    /// never as script text. <paramref name="failsOnlyByThrowing"/>: a
+    /// command that can rightly return nothing while it silences errors of
+    /// its own, so only an error it throws is its failure.
     /// </summary>
     private async Task<IReadOnlyList<PSObject>> InvokeAsync(
-        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool returnsNothing = false)
+        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool failsOnlyByThrowing = false)
     {
         ObjectDisposedException.ThrowIf(_Disposed, this);
         await _OneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -327,7 +358,7 @@ public class CommandRunner : IDisposable
                 }
             }
             cancellationToken.ThrowIfCancellationRequested();
-            ThrowIfFailed(output, shell.Streams.Error, returnsNothing);
+            ThrowIfFailed(output, shell.Streams.Error, failsOnlyByThrowing);
             return [.. output];
         }
         finally
@@ -341,11 +372,11 @@ public class CommandRunner : IDisposable
     /// when the command returned nothing: the error stream also holds errors a
     /// command silenced with -ErrorAction SilentlyContinue, and the module
     /// reports each VM's own failures in its Problems. A command that
-    /// <paramref name="returnsNothing"/> fails only by throwing.
+    /// <paramref name="failsOnlyByThrowing"/> never fails here.
     /// </summary>
-    internal static void ThrowIfFailed(IList<PSObject> output, IList<ErrorRecord> errors, bool returnsNothing = false)
+    internal static void ThrowIfFailed(IList<PSObject> output, IList<ErrorRecord> errors, bool failsOnlyByThrowing = false)
     {
-        if (!returnsNothing && output.Count == 0 && errors.Count > 0)
+        if (!failsOnlyByThrowing && output.Count == 0 && errors.Count > 0)
         {
             throw new InvalidOperationException(errors[0].ToString());
         }

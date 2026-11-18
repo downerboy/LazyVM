@@ -24,6 +24,9 @@
                             AutomationProperties.Name="{Binding Name, StringFormat='Checks of {0}'}" />
                     <Button Content="Log" Command="{Binding LogCommand}" Margin="8,0,0,0"
                             AutomationProperties.Name="{Binding Name, StringFormat='Log of {0}'}" />
+                    <Button Content="_Restore..." Command="{Binding RestorePointsCommand}" Margin="8,0,0,0"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Restore points of {0}'}"
+                            AutomationProperties.HelpText="Lists the VM's restore points, to return it to one." />
                     <Button Content="Build progress" Command="{Binding BuildProgressCommand}" Margin="8,0,0,0"
                             Visibility="{Binding IsBuilding, Converter={StaticResource VisibleWhenTrue}}"
                             AutomationProperties.Name="{Binding Name, StringFormat='Progress of the build of {0}'}" />

@@ -168,14 +168,15 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
-    public void ThrowIfFailed_ForACommandThatReturnsNothing_IgnoresTheErrorsItSilenced()
+    public void ThrowIfFailed_ForACommandThatFailsOnlyByThrowing_IgnoresTheErrorsItSilenced()
     {
-        // Remove-LazyVM returns nothing, and asks for tasks and checkpoints
+        // Remove-LazyVM returns nothing, and Get-LazyVMRestorePoint nothing
+        // for a VM with no restore points; both ask for tasks or checkpoints
         // that may not be there with -ErrorAction SilentlyContinue: only an
-        // error it throws is its failure.
+        // error they throw is their failure.
         var errors = new[] { Error("No MSFT_ScheduledTask objects found.") };
 
-        CommandRunner.ThrowIfFailed([], errors, returnsNothing: true);
+        CommandRunner.ThrowIfFailed([], errors, failsOnlyByThrowing: true);
     }
 
     [Fact]
@@ -205,6 +206,19 @@ public sealed class CommandRunnerTests
         Assert.Equal(1073743872, plan.Total);
         Assert.Equal([new KeptItem(@"C:\LazyVM\Shared", "Every VM uses it.")], plan.Kept);
         Assert.Equal([new WorkDisk("The Dev Drive", @"C:\LazyVM\DevBox\Dev.vhdx", 512, "Push first.")], plan.WorkDisks);
+    }
+
+    [Fact]
+    public void ToRestorePoint_ReadsEveryField()
+    {
+        var point = CommandRunner.ToRestorePoint(Entry(
+            ("Name", "DevBox"),
+            ("RestorePoint", "20261008-193000"),
+            ("Taken", new DateTime(2026, 10, 8, 19, 30, 0)),
+            ("Checkpoint", "LazyVM tooling 20261008-193000"),
+            ("HasToolingList", false)));
+
+        Assert.Equal(new VMRestorePoint("20261008-193000", new DateTime(2026, 10, 8, 19, 30, 0), HasToolingList: false), point);
     }
 
     [Fact]

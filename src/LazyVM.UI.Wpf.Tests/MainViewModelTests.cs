@@ -338,6 +338,20 @@ public sealed class MainViewModelTests : IDisposable
         Assert.Equal(1, _Runner.DashboardCalls);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ARestore_EvenOneThatFailed_ReadsTheListAgain(bool fails)
+    {
+        _Runner.Returns(Sample.VM("DevBox"));
+        _Runner.RestoreFails = fails ? new InvalidOperationException("The revert failed.") : null;
+
+        await Record.ExceptionAsync(() => _Tools.RestoreToolingAsync("DevBox", "20261008-193000"));
+        await Task.Yield();
+
+        Assert.Equal(1, _Runner.DashboardCalls);
+    }
+
     [Fact]
     public async Task ADeletedVM_ClosesItsWindow()
     {
