@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.26.0](https://github.com/downerboy/LazyVM/compare/v6.25.0...v6.26.0) (2026-11-18)
+
+
+### Features
+
+* return what Remove-LazyVM would delete as objects ([#459](https://github.com/downerboy/LazyVM/issues/459)) ([d24b7e7](https://github.com/downerboy/LazyVM/commit/d24b7e76fc4cb9aa1fa81f954560e719bc11fdd9))
+
 ## [6.25.0](https://github.com/downerboy/LazyVM/compare/v6.24.0...v6.25.0) (2026-11-18)
 
 
