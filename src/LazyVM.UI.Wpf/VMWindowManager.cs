@@ -24,12 +24,9 @@ public class VMWindowManager(ToolWindows tools)
     /// <summary>Shows what a refresh read in the windows that are open.</summary>
     public void Update(IEnumerable<VMDashboard> entries)
     {
-        foreach (var entry in entries)
+        foreach (var entry in entries.Where(entry => _Open.ContainsKey(entry.Name)))
         {
-            if (_Open.TryGetValue(entry.Name, out var viewModel))
-            {
-                viewModel.Update(entry);
-            }
+            _Open[entry.Name].Update(entry);
         }
     }
 

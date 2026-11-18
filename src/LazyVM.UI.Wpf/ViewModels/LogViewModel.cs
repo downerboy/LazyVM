@@ -124,29 +124,21 @@ public sealed class LogViewModel : ViewModelBase
         var start = SelectedEntry is null
             ? (direction > 0 ? 0 : Entries.Count - 1)
             : IndexOf(SelectedEntry) + direction;
-        for (var index = start; index >= 0 && index < Entries.Count; index += direction)
+        // Forward from start, or back from it; a start outside the list finds nothing.
+        var next = direction > 0
+            ? Entries.Skip(start).FirstOrDefault(entry => entry.IsProblem)
+            : Entries.Take(start + 1).LastOrDefault(entry => entry.IsProblem);
+        if (next is not null)
         {
-            if (Entries[index].IsProblem)
-            {
-                SelectedEntry = Entries[index];
-                JumpedTo?.Invoke(Entries[index]);
-                return;
-            }
+            SelectedEntry = next;
+            JumpedTo?.Invoke(next);
+            return;
         }
         Status = direction > 0 ? "No warnings or errors after this entry" : "No warnings or errors before this entry";
     }
 
-    private int IndexOf(LogEntryRowViewModel entry)
-    {
-        for (var index = 0; index < Entries.Count; index++)
-        {
-            if (ReferenceEquals(Entries[index], entry))
-            {
-                return index;
-            }
-        }
-        return -1;
-    }
+    private int IndexOf(LogEntryRowViewModel entry) =>
+        Entries.Select((row, index) => ReferenceEquals(row, entry) ? index : -1).FirstOrDefault(index => index >= 0, -1);
 
     private static string Summary(IReadOnlyList<LogEntryRowViewModel> rows)
     {
@@ -162,15 +154,11 @@ public sealed class LogViewModel : ViewModelBase
         };
         var errors = rows.Count(row => row.Level == VMLogEntry.Error);
         var warnings = rows.Count(row => row.Level == VMLogEntry.Warning);
-        var found = new List<string>();
-        if (errors > 0)
+        var found = new[]
         {
-            found.Add(errors == 1 ? "1 error" : $"{errors} errors");
-        }
-        if (warnings > 0)
-        {
-            found.Add(warnings == 1 ? "1 warning" : $"{warnings} warnings");
-        }
+            errors switch { 0 => null, 1 => "1 error", _ => $"{errors} errors" },
+            warnings switch { 0 => null, 1 => "1 warning", _ => $"{warnings} warnings" },
+        }.OfType<string>().ToList();
         return found.Count == 0 ? $"{count}: no warnings or errors" : $"{count}: {string.Join(", ", found)}";
     }
 }

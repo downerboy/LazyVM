@@ -17,15 +17,11 @@ public sealed class VMRowViewModel(VMDashboard entry) : ViewModelBase
     {
         get
         {
-            var reasons = new List<string>();
-            if (DashboardText.MaintenanceFailed(Entry))
+            var reasons = new[]
             {
-                reasons.Add("last maintenance failed");
-            }
-            if (DashboardText.SettingsProblem(Entry))
-            {
-                reasons.Add("settings problem");
-            }
+                DashboardText.MaintenanceFailed(Entry) ? "last maintenance failed" : null,
+                DashboardText.SettingsProblem(Entry) ? "settings problem" : null,
+            }.OfType<string>().ToList();
             return reasons.Count == 0 ? null : "Needs attention: " + string.Join(", ", reasons);
         }
     }
@@ -50,17 +46,15 @@ public sealed class VMRowViewModel(VMDashboard entry) : ViewModelBase
     {
         get
         {
-            var parts = new List<string> { Name, State };
-            if (AttentionText is { } attention)
+            var parts = new[]
             {
-                parts.Add(DashboardText.InSentence(attention));
-            }
-            parts.Add(MaintenanceInSentence());
-            parts.Add(DashboardText.InSentence(DashboardText.OpenFindings(Entry.OpenFindings)));
-            if (ProblemText is { } problem)
-            {
-                parts.Add(DashboardText.InSentence(problem));
-            }
+                Name,
+                State,
+                AttentionText is { } attention ? DashboardText.InSentence(attention) : null,
+                MaintenanceInSentence(),
+                DashboardText.InSentence(DashboardText.OpenFindings(Entry.OpenFindings)),
+                ProblemText is { } problem ? DashboardText.InSentence(problem) : null,
+            }.OfType<string>();
             return string.Join(", ", parts);
         }
     }

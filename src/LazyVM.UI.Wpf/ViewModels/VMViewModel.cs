@@ -104,15 +104,15 @@ public sealed class VMViewModel : ViewModelBase
             {
                 return $"{RunName(_Entry.Run!.Command)} of {Name} is running now. A build or maintenance can start once it has ended.";
             }
-            var notes = new List<string>();
-            if (_SuggestedPhase is { } phase && _Entry.LastBuild is { } last)
+            var notes = new[]
             {
-                notes.Add($"The last build {EndedText(last.Status)} in phase {phase}, so phase {phase} is chosen. Let any install still running inside the VM finish first.");
-            }
-            if (!IsMaintenanceScheduled)
-            {
-                notes.Add($"Maintenance of {Name} is not scheduled, so it cannot run now. In PowerShell, run Register-LazyVMMaintenance -Name {Name}");
-            }
+                _SuggestedPhase is { } phase && _Entry.LastBuild is { } last
+                    ? $"The last build {EndedText(last.Status)} in phase {phase}, so phase {phase} is chosen. Let any install still running inside the VM finish first."
+                    : null,
+                IsMaintenanceScheduled
+                    ? null
+                    : $"Maintenance of {Name} is not scheduled, so it cannot run now. In PowerShell, run Register-LazyVMMaintenance -Name {Name}",
+            }.OfType<string>();
             return string.Join(" ", notes);
         }
     }
@@ -296,8 +296,8 @@ public sealed class VMViewModel : ViewModelBase
     {
         // Hyper-V has nothing to say about a VM that is not built yet; say why.
         var missing = vm.State == "Not built" ? "Not built yet" : DashboardText.NotKnown;
-        var details = new List<VMDetail>
-        {
+        return
+        [
             new("State", vm.State),
             new("Running now", RunningText(vm.Run)),
             new("Created", vm.Created is { } created ? DashboardText.When(created) : missing),
@@ -305,27 +305,24 @@ public sealed class VMViewModel : ViewModelBase
             new("Disk space used", vm.DiskSpaceUsed is { } used
                 ? $"{DashboardText.Size(used)} on {vm.Disks.Count} {(vm.Disks.Count == 1 ? "disk" : "disks")}"
                 : missing),
-        };
-
-        // Used counts the disk's checkpoint files too, so it can be more than the disk's size; say why then.
-        details.AddRange(vm.Disks.Select(disk => new VMDetail(
-            "Disk " + disk.Name,
-            disk.Used > disk.Maximum
-                ? $"{DashboardText.Size(disk.Used)} used with its checkpoints, disk size {DashboardText.Size(disk.Maximum)}, {disk.Path}"
-                : $"{DashboardText.Size(disk.Used)} used of {DashboardText.Size(disk.Maximum)}, {disk.Path}")));
-
-        details.Add(new("Maintenance", MaintenanceText(vm)));
-        details.Add(new("Last maintenance", DashboardText.LastMaintenance(vm, DashboardText.When)));
-        details.Add(new("Last security scan", vm.LastSecurityScan is { } scanned
-            ? $"{DashboardText.When(scanned)}, {DashboardText.InSentence(DashboardText.OpenFindings(vm.OpenFindings))}"
-            : "Not scanned yet"));
-        // Empty both for a VM made without a template and for one made before LazyVM recorded it (#421).
-        details.Add(new("Created from config template", vm.CreatedFromTemplate ?? "None recorded"));
-        details.Add(new("Configuration first built from", vm.OriginalConfig ?? DashboardText.NotKnown));
-        details.Add(new("Green template", GreenTemplateText(vm)));
-        details.Add(new("Settings", vm.Settings));
-        details.AddRange(vm.Problems.Select(problem => new VMDetail("Could not read", problem)));
-        return details;
+            // Used counts the disk's checkpoint files too, so it can be more than the disk's size; say why then.
+            .. vm.Disks.Select(disk => new VMDetail(
+                "Disk " + disk.Name,
+                disk.Used > disk.Maximum
+                    ? $"{DashboardText.Size(disk.Used)} used with its checkpoints, disk size {DashboardText.Size(disk.Maximum)}, {disk.Path}"
+                    : $"{DashboardText.Size(disk.Used)} used of {DashboardText.Size(disk.Maximum)}, {disk.Path}")),
+            new("Maintenance", MaintenanceText(vm)),
+            new("Last maintenance", DashboardText.LastMaintenance(vm, DashboardText.When)),
+            new("Last security scan", vm.LastSecurityScan is { } scanned
+                ? $"{DashboardText.When(scanned)}, {DashboardText.InSentence(DashboardText.OpenFindings(vm.OpenFindings))}"
+                : "Not scanned yet"),
+            // Empty both for a VM made without a template and for one made before LazyVM recorded it (#421).
+            new("Created from config template", vm.CreatedFromTemplate ?? "None recorded"),
+            new("Configuration first built from", vm.OriginalConfig ?? DashboardText.NotKnown),
+            new("Green template", GreenTemplateText(vm)),
+            new("Settings", vm.Settings),
+            .. vm.Problems.Select(problem => new VMDetail("Could not read", problem)),
+        ];
     }
 
     /// <summary>Such as "Build, in phase 7 (Windows)", "Build, stopping" or "Nothing".</summary>
