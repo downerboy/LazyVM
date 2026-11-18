@@ -229,7 +229,7 @@ public sealed class BuildLauncherTests
     {
         var result = BuildLauncher.ReadResult("""{"Outcome":"Stopped","ErrorId":"LazyVM.RunStopped","Message":"Stopped in phase 7."}""", 2);
 
-        Assert.Equal(new BuildResult(BuildResult.Stopped, "LazyVM.RunStopped", "Stopped in phase 7."), result);
+        Assert.Equal(new BuildResult(BuildResult.STOPPED, "LazyVM.RunStopped", "Stopped in phase 7."), result);
     }
 
     [Theory]
@@ -240,7 +240,7 @@ public sealed class BuildLauncherTests
     {
         var result = BuildLauncher.ReadResult(json, 1);
 
-        Assert.Equal(BuildResult.Failed, result.Outcome);
+        Assert.Equal(BuildResult.FAILED, result.Outcome);
         Assert.Equal("PowerShell ended with exit code 1 before saying how the build went.", result.Message);
     }
 }

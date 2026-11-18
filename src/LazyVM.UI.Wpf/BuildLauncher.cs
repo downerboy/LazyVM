@@ -25,7 +25,7 @@ public class BuildLauncher
     private static readonly Version _MinimumPowerShell = new(7, 6);
 
     /// <summary>Microsoft's publisher ID, the end of every Store PowerShell package folder's name.</summary>
-    private const string MicrosoftPublisher = "8wekyb3d8bbwe";
+    private const string _MICROSOFT_PUBLISHER = "8wekyb3d8bbwe";
 
     /// <summary>
     /// PowerShell 7.6 or later, from a folder only administrators can change,
@@ -68,7 +68,7 @@ public class BuildLauncher
             || parts[0] is not ("Microsoft.PowerShell" or "Microsoft.PowerShell-LTS")
             || !string.Equals(parts[2], architecture, StringComparison.OrdinalIgnoreCase)
             || parts[3].Length != 0
-            || parts[4] != MicrosoftPublisher
+            || parts[4] != _MICROSOFT_PUBLISHER
             ? null
             : Version.TryParse(parts[1], out var version) ? version : null;
     }
@@ -145,7 +145,7 @@ public class BuildLauncher
                 // Said below, as for no result at all.
             }
         }
-        return new(BuildResult.Failed, null, $"PowerShell ended with exit code {exitCode} before saying how the build went.");
+        return new(BuildResult.FAILED, null, $"PowerShell ended with exit code {exitCode} before saying how the build went.");
     }
 
     private static async Task<BuildResult> WaitForEndAsync(Process process, string resultPath)

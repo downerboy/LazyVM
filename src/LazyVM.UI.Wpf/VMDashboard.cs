@@ -98,7 +98,7 @@ public sealed record VMDashboard
     }
 
     /// <summary>OK, or what is wrong with the VM's settings files.</summary>
-    public string Settings { get; init; } = SettingsOK;
+    public string Settings { get; init; } = SETTINGS_OK;
 
     /// <summary>The build, maintenance or rebuild going now, or the latest one; empty when there has been none.</summary>
     public VMRun? Run
@@ -115,7 +115,7 @@ public sealed record VMDashboard
     /// <summary>One line per part that could not be read, such as "Disks: access denied".</summary>
     public IReadOnlyList<string> Problems { get; init; } = [];
 
-    internal const string SettingsOK = "OK";
+    internal const string SETTINGS_OK = "OK";
 }
 
 /// <summary>A virtual hard disk attached to a VM. Sizes are in bytes.</summary>

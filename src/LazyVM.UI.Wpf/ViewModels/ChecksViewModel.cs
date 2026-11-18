@@ -50,7 +50,7 @@ public sealed class ChecksViewModel : ViewModelBase
 
     public bool IsRunning => _Running is not null;
 
-    public bool HasFailures => Checks.Any(row => row.Status == VMCheck.Failed);
+    public bool HasFailures => Checks.Any(row => row.Status == VMCheck.FAILED);
 
     /// <summary>True when the last run failed as a whole, rather than any one check failing.</summary>
     public bool CouldNotRun
@@ -100,8 +100,8 @@ public sealed class ChecksViewModel : ViewModelBase
     private static string Summary(IReadOnlyList<CheckRowViewModel> rows)
     {
         var count = rows.Count == 1 ? "1 check" : $"{rows.Count} checks";
-        var failed = rows.Count(row => row.Status == VMCheck.Failed);
-        var warned = rows.Count(row => row.Status == VMCheck.Warning);
+        var failed = rows.Count(row => row.Status == VMCheck.FAILED);
+        var warned = rows.Count(row => row.Status == VMCheck.WARNING);
         var found = new[]
         {
             failed > 0 ? $"{failed} failed" : null,
@@ -129,9 +129,9 @@ public sealed class CheckRowViewModel(VMCheck check)
     public string StatusText => check.Status switch
     {
         VMCheck.OK => "OK",
-        VMCheck.Info => "Note",
-        VMCheck.Warning => "Warning",
-        VMCheck.Failed => "Failed",
+        VMCheck.INFO => "Note",
+        VMCheck.WARNING => "Warning",
+        VMCheck.FAILED => "Failed",
         _ => check.Status,
     };
 
@@ -139,8 +139,8 @@ public sealed class CheckRowViewModel(VMCheck check)
     public string Symbol => check.Status switch
     {
         VMCheck.OK => "✓",
-        VMCheck.Warning => "▲",
-        VMCheck.Failed => "✖",
+        VMCheck.WARNING => "▲",
+        VMCheck.FAILED => "✖",
         _ => "ℹ",
     };
 
@@ -154,7 +154,7 @@ public sealed class CheckRowViewModel(VMCheck check)
 
     public bool HasFix => check.Fix.Length > 0;
 
-    public bool NeedsAttention => check.Status is VMCheck.Warning or VMCheck.Failed;
+    public bool NeedsAttention => check.Status is VMCheck.WARNING or VMCheck.FAILED;
 
     /// <summary>The row as a screen reader reads it: status, check, what was found, then the fix.</summary>
     public string AutomationName =>

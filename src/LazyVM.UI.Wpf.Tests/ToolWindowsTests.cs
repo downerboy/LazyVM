@@ -116,7 +116,7 @@ public sealed class ToolWindowsTests
     [Fact]
     public void OpenProgress_Twice_BringsTheOpenWindowToTheFront()
     {
-        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 });
         _Tools.OpenProgress("DevBox", started: null);
 
         _Tools.OpenProgress("DevBox", started: null);
@@ -129,7 +129,7 @@ public sealed class ToolWindowsTests
     [Fact]
     public void ClosingTheProgressWindow_StopsOnlyTheFollowing()
     {
-        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 });
         _Tools.OpenProgress("DevBox", started: null);
         var progress = (BuildProgressViewModel)_Tools.Shown[0];
 
@@ -193,12 +193,12 @@ public sealed class ToolWindowsTests
     {
         var launcher = new FakeBuildLauncher();
         var withLauncher = new FakeToolWindows(_Runner, launcher);
-        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9, Phase = 7 });
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 });
         withLauncher.OpenProgress("DevBox", started: null);
         var failed = (BuildProgressViewModel)withLauncher.Shown[0];
         // The window follows the build it found running, until it reads the build as failed.
         failed.StopFollowing();
-        _Runner.ReturnsRun(new VMRun { Command = VMRun.Build, Status = VMRun.Failed, ProcessId = 9, Phase = 7, UnfinishedPhase = 7 });
+        _Runner.ReturnsRun(new VMRun { Command = VMRun.BUILD, Status = VMRun.FAILED, ProcessId = 9, Phase = 7, UnfinishedPhase = 7 });
         await failed.PollAsync(CancellationToken.None);
         _Runner.ReturnsRun(null);
 

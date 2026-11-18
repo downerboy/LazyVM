@@ -9,8 +9,8 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// </summary>
 public sealed class RemovalViewModel(RemovalPlan plan) : ViewModelBase
 {
-    private const double BytesPerMB = 1024 * 1024;
-    private const long BytesPerGB = 1024L * 1024 * 1024;
+    private const double _BYTES_PER_MB = 1024 * 1024;
+    private const long _BYTES_PER_GB = 1024L * 1024 * 1024;
 
     public string Name => plan.Name;
 
@@ -48,7 +48,7 @@ public sealed class RemovalViewModel(RemovalPlan plan) : ViewModelBase
             .. plan.HyperVState is { } state ? new[] { new RemovalLine(MachineText(plan.Name, state, plan.CheckpointCount)) } : [],
             .. plan.Tasks.Select(task => new RemovalLine("Scheduled task " + task)),
             .. plan.Items.Select(item => new RemovalLine(
-                $"{(item.Kind == RemovalItem.File ? "File" : "Folder")} {item.Path}, {Size(item.Size)}")),
+                $"{(item.Kind == RemovalItem.FILE ? "File" : "Folder")} {item.Path}, {Size(item.Size)}")),
             new($"{Size(plan.Total)} in all."),
             .. plan.Kept.Select(kept => new RemovalLine($"Kept: {kept.Path}. {kept.Reason}")),
         ];
@@ -72,9 +72,9 @@ public sealed class RemovalViewModel(RemovalPlan plan) : ViewModelBase
     {
         return bytes switch
         {
-            >= BytesPerGB => DashboardText.Size(bytes),
-            < (long)BytesPerMB => "less than 1 MB",
-            _ => (bytes / BytesPerMB).ToString("0", CultureInfo.CurrentCulture) + " MB",
+            >= _BYTES_PER_GB => DashboardText.Size(bytes),
+            < (long)_BYTES_PER_MB => "less than 1 MB",
+            _ => (bytes / _BYTES_PER_MB).ToString("0", CultureInfo.CurrentCulture) + " MB",
         };
     }
 }

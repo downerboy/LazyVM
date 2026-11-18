@@ -9,7 +9,7 @@ namespace LazyVM.UI.Wpf.ViewModels;
 public sealed class LogViewModel : ViewModelBase
 {
     /// <summary>How many of the newest entries are read: a log grows for as long as the VM lives.</summary>
-    public const int Tail = 1000;
+    public const int TAIL = 1000;
 
     private readonly CommandRunner _Runner;
     private readonly RelayCommand _ReloadCommand;
@@ -99,7 +99,7 @@ public sealed class LogViewModel : ViewModelBase
         Status = "Reading the log";
         try
         {
-            var read = await _Runner.GetLogAsync(VMName, Tail, CancellationToken.None);
+            var read = await _Runner.GetLogAsync(VMName, TAIL, CancellationToken.None);
             Entries = read.Select(entry => new LogEntryRowViewModel(entry)).ToList();
             Status = Summary(Entries);
             SelectedEntry = Entries.Count > 0 ? Entries[^1] : null;
@@ -149,11 +149,11 @@ public sealed class LogViewModel : ViewModelBase
         var count = rows.Count switch
         {
             1 => "1 entry",
-            Tail => $"The last {Tail} entries",
+            TAIL => $"The last {TAIL} entries",
             _ => $"{rows.Count} entries",
         };
-        var errors = rows.Count(row => row.Level == VMLogEntry.Error);
-        var warnings = rows.Count(row => row.Level == VMLogEntry.Warning);
+        var errors = rows.Count(row => row.Level == VMLogEntry.ERROR);
+        var warnings = rows.Count(row => row.Level == VMLogEntry.WARNING);
         var found = new[]
         {
             errors switch { 0 => null, 1 => "1 error", _ => $"{errors} errors" },
@@ -172,11 +172,11 @@ public sealed class LogEntryRowViewModel(VMLogEntry entry)
     /// <summary>The day and time to the second, such as "12 November 2026 02:10:05".</summary>
     public string TimeText => entry.Time is { } time
         ? time.ToString("d MMMM yyyy ", CultureInfo.CurrentCulture) + time.ToString("T", CultureInfo.CurrentCulture)
-        : DashboardText.NotKnown;
+        : DashboardText.NOT_KNOWN;
 
     public string Message => entry.Message;
 
-    public bool IsProblem => entry.Level is VMLogEntry.Warning or VMLogEntry.Error;
+    public bool IsProblem => entry.Level is VMLogEntry.WARNING or VMLogEntry.ERROR;
 
     /// <summary>The entry as a screen reader reads it: level, time, then message.</summary>
     public string AutomationName => $"{Level}, {TimeText}, {Message}";

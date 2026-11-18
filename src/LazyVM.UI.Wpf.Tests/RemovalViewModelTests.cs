@@ -4,8 +4,8 @@ namespace LazyVM.UI.Wpf.Tests;
 
 public sealed class RemovalViewModelTests : IDisposable
 {
-    private const long MB = 1024L * 1024;
-    private const long GB = 1024 * MB;
+    private const long _MB = 1024L * 1024;
+    private const long _GB = 1024 * _MB;
 
     private readonly CultureScope _Culture = new("en-GB");
 
@@ -24,15 +24,15 @@ public sealed class RemovalViewModelTests : IDisposable
             Tasks = [@"LazyVM\DevBox maintenance"],
             Items =
             [
-                new("Folder", @"C:\LazyVM\DevBox", 90 * GB),
-                new(RemovalItem.File, @"E:\Disks\DevBox\SQL.vhdx", 10 * GB),
+                new("Folder", @"C:\LazyVM\DevBox", 90 * _GB),
+                new(RemovalItem.FILE, @"E:\Disks\DevBox\SQL.vhdx", 10 * _GB),
             ],
-            Total = 100 * GB,
+            Total = 100 * _GB,
             Kept = [new(@"C:\LazyVM\Shared\Win11.iso", "Every VM uses it.")],
             WorkDisks =
             [
-                new("The Dev Drive", @"C:\LazyVM\DevBox\Disks\Dev.vhdx", 40 * GB, "It holds this VM's source code. Push or copy anything not yet in source control first."),
-                new("The User disk", @"C:\LazyVM\DevBox\Disks\User.vhdx", 5 * GB, "It holds this VM's Documents. Copy anything you need first."),
+                new("The Dev Drive", @"C:\LazyVM\DevBox\Disks\Dev.vhdx", 40 * _GB, "It holds this VM's source code. Push or copy anything not yet in source control first."),
+                new("The User disk", @"C:\LazyVM\DevBox\Disks\User.vhdx", 5 * _GB, "It holds this VM's Documents. Copy anything you need first."),
             ],
         };
     }
@@ -75,14 +75,14 @@ public sealed class RemovalViewModelTests : IDisposable
     [Theory]
     [InlineData(0, "less than 1 MB")]
     [InlineData(300 * 1024, "less than 1 MB")]
-    [InlineData(12 * MB, "12 MB")]
-    [InlineData(1536 * MB, "1.5 GB")]
+    [InlineData(12 * _MB, "12 MB")]
+    [InlineData(1536 * _MB, "1.5 GB")]
     public void SmallFiles_AreShownInMB(long size, string said)
     {
         var removal = new RemovalViewModel(new RemovalPlan
         {
             Name = "DevBox",
-            Items = [new(RemovalItem.File, @"C:\Logs\DevBox.log", size)],
+            Items = [new(RemovalItem.FILE, @"C:\Logs\DevBox.log", size)],
             Total = size,
         });
 

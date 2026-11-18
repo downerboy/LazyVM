@@ -10,7 +10,7 @@ namespace LazyVM.UI.Wpf.ViewModels;
 public sealed partial class BuildViewModel : ViewModelBase
 {
     /// <summary>The template chosen when the window opens, when there is one: the full developer VM.</summary>
-    internal const string DefaultTemplate = "Developer";
+    internal const string DEFAULT_TEMPLATE = "Developer";
 
     private readonly CommandRunner _Runner;
     private readonly BuildLauncher _Launcher;
@@ -95,7 +95,7 @@ public sealed partial class BuildViewModel : ViewModelBase
         {
             var found = await _Runner.GetConfigTemplatesAsync(CancellationToken.None);
             Templates = found.Select(template => new TemplateOption(template)).ToList();
-            SelectedTemplate = Templates.FirstOrDefault(option => string.Equals(option.Name, DefaultTemplate, StringComparison.OrdinalIgnoreCase))
+            SelectedTemplate = Templates.FirstOrDefault(option => string.Equals(option.Name, DEFAULT_TEMPLATE, StringComparison.OrdinalIgnoreCase))
                 ?? Templates.FirstOrDefault();
         }
         catch (Exception exception)

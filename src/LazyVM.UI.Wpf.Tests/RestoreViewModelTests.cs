@@ -133,7 +133,7 @@ public sealed class RestoreViewModelTests : IDisposable
     [Fact]
     public async Task WhileARunIsGoing_RestoreIsDisabled_AndTheNoteSaysWhy()
     {
-        var restore = await Loaded(Sample.VM() with { Run = new VMRun { Command = VMRun.Build, Status = VMRun.Running, ProcessId = 9 } }, _October);
+        var restore = await Loaded(Sample.VM() with { Run = new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9 } }, _October);
 
         Assert.False(restore.RestoreCommand.CanExecute(null));
         Assert.Equal("A build of DevBox is running now, so DevBox cannot be restored until it has ended.", restore.RestoreNote);
@@ -150,7 +150,7 @@ public sealed class RestoreViewModelTests : IDisposable
         Assert.True(restore.RestoreCommand.CanExecute(null));
         Assert.False(restore.HasRestoreNote);
 
-        restore.Update(Sample.VM() with { Run = new VMRun { Command = "Maintenance", Status = VMRun.Running, ProcessId = 9 } });
+        restore.Update(Sample.VM() with { Run = new VMRun { Command = "Maintenance", Status = VMRun.RUNNING, ProcessId = 9 } });
 
         Assert.False(restore.RestoreCommand.CanExecute(null));
         Assert.StartsWith("Maintenance of DevBox is running now", restore.RestoreNote);
