@@ -47,6 +47,7 @@ One row per VM in the main list. The details open in the VM's own window.
 | Configuration it was first built from | `OriginalConfig` | `Config\VM.Template.json` |
 | Config template it was created from | `CreatedFromTemplate` | `VM.json`, recorded when the profile is created with `-ConfigTemplate` (#421). Empty when there was none, and for profiles made before LazyVM recorded it. |
 | Green template | `GreenTemplate`, `GreenTemplateUpdated` | `Shared\Templates\<VM>-latest.json` |
+| Recovery keys stored, not exported, last export | `RecoveryKeys`, `UnexportedRecoveryKeys`, `RecoveryKeysExported` | The key IDs in `Credentials\bitlocker.cred` and `Config\RecoveryKeyExport.json`, from `Export-LazyVMRecoveryKey` (#467). `UnexportedRecoveryKeys` counts the keys the last export did not hold. `RecoveryKeysExported` is empty when the keys were never exported. No password is read into the row. |
 | Settings problem | `Settings` | The VM's settings files |
 | What could not be read | `Problems` | One line per part that failed, such as `Disks: access denied` |
 

@@ -25,6 +25,13 @@ function Get-LazyVMDashboard {
     build has been asked to stop (Stop-LazyVMBuild) and has not stopped
     yet. Empty when there has been none.
 
+    RecoveryKeys is how many BitLocker recovery passwords LazyVM stores for
+    the VM, UnexportedRecoveryKeys how many of them the last
+    Export-LazyVMRecoveryKey file did not hold, and RecoveryKeysExported
+    when the VM's keys were last exported, empty if they never were. Only
+    the key IDs and the export record are used; no password is put on the
+    row.
+
     It only reads. What it cannot read for a VM is listed in that VM's
     Problems, and the rest is still filled in, so one VM never hides
     another. Hyper-V details need Hyper-V rights; without them State is
@@ -43,6 +50,12 @@ function Get-LazyVMDashboard {
     Get-LazyVMDashboard | Where-Object OpenFindings -gt 0
 
     The VMs with security findings still open.
+
+    .EXAMPLE
+    Get-LazyVMDashboard | Where-Object UnexportedRecoveryKeys -gt 0
+
+    The VMs with BitLocker recovery passwords not exported yet. Export them
+    with Export-LazyVMRecoveryKey.
 
     .OUTPUTS
     LazyVM.Dashboard

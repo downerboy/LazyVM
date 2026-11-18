@@ -34,6 +34,9 @@ function New-DashboardEntry {
         GreenTemplateUpdated  = $null
         Run                   = $null
         LastBuild             = $null
+        RecoveryKeys          = $null
+        UnexportedRecoveryKeys = $null
+        RecoveryKeysExported  = $null
         Settings              = $VM.Settings
         ProfilePath           = $VM.ProfilePath
         Problems              = @()
@@ -90,6 +93,15 @@ function New-DashboardEntry {
             $entry.LastBuild = Get-VMRunState -Settings $settings -Command 'Build'
         }
         catch { $problems.Add("Run: $($_.Exception.Message)") }
+
+        # How many recovery passwords are stored and not exported yet, and when they last were; never the passwords (#467).
+        try {
+            $keys = Get-RecoveryKeySummary -VM ([VMContext]::new($settings))
+            $entry.RecoveryKeys = $keys.Stored
+            $entry.UnexportedRecoveryKeys = $keys.Unexported
+            $entry.RecoveryKeysExported = $keys.Exported
+        }
+        catch { $problems.Add("Recovery keys: $($_.Exception.Message)") }
     }
 
     try {
@@ -156,6 +168,31 @@ function Get-SecurityFindingSummary {
     $unapproved = @(Select-UnapprovedSecurityFinding -Finding $record.Findings -Approval (Read-SecurityBaseline -VM $VM).Approvals)
     $open = @($unapproved | Where-Object { $_.Status -ne 'Resolved' })
     return [pscustomobject]@{ ScannedAt = $record.ScannedAt; Open = $open.Count }
+}
+
+function Get-RecoveryKeySummary {
+    <#
+      How many BitLocker recovery passwords LazyVM stores for the VM
+      (Stored), how many of them its last export did not hold (Unexported),
+      and when that export was (Exported; empty when the keys were never
+      exported). Gives counts and a date only, never a password. Throws when
+      the key store cannot be read.
+    #>
+    [OutputType([pscustomobject])]
+    param([Parameter(Mandatory)][VMContext]$VM)
+
+    $keys = @(Get-StoredRecoveryKey -VM $VM)
+    $record = Read-RecoveryKeyExportRecord -VM $VM
+    $unexported = @(Select-UnexportedRecoveryKey -Keys $keys -Record $record)
+
+    # Save-RecoveryKeyExportRecord writes the date in this format, in the current culture.
+    $exported = [datetime]::MinValue
+    $hasDate = $record -and [datetime]::TryParseExact($record.Exported, 'yyyy-MM-dd HH:mm', [cultureinfo]::CurrentCulture, [Globalization.DateTimeStyles]::None, [ref]$exported)
+    return [pscustomobject]@{
+        Stored     = $keys.Count
+        Unexported = $unexported.Count
+        Exported   = if ($hasDate) { $exported } else { $null }
+    }
 }
 
 function Get-VMTemplateSummary {

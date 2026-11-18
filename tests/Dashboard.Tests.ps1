@@ -36,7 +36,30 @@ BeforeAll {
         Mock -ModuleName $module Get-VM { [pscustomobject]@{ State = 'Off'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 0; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }.GetNewClosure()
         Mock -ModuleName $module Get-VMHardDiskDrive { }
         Mock -ModuleName $module Get-ScheduledTask { }
+        Use-MemorySecretStore
     }
+
+    function Use-MemorySecretStore {
+        <# The credential store, in memory, so no test reads or writes an encrypted file. What a test stores lands in $script:Secrets, keyed by file. #>
+        $script:Secrets = @{}
+        Mock -ModuleName $module Get-StoredSecretTable { if ($script:Secrets.ContainsKey($Path)) { $script:Secrets[$Path].Clone() } else { @{} } }
+    }
+
+    function Add-TestKey {
+        <# Stores a recovery password for disk $Guid of VM $Name under $Root, with BitLocker's key ID $KeyId. #>
+        param(
+            [Parameter(Mandatory)][string]$Root,
+            [Parameter(Mandatory)][string]$Guid,
+            [Parameter(Mandatory)][string]$KeyId,
+            [string]$Name = 'Alpha'
+        )
+
+        $path = "$Root\$Name\Credentials\bitlocker.cred"
+        if (-not $script:Secrets.ContainsKey($path)) { $script:Secrets[$path] = @{} }
+        $script:Secrets[$path][$Guid] = @{ Disk = 'User disk'; RecoveryPassword = $recoveryPassword; Recorded = '2026-10-01T09:30:00.0000000+00:00'; KeyId = $KeyId }
+    }
+
+    $recoveryPassword = '111111-222222-333333-444444-555555-666666-777777-888888'
 }
 
 Describe 'Get-LazyVMDashboard' {
@@ -246,5 +269,73 @@ Describe 'Get-LazyVMDashboard' {
 
         $row.Run | Should -BeNullOrEmpty
         $row.LastBuild | Should -BeNullOrEmpty
+    }
+
+    It 'counts the recovery keys stored and those the last export did not hold, and says when it was (#467)' {
+        $root = New-TestRoot -VMs 'Alpha'
+        Use-TestRoot -Root $root
+        Add-TestKey -Root $root -Guid '{AAAAAAAA-0000-0000-0000-000000000001}' -KeyId '{11111111-0000-0000-0000-000000000001}'
+        Add-TestKey -Root $root -Guid '{BBBBBBBB-0000-0000-0000-000000000002}' -KeyId '{22222222-0000-0000-0000-000000000002}'
+        $exported = (Get-Date -Year 2026 -Month 11 -Day 15 -Hour 10 -Minute 5 -Second 0 -Millisecond 0)
+        $record = [ordered]@{
+            Exported = $exported.ToString('yyyy-MM-dd HH:mm')
+            Keys     = @(@{ DiskGuid = '{AAAAAAAA-0000-0000-0000-000000000001}'; KeyId = '{11111111-0000-0000-0000-000000000001}' })
+        }
+        Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'Alpha/Config/RecoveryKeyExport.json') -Value (ConvertTo-Json -InputObject $record -Depth 3)
+
+        $row = Get-LazyVMDashboard -Name 'Alpha'
+
+        $row.RecoveryKeys | Should -Be 2
+        $row.UnexportedRecoveryKeys | Should -Be 1
+        $row.RecoveryKeysExported | Should -BeOfType [datetime]
+        $row.RecoveryKeysExported | Should -Be $exported
+        $row.Problems | Should -BeNullOrEmpty
+    }
+
+    It 'counts every recovery key as not exported, with no export date, when the keys were never exported' {
+        $root = New-TestRoot -VMs 'Alpha'
+        Use-TestRoot -Root $root
+        Add-TestKey -Root $root -Guid '{AAAAAAAA-0000-0000-0000-000000000001}' -KeyId '{11111111-0000-0000-0000-000000000001}'
+
+        $row = Get-LazyVMDashboard -Name 'Alpha'
+
+        $row.RecoveryKeys | Should -Be 1
+        $row.UnexportedRecoveryKeys | Should -Be 1
+        $row.RecoveryKeysExported | Should -BeNullOrEmpty
+    }
+
+    It 'counts no recovery keys for a VM that has none stored yet' {
+        Use-TestRoot -Root (New-TestRoot -VMs 'Alpha')
+
+        $row = Get-LazyVMDashboard -Name 'Alpha'
+
+        $row.RecoveryKeys | Should -Be 0
+        $row.UnexportedRecoveryKeys | Should -Be 0
+        $row.RecoveryKeysExported | Should -BeNullOrEmpty
+    }
+
+    It 'never puts a recovery password on the row' {
+        $root = New-TestRoot -VMs 'Alpha'
+        Use-TestRoot -Root $root
+        Add-TestKey -Root $root -Guid '{AAAAAAAA-0000-0000-0000-000000000001}' -KeyId '{11111111-0000-0000-0000-000000000001}'
+
+        $row = Get-LazyVMDashboard -Name 'Alpha'
+
+        ConvertTo-Json -InputObject $row -Depth 6 | Should -Not -BeLike "*$recoveryPassword*"
+    }
+
+    It 'shows a key store it could not read on that VM''s row, and still gives the rest' {
+        $root = New-TestRoot -VMs 'Alpha', 'Beta'
+        Use-TestRoot -Root $root
+        Mock -ModuleName $module Get-StoredSecretTable { throw 'Key not valid for use in specified state.' } -ParameterFilter { $Path -like '*\Alpha\Credentials\bitlocker.cred' }
+
+        $rows = @(Get-LazyVMDashboard)
+
+        $rows[0].Problems | Should -Be @('Recovery keys: Key not valid for use in specified state.')
+        $rows[0].RecoveryKeys | Should -BeNullOrEmpty
+        $rows[0].UnexportedRecoveryKeys | Should -BeNullOrEmpty
+        $rows[0].Created | Should -Be $created
+        $rows[1].Problems | Should -BeNullOrEmpty
+        $rows[1].RecoveryKeys | Should -Be 0
     }
 }

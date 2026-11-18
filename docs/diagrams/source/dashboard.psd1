@@ -3,8 +3,8 @@
     Title      = 'See the dashboard data'
     Command    = 'Get-LazyVMDashboard'
     Parameters = @('-Name  (wildcards, default *)')
-    Summary    = 'Lists every VM with what the dashboard shows: Get-LazyVM''s list, and each VM''s disks, memory, last maintenance, open findings, templates, and the build, maintenance, rebuild, restore or removal going now with the latest build. Only reads. No administrator rights needed.'
-    Covers     = @('Get-LazyVMDashboard', 'New-DashboardEntry', 'Get-VMDiskUsage', 'Get-MaintenanceRunSummary', 'Get-SecurityFindingSummary', 'Get-VMTemplateSummary')
+    Summary    = 'Lists every VM with what the dashboard shows: Get-LazyVM''s list, and each VM''s disks, memory, last maintenance, open findings, templates, the build, maintenance, rebuild, restore or removal going now with the latest build, and how many recovery keys are not exported yet. Only reads; never a recovery password. No administrator rights needed.'
+    Covers     = @('Get-LazyVMDashboard', 'New-DashboardEntry', 'Get-VMDiskUsage', 'Get-MaintenanceRunSummary', 'Get-SecurityFindingSummary', 'Get-RecoveryKeySummary', 'Get-VMTemplateSummary')
     Omits      = @{}
     Steps      = @(
         @{
@@ -84,6 +84,17 @@
             Includes = @('Get-VMRunPath', 'Test-VMRunLockHeld', 'Read-VMRunDocument')
             Reads    = @(
                 @{ Label = 'run lock and state'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('Run.lock  (opened for a moment, never created)', 'Run.json') }
+            )
+        }
+        @{
+            Function = 'Get-RecoveryKeySummary'
+            Caller   = 'New-DashboardEntry'
+            Area     = 'Dashboard'
+            Note     = 'how many recovery keys are stored and not exported yet, and when they last were; counts only, never a password'
+            Includes = @('Get-StoredRecoveryKey', 'Read-RecoveryKeyExportRecord', 'Select-UnexportedRecoveryKey')
+            Reads    = @(
+                @{ Label = 'recovery keys'; Kind = 'file'; Store = '<VM>\Credentials\'; Items = @('bitlocker.cred  (key IDs counted)') }
+                @{ Label = 'last export'; Kind = 'file'; Store = '<VM>\Config\'; Items = @('RecoveryKeyExport.json') }
             )
         }
         @{
