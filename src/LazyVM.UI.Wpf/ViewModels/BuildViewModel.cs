@@ -140,11 +140,9 @@ public sealed partial class BuildViewModel : ViewModelBase
     /// <summary>The rules Build-LazyVM checks, said before the build starts rather than after.</summary>
     private string? Problem()
     {
-        if (Name.Length == 0)
-        {
-            return "Type a name for the new VM.";
-        }
-        return !VMNameRule().IsMatch(Name)
+        return Name.Length == 0
+            ? "Type a name for the new VM."
+            : !VMNameRule().IsMatch(Name)
             ? $"'{Name}' cannot be used as a VM name: use 1-15 letters, digits or hyphens, starting with a letter or digit."
             : _ExistingNames.Contains(Name)
             ? $"There is a VM named {Name} already. Choose another name."

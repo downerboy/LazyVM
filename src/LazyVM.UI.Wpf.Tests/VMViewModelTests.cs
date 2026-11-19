@@ -148,7 +148,11 @@ public sealed class VMViewModelTests : IDisposable
     [InlineData(3, "3 BitLocker recovery passwords of DevBox are not exported yet. Keep a copy offline, such as on a USB drive: choose Recovery keys.")]
     public void KeysNotExported_ShowANotice_SayingHowMany(int unexported, string said)
     {
-        var vm = Open(Sample.VM() with { RecoveryKeys = 3, UnexportedRecoveryKeys = unexported });
+        var vm = Open(Sample.VM() with
+        {
+            RecoveryKeys = 3,
+            UnexportedRecoveryKeys = unexported
+        });
 
         Assert.Equal(said, vm.RecoveryKeyNotice);
         Assert.True(vm.HasRecoveryKeyNotice);
@@ -159,7 +163,11 @@ public sealed class VMViewModelTests : IDisposable
     [InlineData(null)]
     public void EveryKeyExported_OrNotKnown_ShowsNoNotice(int? unexported)
     {
-        var vm = Open(Sample.VM() with { RecoveryKeys = 2, UnexportedRecoveryKeys = unexported });
+        var vm = Open(Sample.VM() with
+        {
+            RecoveryKeys = 2,
+            UnexportedRecoveryKeys = unexported
+        });
 
         Assert.False(vm.HasRecoveryKeyNotice);
         Assert.Equal(string.Empty, vm.RecoveryKeyNotice);
@@ -168,11 +176,19 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void ARefresh_AfterAnExport_TakesTheNoticeAway()
     {
-        var vm = Open(Sample.VM() with { RecoveryKeys = 2, UnexportedRecoveryKeys = 2 });
+        var vm = Open(Sample.VM() with
+        {
+            RecoveryKeys = 2,
+            UnexportedRecoveryKeys = 2
+        });
         var changed = new List<string?>();
         vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 
-        vm.Update(Sample.VM() with { RecoveryKeys = 2, UnexportedRecoveryKeys = 0 });
+        vm.Update(Sample.VM() with
+        {
+            RecoveryKeys = 2,
+            UnexportedRecoveryKeys = 0
+        });
 
         Assert.False(vm.HasRecoveryKeyNotice);
         Assert.Contains(string.Empty, changed);
@@ -223,12 +239,18 @@ public sealed class VMViewModelTests : IDisposable
     {
         _Runner.ReturnsSecurityFindings();
         _Runner.ReturnsSecurityApprovals();
-        var vm = Open(Sample.VM() with { LastSecurityScan = null });
+        var vm = Open(Sample.VM() with
+        {
+            LastSecurityScan = null
+        });
         vm.SecurityFindingsCommand.Execute(null);
         _Runner.ReturnsSecurityFindings();
         _Runner.ReturnsSecurityApprovals();
 
-        vm.Update(Sample.VM() with { LastSecurityScan = new DateTime(2026, 11, 18, 2, 30, 0) });
+        vm.Update(Sample.VM() with
+        {
+            LastSecurityScan = new DateTime(2026, 11, 18, 2, 30, 0)
+        });
 
         Assert.Equal(2, _Runner.SecurityFindingCalls.Count);
     }
@@ -872,7 +894,10 @@ public sealed class VMViewModelTests : IDisposable
         var changed = 0;
         vm.DeleteCommand.CanExecuteChanged += (_, _) => changed++;
 
-        vm.Update(Sample.VM() with { Run = RunningNow("Maintenance") });
+        vm.Update(Sample.VM() with
+        {
+            Run = RunningNow("Maintenance")
+        });
 
         Assert.False(vm.DeleteCommand.CanExecute(null));
         Assert.True(changed > 0);
@@ -911,7 +936,10 @@ public sealed class VMViewModelTests : IDisposable
         var restore = Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Shown));
         await Task.Yield();
 
-        vm.Update(Sample.VM() with { Run = RunningNow(VMRun.BUILD) });
+        vm.Update(Sample.VM() with
+        {
+            Run = RunningNow(VMRun.BUILD)
+        });
 
         Assert.False(restore.RestoreCommand.CanExecute(null));
     }

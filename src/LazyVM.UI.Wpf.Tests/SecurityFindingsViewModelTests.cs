@@ -44,7 +44,10 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
 
     private static VMDashboard Scanned(DateTime? when = null)
     {
-        return Sample.VM() with { LastSecurityScan = when ?? _Scanned };
+        return Sample.VM() with
+        {
+            LastSecurityScan = when ?? _Scanned
+        };
     }
 
     private async Task<SecurityFindingsViewModel> Loaded(VMDashboard entry, VMSecurityFinding[] findings, params VMSecurityApproval[] approvals)
@@ -77,7 +80,10 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     [Fact]
     public async Task NotScannedYet_IsToldApart_FromNoOpenFindings()
     {
-        var notScanned = await Loaded(Sample.VM() with { LastSecurityScan = null }, []);
+        var notScanned = await Loaded(Sample.VM() with
+        {
+            LastSecurityScan = null
+        }, []);
         var clean = await Loaded(Scanned(), []);
 
         Assert.Equal(
@@ -183,7 +189,13 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     [Fact]
     public async Task Approvals_ListEach_WithWhenAndWhyItWasApproved()
     {
-        var window = await Loaded(Scanned(), [], _Approval, _Approval with { Id = "Other", Severity = "Low", Title = "Guest account is on", Reason = "" });
+        var window = await Loaded(Scanned(), [], _Approval, _Approval with
+        {
+            Id = "Other",
+            Severity = "Low",
+            Title = "Guest account is on",
+            Reason = ""
+        });
 
         Assert.Equal(
         [
@@ -254,7 +266,10 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     [Fact]
     public async Task Update_WithANewerScan_ReadsTheFindingsAgain()
     {
-        var window = await Loaded(Sample.VM() with { LastSecurityScan = null }, []);
+        var window = await Loaded(Sample.VM() with
+        {
+            LastSecurityScan = null
+        }, []);
         _Runner.ReturnsSecurityFindings(_Firewall);
         _Runner.ReturnsSecurityApprovals();
 
@@ -282,5 +297,290 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         var window = await Loaded(Scanned(), [_Firewall with { Title = "<Bold>Run</Bold> {Binding} https://example.invalid" }]);
 
         Assert.Equal("<Bold>Run</Bold> {Binding} https://example.invalid", Assert.Single(window.Findings).Finding.Title);
+    }
+
+    private async Task<SecurityFindingsViewModel> Chosen(VMSecurityFinding finding)
+    {
+        var window = await Loaded(Scanned(), [finding], _Approval);
+        window.SelectedFinding = window.Findings.Single();
+        return window;
+    }
+
+    /// <summary>What reading both lists again, after an approval or revoke, returns.</summary>
+    private void ReadAgainGives(VMSecurityFinding[] findings, params VMSecurityApproval[] approvals)
+    {
+        _Runner.ReturnsSecurityFindings(findings);
+        _Runner.ReturnsSecurityApprovals(approvals);
+    }
+
+    [Fact]
+    public async Task Approve_IsDisabled_UntilAFindingIsChosen()
+    {
+        var window = await Loaded(Scanned(), [_Firewall]);
+
+        Assert.False(window.ApproveCommand.CanExecute(null));
+
+        window.SelectedFinding = window.Findings.Single();
+
+        Assert.True(window.ApproveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task AResolvedFinding_CannotBeApproved_AndANoteSaysWhy()
+    {
+        var window = await Chosen(_Smb);
+
+        Assert.False(window.ApproveCommand.CanExecute(null));
+        Assert.True(window.HasApproveNote);
+        Assert.Contains("resolved finding cannot be approved", window.ApproveNote);
+    }
+
+    [Fact]
+    public async Task AnOpenFinding_HasNoNote()
+    {
+        var window = await Chosen(_Firewall);
+
+        Assert.False(window.HasApproveNote);
+        Assert.Equal(string.Empty, window.ApproveNote);
+    }
+
+    [Fact]
+    public async Task Approve_AsksForAReason_ThenAsksWithYesAndNo_ThenApprovesWithTheReason()
+    {
+        var window = await Chosen(_Firewall);
+        _Tools.ApprovalReason = "I turned it off for a test";
+        _Tools.ConfirmsSecurityChange = true;
+        ReadAgainGives([], _Approval);
+
+        await window.ApproveAsync();
+
+        Assert.Equal(_Firewall.Id, Assert.Single(_Tools.ReasonsAsked).Finding.Id);
+        Assert.Single(_Tools.SecurityQuestions);
+        Assert.Equal([("DevBox", "Firewall:Public:Off", "I turned it off for a test")], _Runner.ApproveCalls);
+    }
+
+    [Fact]
+    public async Task ApproveQuestion_NamesTheIdAndSeverity_AndSaysWhatApprovingDoes()
+    {
+        var window = await Chosen(_Detection);
+        ReadAgainGives([_Detection]);
+
+        await window.ApproveAsync();
+
+        var question = Assert.Single(_Tools.SecurityQuestions);
+        Assert.Contains("Defender:Detection:Trojan", question);
+        Assert.Contains("Medium severity", question);
+        Assert.Contains("Defender found Trojan:Win32/Sample", question);
+        Assert.Contains("DevBox", question);
+        Assert.Contains("stops reporting it until it changes", question);
+        Assert.Contains("an approved event, such as a Defender detection, covers only that one occurrence", question, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Approve_AReasonOfOnlySpaces_IsNoReason()
+    {
+        var window = await Chosen(_Firewall);
+        _Tools.ApprovalReason = "   ";
+        _Tools.ConfirmsSecurityChange = true;
+        ReadAgainGives([]);
+
+        await window.ApproveAsync();
+
+        Assert.Equal(string.Empty, Assert.Single(_Runner.ApproveCalls).Reason);
+    }
+
+    [Fact]
+    public async Task Approve_CancelledAtTheReason_AsksNothingMore_AndApprovesNothing()
+    {
+        var window = await Chosen(_Firewall);
+        _Tools.ApprovalReason = null;
+
+        await window.ApproveAsync();
+
+        Assert.Empty(_Tools.SecurityQuestions);
+        Assert.Empty(_Runner.ApproveCalls);
+        Assert.Equal("Firewall:Public:Off was not approved.", window.Status);
+    }
+
+    [Fact]
+    public async Task Approve_No_ApprovesNothing()
+    {
+        var window = await Chosen(_Firewall);
+        _Tools.ConfirmsSecurityChange = false;
+        var changed = 0;
+        _Tools.SecurityFindingsChanged += (_, _) => changed++;
+
+        await window.ApproveAsync();
+
+        Assert.Empty(_Runner.ApproveCalls);
+        Assert.Equal(0, changed);
+        Assert.Equal("Firewall:Public:Off was not approved.", window.Status);
+    }
+
+    [Fact]
+    public async Task Approve_Yes_SaysItIsApproved_AndReadsBothListsAndTheMainListAgain()
+    {
+        var window = await Chosen(_Firewall);
+        _Tools.ConfirmsSecurityChange = true;
+        var changed = 0;
+        _Tools.SecurityFindingsChanged += (_, _) => changed++;
+        var approved = new VMSecurityApproval(_Firewall.Id, _Firewall.Severity, _Firewall.Title, _Scanned, string.Empty);
+        ReadAgainGives([], _Approval, approved);
+
+        await window.ApproveAsync();
+
+        Assert.Equal(2, _Runner.SecurityFindingCalls.Count);
+        Assert.Equal(2, _Runner.SecurityApprovalCalls.Count);
+        Assert.Equal(1, changed);
+        Assert.Empty(window.Findings);
+        Assert.Equal(2, window.Approvals.Count);
+        Assert.Equal("Firewall:Public:Off is approved. The nightly scan stops reporting it until it changes.", window.Status);
+    }
+
+    [Fact]
+    public async Task Approve_Refused_SaysTheModulesReason_AndStillReadsAgain()
+    {
+        var window = await Chosen(_Firewall);
+        _Tools.ConfirmsSecurityChange = true;
+        _Runner.ApproveFails = new InvalidOperationException("Firewall:Public:Off is not an open finding of the last scan of DevBox.");
+        var changed = 0;
+        _Tools.SecurityFindingsChanged += (_, _) => changed++;
+        ReadAgainGives([_Firewall]);
+
+        await window.ApproveAsync();
+
+        Assert.Equal(1, changed);
+        Assert.Equal(2, _Runner.SecurityFindingCalls.Count);
+        Assert.Equal("Firewall:Public:Off was not approved: Firewall:Public:Off is not an open finding of the last scan of DevBox.", window.Status);
+    }
+
+    [Fact]
+    public async Task AfterAnAction_AListThatCannotBeRead_IsSaidAfterTheOutcome()
+    {
+        var window = await Chosen(_Firewall);
+        _Tools.ConfirmsSecurityChange = true;
+        _Runner.SecurityFindingsThrow(new InvalidOperationException("The file is locked."));
+        _Runner.ReturnsSecurityApprovals(_Approval);
+
+        await window.ApproveAsync();
+
+        Assert.Equal(
+            "Firewall:Public:Off is approved. The nightly scan stops reporting it until it changes. The security findings could not be read: The file is locked.",
+            window.Status);
+    }
+
+    [Fact]
+    public async Task WhileApproving_NeitherApproveNorRevokeCanStart()
+    {
+        var window = await Chosen(_Firewall);
+        window.SelectedApproval = window.Approvals.Single();
+        _Tools.ConfirmsSecurityChange = true;
+        _Runner.ApproveGate = new();
+        ReadAgainGives([]);
+
+        var approving = window.ApproveAsync();
+
+        Assert.True(window.IsChanging);
+        Assert.False(window.ApproveCommand.CanExecute(null));
+        Assert.False(window.RevokeCommand.CanExecute(null));
+        Assert.Equal("Approving Firewall:Public:Off", window.Status);
+
+        _Runner.ApproveGate.SetResult();
+        await approving;
+
+        Assert.False(window.IsChanging);
+    }
+
+    [Fact]
+    public async Task Revoke_IsDisabled_UntilAnApprovalIsChosen()
+    {
+        var window = await Loaded(Scanned(), [], _Approval);
+
+        Assert.False(window.RevokeCommand.CanExecute(null));
+
+        window.SelectedApproval = window.Approvals.Single();
+
+        Assert.True(window.RevokeCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task RevokeQuestion_NamesTheIdAndSeverity_AndSaysWhatRevokingDoes()
+    {
+        var window = await Loaded(Scanned(), [], _Approval);
+        window.SelectedApproval = window.Approvals.Single();
+
+        await window.RevokeAsync();
+
+        var question = Assert.Single(_Tools.SecurityQuestions);
+        Assert.Contains("Rdp:On", question);
+        Assert.Contains("Medium severity", question);
+        Assert.Contains("Remote Desktop is on", question);
+        Assert.Contains("reports it again", question);
+        Assert.Empty(_Runner.RevokeCalls);
+        Assert.Equal("The approval of Rdp:On was not revoked.", window.Status);
+    }
+
+    [Fact]
+    public async Task Revoke_Yes_RevokesIt_AndReadsBothListsAndTheMainListAgain()
+    {
+        var window = await Loaded(Scanned(), [], _Approval);
+        window.SelectedApproval = window.Approvals.Single();
+        _Tools.ConfirmsSecurityChange = true;
+        var changed = 0;
+        _Tools.SecurityFindingsChanged += (_, _) => changed++;
+        ReadAgainGives([]);
+
+        await window.RevokeAsync();
+
+        Assert.Equal([("DevBox", "Rdp:On")], _Runner.RevokeCalls);
+        Assert.Equal(1, changed);
+        Assert.Empty(window.Approvals);
+        Assert.Null(window.SelectedApproval);
+        Assert.Equal("The approval of Rdp:On is revoked. The next nightly scan reports it again, as new, if it still finds it.", window.Status);
+    }
+
+    [Fact]
+    public async Task Revoke_Refused_SaysTheModulesReason()
+    {
+        var window = await Loaded(Scanned(), [], _Approval);
+        window.SelectedApproval = window.Approvals.Single();
+        _Tools.ConfirmsSecurityChange = true;
+        _Runner.RevokeFails = new InvalidOperationException("Rdp:On is not approved for DevBox.");
+        ReadAgainGives([], _Approval);
+
+        await window.RevokeAsync();
+
+        Assert.Equal("The approval of Rdp:On was not revoked: Rdp:On is not approved for DevBox.", window.Status);
+    }
+
+    [Fact]
+    public async Task ReadingAgain_KeepsTheChosenFinding_ByItsId_AndForgetsOneThatIsGone()
+    {
+        var window = await Loaded(Scanned(), [_Firewall, _Detection]);
+        window.SelectedFinding = window.Findings.Single(row => row.Finding.Id == _Detection.Id);
+
+        ReadAgainGives([_Firewall, _Detection]);
+        await window.ReloadAsync();
+
+        Assert.Equal(_Detection.Id, window.SelectedFinding?.Finding.Id);
+        Assert.Contains(window.SelectedFinding, window.Findings);
+
+        ReadAgainGives([_Firewall]);
+        await window.ReloadAsync();
+
+        Assert.Null(window.SelectedFinding);
+        Assert.False(window.ApproveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task ReadingAgain_AFindingNowResolved_DisablesApprove_AndSaysWhy()
+    {
+        var window = await Chosen(_Firewall);
+
+        ReadAgainGives([_Firewall with { Status = "Resolved" }]);
+        await window.ReloadAsync();
+
+        Assert.False(window.ApproveCommand.CanExecute(null));
+        Assert.True(window.HasApproveNote);
     }
 }

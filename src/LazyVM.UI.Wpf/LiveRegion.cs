@@ -36,11 +36,16 @@ public static class LiveRegion
         if ((bool)e.NewValue)
         {
             _Text.AddValueChanged(block, Announce);
-        }
-        else
+        } else
         {
             _Text.RemoveValueChanged(block, Announce);
         }
+    }
+
+    /// <summary>Reads the text block out again, such as after focus has moved, which can cut off what Narrator was reading.</summary>
+    public static void AnnounceAgain(TextBlock block)
+    {
+        Announce(block, EventArgs.Empty);
     }
 
     private static void Announce(object? sender, EventArgs e)

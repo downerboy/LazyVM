@@ -1,4 +1,5 @@
 using LazyVM.UI.Wpf.ViewModels;
+
 using System.Windows;
 
 namespace LazyVM.UI.Wpf;
@@ -16,7 +17,7 @@ namespace LazyVM.UI.Wpf;
 /// window per VM shows the account LazyVM signs in with, its password hidden
 /// until asked for, and copies it to the clipboard for three minutes. One
 /// Security findings window per VM lists what its last scan found, and the
-/// findings approved.
+/// findings approved, and approves or revokes one after asking.
 /// </summary>
 public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
 {
@@ -262,6 +263,54 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     public virtual Task<IReadOnlyList<VMSecurityApproval>> GetSecurityApprovalsAsync(string vmName)
     {
         return runner.GetSecurityApprovalsAsync(vmName, CancellationToken.None);
+    }
+
+    /// <summary>Raised when an approval or a revoke has ended, even one refused, so the list can be read again.</summary>
+    public event EventHandler? SecurityFindingsChanged;
+
+    /// <summary>Approves the finding, without asking: <see cref="ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
+    public virtual async Task ApproveSecurityFindingAsync(string vmName, string id, string reason)
+    {
+        try
+        {
+            await runner.ApproveSecurityFindingAsync(vmName, id, reason);
+        }
+        finally
+        {
+            SecurityFindingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Revokes the approval, without asking: <see cref="ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
+    public virtual async Task RevokeSecurityFindingAsync(string vmName, string id)
+    {
+        try
+        {
+            await runner.RevokeSecurityFindingAsync(vmName, id);
+        }
+        finally
+        {
+            SecurityFindingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Asks for the optional reason an approval keeps, over the Security findings window. Null for Cancel.</summary>
+    public virtual string? AskApprovalReason(SecurityFindingsViewModel findings, SecurityFindingRow finding)
+    {
+        var reason = new ReasonViewModel($"Approve a security finding of {findings.Name} - LazyVM", finding.Finding.Id);
+        var dialog = new ReasonWindow { DataContext = reason, Owner = WindowOf(findings) };
+        return dialog.ShowDialog() == true ? reason.Reason : null;
+    }
+
+    /// <summary>Asks <paramref name="question"/> with Yes and No, No the default, over the Security findings window. True for Yes.</summary>
+    public virtual bool ConfirmSecurityChange(SecurityFindingsViewModel findings, string title, string question)
+    {
+        var dialog = new QuestionWindow
+        {
+            DataContext = new QuestionViewModel(title, question),
+            Owner = WindowOf(findings),
+        };
+        return dialog.ShowDialog() == true;
     }
 
     /// <summary>

@@ -32,6 +32,7 @@ public sealed class MainViewModel : ViewModelBase
         tools.VMRemoved += (_, _) => _ = RefreshAsync();
         tools.ToolingRestored += (_, _) => _ = RefreshAsync();
         tools.RecoveryKeysExported += (_, _) => _ = RefreshAsync();
+        tools.SecurityFindingsChanged += (_, _) => _ = RefreshAsync();
         _RefreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         _CancelRefreshCommand = new RelayCommand(() => _Refreshing?.Cancel(), () => IsRefreshing);
         _OpenVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);

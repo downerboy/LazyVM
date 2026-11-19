@@ -1,0 +1,28 @@
+<Window x:Class="LazyVM.UI.Wpf.ReasonWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:ReasonViewModel}"
+        Title="{Binding Title}" Width="560" SizeToContent="Height" MinWidth="320"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="NoResize"
+        Style="{StaticResource LvWindow}">
+    <!-- Focus starts in the reason box, which Narrator reads with its label and the warning. Enter goes on to the question; Esc cancels the approval. -->
+    <StackPanel Margin="24">
+        <Label Target="{Binding ElementName=ReasonBox}" Padding="0" Margin="0,0,0,4">
+            <TextBlock Text="{Binding Prompt}" TextWrapping="Wrap" />
+        </Label>
+        <TextBlock Text="{Binding Warning}" TextWrapping="Wrap" Style="{StaticResource LvMuted}" Margin="0,0,0,8" />
+        <TextBox x:Name="ReasonBox" Text="{Binding Reason, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16"
+                 AutomationProperties.Name="{Binding Prompt}"
+                 AutomationProperties.HelpText="{Binding Warning}" />
+        <WrapPanel HorizontalAlignment="Right">
+            <Button Content="_Next" Click="Accept" IsDefault="True" MinWidth="88" Margin="0,0,8,0"
+                    AutomationProperties.HelpText="Asks next whether to approve the finding." />
+            <Button Content="Cancel" IsCancel="True" MinWidth="88"
+                    AutomationProperties.HelpText="Does not approve the finding." />
+        </WrapPanel>
+    </StackPanel>
+</Window>

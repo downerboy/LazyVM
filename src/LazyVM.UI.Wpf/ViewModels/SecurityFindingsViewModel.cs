@@ -6,7 +6,9 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// and the findings approved, each with when and why. It tells "not scanned
 /// yet" from "no open findings" by the dashboard's <c>LastSecurityScan</c>,
 /// since the module returns nothing in both cases. A finding's text comes
-/// from inside the VM, so the window shows it as plain text only.
+/// from inside the VM, so the window shows it as plain text only. An open
+/// finding can be approved, and an approval revoked, each after asking;
+/// both lists, and the main list, are read again afterwards.
 /// </summary>
 public sealed class SecurityFindingsViewModel : ViewModelBase
 {
@@ -14,8 +16,11 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
     private VMDashboard _Entry;
     private IReadOnlyList<SecurityFindingRow> _Findings = [];
     private IReadOnlyList<SecurityApprovalRow> _Approvals = [];
+    private SecurityFindingRow? _SelectedFinding;
+    private SecurityApprovalRow? _SelectedApproval;
     private bool _FindingsRead;
     private bool _ApprovalsRead;
+    private bool _IsChanging;
     private string _Status = string.Empty;
 
     public SecurityFindingsViewModel(VMDashboard entry, ToolWindows tools)
@@ -23,6 +28,8 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         _Entry = entry;
         _Tools = tools;
         ReloadCommand = new RelayCommand(() => _ = ReloadAsync());
+        ApproveCommand = new RelayCommand(() => _ = ApproveAsync(), () => CanApprove);
+        RevokeCommand = new RelayCommand(() => _ = RevokeAsync(), () => CanRevoke);
     }
 
     /// <summary>Reads the findings and the approvals again (F5).</summary>
@@ -30,6 +37,72 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
     {
         get;
     }
+
+    /// <summary>Asks for a reason, then asks, and on Yes approves <see cref="SelectedFinding"/>.</summary>
+    public RelayCommand ApproveCommand
+    {
+        get;
+    }
+
+    /// <summary>Asks, and on Yes revokes <see cref="SelectedApproval"/>.</summary>
+    public RelayCommand RevokeCommand
+    {
+        get;
+    }
+
+    /// <summary>The finding chosen in the list, to approve.</summary>
+    public SecurityFindingRow? SelectedFinding
+    {
+        get => _SelectedFinding;
+        set
+        {
+            if (SetProperty(ref _SelectedFinding, value))
+            {
+                RaiseActionsChanged();
+            }
+        }
+    }
+
+    /// <summary>The approval chosen in the list, to revoke.</summary>
+    public SecurityApprovalRow? SelectedApproval
+    {
+        get => _SelectedApproval;
+        set
+        {
+            if (SetProperty(ref _SelectedApproval, value))
+            {
+                RaiseActionsChanged();
+            }
+        }
+    }
+
+    /// <summary>True from the first question until an approval or revoke, and reading the lists again, has ended.</summary>
+    public bool IsChanging
+    {
+        get => _IsChanging;
+        private set
+        {
+            if (SetProperty(ref _IsChanging, value))
+            {
+                RaiseActionsChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Why Approve is disabled for the chosen finding, as text of its own: a
+    /// disabled button cannot take focus, so Narrator would never read a
+    /// reason given only on it.
+    /// </summary>
+    public string ApproveNote => SelectedFinding is { IsResolved: true }
+        ? "A resolved finding cannot be approved: the last scan no longer found it, so there is nothing to approve."
+        : string.Empty;
+
+    public bool HasApproveNote => ApproveNote.Length > 0;
+
+    private bool CanApprove => !IsChanging && SelectedFinding is { IsResolved: false };
+
+    private bool CanRevoke => !IsChanging && SelectedApproval is not null;
 
     public string Name => _Entry.Name;
 
@@ -118,6 +191,18 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
     /// <summary>Reads the findings and the approvals. One that cannot be read says why, and does not keep the other from showing.</summary>
     public async Task LoadAsync()
     {
+        Status = string.Join(" ", await ReadAsync());
+    }
+
+    /// <summary>
+    /// Reads both lists, keeps the chosen finding and approval by their Id
+    /// while they are still listed, and gives what could not be read.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ReadAsync()
+    {
+        // Taken first: a list given new items lets go of its selection.
+        var findingId = SelectedFinding?.Finding.Id;
+        var approvalId = SelectedApproval?.Approval.Id;
         var problems = new List<string>();
         try
         {
@@ -147,9 +232,113 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
             Approvals = [];
             problems.Add("The approved findings could not be read: " + exception.Message);
         }
-        Status = string.Join(" ", problems);
+        SelectedFinding = Findings.FirstOrDefault(row => string.Equals(row.Finding.Id, findingId, StringComparison.Ordinal));
+        SelectedApproval = Approvals.FirstOrDefault(row => string.Equals(row.Approval.Id, approvalId, StringComparison.Ordinal));
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(ApprovalsSummary));
+        return problems;
+    }
+
+    /// <summary>
+    /// Asks for the optional reason, then asks, naming the finding's Id and
+    /// severity, what approving does; on Yes runs
+    /// Approve-LazyVMSecurityFinding. Both lists are read again afterwards,
+    /// however it ended.
+    /// </summary>
+    public async Task ApproveAsync()
+    {
+        if (!CanApprove || SelectedFinding is not { } chosen)
+        {
+            return;
+        }
+        var id = chosen.Finding.Id;
+        await ChangeAsync(
+            () => _Tools.AskApprovalReason(this, chosen) is { } reason
+                && _Tools.ConfirmSecurityChange(this, $"Approve a security finding of {Name} - LazyVM", ApproveQuestion(chosen))
+                ? () => _Tools.ApproveSecurityFindingAsync(Name, id, reason.Trim())
+                : null,
+            $"Approving {id}",
+            $"{id} is approved. The nightly scan stops reporting it until it changes.",
+            $"{id} was not approved");
+    }
+
+    /// <summary>
+    /// Asks, naming the approval's Id and severity, what revoking does; on
+    /// Yes runs Revoke-LazyVMSecurityFinding. Both lists are read again
+    /// afterwards, however it ended.
+    /// </summary>
+    public async Task RevokeAsync()
+    {
+        if (!CanRevoke || SelectedApproval is not { } chosen)
+        {
+            return;
+        }
+        var id = chosen.Approval.Id;
+        await ChangeAsync(
+            () => _Tools.ConfirmSecurityChange(this, $"Revoke an approval of {Name} - LazyVM", RevokeQuestion(chosen.Approval))
+                ? () => _Tools.RevokeSecurityFindingAsync(Name, id)
+                : null,
+            $"Revoking the approval of {id}",
+            $"The approval of {id} is revoked. The next nightly scan reports it again, as new, if it still finds it.",
+            $"The approval of {id} was not revoked");
+    }
+
+    /// <summary>
+    /// Asks with <paramref name="ask"/>, which gives the change to make, or
+    /// null when it was not wanted; makes it, reads both lists again, and
+    /// says how it ended, then what could not be read.
+    /// </summary>
+    private async Task ChangeAsync(Func<Func<Task>?> ask, string doing, string done, string notDone)
+    {
+        IsChanging = true;
+        try
+        {
+            if (ask() is not { } change)
+            {
+                Status = notDone + ".";
+                return;
+            }
+            Status = doing;
+            string outcome;
+            try
+            {
+                await change();
+                outcome = done;
+            }
+            catch (Exception exception)
+            {
+                outcome = $"{notDone}: {exception.Message}";
+            }
+            var problems = await ReadAsync();
+            Status = string.Join(" ", new[] { outcome }.Concat(problems));
+        }
+        finally
+        {
+            IsChanging = false;
+        }
+    }
+
+    private string ApproveQuestion(SecurityFindingRow finding)
+    {
+        return $"Do you really want to approve the finding {finding.Finding.Id} ({finding.SeverityWords}) of {Name}? "
+            + $"Its title, made from names chosen inside the VM, is: {finding.Finding.Title}. "
+            + "The nightly scan stops reporting it until it changes. "
+            + "An approved event, such as a Defender detection, covers only that one occurrence: another one is reported again.";
+    }
+
+    private string RevokeQuestion(VMSecurityApproval approval)
+    {
+        return $"Do you really want to revoke the approval of the finding {approval.Id} ({SecurityFindingRow.InWords(approval.Severity)}) of {Name}? "
+            + $"Its title, made from names chosen inside the VM, is: {approval.Title}. "
+            + "The next nightly scan reports it again, as new, if it still finds it.";
+    }
+
+    private void RaiseActionsChanged()
+    {
+        OnPropertyChanged(nameof(ApproveNote));
+        OnPropertyChanged(nameof(HasApproveNote));
+        ApproveCommand.RaiseCanExecuteChanged();
+        RevokeCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>Reads both again.</summary>
