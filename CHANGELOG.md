@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.35.0](https://github.com/downerboy/LazyVM/compare/v6.34.0...v6.35.0) (2026-11-19)
+
+
+### Features
+
+* ship the app in the release zip and install it ([#491](https://github.com/downerboy/LazyVM/issues/491)) ([b36d91f](https://github.com/downerboy/LazyVM/commit/b36d91f723ee6757acdfc6bcbbac0dde9aace442))
+
 ## [6.34.0](https://github.com/downerboy/LazyVM/compare/v6.33.0...v6.34.0) (2026-11-19)
 
 
