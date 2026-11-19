@@ -101,6 +101,11 @@ jobs:
           ref: ${{ steps.commit.outputs.sha }}
           persist-credentials: false
 
+      # The zip holds the app, published self-contained with the .NET 10 SDK (#489).
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.x
+
       - name: Build, analyze and test
         run: ./Invoke-AnalyzerAndTest.ps1
 
@@ -129,7 +134,9 @@ jobs:
           .\LazyVM\Install.ps1
           ``````
 
-          Then open a new PowerShell 7 window as administrator and run:
+          This installs the module and the LazyVM app in ``%ProgramFiles%\LazyVM``. Start the app with ``%ProgramFiles%\LazyVM\App\LazyVM.UI.Wpf.exe``; it asks for elevation. To install a newer release over an open app, close it first.
+
+          Or open a new PowerShell 7 window as administrator and run:
 
           ``````powershell
           Build-LazyVM -Name DevBox

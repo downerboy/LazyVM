@@ -159,7 +159,7 @@ The module is per-user by design. Any multi-user mode must be an explicit, admin
 
 ## 9. Installing and starting it
 
-- It ships in the same release zip as the module, and `Install.ps1` installs both: the module in `%ProgramFiles%\LazyVM\Modules` and the app in `%ProgramFiles%\LazyVM\App`.
+- It ships in the same release zip as the module, in `App`, and `Install.ps1` installs both: the module in `%ProgramFiles%\LazyVM\Modules` and the app in `%ProgramFiles%\LazyVM\App` (#489). The app is published self-contained for win-x64, so the host needs no .NET, and every DLL it loads is in its own folder (section 5, rule 1). Not as a single file, which would leave PowerShell unable to find its built-in modules, and not trimmed. The new app is copied in beside the old one, then swapped in: an app that is running is kept whole, and `Install.ps1` says to close it and run again. `Install-FromRepository.cmd` publishes and installs it too (`Publish-App.ps1`), and CI makes the release zip on every pull request.
 - The zip includes a double-click **Install LazyVM** launcher that runs `Install.ps1` elevated, so a user never opens a console. `Install-FromRepository.cmd` stays the developer's shortcut.
 - `Install.ps1` adds a **LazyVM** shortcut in a Start menu folder that only administrators can change (section 5, rule 6). Uninstalling removes it.
 - Updating means installing the newer release the same way. The app does not update itself in the first step.
@@ -202,6 +202,8 @@ Each screen needs its command first. Where a command is missing (for example the
 8. Security findings: view, approve, revoke. Module pull request first, then the app.
    1. `Get-LazyVMSecurityFinding` writes nothing to the VM's log, so the app can read the findings each time its window opens (#480). Done.
    2. The app: a VM's security findings, and the approved ones (#481). Done.
-   3. The app: approve a finding, with a reason, and revoke an approval (#482).
+   3. The app: approve a finding, with a reason, and revoke an approval (#482). Done.
 9. Accessibility pass with Narrator, and zoom and High Contrast checks.
 10. Packaging: the release zip, `Install.ps1`, the launcher and the Start menu shortcut.
+    1. The app in the release zip, published self-contained for win-x64, and installed by `Install.ps1` in `%ProgramFiles%\LazyVM\App` (#489).
+    2. The **Install LazyVM** launcher, the Start menu shortcut, and an uninstall that keeps the VMs and their data (#490).

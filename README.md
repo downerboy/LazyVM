@@ -43,7 +43,7 @@ Still needed: a code-signing certificate, and a good deal more.
 
 ## Install
 
-LazyVM is installed for you: the module goes in `%ProgramFiles%\LazyVM\Modules`, which only administrators can change and only you can read, added to your `PSModulePath`. Its data folder is open to you and SYSTEM only, so other standard users cannot use LazyVM or read what it stores. Open **PowerShell 7** (`pwsh`, not Windows PowerShell) as administrator, signed in as the user who will use LazyVM.
+LazyVM is installed for you: the module goes in `%ProgramFiles%\LazyVM\Modules` and the LazyVM app in `%ProgramFiles%\LazyVM\App`, which only administrators can change and only you can read, and the module's folder is added to your `PSModulePath`. Its data folder is open to you and SYSTEM only, so other standard users cannot use LazyVM or read what it stores. Open **PowerShell 7** (`pwsh`, not Windows PowerShell) as administrator, signed in as the user who will use LazyVM.
 
 **From a release** (no Git needed): download `LazyVM-<version>.zip` from the [latest release](https://github.com/downerboy/LazyVM/releases), then, in the folder you saved it to:
 
@@ -58,12 +58,14 @@ Expand-Archive .\LazyVM-*.zip -DestinationPath .\LazyVM -Force
 ```powershell
 git clone https://github.com/downerboy/LazyVM S:\Source\LazyVM
 cd S:\Source\LazyVM
-./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out
+./Invoke-AnalyzerAndTest.ps1 && ./Publish-App.ps1 && ./src/Install.ps1 -Path out
 ```
 
-Or double-click `Install-FromRepository.cmd` in the repository folder: it runs the same two commands.
+Or double-click `Install-FromRepository.cmd` in the repository folder: it runs the same three commands.
 
-This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, installs it for you. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Open a new PowerShell 7 window as administrator afterwards.
+This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, publishes the app and installs both for you. Publishing the app needs the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0); without it, `./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out` installs the module only. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Open a new PowerShell 7 window as administrator afterwards.
+
+Start the app with `%ProgramFiles%\LazyVM\App\LazyVM.UI.Wpf.exe`; it asks for elevation. Close it before installing a newer version: an app that is running is not replaced.
 
 **Updating from LazyVM 5?** It was installed for every user. Once LazyVM 6 is installed, run `Convert-LazyVMInstallation` once, as administrator: it moves your VMs, passwords and scheduled tasks to your account, keeping the VMs running. See the [guide](docs/Guide.md#updating-from-lazyvm-5-installed-for-every-user).
 
@@ -153,7 +155,8 @@ src/LazyVM/
 tests/                             Pester tests
 Invoke-AnalyzerAndTest.ps1         check a change: assemble, analyze, test
 Install-FromRepository.cmd         double-click: check, then install if all passed
-New-ReleasePackage.ps1             make the release zip
+Publish-App.ps1                    publish the app into out/App
+New-ReleasePackage.ps1             make the release zip, with the app
 Update-Diagram.ps1                 redraw docs/Diagrams.md and its SVGs from docs/diagrams/source
 build/                             the steps these use
 ```

@@ -266,3 +266,103 @@ Describe 'Which LazyVM loads first, in Install.ps1 (#311)' {
         $text.LastIndexOf('Write-ShadowingCopyWarning -Path $target') | Should -BeGreaterThan $firstChange
     }
 }
+
+Describe 'The app, in Install.ps1 (#489)' {
+    BeforeAll {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($installScript, [ref]$null, [ref]$null)
+        foreach ($name in 'Test-ReparsePoint', 'Test-ContainsReparsePoint', 'Install-App') {
+            $definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }.GetNewClosure(), $true)
+            . ([scriptblock]::Create($definition.Extent.Text))
+        }
+        $linkType = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+    }
+
+    BeforeEach {
+        # A release download with the app in App, and the locked install folder.
+        $download = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $source = Join-Path -Path $download -ChildPath 'App'
+        New-Item -ItemType Directory -Path (Join-Path -Path $source -ChildPath 'Modules/Microsoft.PowerShell.Utility') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $source -ChildPath 'LazyVM.UI.Wpf.exe') -Value 'new'
+        Set-Content -LiteralPath (Join-Path -Path $source -ChildPath 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1') -Value '@{}'
+        $installDir = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $installDir | Out-Null
+        $target = Join-Path -Path $installDir -ChildPath 'App'
+        $outside = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $outside | Out-Null
+        Set-Content -LiteralPath (Join-Path -Path $outside -ChildPath 'keep.txt') -Value 'keep'
+
+        function Get-OldApp {
+            <# The app as an earlier install left it: an exe, and a file the new one no longer has. #>
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path -Path $target -ChildPath 'LazyVM.UI.Wpf.exe') -Value 'old'
+            Set-Content -LiteralPath (Join-Path -Path $target -ChildPath 'Gone.dll') -Value 'old'
+        }
+    }
+
+    It 'installs the app in App, in the install folder, and says where' {
+        $said = Install-App -Source $source -InstallDir $installDir 6>&1
+
+        Get-Content -LiteralPath (Join-Path -Path $target -ChildPath 'LazyVM.UI.Wpf.exe') | Should -Be 'new'
+        Test-Path -LiteralPath (Join-Path -Path $target -ChildPath 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1') | Should -BeTrue
+        "$said" | Should -BeLike "*Installed the LazyVM app in $target*"
+    }
+
+    It 'replaces an earlier app whole, so none of its files are left, and leaves nothing beside it' {
+        Get-OldApp
+
+        Install-App -Source $source -InstallDir $installDir 6>&1 | Out-Null
+
+        Get-Content -LiteralPath (Join-Path -Path $target -ChildPath 'LazyVM.UI.Wpf.exe') | Should -Be 'new'
+        Test-Path -LiteralPath (Join-Path -Path $target -ChildPath 'Gone.dll') | Should -BeFalse
+        @(Get-ChildItem -LiteralPath $installDir -Force | ForEach-Object { $_.Name }) | Should -Be @('App')
+    }
+
+    It 'keeps an earlier app that is running, says to close it, and leaves nothing beside it' {
+        Get-OldApp
+        # Windows refuses to rename a folder while a program in it runs.
+        Mock Rename-Item { throw 'The process cannot access the file because it is being used by another process.' }
+
+        $warning = Install-App -Source $source -InstallDir $installDir 3>&1
+
+        Get-Content -LiteralPath (Join-Path -Path $target -ChildPath 'LazyVM.UI.Wpf.exe') | Should -Be 'old'
+        Test-Path -LiteralPath (Join-Path -Path $target -ChildPath 'Gone.dll') | Should -BeTrue
+        @(Get-ChildItem -LiteralPath $installDir -Force | ForEach-Object { $_.Name }) | Should -Be @('App')
+        "$warning" | Should -BeLike '*app was not updated*Close LazyVM*Install.ps1 again*'
+    }
+
+    It 'installs the module only, and says so, when the download has no App folder' {
+        Remove-Item -LiteralPath $source -Recurse -Force
+
+        $said = Install-App -Source $source -InstallDir $installDir 6>&1 3>&1
+
+        Test-Path -LiteralPath $target | Should -BeFalse
+        "$said" | Should -BeLike "*no App folder in $download*only the module*"
+    }
+
+    It 'does not install an app that holds a link, warning, and leaves what it points to alone' {
+        New-Item -ItemType $linkType -Path (Join-Path -Path $source -ChildPath 'Linked') -Target $outside | Out-Null
+
+        $warning = Install-App -Source $source -InstallDir $installDir 3>&1
+
+        Test-Path -LiteralPath $target | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path -Path $outside -ChildPath 'keep.txt') | Should -BeTrue
+        "$warning" | Should -BeLike "*app was not installed*$source*junction, link or cloud placeholder*"
+    }
+
+    It 'does not replace an installed app that is a link, warning, and leaves what it points to alone' {
+        New-Item -ItemType $linkType -Path $target -Target $outside | Out-Null
+
+        $warning = Install-App -Source $source -InstallDir $installDir 3>&1
+
+        Test-Path -LiteralPath (Join-Path -Path $outside -ChildPath 'keep.txt') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path -Path $outside -ChildPath 'LazyVM.UI.Wpf.exe') | Should -BeFalse
+        "$warning" | Should -BeLike "*app was not installed*$target*junction, link or cloud placeholder*"
+    }
+
+    It 'smoke: installs the app after the module, from the download''s App folder, into the locked install folder' {
+        $text = Get-Content -LiteralPath $installScript -Raw
+
+        $text | Should -Match 'Install-App -Source \(Join-Path -Path \$Path -ChildPath ''App''\) -InstallDir \$installDir'
+        $text.IndexOf('Install-App -Source') | Should -BeGreaterThan $text.IndexOf('Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File')
+    }
+}
