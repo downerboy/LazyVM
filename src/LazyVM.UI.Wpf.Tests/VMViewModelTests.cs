@@ -191,6 +191,49 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void SecurityFindings_OpensTheVMsSecurityFindingsWindow_AndReadsThem()
+    {
+        _Runner.ReturnsSecurityFindings();
+        _Runner.ReturnsSecurityApprovals();
+        var vm = Open(Sample.VM());
+
+        vm.SecurityFindingsCommand.Execute(null);
+
+        Assert.Equal("DevBox", Assert.IsType<SecurityFindingsViewModel>(Assert.Single(_Tools.Shown)).Name);
+        Assert.Equal(["DevBox"], _Runner.SecurityFindingCalls);
+        Assert.Equal(["DevBox"], _Runner.SecurityApprovalCalls);
+    }
+
+    [Fact]
+    public void SecurityFindings_Twice_BringsTheOpenWindowToTheFront()
+    {
+        _Runner.ReturnsSecurityFindings();
+        _Runner.ReturnsSecurityApprovals();
+        var vm = Open(Sample.VM());
+
+        vm.SecurityFindingsCommand.Execute(null);
+        vm.SecurityFindingsCommand.Execute(null);
+
+        Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
+        Assert.Single(_Runner.SecurityFindingCalls);
+    }
+
+    [Fact]
+    public void Update_WithANewerScan_ReadsTheOpenSecurityFindingsWindowAgain()
+    {
+        _Runner.ReturnsSecurityFindings();
+        _Runner.ReturnsSecurityApprovals();
+        var vm = Open(Sample.VM() with { LastSecurityScan = null });
+        vm.SecurityFindingsCommand.Execute(null);
+        _Runner.ReturnsSecurityFindings();
+        _Runner.ReturnsSecurityApprovals();
+
+        vm.Update(Sample.VM() with { LastSecurityScan = new DateTime(2026, 11, 18, 2, 30, 0) });
+
+        Assert.Equal(2, _Runner.SecurityFindingCalls.Count);
+    }
+
+    [Fact]
     public void Password_OpensTheVMsPasswordWindow_ReadingOnlyTheUserName()
     {
         var vm = Open(Sample.VM());

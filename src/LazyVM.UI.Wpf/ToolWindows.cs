@@ -14,7 +14,9 @@ namespace LazyVM.UI.Wpf;
 /// One Recovery keys window per VM lists its BitLocker recovery keys, shows
 /// a password only when asked, and exports the keys to a file. One Password
 /// window per VM shows the account LazyVM signs in with, its password hidden
-/// until asked for, and copies it to the clipboard for three minutes.
+/// until asked for, and copies it to the clipboard for three minutes. One
+/// Security findings window per VM lists what its last scan found, and the
+/// findings approved.
 /// </summary>
 public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
 {
@@ -250,6 +252,37 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
         return password;
     }
 
+    /// <summary>The findings of the VM's last security scan, less the approved ones.</summary>
+    public virtual Task<IReadOnlyList<VMSecurityFinding>> GetSecurityFindingsAsync(string vmName)
+    {
+        return runner.GetSecurityFindingsAsync(vmName, CancellationToken.None);
+    }
+
+    /// <summary>The VM's approved findings, with when and why each was approved.</summary>
+    public virtual Task<IReadOnlyList<VMSecurityApproval>> GetSecurityApprovalsAsync(string vmName)
+    {
+        return runner.GetSecurityApprovalsAsync(vmName, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Shows the VM's security findings and approved findings, or brings its
+    /// open window to the front, and returns the window's view model, so a
+    /// refresh can reach it.
+    /// </summary>
+    public SecurityFindingsViewModel OpenSecurityFindings(VMDashboard entry)
+    {
+        var key = "security-findings:" + entry.Name;
+        if (_Open.TryGetValue(key, out var existing) && existing is SecurityFindingsViewModel open)
+        {
+            BringToFront(open);
+            return open;
+        }
+        var findings = new SecurityFindingsViewModel(entry, this);
+        Track(key, findings);
+        _ = findings.LoadAsync();
+        return findings;
+    }
+
     /// <summary>Shows the checks of the VM <paramref name="vmName"/>, or of the host, and runs them.</summary>
     public void OpenChecks(string? vmName, bool hostOnly)
     {
@@ -334,6 +367,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
             RestoreViewModel => new RestoreWindow(),
             RecoveryKeysViewModel => new RecoveryKeysWindow(),
             PasswordViewModel => new PasswordWindow(),
+            SecurityFindingsViewModel => new SecurityFindingsWindow(),
             _ => throw new ArgumentException($"There is no window for {viewModel.GetType().Name}.", nameof(viewModel)),
         };
         window.DataContext = viewModel;

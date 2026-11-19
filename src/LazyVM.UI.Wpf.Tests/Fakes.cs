@@ -334,6 +334,47 @@ internal sealed class FakeCommandRunner : CommandRunner
             : Task.FromResult(new RecoveryKeyExport(path, ExportWarnings));
     }
 
+    private readonly Answers<VMSecurityFinding> _SecurityFindings = new();
+    private readonly Answers<VMSecurityApproval> _SecurityApprovals = new();
+
+    public List<string> SecurityFindingCalls { get; } = [];
+
+    public List<string> SecurityApprovalCalls { get; } = [];
+
+    /// <summary>The next Get-LazyVMSecurityFinding returns these findings.</summary>
+    public void ReturnsSecurityFindings(params VMSecurityFinding[] findings)
+    {
+        _SecurityFindings.Returns(findings);
+    }
+
+    public void SecurityFindingsThrow(Exception exception)
+    {
+        _SecurityFindings.Throws(exception);
+    }
+
+    /// <summary>The next Get-LazyVMSecurityFinding -Approved returns these approvals.</summary>
+    public void ReturnsSecurityApprovals(params VMSecurityApproval[] approvals)
+    {
+        _SecurityApprovals.Returns(approvals);
+    }
+
+    public void SecurityApprovalsThrow(Exception exception)
+    {
+        _SecurityApprovals.Throws(exception);
+    }
+
+    public override Task<IReadOnlyList<VMSecurityFinding>> GetSecurityFindingsAsync(string name, CancellationToken cancellationToken)
+    {
+        SecurityFindingCalls.Add(name);
+        return _SecurityFindings.Next(cancellationToken);
+    }
+
+    public override Task<IReadOnlyList<VMSecurityApproval>> GetSecurityApprovalsAsync(string name, CancellationToken cancellationToken)
+    {
+        SecurityApprovalCalls.Add(name);
+        return _SecurityApprovals.Next(cancellationToken);
+    }
+
     /// <summary>The user name Get-LazyVMCredential gives; empty for a VM with no credential stored, which fails as the module does.</summary>
     public string? UserName { get; set; } = "devadmin";
 

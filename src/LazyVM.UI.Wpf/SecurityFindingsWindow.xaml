@@ -1,0 +1,110 @@
+<Window x:Class="LazyVM.UI.Wpf.SecurityFindingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:LazyVM.UI.Wpf"
+        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:SecurityFindingsViewModel}"
+        Title="{Binding Title}" Width="900" Height="820" MinWidth="320"
+        Style="{StaticResource LvWindow}">
+    <Window.CommandBindings>
+        <CommandBinding Command="Close" Executed="CloseWindow" />
+    </Window.CommandBindings>
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="Close" />
+        <KeyBinding Key="F5" Command="{Binding ReloadCommand}" />
+    </Window.InputBindings>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
+            <DockPanel>
+                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Content="Read again" Command="{Binding ReloadCommand}"
+                            AutomationProperties.Name="Read the security findings again (F5)" />
+                </WrapPanel>
+                <TextBlock Text="{Binding Name, StringFormat='Security findings of {0}'}" Style="{StaticResource LvTitle}" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Style="{StaticResource LvStatus}" Margin="24,0,24,24" TextWrapping="Wrap"
+                   Visibility="{Binding HasStatus, Converter={StaticResource VisibleWhenTrue}}"
+                   AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+
+        <!-- The approved findings, each with when and why it was approved. -->
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Approved findings" Style="{StaticResource LvHeading}" Margin="0,0,0,8" />
+                <TextBlock DockPanel.Dock="Top" Text="{Binding ApprovalsSummary}" TextWrapping="Wrap" Margin="0,0,0,8"
+                           AutomationProperties.Name="{Binding ApprovalsSummary}" />
+                <ListBox ItemsSource="{Binding Approvals}" MaxHeight="180" AutomationProperties.Name="Approved findings"
+                         BorderThickness="0" Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:SecurityApprovalRow">
+                            <!-- Plain text only: the title comes from inside the VM. -->
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <Border Style="{StaticResource LvPanel}" Margin="24">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Findings" Style="{StaticResource LvHeading}" Margin="0,0,0,8" />
+                <TextBlock DockPanel.Dock="Top" Text="{Binding ScanText}" TextWrapping="Wrap" Margin="0,0,0,4"
+                           AutomationProperties.Name="{Binding ScanText}" />
+                <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,0,0,8"
+                           AutomationProperties.Name="{Binding Summary}" />
+                <!-- A list, so the arrow keys move through the findings and Narrator reads each: severity, title and status first, then the rest. -->
+                <ListBox x:Name="List" ItemsSource="{Binding Findings}" AutomationProperties.Name="Security findings"
+                         BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
+                         Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                         VirtualizingPanel.ScrollUnit="Pixel"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <!-- Plain text only: a finding's text comes from inside the VM, which is not trusted. -->
+                        <DataTemplate DataType="vm:SecurityFindingRow">
+                            <StackPanel Margin="0,4,0,8">
+                                <WrapPanel>
+                                    <Border Padding="6,0" CornerRadius="4" Margin="0,0,8,0" VerticalAlignment="Top"
+                                            BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}">
+                                        <TextBlock Text="{Binding SeverityText}" FontWeight="SemiBold" />
+                                    </Border>
+                                    <TextBlock Text="{Binding Finding.Title}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,8,0" />
+                                    <TextBlock Text="{Binding StatusText, StringFormat='({0})'}" Style="{StaticResource LvMuted}" />
+                                </WrapPanel>
+                                <TextBlock Text="{Binding FirstSeenText}" Style="{StaticResource LvMuted}" Margin="0,2,0,0" />
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0">
+                                    <Run Text="What was found:" FontWeight="SemiBold" /> <Run Text="{Binding Finding.WhatWeFound, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" FontFamily="Cascadia Mono, Consolas"
+                                           Visibility="{Binding HasWhere, Converter={StaticResource VisibleWhenTrue}}">
+                                    <Run Text="Where:" FontWeight="SemiBold" /> <Run Text="{Binding WhereText, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0">
+                                    <Run Text="Why it matters:" FontWeight="SemiBold" /> <Run Text="{Binding Finding.WhyItMatters, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0">
+                                    <Run Text="How to fix it:" FontWeight="SemiBold" /> <Run Text="{Binding Finding.HowToFix, Mode=OneWay}" />
+                                </TextBlock>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+    </DockPanel>
+</Window>
