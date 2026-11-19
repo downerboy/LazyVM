@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.34.0](https://github.com/downerboy/LazyVM/compare/v6.33.0...v6.34.0) (2026-11-19)
+
+
+### Features
+
+* **gui:** approve and revoke security findings ([#487](https://github.com/downerboy/LazyVM/issues/487)) ([a291c6b](https://github.com/downerboy/LazyVM/commit/a291c6ba5bd72670b0d1f689387ed8c3b0f88e22))
+
 ## [6.33.0](https://github.com/downerboy/LazyVM/compare/v6.32.0...v6.33.0) (2026-11-19)
 
 
