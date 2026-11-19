@@ -2,12 +2,17 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-Installs LazyVM from a release download.
+Installs LazyVM and its app from a release download.
 
 .DESCRIPTION
 Copies the LazyVM module beside this script to %ProgramFiles%\LazyVM\Modules
 and adds that folder to your PSModulePath (once), so PowerShell 7 finds
-LazyVM. The folder %ProgramFiles%\LazyVM is locked: administrators and
+LazyVM. The LazyVM app, in App beside it, goes in %ProgramFiles%\LazyVM\App:
+start it with %ProgramFiles%\LazyVM\App\LazyVM.UI.Wpf.exe. The new app is
+copied in beside the old one, then swapped in, so an app that is running is
+kept whole: close it, and run Install.ps1 again. Without App, as in out
+from Invoke-AnalyzerAndTest.ps1 before Publish-App.ps1, only the module is
+installed. The folder %ProgramFiles%\LazyVM is locked: administrators and
 SYSTEM can change it, you can read and run it, and nobody else can open
 it. LazyVM's scheduled tasks run this module as SYSTEM, so nobody but an
 administrator may be able to change it. An earlier copy of the same version
@@ -36,8 +41,8 @@ Run it in PowerShell 7 (pwsh) as administrator, signed in as the Windows
 user who will use LazyVM (approve the UAC prompt with your own account).
 
 .PARAMETER Path
-The folder that holds the LazyVM module folder. By default, this script's
-own folder, as in a release download.
+The folder that holds the LazyVM module folder, and the app's App folder.
+By default, this script's own folder, as in a release download.
 
 .EXAMPLE
 .\Install.ps1
@@ -47,7 +52,8 @@ Installs from a release download.
 .EXAMPLE
 ./src/Install.ps1 -Path out
 
-Installs the module Invoke-AnalyzerAndTest.ps1 assembled from the repository.
+Installs the module Invoke-AnalyzerAndTest.ps1 assembled from the repository,
+and the app Publish-App.ps1 published there, if it did.
 #>
 [CmdletBinding()]
 param(
@@ -337,6 +343,64 @@ function Set-InstallFolderAccess {
     Set-Acl -LiteralPath $Path -AclObject $security
 }
 
+function Install-App {
+    <#
+      Installs the LazyVM app from $Source, the download's App folder, in
+      App in the locked install folder $InstallDir (#489). The new app is
+      copied beside it first, then swapped in, so an app that is running,
+      which Windows will not let go, is kept whole and not half replaced.
+      Without $Source, as in out from Invoke-AnalyzerAndTest.ps1, only the
+      module is installed. Nothing that is, holds, or is reached through a
+      junction, link or cloud placeholder is copied from or replaced.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$InstallDir
+    )
+
+    if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
+        Write-Information "There is no App folder in $(Split-Path -Path $Source -Parent), so only the module was installed, not the LazyVM app." -InformationAction Continue
+        return
+    }
+    $target = Join-Path -Path $InstallDir -ChildPath 'App'
+    $staging = Join-Path -Path $InstallDir -ChildPath 'App.new'
+    $old = Join-Path -Path $InstallDir -ChildPath 'App.old'
+    foreach ($path in @($Source, $target, $staging, $old) | Where-Object { Test-Path -LiteralPath $_ }) {
+        if (Test-ContainsReparsePoint -Path $path) {
+            Write-Warning "The LazyVM app was not installed: $path, a folder above it, or something in it is a junction, link or cloud placeholder, which Install.ps1 does not follow. Look at it, and delete it yourself, as administrator."
+            return
+        }
+    }
+    # Left over from an install that stopped part way.
+    foreach ($leftover in @($staging, $old) | Where-Object { Test-Path -LiteralPath $_ }) {
+        Remove-Item -LiteralPath $leftover -Recurse -Force
+    }
+
+    # Made inside the locked folder, so it takes that folder's access.
+    Copy-Item -LiteralPath $Source -Destination $staging -Recurse
+    Get-ChildItem -LiteralPath $staging -Recurse -File | Unblock-File
+    if (Test-Path -LiteralPath $target) {
+        try {
+            Rename-Item -LiteralPath $target -NewName (Split-Path -Path $old -Leaf) -ErrorAction Stop
+        }
+        catch {
+            Remove-Item -LiteralPath $staging -Recurse -Force
+            Write-Warning "The LazyVM app was not updated: $target is in use ($($_.Exception.Message)). Close LazyVM, then run Install.ps1 again."
+            return
+        }
+    }
+    Move-Item -LiteralPath $staging -Destination $target
+    if (Test-Path -LiteralPath $old) {
+        try {
+            Remove-Item -LiteralPath $old -Recurse -Force
+        }
+        catch {
+            Write-Warning "Could not remove the earlier app in ${old}: $($_.Exception.Message) Delete it yourself, as administrator."
+        }
+    }
+    Write-Information "Installed the LazyVM app in $target" -InformationAction Continue
+}
+
 # Only version folders, as a release download and the assembled module have
 # them: in the repository, src\LazyVM holds the module's source instead (#90).
 $versionDir = Get-ChildItem -LiteralPath (Join-Path -Path $Path -ChildPath $moduleName) -Directory -ErrorAction SilentlyContinue |
@@ -362,6 +426,8 @@ New-Item -ItemType Directory -Path $target -Force | Out-Null
 Copy-Item -Path (Join-Path -Path $versionDir.FullName -ChildPath '*') -Destination $target -Recurse -Force
 Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File
 Write-Information "Installed $moduleName $($versionDir.Name) in $target" -InformationAction Continue
+# The app, beside the module in the same locked folder (#489).
+Install-App -Source (Join-Path -Path $Path -ChildPath 'App') -InstallDir $installDir
 
 # Earlier LazyVM 6 builds installed into the user's own folders, which the
 # user, or OneDrive, can change.

@@ -1,11 +1,12 @@
 @echo off
 rem Install-FromRepository.cmd - double-click to analyze, test and install LazyVM
-rem from this repository, for the current Windows user. The same as running, in
-rem PowerShell 7 as administrator in this folder:
+rem and its app from this repository, for the current Windows user. The same as
+rem running, in PowerShell 7 as administrator in this folder:
 rem
-rem     ./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out
+rem     ./Invoke-AnalyzerAndTest.ps1 && ./Publish-App.ps1 && ./src/Install.ps1 -Path out
 rem
-rem Nothing is installed unless the analyzer and every test pass.
+rem Nothing is installed unless the analyzer and every test pass. Publishing the
+rem app needs the .NET 10 SDK.
 setlocal
 
 rem Not elevated: start this file again as administrator (UAC prompt) and stop.
@@ -32,7 +33,7 @@ if errorlevel 1 (
 rem -ExecutionPolicy Bypass applies to this one run only.
 pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "git pull --ff-only"
 
-pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out"
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "./Invoke-AnalyzerAndTest.ps1 && ./Publish-App.ps1 && ./src/Install.ps1 -Path out"
 set "RESULT=%ERRORLEVEL%"
 
 echo.

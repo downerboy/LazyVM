@@ -107,3 +107,17 @@ jobs:
         with:
           name: dotnet-test-results
           path: out/dotnet-test-results
+
+      # The release zip, with the app published self-contained (#489), made
+      # as the release makes it, so a change that breaks it fails here and
+      # not first on release day.
+      - name: Package the release zip
+        if: steps.solution.outputs.exists == 'true'
+        run: ./New-ReleasePackage.ps1
+
+      - name: Upload the release zip
+        if: steps.solution.outputs.exists == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-zip
+          path: out/release/*.zip
