@@ -36,8 +36,7 @@ public static class LiveRegion
         if ((bool)e.NewValue)
         {
             _Text.AddValueChanged(block, Announce);
-        }
-        else
+        } else
         {
             _Text.RemoveValueChanged(block, Announce);
         }

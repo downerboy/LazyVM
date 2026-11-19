@@ -37,12 +37,9 @@ public sealed class RemovalViewModel(RemovalPlan plan) : ViewModelBase
 
     private static List<RemovalLine> ReadLines(RemovalPlan plan)
     {
-        if (plan.IsEmpty)
-        {
-            return [new($"Nothing of {plan.Name} is left to delete.")];
-        }
-        return
-        [
+        return plan.IsEmpty
+            ? [new($"Nothing of {plan.Name} is left to delete.")]
+            : [
             .. plan.WorkDisks.Select(disk => new RemovalLine(
                 $"Warning: {disk.Name} goes too, {Size(disk.Size)}, {disk.Path}. {disk.Advice}", IsWarning: true)),
             .. plan.HyperVState is { } state ? new[] { new RemovalLine(MachineText(plan.Name, state, plan.CheckpointCount)) } : [],

@@ -18,8 +18,7 @@ public partial class RemovalWindow : Window
             if (List.Items.Count > 0)
             {
                 ListFocus.FocusFirst(List);
-            }
-            else
+            } else
             {
                 NoButton.Focus();
             }

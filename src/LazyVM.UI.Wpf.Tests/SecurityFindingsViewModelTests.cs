@@ -44,7 +44,10 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
 
     private static VMDashboard Scanned(DateTime? when = null)
     {
-        return Sample.VM() with { LastSecurityScan = when ?? _Scanned };
+        return Sample.VM() with
+        {
+            LastSecurityScan = when ?? _Scanned
+        };
     }
 
     private async Task<SecurityFindingsViewModel> Loaded(VMDashboard entry, VMSecurityFinding[] findings, params VMSecurityApproval[] approvals)
@@ -77,7 +80,10 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     [Fact]
     public async Task NotScannedYet_IsToldApart_FromNoOpenFindings()
     {
-        var notScanned = await Loaded(Sample.VM() with { LastSecurityScan = null }, []);
+        var notScanned = await Loaded(Sample.VM() with
+        {
+            LastSecurityScan = null
+        }, []);
         var clean = await Loaded(Scanned(), []);
 
         Assert.Equal(
@@ -183,7 +189,13 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     [Fact]
     public async Task Approvals_ListEach_WithWhenAndWhyItWasApproved()
     {
-        var window = await Loaded(Scanned(), [], _Approval, _Approval with { Id = "Other", Severity = "Low", Title = "Guest account is on", Reason = "" });
+        var window = await Loaded(Scanned(), [], _Approval, _Approval with
+        {
+            Id = "Other",
+            Severity = "Low",
+            Title = "Guest account is on",
+            Reason = ""
+        });
 
         Assert.Equal(
         [
@@ -254,7 +266,10 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     [Fact]
     public async Task Update_WithANewerScan_ReadsTheFindingsAgain()
     {
-        var window = await Loaded(Sample.VM() with { LastSecurityScan = null }, []);
+        var window = await Loaded(Sample.VM() with
+        {
+            LastSecurityScan = null
+        }, []);
         _Runner.ReturnsSecurityFindings(_Firewall);
         _Runner.ReturnsSecurityApprovals();
 

@@ -59,7 +59,11 @@ public sealed class RemovalViewModelTests : IDisposable
     [Fact]
     public void AVMThatIsOff_WithOneCheckpoint_IsNotTurnedOff()
     {
-        var removal = new RemovalViewModel(Plan() with { HyperVState = "Off", CheckpointCount = 1 });
+        var removal = new RemovalViewModel(Plan() with
+        {
+            HyperVState = "Off",
+            CheckpointCount = 1
+        });
 
         Assert.Contains("The Hyper-V VM DevBox, Off, with 1 checkpoint.", removal.Lines.Select(line => line.Text));
     }
@@ -67,7 +71,11 @@ public sealed class RemovalViewModelTests : IDisposable
     [Fact]
     public void AVMWithNoCheckpoints_SaysNothingOfThem()
     {
-        var removal = new RemovalViewModel(Plan() with { HyperVState = "Off", CheckpointCount = 0 });
+        var removal = new RemovalViewModel(Plan() with
+        {
+            HyperVState = "Off",
+            CheckpointCount = 0
+        });
 
         Assert.Contains("The Hyper-V VM DevBox, Off.", removal.Lines.Select(line => line.Text));
     }

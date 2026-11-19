@@ -221,8 +221,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         if (_Started is not null)
         {
             ShowStartedBuild(latest);
-        }
-        else
+        } else
         {
             ShowRunningBuild(latest);
         }
@@ -236,15 +235,13 @@ public sealed class BuildProgressViewModel : ViewModelBase
         if (latest?.ProcessId == _Started.ProcessId)
         {
             Show(latest, result);
-        }
-        else if (processEnded)
+        } else if (processEnded)
         {
             // It ended before it recorded a run, such as when the Windows ISO is missing or another run is going.
             Finish(result!.Outcome == BuildResult.COMPLETED
                 ? $"The build of {VMName} ended."
                 : $"The build of {VMName} did not start: {result.Message}", null);
-        }
-        else
+        } else
         {
             Status = $"Starting the build of {VMName}";
         }

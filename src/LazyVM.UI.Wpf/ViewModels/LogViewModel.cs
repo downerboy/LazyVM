@@ -137,8 +137,10 @@ public sealed class LogViewModel : ViewModelBase
         Status = direction > 0 ? "No warnings or errors after this entry" : "No warnings or errors before this entry";
     }
 
-    private int IndexOf(LogEntryRowViewModel entry) =>
-        Entries.Select((row, index) => ReferenceEquals(row, entry) ? index : -1).FirstOrDefault(index => index >= 0, -1);
+    private int IndexOf(LogEntryRowViewModel entry)
+    {
+        return Entries.Select((row, index) => ReferenceEquals(row, entry) ? index : -1).FirstOrDefault(index => index >= 0, -1);
+    }
 
     private static string Summary(IReadOnlyList<LogEntryRowViewModel> rows)
     {

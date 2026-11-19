@@ -1,4 +1,5 @@
 using LazyVM.UI.Wpf.ViewModels;
+
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -41,8 +42,7 @@ public partial class SecurityFindingsWindow : Window
         if (e.PropertyName == nameof(SecurityFindingsViewModel.Findings) && sender is SecurityFindingsViewModel { IsChanging: false })
         {
             ListFocus.FocusFirst(List);
-        }
-        else if (e.PropertyName == nameof(SecurityFindingsViewModel.IsChanging) && sender is SecurityFindingsViewModel { IsChanging: false })
+        } else if (e.PropertyName == nameof(SecurityFindingsViewModel.IsChanging) && sender is SecurityFindingsViewModel { IsChanging: false })
         {
             Dispatcher.BeginInvoke(DispatcherPriority.Loaded, KeepFocusAfterChange);
         }
@@ -64,12 +64,10 @@ public partial class SecurityFindingsWindow : Window
         {
             // No, Cancel or a refused Id: the button was disabled while it asked, and is back.
             button.Focus();
-        }
-        else if (list.Items.Count > 0)
+        } else if (list.Items.Count > 0)
         {
             ListFocus.Focus(list, list.SelectedItem ?? list.Items[0]);
-        }
-        else
+        } else
         {
             list.Focus();
         }

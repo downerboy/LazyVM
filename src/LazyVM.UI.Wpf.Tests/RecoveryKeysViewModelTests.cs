@@ -165,7 +165,10 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     {
         var window = await Loaded(_OsKey, _UserKey);
         _Tools.ChosenExportFile = _FILE;
-        _Runner.ReturnsRecoveryKeys(_OsKey, _UserKey with { Exported = true });
+        _Runner.ReturnsRecoveryKeys(_OsKey, _UserKey with
+        {
+            Exported = true
+        });
         var exported = 0;
         _Tools.RecoveryKeysExported += (_, _) => exported++;
 
@@ -189,7 +192,10 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
         _Tools.ChosenExportFile = _FILE;
         _Tools.ExistingFiles.Add(_FILE);
         _Tools.ConfirmsReplace = true;
-        _Runner.ReturnsRecoveryKeys(_UserKey with { Exported = true });
+        _Runner.ReturnsRecoveryKeys(_UserKey with
+        {
+            Exported = true
+        });
 
         await window.ExportAsync();
 
@@ -235,7 +241,10 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
         [
             @"C:\Users\me\OneDrive\keys.txt is in OneDrive (or another folder kept in step with the cloud), which copies it off this computer. Keep the file offline, such as on a USB drive.",
         ];
-        _Runner.ReturnsRecoveryKeys(_UserKey with { Exported = true });
+        _Runner.ReturnsRecoveryKeys(_UserKey with
+        {
+            Exported = true
+        });
 
         await window.ExportAsync();
 
@@ -250,7 +259,10 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
         var window = await Loaded(_UserKey);
         _Tools.ChosenExportFile = _FILE;
         _Runner.ExportWarnings = ["One.", "Two."];
-        _Runner.ReturnsRecoveryKeys(_UserKey with { Exported = true });
+        _Runner.ReturnsRecoveryKeys(_UserKey with
+        {
+            Exported = true
+        });
 
         await window.ExportAsync();
 
