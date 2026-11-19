@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.31.0](https://github.com/downerboy/LazyVM/compare/v6.30.0...v6.31.0) (2026-11-19)
+
+
+### Features
+
+* **gui:** show a VM's password on request and copy it safely ([#478](https://github.com/downerboy/LazyVM/issues/478)) ([adc0cf0](https://github.com/downerboy/LazyVM/commit/adc0cf0e4d8525431c61e0a139fb0e6836ea4b8e))
+
 ## [6.30.0](https://github.com/downerboy/LazyVM/compare/v6.29.0...v6.30.0) (2026-11-18)
 
 
