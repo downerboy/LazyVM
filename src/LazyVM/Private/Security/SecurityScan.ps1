@@ -379,13 +379,13 @@ function Write-SecurityFindingReminder {
 }
 
 function Get-SecurityFindingList {
-    <# Get-LazyVMSecurityFinding: the last scan's findings, but those approved since, each with the VM's name first. Says so when no scan has run yet. #>
+    <# Get-LazyVMSecurityFinding: the last scan's findings, but those approved since, each with the VM's name first. Says so in a warning, not the log, when no scan has run yet. #>
     [OutputType('LazyVM.SecurityFinding')]
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $record = Read-SecurityFindingRecord -VM $VM
     if (-not $record) {
-        Write-LogWarning "No security scan has run on $($VM.Name) yet. The nightly maintenance runs one (GuestSecurityScan)."
+        Write-Warning "No security scan has run on $($VM.Name) yet. The nightly maintenance runs one (GuestSecurityScan)."
         return
     }
     foreach ($finding in @(Select-UnapprovedSecurityFinding -Finding $record.Findings -Approval (Read-SecurityBaseline -VM $VM).Approvals)) {

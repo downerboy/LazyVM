@@ -781,6 +781,8 @@ Describe 'Get-LazyVMSecurityFinding' {
         Mock -ModuleName $module Write-LogEntry { }
         $script:vm = New-TestVM -Root (New-TestRoot)
         Mock -ModuleName $module Initialize-CommandRun { $script:vm }
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $script:vm.Settings.Root; Source = 'a test' } }
+        Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ VMName = 'Alpha'; Settings = $script:vm.Settings } }
     }
 
     It 'lists the last scan''s findings, with the VM''s name' {
@@ -803,6 +805,28 @@ Describe 'Get-LazyVMSecurityFinding' {
 
         $result.Count | Should -Be 0
         "$warned" | Should -BeLike '*No security scan has run on Alpha yet*'
+    }
+
+    It 'writes nothing to the VM''s log, with or without -Approved, so the dashboard can read it as often as it needs (#480)' {
+        Mock -ModuleName $module Start-Log { }
+        Mock -ModuleName $module Write-LogWarning { }
+        Mock -ModuleName $module Write-RunReminder { }
+
+        $null = Get-LazyVMSecurityFinding -Name Alpha -WarningAction SilentlyContinue
+        $null = Get-LazyVMSecurityFinding -Name Alpha -Approved -WarningAction SilentlyContinue
+
+        Should -Invoke -ModuleName $module Initialize-CommandRun -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Start-Log -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogEntry -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-LogWarning -Times 0 -Exactly
+        Should -Invoke -ModuleName $module Write-RunReminder -Times 0 -Exactly
+    }
+
+    It 'reads the VM''s settings read-only, and still needs administrator rights' {
+        $null = Get-LazyVMSecurityFinding -Name Alpha -WarningAction SilentlyContinue
+
+        Should -Invoke -ModuleName $module Read-VMSetting -Times 1 -Exactly -ParameterFilter { $ReadOnly -and $VMName -eq 'Alpha' }
+        Should -Invoke -ModuleName $module Assert-Administrator -Times 1 -Exactly
     }
 }
 

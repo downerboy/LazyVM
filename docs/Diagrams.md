@@ -9,7 +9,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 - **Blue arrows** are calls, numbered in the order they run.
 - **Dashed orange arrows** are data, numbered D1, D2 and so on. An arrow into a call is data read; an arrow out of it is data written.
 - Host paths are relative to the LazyVM folder (`HKCU:\SOFTWARE\LazyVM` `Root`), for example `D:\DevVM`. Inside the VM, `D:` is the SQL data disk, `W:` is the Dev Drive and `U:` is the User disk.
-- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance, a rebuild and a restore (`Restore-LazyVMTooling`) also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Remove-LazyVM` holds it too, until the Hyper-V VM is gone and just before the folder that holds it is deleted. A restore or removal you do not confirm leaves `Run.json` as it was. `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMRecoveryKey`, `Get-LazyVMRemovalPlan`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Start-LazyVMMaintenance`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
+- Every command that works on one VM runs inside `Invoke-CommandRun`: it starts with `Initialize-CommandRun`, which builds the VM context and opens the log, and ends with `Complete-CommandRun`, which closes the guest session and the log. A build, maintenance, a rebuild and a restore (`Restore-LazyVMTooling`) also hold the VM's run lock, `<VM>\Config\Run.lock`, from the start of the run to its end, so only one of them changes a VM at a time; the one holding it records in `Run.json` what is running, its phase and how it ended (`RunState.ps1`). `Remove-LazyVM` holds it too, until the Hyper-V VM is gone and just before the folder that holds it is deleted. A restore or removal you do not confirm leaves `Run.json` as it was. `Stop-LazyVMBuild` asks a running build to stop by writing `<VM>\Config\Run.stop`, which the build checks for between phases, between steps and in `Wait-Until`. `Show-LazyVM`, `Set-LazyVMRoot`, `Convert-LazyVMInstallation`, `New-LazyVM`, `Export-LazyVMTemplate`, `Export-LazyVMRecoveryKey`, `Get-LazyVM`, `Get-LazyVMBuildPhase`, `Get-LazyVMConfigTemplate`, `Get-LazyVMDashboard`, `Get-LazyVMLog`, `Get-LazyVMRecoveryKey`, `Get-LazyVMRemovalPlan`, `Get-LazyVMSecurityFinding`, `Get-LazyVMSetting`, `Get-LazyVMCredential`, `Start-LazyVMMaintenance`, `Stop-LazyVMBuild` and `Test-LazyVM` do not.
 - A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.
 
 ## Contents
@@ -1003,19 +1003,20 @@ Writes the BitLocker recovery passwords of the VM, or of every VM, to a file you
 
 `Get-LazyVMSecurityFinding` `-Name <VM>` `-Approved  (optional)`
 
-Lists what the last nightly security scan found, but the findings approved since, from what it kept; with -Approved, the approvals instead. Does not start or scan the VM.
+Lists what the last nightly security scan found, but the findings approved since, from what it kept; with -Approved, the approvals instead. Does not start or scan the VM, and writes nothing to its log.
 
 ![See the security findings: call order and data flow](diagrams/security-finding.svg)
 
-1. `Initialize-CommandRun` (Common): builds the VM context and opens the log
-   - Reads D1, settings, VM profile, guest user name: VM context sources (HKCU:\SOFTWARE\LazyVM  Root, Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json, <VM>\Credentials\guest.cred)
-   - Writes D2, run log: <VM>\Logs\ (<VM>.log  (appended))
-2. `Get-SecurityFindingList` (Security): without -Approved: each finding of the last scan not approved since, with the VM's name; a warning when no scan has run yet
+1. `Resolve-LazyVMRoot` (Settings): the LazyVM folder
+   - Reads D1, LazyVM folder: HKCU:\SOFTWARE\LazyVM (Root)
+2. `Read-VMSetting` (Settings): the VM's settings, read only; nothing is written to the VM's log (#480)
+   - Reads D2, settings: Settings files (Shared\Config\LazyVM.Settings.json, <VM>\Config\VM.json)
+3. `Get-SecurityFindingList` (Security): without -Approved: each finding of the last scan not approved since, with the VM's name; a warning when no scan has run yet
    - Also runs `Read-SecurityFindingRecord`, `Read-SecurityBaseline`, `Select-UnapprovedSecurityFinding`, `ConvertTo-VMRecordView`
    - Reads D3, last findings: <VM>\Logs\ (SecurityFindings.json)
    - Reads D4, approvals: <VM>\Config\ (SecurityBaseline.json)
    - Writes D5, findings: Pipeline (LazyVM.SecurityFinding: Name, Id, Severity, Title,, WhatWeFound, WhyItMatters, HowToFix, FirstSeen, Status)
-3. `Get-SecurityApprovalList` (Security): with -Approved: each approval, with the VM's name; says so when there is none
+4. `Get-SecurityApprovalList` (Security): with -Approved: each approval, with the VM's name; says so when there is none
    - Also runs `Read-SecurityBaseline`
    - Reads D6, approvals: <VM>\Config\ (SecurityBaseline.json)
    - Writes D7, approvals: Pipeline (LazyVM.SecurityApproval: Name, Id, Severity,, Title, ApprovedOn, Reason)

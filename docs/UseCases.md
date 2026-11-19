@@ -155,7 +155,7 @@ Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Window
 - View the guest account (`Get-LazyVMCredential`).
 - List the recovery keys (`Get-LazyVMRecoveryKey`): each disk's key ID, when it was recorded and whether it is exported, from the credential store and `Config\RecoveryKeyExport.json`. Never the passwords. Read-only.
 - Check the license (`Get-LazyVMLicense`) reads the license inside the guest. Extended by **Start the VM** when the VM is off.
-- See the security findings (`Get-LazyVMSecurityFinding`), or the approved ones (`-Approved`). Read-only.
+- See the security findings (`Get-LazyVMSecurityFinding`), or the approved ones (`-Approved`). Read-only, and writes nothing to the VM's log.
 - Approve a security finding you expect (`Approve-LazyVMSecurityFinding`), and revoke an approval (`Revoke-LazyVMSecurityFinding`). Both change only `Config\SecurityBaseline.json` and support `-WhatIf`.
 - Check a VM end to end (`Test-LazyVM`) checks the folder, the ISOs, the VM, PowerShell Direct, the guest's set-up and the maintenance task. Read-only: a VM that is off is not started.
 - Remove a VM (`Remove-LazyVM`) includes **List what will be deleted and kept**, then deletes the VM, its tasks, its disks (Dev Drive and User disk included), checkpoints, state, profile and log. Anything another VM also uses is kept. It asks first unless `-Force`; `-WhatIf` only lists.
