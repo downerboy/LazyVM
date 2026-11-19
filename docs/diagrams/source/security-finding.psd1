@@ -3,20 +3,21 @@
     Title      = 'See the security findings'
     Command    = 'Get-LazyVMSecurityFinding'
     Parameters = @('-Name <VM>', '-Approved  (optional)')
-    Summary    = 'Lists what the last nightly security scan found, but the findings approved since, from what it kept; with -Approved, the approvals instead. Does not start or scan the VM.'
+    Summary    = 'Lists what the last nightly security scan found, but the findings approved since, from what it kept; with -Approved, the approvals instead. Does not start or scan the VM, and writes nothing to its log.'
     Covers     = @('Get-LazyVMSecurityFinding', 'Get-SecurityFindingList', 'Get-SecurityApprovalList')
-    Omits      = @{ 'Write-LogWarning' = 'only when no scan has run yet: says so, in the log and on screen' }
+    Omits      = @{ 'Assert-Administrator' = 'stops at once unless run as administrator' }
     Steps      = @(
         @{
-            Function = 'Initialize-CommandRun'
-            Area     = 'Common'
-            Note     = 'builds the VM context and opens the log'
-            Reads    = @(
-                @{ Label = 'settings, VM profile, guest user name'; Kind = 'settings'; Store = 'VM context sources'; Items = @('HKCU:\SOFTWARE\LazyVM  Root', 'Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json', '<VM>\Credentials\guest.cred') }
-            )
-            Writes   = @(
-                @{ Label = 'run log'; Kind = 'file'; Store = '<VM>\Logs\'; Items = @('<VM>.log  (appended)') }
-            )
+            Function = 'Resolve-LazyVMRoot'
+            Area     = 'Settings'
+            Note     = 'the LazyVM folder'
+            Reads    = @(@{ Label = 'LazyVM folder'; Kind = 'registry'; Store = 'HKCU:\SOFTWARE\LazyVM'; Items = @('Root') })
+        }
+        @{
+            Function = 'Read-VMSetting'
+            Area     = 'Settings'
+            Note     = 'the VM''s settings, read only; nothing is written to the VM''s log (#480)'
+            Reads    = @(@{ Label = 'settings'; Kind = 'file'; Store = 'Settings files'; Items = @('Shared\Config\LazyVM.Settings.json', '<VM>\Config\VM.json') })
         }
         @{
             Function = 'Get-SecurityFindingList'

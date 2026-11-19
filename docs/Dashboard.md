@@ -197,6 +197,9 @@ Each screen needs its command first. Where a command is missing (for example the
    1. `Get-LazyVMDashboard` reports each VM's recovery key export status: how many keys are stored, how many are not exported, and when they were last exported. It never reads a password (#467).
    2. The app: a VM's recovery keys, each disk's recovery password hidden until shown, export to a file, and a "keys not exported" notice (#468). The module gets `Get-LazyVMRecoveryKey` first, in the same pull request: each disk's key without its password, and whether it is exported.
    3. The app: the VM's password, hidden until shown, and Copy, which keeps it out of clipboard history and clears it after three minutes (#469).
-8. Security findings: view, approve, revoke.
+8. Security findings: view, approve, revoke. Module pull request first, then the app.
+   1. `Get-LazyVMSecurityFinding` writes nothing to the VM's log, so the app can read the findings each time its window opens (#480).
+   2. The app: a VM's security findings, and the approved ones (#481).
+   3. The app: approve a finding, with a reason, and revoke an approval (#482).
 9. Accessibility pass with Narrator, and zoom and High Contrast checks.
 10. Packaging: the release zip, `Install.ps1`, the launcher and the Start menu shortcut.

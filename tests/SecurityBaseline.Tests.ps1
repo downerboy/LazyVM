@@ -635,6 +635,8 @@ Describe 'Approve-LazyVMSecurityFinding' {
         Mock -ModuleName $module Write-LogError { }
         $script:vm = New-TestVM -Root (New-TestRoot)
         Mock -ModuleName $module Initialize-CommandRun { $script:vm }
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $script:vm.Settings.Root; Source = 'a test' } }
+        Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ VMName = 'Alpha'; Settings = $script:vm.Settings } }
         Save-TestFindingRecord -VM $script:vm -Finding @(
             New-TestFinding -Id 'Service:MySvc:999999999999' -Severity 'Medium'
             New-TestFinding -Id 'AutoLogon:Winlogon:On' -Severity 'Info' -Status 'Still open'
@@ -734,6 +736,8 @@ Describe 'Revoke-LazyVMSecurityFinding and Get-LazyVMSecurityFinding -Approved' 
         Mock -ModuleName $module Write-LogError { }
         $script:vm = New-TestVM -Root (New-TestRoot)
         Mock -ModuleName $module Initialize-CommandRun { $script:vm }
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $script:vm.Settings.Root; Source = 'a test' } }
+        Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ VMName = 'Alpha'; Settings = $script:vm.Settings } }
         Save-TestFindingRecord -VM $script:vm -Finding @((New-TestFinding -Id 'Service:MySvc:999999999999' -Severity 'Medium'), (New-TestFinding -Id 'AutoLogon:Winlogon:On' -Severity 'Info'))
         Approve-LazyVMSecurityFinding -Name Alpha -Id 'Service:MySvc:999999999999' -Reason 'my own service'
         Approve-LazyVMSecurityFinding -Name Alpha -Id 'AutoLogon:Winlogon:On'
@@ -787,8 +791,10 @@ Describe 'Revoke-LazyVMSecurityFinding and Get-LazyVMSecurityFinding -Approved' 
     It 'says so when nothing is approved' {
         Get-LazyVMSecurityFinding -Name Alpha -Approved | Revoke-LazyVMSecurityFinding
 
-        @(Get-LazyVMSecurityFinding -Name Alpha -Approved).Count | Should -Be 0
-        Should -Invoke -ModuleName $module Write-LogEntry -ParameterFilter { $Message -like '*No security findings are approved on Alpha*' }
+        $approved = @(Get-LazyVMSecurityFinding -Name Alpha -Approved -WarningVariable warned -WarningAction SilentlyContinue)
+
+        $approved.Count | Should -Be 0
+        "$warned" | Should -BeLike '*No security findings are approved on Alpha*'
     }
 }
 
@@ -1096,6 +1102,8 @@ Describe 'Automatic sign-in, approved at the first build (#334)' {
         Mock -ModuleName $module Assert-Administrator { }
         Mock -ModuleName $module Complete-CommandRun { }
         Mock -ModuleName $module Initialize-CommandRun { $script:vm }
+        Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $script:vm.Settings.Root; Source = 'a test' } }
+        Mock -ModuleName $module Read-VMSetting { [pscustomobject]@{ VMName = 'Alpha'; Settings = $script:vm.Settings } }
     }
 
     It 'is approved, with the reason, and listed with the approvals' {

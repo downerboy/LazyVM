@@ -24,7 +24,9 @@ function Get-LazyVMSecurityFinding {
     The same findings are in the VM's log and in LazyVM Findings.html on the
     VM's desktop. A finding approved with Approve-LazyVMSecurityFinding is
     left out; -Approved lists the approvals instead. Reads only what the
-    last scan and the approvals kept; it does not start or scan the VM.
+    last scan and the approvals kept; it does not start or scan the VM, and
+    writes nothing to the VM's log. When there is nothing to list, because
+    no scan has run yet or nothing is approved, it says so in a warning.
 
     .PARAMETER Name
     The VM. May be left out while there is only one.
@@ -60,10 +62,10 @@ function Get-LazyVMSecurityFinding {
     )
 
     process {
-        Invoke-CommandRun -Title 'Security findings' -Name $Name -FailureMessage 'Listing the security findings failed' -Cmdlet $PSCmdlet -ScriptBlock {
-            param($VM)
-            if ($Approved) { Get-SecurityApprovalList -VM $VM }
-            else { Get-SecurityFindingList -VM $VM }
-        }
+        # Only reads, and writes nothing to the VM's log, so the dashboard can read it as often as it needs (#480).
+        Assert-Administrator
+        $vm = [VMContext]::new((Read-VMSetting -Root (Resolve-LazyVMRoot).Path -VMName $Name -ReadOnly).Settings)
+        if ($Approved) { Get-SecurityApprovalList -VM $vm }
+        else { Get-SecurityFindingList -VM $vm }
     }
 }

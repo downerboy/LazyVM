@@ -132,13 +132,13 @@ function Add-DefaultSecurityApproval {
 }
 
 function Get-SecurityApprovalList {
-    <# Get-LazyVMSecurityFinding -Approved: each approval, with the VM's name first. Says so when there is none. #>
+    <# Get-LazyVMSecurityFinding -Approved: each approval, with the VM's name first. Says so in a warning, not the log, when there is none. #>
     [OutputType('LazyVM.SecurityApproval')]
     param([Parameter(Mandatory)][VMContext]$VM)
 
     $approvals = @((Read-SecurityBaseline -VM $VM).Approvals)
     if ($approvals.Count -eq 0) {
-        Write-LogEntry "No security findings are approved on $($VM.Name)." 'INFO'
+        Write-Warning "No security findings are approved on $($VM.Name)."
         return
     }
     foreach ($approval in $approvals) { ConvertTo-VMRecordView -VMName $VM.Name -TypeName 'LazyVM.SecurityApproval' -Record $approval }
