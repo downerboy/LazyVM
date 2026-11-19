@@ -257,6 +257,56 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
+    public void ThrowIfCommandWroteError_ARefusedId_ThrowsWithTheModulesReason_AndIgnoresWhatItSilenced()
+    {
+        // As Approve-LazyVMSecurityFinding refuses an Id: a helper throws, the
+        // command catches it and writes it with its own $PSCmdlet, through a
+        // simple function as Write-CommandItemError does. An error of a call
+        // inside it reaches the error stream first, and must not count.
+        using var shell = PowerShell.Create();
+        shell.AddScript("""
+            function Write-ItemError { param($Cmdlet, $ErrorRecord) $Cmdlet.WriteError($ErrorRecord) }
+            function Get-Approvable { param($Id) throw "The finding $Id is not an open finding of the last scan." }
+            function global:Approve-LazyVMSecurityFinding {
+                [CmdletBinding()]
+                param([string]$Id)
+                $null = Get-Item -LiteralPath 'Z:\lazyvm-not-there'
+                & { try { Get-Approvable -Id $Id } catch { Write-ItemError -Cmdlet $PSCmdlet -ErrorRecord $_ } }
+            }
+            """).Invoke();
+        shell.Commands.Clear();
+        shell.Streams.Error.Clear();
+        shell.AddCommand("Approve-LazyVMSecurityFinding").AddParameter("Id", "Task:x:1").Invoke();
+        Assert.Equal(2, shell.Streams.Error.Count);
+
+        var failure = Assert.Throws<InvalidOperationException>(
+            () => CommandRunner.ThrowIfCommandWroteError("Approve-LazyVMSecurityFinding", shell.Streams.Error));
+
+        Assert.Equal("The finding Task:x:1 is not an open finding of the last scan.", failure.Message);
+    }
+
+    [Fact]
+    public void ThrowIfCommandWroteError_OnlyErrorsOfCallsInsideIt_DoesNotThrow()
+    {
+        // An error of a call inside the module, which it does not treat as a
+        // failure, reaches the error stream named for that call, not the command.
+        using var shell = PowerShell.Create();
+        shell.AddScript("""
+            function global:Revoke-LazyVMSecurityFinding {
+                [CmdletBinding()]
+                param()
+                $null = Get-Item -LiteralPath 'Z:\lazyvm-not-there'
+            }
+            """).Invoke();
+        shell.Commands.Clear();
+        shell.Streams.Error.Clear();
+        shell.AddCommand("Revoke-LazyVMSecurityFinding").Invoke();
+        Assert.NotEmpty(shell.Streams.Error);
+
+        CommandRunner.ThrowIfCommandWroteError("Revoke-LazyVMSecurityFinding", shell.Streams.Error);
+    }
+
+    [Fact]
     public void ToRemovalPlan_ReadsEveryField()
     {
         var plan = CommandRunner.ToRemovalPlan(Entry(

@@ -43,6 +43,12 @@ public static class LiveRegion
         }
     }
 
+    /// <summary>Reads the text block out again, such as after focus has moved, which can cut off what Narrator was reading.</summary>
+    public static void AnnounceAgain(TextBlock block)
+    {
+        Announce(block, EventArgs.Empty);
+    }
+
     private static void Announce(object? sender, EventArgs e)
     {
         if (sender is TextBlock block)

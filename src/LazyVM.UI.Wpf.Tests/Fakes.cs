@@ -375,6 +375,47 @@ internal sealed class FakeCommandRunner : CommandRunner
         return _SecurityApprovals.Next(cancellationToken);
     }
 
+    public List<(string Name, string Id, string Reason)> ApproveCalls { get; } = [];
+
+    public List<(string Name, string Id)> RevokeCalls { get; } = [];
+
+    /// <summary>Approve-LazyVMSecurityFinding fails with this, as a refused Id does.</summary>
+    public Exception? ApproveFails
+    {
+        get; set;
+    }
+
+    /// <summary>Revoke-LazyVMSecurityFinding fails with this, as a refused Id does.</summary>
+    public Exception? RevokeFails
+    {
+        get; set;
+    }
+
+    /// <summary>When set, Approve-LazyVMSecurityFinding runs until the test completes it.</summary>
+    public TaskCompletionSource? ApproveGate
+    {
+        get; set;
+    }
+
+    public override async Task ApproveSecurityFindingAsync(string name, string id, string reason)
+    {
+        ApproveCalls.Add((name, id, reason));
+        if (ApproveGate is { } gate)
+        {
+            await gate.Task;
+        }
+        if (ApproveFails is { } failure)
+        {
+            throw failure;
+        }
+    }
+
+    public override Task RevokeSecurityFindingAsync(string name, string id)
+    {
+        RevokeCalls.Add((name, id));
+        return RevokeFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
+    }
+
     /// <summary>The user name Get-LazyVMCredential gives; empty for a VM with no credential stored, which fails as the module does.</summary>
     public string? UserName { get; set; } = "devadmin";
 
@@ -546,6 +587,33 @@ internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launc
     {
         ReplaceQuestions.Add(question);
         return ConfirmsReplace;
+    }
+
+    /// <summary>The reason typed for an approval; null for Cancel.</summary>
+    public string? ApprovalReason { get; set; } = string.Empty;
+
+    /// <summary>The finding each reason box was shown for.</summary>
+    public List<SecurityFindingRow> ReasonsAsked { get; } = [];
+
+    public override string? AskApprovalReason(SecurityFindingsViewModel findings, SecurityFindingRow finding)
+    {
+        ReasonsAsked.Add(finding);
+        return ApprovalReason;
+    }
+
+    /// <summary>The answer to the approve or revoke question: Yes when true.</summary>
+    public bool ConfirmsSecurityChange
+    {
+        get; set;
+    }
+
+    /// <summary>Every approve or revoke question asked.</summary>
+    public List<string> SecurityQuestions { get; } = [];
+
+    public override bool ConfirmSecurityChange(SecurityFindingsViewModel findings, string title, string question)
+    {
+        SecurityQuestions.Add(question);
+        return ConfirmsSecurityChange;
     }
 
     public void Close(ViewModelBase window)

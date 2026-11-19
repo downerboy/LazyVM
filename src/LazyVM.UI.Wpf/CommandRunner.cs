@@ -272,6 +272,46 @@ public class CommandRunner : IDisposable
         return output.Select(ToSecurityApproval).ToList();
     }
 
+    /// <summary>
+    /// Runs <c>Approve-LazyVMSecurityFinding -Name -Id -Reason -Confirm:$false</c>,
+    /// without the question the app has already asked. Throws with the
+    /// module's reason when it refused the Id, such as a finding no longer open.
+    /// </summary>
+    public virtual async Task ApproveSecurityFindingAsync(string name, string id, string reason)
+    {
+        await InvokeAsync(
+            "Approve-LazyVMSecurityFinding", [("Name", name), ("Id", id), ("Reason", reason), ("Confirm", false)], CancellationToken.None,
+            failsOnlyByThrowing: true, failsByItsOwnErrors: true)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs <c>Revoke-LazyVMSecurityFinding -Name -Id -Confirm:$false</c>,
+    /// without the question the app has already asked. Throws with the
+    /// module's reason when it refused the Id, such as one not approved.
+    /// </summary>
+    public virtual async Task RevokeSecurityFindingAsync(string name, string id)
+    {
+        await InvokeAsync(
+            "Revoke-LazyVMSecurityFinding", [("Name", name), ("Id", id), ("Confirm", false)], CancellationToken.None,
+            failsOnlyByThrowing: true, failsByItsOwnErrors: true)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The first error <paramref name="command"/> itself wrote, such as a
+    /// refused Id, thrown with the module's reason. Errors of the calls it
+    /// silenced inside the module reach the error stream too, and do not count.
+    /// </summary>
+    internal static void ThrowIfCommandWroteError(string command, IEnumerable<ErrorRecord> errors)
+    {
+        var own = errors.FirstOrDefault(error => string.Equals(error.InvocationInfo?.MyCommand?.Name, command, StringComparison.OrdinalIgnoreCase));
+        if (own is not null)
+        {
+            throw new InvalidOperationException(own.ToString());
+        }
+    }
+
     /// <summary>Reads one <c>LazyVM.SecurityFinding</c> object. A time that cannot be read is left empty.</summary>
     internal static VMSecurityFinding ToSecurityFinding(PSObject finding)
     {
@@ -476,17 +516,22 @@ public class CommandRunner : IDisposable
     /// never as script text. <paramref name="failsOnlyByThrowing"/>: a
     /// command that can rightly return nothing while it silences errors of
     /// its own, so only an error it throws is its failure.
+    /// <paramref name="failsByItsOwnErrors"/>: a command that returns nothing
+    /// and reports a refused item as a non-terminating error of its own, so
+    /// that error is its failure too (<see cref="ThrowIfCommandWroteError"/>).
     /// </summary>
     private async Task<IReadOnlyList<PSObject>> InvokeAsync(
-        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool failsOnlyByThrowing = false)
+        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool failsOnlyByThrowing = false,
+        bool failsByItsOwnErrors = false)
     {
-        var (output, _) = await InvokeWithWarningsAsync(command, parameters, cancellationToken, failsOnlyByThrowing).ConfigureAwait(false);
+        var (output, _) = await InvokeWithWarningsAsync(command, parameters, cancellationToken, failsOnlyByThrowing, failsByItsOwnErrors).ConfigureAwait(false);
         return output;
     }
 
     /// <summary>As <see cref="InvokeAsync"/>, and also gives the warnings the command wrote, each as its text.</summary>
     private async Task<(IReadOnlyList<PSObject> Output, IReadOnlyList<string> Warnings)> InvokeWithWarningsAsync(
-        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool failsOnlyByThrowing = false)
+        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool failsOnlyByThrowing = false,
+        bool failsByItsOwnErrors = false)
     {
         ObjectDisposedException.ThrowIf(_Disposed, this);
         await _OneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -511,6 +556,10 @@ public class CommandRunner : IDisposable
             }
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfFailed(output, shell.Streams.Error, failsOnlyByThrowing);
+            if (failsByItsOwnErrors)
+            {
+                ThrowIfCommandWroteError(command, shell.Streams.Error);
+            }
             return ([.. output], shell.Streams.Warning.Select(warning => warning.Message).ToList());
         }
         finally
