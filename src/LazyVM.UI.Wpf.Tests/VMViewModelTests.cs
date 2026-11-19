@@ -191,6 +191,29 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Password_OpensTheVMsPasswordWindow_ReadingOnlyTheUserName()
+    {
+        var vm = Open(Sample.VM());
+
+        vm.PasswordCommand.Execute(null);
+
+        Assert.Equal("DevBox", Assert.IsType<PasswordViewModel>(Assert.Single(_Tools.Shown)).Name);
+        Assert.Equal(["DevBox"], _Runner.UserNameCalls);
+        Assert.Empty(_Runner.PasswordCalls);
+    }
+
+    [Fact]
+    public void Password_Twice_BringsTheOpenWindowToTheFront()
+    {
+        var vm = Open(Sample.VM());
+
+        vm.PasswordCommand.Execute(null);
+        vm.PasswordCommand.Execute(null);
+
+        Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
+    }
+
+    [Fact]
     public void RecoveryKeys_Twice_BringsTheOpenWindowToTheFront()
     {
         _Runner.ReturnsRecoveryKeys();

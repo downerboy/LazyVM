@@ -27,6 +27,9 @@
                     <Button Content="_Restore..." Command="{Binding RestorePointsCommand}" Margin="8,0,0,0"
                             AutomationProperties.Name="{Binding Name, StringFormat='Restore points of {0}'}"
                             AutomationProperties.HelpText="Lists the VM's restore points, to return it to one." />
+                    <Button Content="Pass_word..." Command="{Binding PasswordCommand}" Margin="8,0,0,0"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Password of {0}'}"
+                            AutomationProperties.HelpText="Shows the account LazyVM signs in to the VM with. The password stays hidden until you ask for it." />
                     <Button Content="Build progress" Command="{Binding BuildProgressCommand}" Margin="8,0,0,0"
                             Visibility="{Binding IsBuilding, Converter={StaticResource VisibleWhenTrue}}"
                             AutomationProperties.Name="{Binding Name, StringFormat='Progress of the build of {0}'}" />

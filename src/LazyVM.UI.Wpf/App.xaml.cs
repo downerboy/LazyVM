@@ -8,6 +8,7 @@ namespace LazyVM.UI.Wpf;
 public partial class App : Application
 {
     private CommandRunner? _Runner;
+    private ToolWindows? _Tools;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -18,7 +19,7 @@ public partial class App : Application
         });
 
         _Runner = new CommandRunner();
-        var tools = new ToolWindows(_Runner, new BuildLauncher(), TimeProvider.System);
+        var tools = _Tools = new ToolWindows(_Runner, new BuildLauncher(), TimeProvider.System);
         var main = new MainViewModel(_Runner, new VMWindowManager(tools), tools, TimeProvider.System);
         MainWindow = new MainWindow { DataContext = main };
         MainWindow.Show();
@@ -27,6 +28,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // A password copied less than three minutes ago goes now, if the clipboard still holds it (#469).
+        _Tools?.Clipboard.ClearNow();
         _Runner?.Dispose();
         base.OnExit(e);
     }
