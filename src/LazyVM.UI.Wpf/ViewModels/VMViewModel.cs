@@ -19,6 +19,7 @@ public sealed class VMViewModel : ViewModelBase
     private bool _IsStarting;
     private bool _IsDeleting;
     private RestoreViewModel? _Restore;
+    private SecurityFindingsViewModel? _Findings;
 
     public VMViewModel(VMDashboard entry, ToolWindows tools)
     {
@@ -35,6 +36,13 @@ public sealed class VMViewModel : ViewModelBase
         RestorePointsCommand = new RelayCommand(() => _Restore = tools.OpenRestore(_Entry));
         RecoveryKeysCommand = new RelayCommand(() => tools.OpenRecoveryKeys(_Entry));
         PasswordCommand = new RelayCommand(() => tools.OpenPassword(_Entry));
+        SecurityFindingsCommand = new RelayCommand(() => _Findings = tools.OpenSecurityFindings(_Entry));
+    }
+
+    /// <summary>Opens what the VM's last security scan found, and the findings approved.</summary>
+    public RelayCommand SecurityFindingsCommand
+    {
+        get;
     }
 
     /// <summary>Opens the account LazyVM signs in to the VM with, its password hidden until asked for.</summary>
@@ -401,6 +409,8 @@ public sealed class VMViewModel : ViewModelBase
         RaiseRunCommandsChanged();
         // Its Restore window, if it has opened one, follows the runs too; one since closed just keeps it.
         _Restore?.Update(entry);
+        // So does its Security findings window, reading the findings again after a newer scan.
+        _ = _Findings?.Update(entry);
     }
 
     /// <summary>Memory in use against the most the VM can use, for example "6 GB of 16 GB" (#420).</summary>

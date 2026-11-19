@@ -252,6 +252,52 @@ public class CommandRunner : IDisposable
                 "No recovery password is stored for that disk now. Close this window and open it again to see the keys stored now.");
     }
 
+    /// <summary>
+    /// Runs <c>Get-LazyVMSecurityFinding -Name</c>: the last scan's findings,
+    /// less the approved ones. None before the first scan, and none when it
+    /// found nothing: the module tells those apart only in a warning, so the
+    /// window tells them apart by the dashboard's <c>LastSecurityScan</c>.
+    /// </summary>
+    public virtual async Task<IReadOnlyList<VMSecurityFinding>> GetSecurityFindingsAsync(string name, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMSecurityFinding", [("Name", name)], cancellationToken, failsOnlyByThrowing: true).ConfigureAwait(false);
+        return output.Select(ToSecurityFinding).ToList();
+    }
+
+    /// <summary>Runs <c>Get-LazyVMSecurityFinding -Name -Approved</c>: the approved findings, with when and why. None while none is approved.</summary>
+    public virtual async Task<IReadOnlyList<VMSecurityApproval>> GetSecurityApprovalsAsync(string name, CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync("Get-LazyVMSecurityFinding", [("Name", name), ("Approved", true)], cancellationToken, failsOnlyByThrowing: true)
+            .ConfigureAwait(false);
+        return output.Select(ToSecurityApproval).ToList();
+    }
+
+    /// <summary>Reads one <c>LazyVM.SecurityFinding</c> object. A time that cannot be read is left empty.</summary>
+    internal static VMSecurityFinding ToSecurityFinding(PSObject finding)
+    {
+        return new(
+            Text(finding, "Id"),
+            Text(finding, "Severity"),
+            Text(finding, "Title"),
+            Text(finding, "WhatWeFound"),
+            ReadList(finding, "Where").Select(file => file.BaseObject.ToString() ?? string.Empty).Where(file => file.Length > 0).ToList(),
+            Text(finding, "WhyItMatters"),
+            Text(finding, "HowToFix"),
+            ReadDate(finding, "FirstSeen", "FirstSeen", []),
+            Text(finding, "Status"));
+    }
+
+    /// <summary>Reads one <c>LazyVM.SecurityApproval</c> object. A time that cannot be read is left empty.</summary>
+    internal static VMSecurityApproval ToSecurityApproval(PSObject approval)
+    {
+        return new(
+            Text(approval, "Id"),
+            Text(approval, "Severity"),
+            Text(approval, "Title"),
+            ReadDate(approval, "ApprovedOn", "ApprovedOn", []),
+            Text(approval, "Reason"));
+    }
+
     /// <summary>The folder the module was imported from, which holds the script each build runs with.</summary>
     public virtual async Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
     {
