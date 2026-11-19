@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.33.0](https://github.com/downerboy/LazyVM/compare/v6.32.0...v6.33.0) (2026-11-19)
+
+
+### Features
+
+* **gui:** show a VM's security findings ([#485](https://github.com/downerboy/LazyVM/issues/485)) ([18b8806](https://github.com/downerboy/LazyVM/commit/18b88064a006557c67331f27efbd1881b18edabd))
+
 ## [6.32.0](https://github.com/downerboy/LazyVM/compare/v6.31.0...v6.32.0) (2026-11-19)
 
 
