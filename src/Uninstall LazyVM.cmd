@@ -34,7 +34,8 @@ pause
 exit /b %RESULT%
 
 :nopwsh
-echo Uninstalling LazyVM needs PowerShell 7.6 or later, in %ProgramFiles%\PowerShell\7.
+echo Uninstalling LazyVM needs PowerShell 7.6 or later, installed in %ProgramFiles%\PowerShell\7.
+echo A copy from the Microsoft Store is not used: it is installed elsewhere.
 echo Install it with: winget install Microsoft.PowerShell
 echo Then double-click Uninstall LazyVM.cmd again.
 echo.

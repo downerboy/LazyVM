@@ -3,7 +3,7 @@
 function New-ReleasePackage {
     <#
       Zips the built module, the app Publish-App published in out\App
-      (#489), Install.ps1, the README, the logo the README shows and the
+      (#489), Install.ps1 and the launchers that run it (#490), the README, the logo the README shows and the
       licence into out\release\<ModuleName>-<version>.zip. Stops without the
       app, so no release ships without it.
     #>
