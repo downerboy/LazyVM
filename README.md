@@ -45,7 +45,7 @@ Still needed: a code-signing certificate, and a good deal more.
 
 LazyVM is installed for you: the module goes in `%ProgramFiles%\LazyVM\Modules` and the LazyVM app in `%ProgramFiles%\LazyVM\App`, which only administrators can change and only you can read, and the module's folder is added to your `PSModulePath`. Its data folder is open to you and SYSTEM only, so other standard users cannot use LazyVM or read what it stores. Open **PowerShell 7** (`pwsh`, not Windows PowerShell) as administrator, signed in as the user who will use LazyVM.
 
-**From a release** (no Git needed): download `LazyVM-<version>.zip` from the [latest release](https://github.com/downerboy/LazyVM/releases), extract it, and double-click **Install LazyVM.cmd** in it. It asks for administrator rights, checks for PowerShell 7.6 or later (if it is missing, install it with `winget install Microsoft.PowerShell`), installs LazyVM and its app, and keeps its window open so you can read the result. Or, in PowerShell 7 as administrator, in the folder you saved the zip to:
+**From a release** (no Git needed): download `LazyVM-<version>.zip` from the [latest release](https://github.com/downerboy/LazyVM/releases), then, in the folder you saved it to:
 
 ```powershell
 Unblock-File .\LazyVM-*.zip
