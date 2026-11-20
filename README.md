@@ -65,7 +65,9 @@ Or double-click `Install-FromRepository.cmd` in the repository folder: it runs t
 
 This builds the module, checks it with PSScriptAnalyzer, runs the Pester tests and, only if they all pass, publishes the app and installs both for you. Publishing the app needs the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0); without it, `./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out` installs the module only. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Open a new PowerShell 7 window as administrator afterwards.
 
-Start the app with `%ProgramFiles%\LazyVM\App\LazyVM.UI.Wpf.exe`; it asks for elevation. Close it before installing a newer version: an app that is running is not replaced.
+Start the app from **LazyVM** in the Start menu, or with `%ProgramFiles%\LazyVM\App\LazyVM.UI.Wpf.exe`; it asks for elevation. The shortcut is in a Start menu folder only administrators can change, so no other program can repoint it. A build runs on its own: close its progress window whenever you like, and open it again with **Build progress**, for the selected VM in the main list or in the VM's window. Close the app before installing a newer version: an app that is running is not replaced.
+
+**Uninstalling:** double-click **Uninstall LazyVM.cmd** in the release folder, or run `.\LazyVM\Install.ps1 -Uninstall` as administrator. It lists what goes and what stays, and asks first. It removes the Start menu shortcut, the app, the module and LazyVM's scheduled tasks, so the VMs' nightly maintenance and security scan stop. It keeps the Hyper-V VMs, their disks, your LazyVM folder and the stored passwords and recovery keys. To remove a VM fully, run `Remove-LazyVM` first.
 
 **Updating from LazyVM 5?** It was installed for every user. Once LazyVM 6 is installed, run `Convert-LazyVMInstallation` once, as administrator: it moves your VMs, passwords and scheduled tasks to your account, keeping the VMs running. See the [guide](docs/Guide.md#updating-from-lazyvm-5-installed-for-every-user).
 

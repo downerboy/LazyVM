@@ -23,6 +23,9 @@
 
         <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24" Padding="24,16">
             <DockPanel>
+                <!-- Before a build starts: it runs on its own, so its window can be closed and opened again (#498). -->
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,12"
+                           Text="The build runs on its own, in its own process. Its progress opens in a window you can close at any time without stopping it: to see it again, select the VM in the list and choose Build progress." />
                 <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
                     <Button Content="_Build" Command="{Binding BuildCommand}" IsDefault="True"
                             AutomationProperties.Name="Build the VM" />

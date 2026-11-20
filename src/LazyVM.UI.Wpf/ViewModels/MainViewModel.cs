@@ -13,6 +13,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly RelayCommand _RefreshCommand;
     private readonly RelayCommand _CancelRefreshCommand;
     private readonly RelayCommand _OpenVMCommand;
+    private readonly RelayCommand _BuildProgressCommand;
     private CancellationTokenSource? _Refreshing;
     private VMRowViewModel? _SelectedVM;
     private string _Status = string.Empty;
@@ -36,6 +37,7 @@ public sealed class MainViewModel : ViewModelBase
         _RefreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         _CancelRefreshCommand = new RelayCommand(() => _Refreshing?.Cancel(), () => IsRefreshing);
         _OpenVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);
+        _BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(SelectedVM!.Name, started: null), () => SelectedVMIsBuilding);
     }
 
     public ObservableCollection<VMRowViewModel> VMs { get; } = [];
@@ -48,6 +50,7 @@ public sealed class MainViewModel : ViewModelBase
             if (SetProperty(ref _SelectedVM, value))
             {
                 _OpenVMCommand.RaiseCanExecuteChanged();
+                SelectedVMChanged();
             }
         }
     }
@@ -65,6 +68,12 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand RefreshCommand => _RefreshCommand;
 
     public RelayCommand CancelRefreshCommand => _CancelRefreshCommand;
+
+    /// <summary>True while a build of the selected VM runs, so its progress window can be opened again from the list.</summary>
+    public bool SelectedVMIsBuilding => SelectedVM is { IsBuilding: true };
+
+    /// <summary>Opens the progress window of the selected VM's build, or brings it to the front when it is open.</summary>
+    public RelayCommand BuildProgressCommand => _BuildProgressCommand;
 
     /// <summary>Opens the selected VM's window, or brings it to the front when it is open (Enter, double-click).</summary>
     public RelayCommand OpenVMCommand => _OpenVMCommand;
@@ -130,6 +139,8 @@ public sealed class MainViewModel : ViewModelBase
         {
             var entries = await _Runner.GetDashboardAsync(cancel.Token);
             ShowInList(entries);
+            // The selected VM may have started or stopped building.
+            SelectedVMChanged();
             _ListIsKnown = true;
             _Windows.Update(entries);
             var count = entries.Count == 1 ? "1 VM" : $"{entries.Count} VMs";
@@ -183,6 +194,12 @@ public sealed class MainViewModel : ViewModelBase
                 VMs.Move(current, index);
             }
         }
+    }
+
+    private void SelectedVMChanged()
+    {
+        OnPropertyChanged(nameof(SelectedVMIsBuilding));
+        _BuildProgressCommand.RaiseCanExecuteChanged();
     }
 
     private void OpenSelectedVM()
