@@ -252,6 +252,39 @@ Describe 'The code the tasks run (#284)' {
         Should -Invoke -ModuleName $module Assert-TrustedFolder -Times 0 -ParameterFilter { $Path -eq $env:ProgramFiles }
     }
 
+    It 'covers the app in Program Files, and the folder above it, when it is installed (#490)' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Program Files\LazyVM\Modules\LazyVM\6.0.0' }
+        Mock -ModuleName $module Get-ProgramFilesFolder { $TestDrive }
+        Mock -ModuleName $module Assert-TrustedFolder { }
+        $app = Join-Path -Path $TestDrive -ChildPath 'LazyVM/App'
+        New-Item -ItemType Directory -Path $app -Force | Out-Null
+
+        InModuleScope $module { Assert-TrustedCode }
+
+        Should -Invoke -ModuleName $module Assert-TrustedFolder -ParameterFilter { $Path -eq $app }
+        Should -Invoke -ModuleName $module Assert-TrustedFolder -ParameterFilter { $Path -eq (Join-Path -Path $TestDrive -ChildPath 'LazyVM') }
+    }
+
+    It 'does not look for the app when only the module is installed (#490)' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Program Files\LazyVM\Modules\LazyVM\6.0.0' }
+        Mock -ModuleName $module Get-ProgramFilesFolder { Join-Path -Path $TestDrive -ChildPath 'NoApp' }
+        Mock -ModuleName $module Assert-TrustedFolder { }
+
+        InModuleScope $module { Assert-TrustedCode }
+
+        Should -Invoke -ModuleName $module Assert-TrustedFolder -Times 0 -ParameterFilter { $Path -like '*App' }
+    }
+
+    It 'stops when anyone but administrators can change the app, which runs elevated (#490)' {
+        Mock -ModuleName $module Get-LazyVMModuleBase { 'C:\Program Files\LazyVM\Modules\LazyVM\6.0.0' }
+        Mock -ModuleName $module Get-ProgramFilesFolder { $TestDrive }
+        Mock -ModuleName $module Assert-TrustedFolder { }
+        Mock -ModuleName $module Assert-TrustedFolder { throw "$Path can be changed by MIKEPC\sean" } -ParameterFilter { $Path -like '*App' }
+        New-Item -ItemType Directory -Path (Join-Path -Path $TestDrive -ChildPath 'LazyVM/App') -Force | Out-Null
+
+        { InModuleScope $module { Assert-TrustedCode } } | Should -Throw -ExpectedMessage '*App can be changed by MIKEPC\sean*'
+    }
+
     It 'refuses a folder owned by anyone but administrators, SYSTEM and TrustedInstaller' {
         Mock -ModuleName $module Get-FolderWriteRule { }
         Mock -ModuleName $module Get-PathOwnerSid { 'S-1-5-21-111-222-333-1001' }
