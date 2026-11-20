@@ -19,9 +19,6 @@ BeforeAll {
         Set-Content -LiteralPath (Join-Path -Path $moduleSource -ChildPath 'Demo.psd1') -Value "@{ ModuleVersion = '1.2.3'; PrivateData = @{ PSData = @{ } } }"
         Set-Content -LiteralPath (Join-Path -Path $built -ChildPath 'Demo.psm1') -Value '# module'
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'src/Install.ps1') -Value '# install'
-        foreach ($launcher in 'Install LazyVM.cmd', 'Uninstall LazyVM.cmd') {
-            Set-Content -LiteralPath (Join-Path -Path $root -ChildPath "src/$launcher") -Value '@echo off'
-        }
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'README.md') -Value '# readme'
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'LICENSE.md') -Value '# licence'
         Set-Content -LiteralPath (Join-Path -Path $root -ChildPath 'docs/images/logo.svg') -Value '<svg/>'
@@ -60,11 +57,6 @@ Describe 'New-ReleasePackage' {
         $script:entries | Should -Contain 'Install.ps1'
         $script:entries | Should -Contain 'README.md'
         $script:entries | Should -Contain 'LICENSE.md'
-    }
-
-    It 'puts the launchers a user double-clicks at the top of the zip, beside Install.ps1 (#490)' {
-        $script:entries | Should -Contain 'Install LazyVM.cmd'
-        $script:entries | Should -Contain 'Uninstall LazyVM.cmd'
     }
 
     It 'puts the logo at docs/images/logo.svg, where the README shows it from' {

@@ -5,8 +5,7 @@ Makes the release zip: out\release\LazyVM-<version>.zip.
 
 .DESCRIPTION
 Assembles src\LazyVM into out\LazyVM\<version>, publishes the app
-self-contained for win-x64 into out\App, then zips both with Install.ps1, its launchers (Install LazyVM.cmd and
-Uninstall LazyVM.cmd),
+self-contained for win-x64 into out\App, then zips both with Install.ps1,
 the README and the licence, ready to attach to a GitHub release. It needs
 the .NET 10 SDK. The release workflow runs it after Invoke-AnalyzerAndTest.ps1
 passes; it does not analyze or test by itself.
