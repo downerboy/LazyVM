@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.36.0](https://github.com/downerboy/LazyVM/compare/v6.35.0...v6.36.0) (2026-11-20)
+
+
+### Features
+
+* install launcher, Start menu shortcut and uninstall ([#495](https://github.com/downerboy/LazyVM/issues/495)) ([d387c8d](https://github.com/downerboy/LazyVM/commit/d387c8d9cfa6a4b75c929163bdfd63856799b175))
+
 ## [6.35.0](https://github.com/downerboy/LazyVM/compare/v6.34.0...v6.35.0) (2026-11-19)
 
 
