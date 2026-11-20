@@ -160,9 +160,37 @@ public sealed class VMViewModel : ViewModelBase
             if (SetProperty(ref _SelectedPhase, value))
             {
                 BuildFromPhaseCommand.RaiseCanExecuteChanged();
+                OnPropertyChanged(nameof(PhaseHelp));
+                OnPropertyChanged(nameof(HasPhaseHelp));
             }
         }
     }
+
+    /// <summary>
+    /// What building from <see cref="SelectedPhase"/> skips, what it runs
+    /// again and what it keeps, and when to use it; empty when no phase is
+    /// chosen. The window shows it and gives it to the phase list as its
+    /// help text, so Narrator reads the same.
+    /// </summary>
+    public string PhaseHelp
+    {
+        get
+        {
+            if (SelectedPhase is not { } chosen)
+            {
+                return string.Empty;
+            }
+            var number = chosen.Number;
+            var runs = number == Phases[0].Number
+                ? "Runs every phase again"
+                : number == Phases[^1].Number
+                    ? $"Skips the phases before phase {number}, then runs only phase {number} again"
+                    : $"Skips the phases before phase {number}, then runs phase {number} and those after it again";
+            return runs + ", skipping work already done: the VM, its disks and what is installed are kept. Use it after fixing what stopped a build, from the phase it stopped in.";
+        }
+    }
+
+    public bool HasPhaseHelp => PhaseHelp.Length > 0;
 
     /// <summary>
     /// Why a run cannot start now, or which phase is chosen and why, as text

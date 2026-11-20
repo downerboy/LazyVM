@@ -45,7 +45,7 @@
                 <Button Content="{Binding CarryOnText}" Command="{Binding CarryOnCommand}" HorizontalAlignment="Left" Margin="0,12,0,0"
                         Visibility="{Binding CanCarryOn, Converter={StaticResource VisibleWhenTrue}}"
                         AutomationProperties.Name="{Binding CarryOnText}"
-                        AutomationProperties.HelpText="Starts the build again from this phase, in a new progress window. Let any install still running inside the VM finish first." />
+                        AutomationProperties.HelpText="Starts the build again from this phase, in a new progress window, skipping the phases before it and work already done: the VM, its disks and what is installed are kept. Let any install still running inside the VM finish first." />
                 <!-- Close, and while the build runs, that closing does not stop it and where to open this window again (#498). -->
                 <DockPanel Margin="0,12,0,0">
                     <Button DockPanel.Dock="Right" Content="Close" Command="Close" VerticalAlignment="Bottom" Margin="16,0,0,0"

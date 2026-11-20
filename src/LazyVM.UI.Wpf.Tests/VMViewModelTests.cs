@@ -548,6 +548,45 @@ public sealed class VMViewModelTests : IDisposable
         Assert.Equal($"The last build {said} in phase 7, so phase 7 is chosen. Let any install still running inside the VM finish first.", vm.RunNote);
     }
 
+    [Theory]
+    [InlineData(0, "Runs every phase again")]
+    [InlineData(1, "Skips the phases before phase 1, then runs phase 1 and those after it again")]
+    [InlineData(7, "Skips the phases before phase 7, then runs phase 7 and those after it again")]
+    [InlineData(8, "Skips the phases before phase 8, then runs only phase 8 again")]
+    public async Task PhaseHelp_SaysWhatBuildingFromTheChosenPhaseSkipsAndKeeps(int number, string runs)
+    {
+        var vm = await Loaded(Sample.VM());
+
+        vm.SelectedPhase = vm.Phases.Single(phase => phase.Number == number);
+
+        Assert.Equal(runs + ", skipping work already done: the VM, its disks and what is installed are kept. Use it after fixing what stopped a build, from the phase it stopped in.", vm.PhaseHelp);
+        Assert.True(vm.HasPhaseHelp);
+    }
+
+    [Fact]
+    public async Task PhaseHelp_FollowsTheChosenPhase()
+    {
+        var vm = await Loaded(Sample.VM());
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        vm.SelectedPhase = vm.Phases.Single(phase => phase.Number == 7);
+
+        Assert.Contains(nameof(VMViewModel.PhaseHelp), changed);
+        Assert.Contains(nameof(VMViewModel.HasPhaseHelp), changed);
+    }
+
+    [Fact]
+    public async Task PhaseHelp_WhenThePhasesCannotBeRead_IsEmpty()
+    {
+        _Runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
+
+        var vm = await Loaded(Sample.VM());
+
+        Assert.Equal(string.Empty, vm.PhaseHelp);
+        Assert.False(vm.HasPhaseHelp);
+    }
+
     [Fact]
     public async Task AfterABuildThatCompleted_TheFirstPhaseIsChosen()
     {
