@@ -116,7 +116,7 @@ The app runs elevated, because the commands it runs need administrator rights. I
 3. The data folder in `%USERPROFILE%\LazyVM` is untrusted: any process running as the user can change it. Settings are read through the module's checks (`Read-TrustedVMSetting`) and never become script text. Commands are fixed commands with fixed parameters.
 4. No listener, no named pipe, no remote calls.
 5. No secrets on disk or in logs. The password is hidden until asked for, and the clipboard is cleared after a copy. A recovery key export warns when the chosen folder is inside OneDrive.
-6. The Start menu shortcut is in a place only administrators can change, so no other program can repoint a shortcut that then asks for elevation.
+6. The Start menu shortcut is in a place only administrators can change, so no other program can repoint a shortcut that then asks for elevation. It is in the Start menu of every user, `%ProgramData%\Microsoft\Windows\Start Menu\Programs`, and `Install.ps1` adds it only while nobody but administrators, SYSTEM and TrustedInstaller owns that folder or can add to it or change its permissions. Windows lets the signed-in user delete from it, which removes the shortcut but puts none in its place. The shortcut itself is locked as the install folder is (#490).
 7. A user without Hyper-V rights sees State as "Unknown", as `Get-LazyVM` already reports.
 
 ## 6. Look and feel
@@ -160,8 +160,9 @@ The module is per-user by design. Any multi-user mode must be an explicit, admin
 ## 9. Installing and starting it
 
 - It ships in the same release zip as the module, in `App`, and `Install.ps1` installs both: the module in `%ProgramFiles%\LazyVM\Modules` and the app in `%ProgramFiles%\LazyVM\App` (#489). The app is published self-contained for win-x64, so the host needs no .NET, and every DLL it loads is in its own folder (section 5, rule 1). Not as a single file, which would leave PowerShell unable to find its built-in modules, and not trimmed. The new app is copied in beside the old one, then swapped in: an app that is running is kept whole, and `Install.ps1` says to close it and run again. `Install-FromRepository.cmd` publishes and installs it too (`Publish-App.ps1`), and CI makes the release zip on every pull request.
-- The zip includes a double-click **Install LazyVM** launcher that runs `Install.ps1` elevated, so a user never opens a console. `Install-FromRepository.cmd` stays the developer's shortcut.
-- `Install.ps1` adds a **LazyVM** shortcut in a Start menu folder that only administrators can change (section 5, rule 6). Uninstalling removes it.
+- The zip includes a double-click **Install LazyVM** launcher (`Install LazyVM.cmd`), so a user never opens a console (#490). It asks for elevation, checks that PowerShell 7.6 or later is installed in `%ProgramFiles%\PowerShell\7` and otherwise says to run `winget install Microsoft.PowerShell`, runs `Install.ps1` with `-ExecutionPolicy Bypass` for that one run, and waits so the user can read how it ended. `Install-FromRepository.cmd` stays the developer's shortcut.
+- `Install.ps1` adds a **LazyVM** shortcut to the app in a Start menu folder that only administrators can change (section 5, rule 6), once the app is installed. Installing again replaces it.
+- `Install.ps1 -Uninstall`, or the **Uninstall LazyVM** launcher in the zip (`Uninstall LazyVM.cmd`), removes LazyVM from the host and keeps the VMs and their data (#490). It lists what goes and what stays and asks first; `-Confirm:$false` does not ask. It removes the Start menu shortcut, `%ProgramFiles%\LazyVM\App`, `%ProgramFiles%\LazyVM\Modules` and that folder on the user's PSModulePath, and unregisters LazyVM's scheduled tasks on the host, each VM's maintenance task among them, listing each: nothing runs the VMs' nightly maintenance or security scan after that, and it says so. It keeps the Hyper-V VMs, their disks, the LazyVM folder (settings, logs, templates, backups), the stored passwords and recovery keys, and LazyVM 5's copy in `Legacy`; `%ProgramFiles%\LazyVM` goes once nothing is left in it. To remove a VM fully, run `Remove-LazyVM` first. It follows no junction or link, keeps an app that is running whole and says to close it, and names what it could not remove without stopping the rest.
 - Updating means installing the newer release the same way. The app does not update itself in the first step.
 - Code signing (#4) is deferred until the first beta release. Until then Windows SmartScreen warns about the app.
 
@@ -206,4 +207,4 @@ Each screen needs its command first. Where a command is missing (for example the
 9. Accessibility pass with Narrator, and zoom and High Contrast checks.
 10. Packaging: the release zip, `Install.ps1`, the launcher and the Start menu shortcut.
     1. The app in the release zip, published self-contained for win-x64, and installed by `Install.ps1` in `%ProgramFiles%\LazyVM\App` (#489).
-    2. The **Install LazyVM** launcher, the Start menu shortcut, and an uninstall that keeps the VMs and their data (#490).
+    2. The **Install LazyVM** launcher, the Start menu shortcut, and an uninstall that keeps the VMs and their data (#490). Done.

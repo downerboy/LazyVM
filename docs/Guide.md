@@ -67,7 +67,7 @@ These are detected and reported by name rather than migrated. Doing them correct
 
 ### Installing LazyVM
 
-LazyVM is a PowerShell module, installed in `%ProgramFiles%\LazyVM\Modules`: only administrators can change it, because LazyVM's scheduled tasks run it as SYSTEM, and only you (and administrators) can read it. The installer adds that folder to your `PSModulePath`. Install it in PowerShell 7 run as administrator, signed in as the Windows user who will use LazyVM (approve the UAC prompt with your own account). The simplest way to install it is from a [release](https://github.com/downerboy/LazyVM/releases): download the zip, then, in PowerShell 7 as administrator, in the folder you saved it to:
+LazyVM is a PowerShell module, installed in `%ProgramFiles%\LazyVM\Modules`, with its app in `%ProgramFiles%\LazyVM\App`: only administrators can change them, because LazyVM's scheduled tasks run the module as SYSTEM and the app runs elevated, and only you (and administrators) can read them. A task is registered only while that holds for the module, the app and PowerShell. The installer adds that folder to your `PSModulePath`. Install it in PowerShell 7 run as administrator, signed in as the Windows user who will use LazyVM (approve the UAC prompt with your own account). The simplest way to install it is from a [release](https://github.com/downerboy/LazyVM/releases): download the zip, then, in PowerShell 7 as administrator, in the folder you saved it to:
 
 ```powershell
 Unblock-File .\LazyVM-*.zip
@@ -76,6 +76,10 @@ Expand-Archive .\LazyVM-*.zip -DestinationPath .\LazyVM -Force
 ```
 
 `Unblock-File` matters: Windows marks downloaded files, and PowerShell will not run a marked script. To update, do the same with the newer release.
+
+Instead of typing those, extract the zip and double-click **Install LazyVM.cmd** in it. It asks for administrator rights, checks that PowerShell 7.6 or later is installed in `%ProgramFiles%\PowerShell\7` (if not, it says to run `winget install Microsoft.PowerShell`), runs `Install.ps1` with the execution policy bypassed for that one run, and keeps its window open so you can read the result. Windows may ask whether to run a downloaded file first.
+
+With the app installed, `Install.ps1` adds a **LazyVM** shortcut to it in the Start menu of every user, `%ProgramData%\Microsoft\Windows\Start Menu\Programs`. Only administrators can add to or change that folder, so no other program can repoint a shortcut that asks for elevation; the shortcut itself is locked as the install folder is. Windows lets you delete it, and installing again puts it back. If the folder can be changed by anyone else, `Install.ps1` adds no shortcut and says why.
 
 Or build it from the repository, in PowerShell 7 as administrator:
 
@@ -92,6 +96,23 @@ Instead of typing those, you can double-click `Install-FromRepository.cmd` in th
 `Install.ps1` also removes earlier copies that PowerShell would load instead, and lists each one: other versions in `C:\Program Files\LazyVM\Modules\LazyVM`, the ones an earlier LazyVM 6 put in your own folders, and LazyVM 5's, in `C:\Program Files\PowerShell\Modules\LazyVM`. While LazyVM 5's VMs are not moved to you yet, its copy is moved to `C:\Program Files\LazyVM\Legacy` instead, where PowerShell does not load it; LazyVM 5's scheduled tasks fail until you run `Convert-LazyVMInstallation`, which deletes that copy once it has moved them. Only a folder holding nothing but LazyVM version folders is removed, and none that is, holds, or is reached through a junction, link or cloud placeholder: such a copy is kept, with a warning naming it. Then `Install.ps1` warns if another copy still comes first on PSModulePath, with its path; `Test-LazyVM` checks the same.
 
 Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the module, and reports its commands as not recognized. To update, pull the repository and run the same commands again. The scheduled tasks pick up the new version on their next run.
+
+### Uninstalling LazyVM
+
+To remove LazyVM from the computer and keep your VMs, double-click **Uninstall LazyVM.cmd** in the release folder, or run, in PowerShell 7 as administrator:
+
+```powershell
+.\LazyVM\Install.ps1 -Uninstall
+```
+
+It lists what goes and what stays, then asks; `-Confirm:$false` does not ask, and `-WhatIf` only lists. It removes:
+
+- the **LazyVM** Start menu shortcut, the app in `%ProgramFiles%\LazyVM\App` and the module in `%ProgramFiles%\LazyVM\Modules`, and that folder from your PSModulePath;
+- LazyVM's scheduled tasks on the host, each VM's daily maintenance task among them, listing each. With them gone, nothing runs the VMs' nightly maintenance or security scan.
+
+It keeps the Hyper-V VMs and their disks, your LazyVM folder (settings, logs, templates, backups), and the stored passwords and the disks' recovery keys, so installing again picks up where you left off. LazyVM 5's copy in `%ProgramFiles%\LazyVM\Legacy` is kept too, and `%ProgramFiles%\LazyVM` goes once nothing is left in it. To remove a VM fully, run `Remove-LazyVM` before you uninstall.
+
+Like the install, it follows no junction or link. An app that is running is kept whole: close it and run the uninstall again. Anything it cannot remove is named, with its path, and the rest is still removed.
 
 ### Who can use LazyVM
 

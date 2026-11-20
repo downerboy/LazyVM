@@ -37,6 +37,14 @@ function Get-InstalledModuleFolder {
     return Join-Path -Path (Get-ProgramFilesFolder) -ChildPath 'LazyVM/Modules'
 }
 
+function Get-InstalledAppFolder {
+    <# Where Install.ps1 puts the LazyVM app: %ProgramFiles%\LazyVM\App (#489). #>
+    [OutputType([string])]
+    param()
+
+    return Join-Path -Path (Get-ProgramFilesFolder) -ChildPath 'LazyVM/App'
+}
+
 function Get-ModuleImportPath {
     <#
       What a scheduled task imports, by path: the tasks run as SYSTEM, whose
@@ -109,7 +117,9 @@ function Assert-TrustedCode {
       administrators, SYSTEM and TrustedInstaller only: this module, the
       folder the task imports it from, the folders above them up to
       %ProgramFiles%\LazyVM (whoever can change one could swap what is
-      below), and PowerShell.
+      below), and PowerShell. With the app installed, its folder and the
+      one above it too: it runs elevated (security rule 1 in
+      docs\Dashboard.md, #490).
     #>
     $moduleBase = Get-LazyVMModuleBase
     $paths = @($moduleBase, (Get-ModuleImportPath))
@@ -118,6 +128,10 @@ function Assert-TrustedCode {
         for ($parent = Split-Path -Path $moduleBase -Parent; Test-PathWithin -Path $parent -Folder $installFolder; $parent = Split-Path -Path $parent -Parent) {
             $paths += $parent
         }
+    }
+    $appFolder = Get-InstalledAppFolder
+    if (Test-Path -LiteralPath $appFolder -PathType Container) {
+        $paths += $appFolder, (Split-Path -Path $appFolder -Parent)
     }
     foreach ($path in @($paths + $PSHOME) | Select-Object -Unique) {
         Assert-TrustedFolder -Path $path

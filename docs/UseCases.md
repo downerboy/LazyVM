@@ -167,7 +167,8 @@ Actors: Host user, Administrator. Systems: Hyper-V, Task Scheduler, Guest Window
 Actor: Administrator. System: PowerShell Gallery. These are the repository's scripts, not module commands.
 
 - Install from the repository (`./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out`) includes **Build the module**, **Analyze with PSScriptAnalyzer** and **Run the Pester tests**, and installs only if they pass. Extended by **Install the build tools** when the pinned Pester or PSScriptAnalyzer is missing.
-- Install from a release (`.\LazyVM\Install.ps1`) copies the module from the release zip and unblocks it.
+- Install from a release (double-click `Install LazyVM.cmd`, or `.\LazyVM\Install.ps1`) copies the module and the app from the release zip, unblocks them, and adds the **LazyVM** Start menu shortcut, in a folder only administrators can change.
+- Uninstall (double-click `Uninstall LazyVM.cmd`, or `.\LazyVM\Install.ps1 -Uninstall`) lists what goes and what stays and asks first, then removes the shortcut, the app, the module and LazyVM's scheduled tasks on the host. The VMs, their disks and the LazyVM folder are kept.
 
 ## Changing the diagrams
 
