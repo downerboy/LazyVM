@@ -220,6 +220,36 @@ public sealed class BuildProgressViewModelTests
     }
 
     [Fact]
+    public async Task WhileTheBuildRuns_SaysClosingDoesNotStopIt_AndHowToComeBack()
+    {
+        var progress = await Loaded(Started());
+        _Runner.ReturnsRun(Running(7));
+
+        await progress.PollAsync(CancellationToken.None);
+
+        Assert.True(progress.HasReturnText);
+        Assert.Equal(
+            "Closing this window does not stop the build. To see it again, select DevBox in the list and choose Build progress, or choose Build progress in the window of DevBox.",
+            progress.ReturnText);
+    }
+
+    [Fact]
+    public async Task OnceTheBuildHasEnded_SaysNothingAboutComingBack()
+    {
+        var progress = await Loaded(Started());
+        var changed = new List<string?>();
+        progress.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        _Runner.ReturnsRun(Ended(VMRun.COMPLETED, 8));
+
+        await progress.PollAsync(CancellationToken.None);
+
+        Assert.False(progress.HasReturnText);
+        Assert.Null(progress.ReturnText);
+        Assert.Contains(nameof(BuildProgressViewModel.ReturnText), changed);
+        Assert.Contains(nameof(BuildProgressViewModel.HasReturnText), changed);
+    }
+
+    [Fact]
     public async Task Failed_SaysThePhaseAndTheReason_AndHowToCarryOn()
     {
         var progress = await Loaded(Started());

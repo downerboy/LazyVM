@@ -22,6 +22,66 @@ public sealed class MainViewModelTests : IDisposable
         _Culture.Dispose();
     }
 
+    private static VMRun RunningNow(string command)
+    {
+        return new VMRun { Command = command, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 };
+    }
+
+    [Fact]
+    public async Task BuildProgress_IsOfferedForTheSelectedVM_OnlyWhileItBuilds()
+    {
+        _Runner.Returns(
+            Sample.VM("Idle"),
+            Sample.VM("Building") with { Run = RunningNow(VMRun.BUILD) },
+            Sample.VM("Maintaining") with { Run = RunningNow("Maintenance") });
+        await _Main.RefreshAsync();
+
+        // A loop, not a query: each row is selected in turn.
+        var offered = new List<(string, bool, bool)>();
+        foreach (var row in _Main.VMs)
+        {
+            _Main.SelectedVM = row;
+            offered.Add((row.Name, _Main.BuildProgressCommand.CanExecute(null), _Main.SelectedVMIsBuilding));
+        }
+        _Main.SelectedVM = null;
+
+        Assert.Equal([("Idle", false, false), ("Building", true, true), ("Maintaining", false, false)], offered);
+        Assert.False(_Main.BuildProgressCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task BuildProgress_OpensTheProgressOfTheSelectedVMsBuild()
+    {
+        _Runner.Returns(Sample.VM("DevEnv") with { Run = RunningNow(VMRun.BUILD) });
+        await _Main.RefreshAsync();
+        _Main.SelectedVM = _Main.VMs.Single();
+
+        _Main.BuildProgressCommand.Execute(null);
+
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Shown));
+        Assert.Equal("DevEnv", progress.VMName);
+        progress.StopFollowing();
+    }
+
+    [Fact]
+    public async Task BuildProgress_FollowsARefresh_WhenTheSelectedVMStartsOrStopsBuilding()
+    {
+        _Runner.Returns(Sample.VM("DevEnv"));
+        await _Main.RefreshAsync();
+        _Main.SelectedVM = _Main.VMs.Single();
+        var changed = new List<string?>();
+        _Main.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        var asked = 0;
+        _Main.BuildProgressCommand.CanExecuteChanged += (_, _) => asked++;
+
+        _Runner.Returns(Sample.VM("DevEnv") with { Run = RunningNow(VMRun.BUILD) });
+        await _Main.RefreshAsync();
+
+        Assert.True(_Main.SelectedVMIsBuilding);
+        Assert.Contains(nameof(MainViewModel.SelectedVMIsBuilding), changed);
+        Assert.True(asked > 0);
+    }
+
     [Fact]
     public async Task Refresh_ShowsOneRowPerVM()
     {
