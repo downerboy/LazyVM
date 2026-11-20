@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.37.0](https://github.com/downerboy/LazyVM/compare/v6.36.0...v6.37.0) (2026-11-20)
+
+
+### Features
+
+* **gui:** close the build progress window, and say how to come back to it ([#504](https://github.com/downerboy/LazyVM/issues/504)) ([b54bb47](https://github.com/downerboy/LazyVM/commit/b54bb47fd07a4bebbc60d619b23526ac8723e567))
+
 ## [6.36.0](https://github.com/downerboy/LazyVM/compare/v6.35.0...v6.36.0) (2026-11-20)
 
 

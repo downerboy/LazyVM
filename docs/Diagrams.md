@@ -14,7 +14,7 @@ One diagram per thing you do with LazyVM. Each shows the calls in order down the
 
 ## Contents
 
-- Install: [Install from the repository](#install-from-repo), [Install from a release](#install-from-release), [Uninstall](#uninstall), [Move a machine-wide install to your account](#convert-installation)
+- Install: [Install from the repository](#install-from-repo), [Install from a release](#install-from-release), [Move a machine-wide install to your account](#convert-installation)
 - Set up: [Show LazyVM and its commands](#show), [Choose the LazyVM folder](#set-root), [Create a VM profile without building](#new-profile), [Store the guest account](#set-credential)
 - Build: [Build a VM](#build), [List the build phases](#build-phases), [Stop a running build](#stop-build)
 - Maintain: [Daily maintenance](#maintenance), [Schedule maintenance again](#register-maintenance), [Run maintenance now](#start-maintenance), [Rebuild a VM](#rebuild)
@@ -59,9 +59,7 @@ Called by: `Install-FromRepository.cmd` (asks for administrator rights).
 
 `.\LazyVM\Install.ps1`
 
-As administrator. Copies the module and the app from a downloaded release to %ProgramFiles%\LazyVM, which it locks so only administrators can change it and only you can read it, adds the module to your PSModulePath, replacing an earlier copy of the same version, and unblocks it. Adds the LazyVM Start menu shortcut, in a folder only administrators can change. Removes copies earlier LazyVM 6 builds put in your own folders. Install LazyVM.cmd runs the same, as administrator.
-
-Called by: `Install LazyVM.cmd` (asks for administrator rights, needs PowerShell 7.6).
+As administrator. Copies the module from a downloaded release to %ProgramFiles%\LazyVM, which it locks so only administrators can change it and only you can read it, adds it to your PSModulePath, replacing an earlier copy of the same version, and unblocks it. Removes copies earlier LazyVM 6 builds put in your own folders.
 
 ![Install from a release: call order and data flow](diagrams/install-from-release.svg)
 
@@ -71,34 +69,6 @@ Called by: `Install LazyVM.cmd` (asks for administrator rights, needs PowerShell
    - Writes D3, module folder on your PSModulePath: HKCU:\Environment (PSModulePath)
 2. `Unblock-File` (Install.ps1): removes the downloaded-from-the-internet mark, which would stop PowerShell loading the module
    - Writes D4, files PowerShell will load: Modules\LazyVM\ (<version>\  (unblocked))
-3. `Install-App` (Install.ps1): copied beside the old app, then swapped in; an app that is running is kept
-   - Reads D5, app from the zip: LazyVM\App\ (LazyVM.UI.Wpf.exe)
-   - Writes D6, app, admin-only to change, readable by you: %ProgramFiles%\LazyVM\ (App\)
-4. `Install-StartMenuShortcut` (Install.ps1): only when the app is installed, and the folder is administrators' alone to change; replaces one that is there
-   - Writes D7, Start menu shortcut, locked: all-users Start menu (LazyVM.lnk)
-
-<a id="uninstall"></a>
-
-## Uninstall
-
-`.\LazyVM\Install.ps1` `-Uninstall`
-
-As administrator. Lists what goes and what stays, and asks first; -Confirm:$false does not ask, and -WhatIf only lists. Unregisters LazyVM's scheduled tasks on the host, so nothing runs the VMs' nightly maintenance or security scan, and removes the Start menu shortcut, the app and the module. Keeps the Hyper-V VMs, their disks, your LazyVM folder and the stored passwords and recovery keys: run Remove-LazyVM first to remove a VM fully. Follows no junction or link, and names what it cannot remove without stopping the rest. Uninstall LazyVM.cmd runs the same, as administrator.
-
-Called by: `Uninstall LazyVM.cmd` (asks for administrator rights, needs PowerShell 7.6).
-
-![Uninstall: call order and data flow](diagrams/uninstall.svg)
-
-1. `Get-UninstallPlan` (Install.ps1): what goes and what stays, shown before anything is removed; nothing goes unless you confirm
-   - Reads D1, LazyVM's tasks on the host: Task Scheduler (LazyVM-Maintain-<VM>, LazyVM-ResumeAfterReboot-<VM>)
-   - Reads D2, LazyVM folder, named only: HKCU:\SOFTWARE\LazyVM (Root)
-   - Writes D3, the list, and the question: Console (Removes: ..., Keeps: ...)
-2. `Unregister-LazyVMHostTask` (Install.ps1): each one listed; one that cannot go is named
-   - Writes D4, tasks deleted: Task Scheduler (LazyVM-Maintain-<VM>, LazyVM-ResumeAfterReboot-<VM>)
-3. `Remove-InstalledItem` (Install.ps1): a folder is renamed first, so an app that is running is kept whole; nothing that is or holds a link is removed
-   - Writes D5, shortcut deleted: all-users Start menu (LazyVM.lnk)
-   - Writes D6, app and module deleted: %ProgramFiles%\LazyVM\ (App\, Modules\, the folder itself, once empty)
-   - Writes D7, module folder off your PSModulePath: HKCU:\Environment (PSModulePath)
 
 <a id="convert-installation"></a>
 

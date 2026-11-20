@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LazyVM: build and look after Hyper-V virtual machines</title>
+<meta name="description" content="LazyVM is a PowerShell module that builds, looks after and disposes of Hyper-V virtual machines on a Windows host, unattended.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="site">
+  <div class="wrap">
+    <h1>LazyVM™</h1>
+    <p>A PowerShell module that builds, looks after and disposes of Hyper-V virtual machines on a Windows host, unattended.</p>
+    <nav aria-label="Site">
+      <ul>
+        <li><a href="#what-it-does">What it does</a></li>
+        <li><a href="#requirements">Requirements</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#quick-start">Quick start</a></li>
+        <li><a href="#documentation">Documentation</a></li>
+        <li><a href="#license">License</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  <p class="notice"><strong>Alpha.</strong> LazyVM works, and its author uses it daily, but much of its behavior is still being worked on.</p>
+
+  <p>Today LazyVM makes development VMs: Windows 11 Enterprise Evaluation with Visual Studio, SQL Server Standard Developer and whatever other tools you install, with the 90-day evaluation handled for you. It uses every rearm Windows allows, then rebuilds the VM and puts your work back.</p>
+  <p><a class="button" href="https://github.com/downerboy/LazyVM/releases/latest">Download the latest release</a></p>
+
+  <h2 id="what-it-does">What it does</h2>
+  <div class="cards">
+    <section class="card"><h3>Builds a VM with no input</h3><p>Creates the VM, installs Windows from an answer file, then installs Visual Studio, SQL Server and your other tools.</p></section>
+    <section class="card"><h3>Handles the 90-day evaluation</h3><p>Rearms Windows while it can. When it can't, it captures your state, rebuilds the VM and puts everything back.</p></section>
+    <section class="card"><h3>Keeps the VM up to date</h3><p>Every night: Windows updates, winget upgrades, Store apps and Sysmon, restarting only when nobody is using the VM.</p></section>
+    <section class="card"><h3>Checks security nightly</h3><p>Defender scan, security baseline checks and persistence checks. It only reports, in plain words, with how to fix each finding.</p></section>
+    <section class="card"><h3>Records what you change</h3><p>Tools, settings, firewall rules, scheduled tasks and SQL logins are kept, so a rebuilt VM comes back as you left it.</p></section>
+    <section class="card"><h3>Runs many VMs</h3><p>Each VM has its own tools, disks, schedule and restore points. Source and files live on disks a rebuild never touches.</p></section>
+  </div>
+
+  <h2 id="requirements">Requirements</h2>
+  <ul class="plain">
+    <li>Windows 10 or 11 Pro, Enterprise or Education on the host. Hyper-V is not available on Home.</li>
+    <li><a href="https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows">PowerShell 7.6 or later</a>, run as administrator.</li>
+    <li>A Windows account that is an administrator on the host.</li>
+    <li>A Windows 11 Enterprise Evaluation ISO from the <a href="https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise">Microsoft Evaluation Center</a>.</li>
+    <li>Memory and disk for each VM: 8 GB of memory by default, growing to 16 GB, and dynamically expanding disks.</li>
+  </ul>
+
+  <h2 id="install">Install</h2>
+  <p>Open PowerShell 7 (<code>pwsh</code>) as administrator, signed in as the user who will use LazyVM. Download <code>LazyVM-&lt;version&gt;.zip</code> from the latest release, then in the folder you saved it to:</p>
+  <pre>Unblock-File .\LazyVM-*.zip
+Expand-Archive .\LazyVM-*.zip -DestinationPath .\LazyVM -Force
+.\LazyVM\Install.ps1</pre>
+  <p>LazyVM is installed for one Windows user. Other standard users on the computer cannot use it or read what it stores.</p>
+
+  <h2 id="quick-start">Quick start</h2>
+  <pre>Build-LazyVM -Name DevBox</pre>
+  <p>That is all. It takes an hour or two and needs no input. Running it again finishes an interrupted build. To sign in to the VM yourself, run:</p>
+  <pre>Get-LazyVMCredential -Name DevBox -AsPlainText</pre>
+
+  <h2 id="documentation">Documentation</h2>
+  <ul class="plain">
+    <li><a href="https://github.com/downerboy/LazyVM/blob/main/docs/Guide.md">Guide</a></li>
+    <li><a href="https://github.com/downerboy/LazyVM/blob/main/docs/UseCases.md">Use cases</a></li>
+    <li><a href="https://github.com/downerboy/LazyVM/blob/main/ACCESSIBILITY.md">Accessibility statement</a></li>
+    <li><a href="https://github.com/downerboy/LazyVM/blob/main/SECURITY.md">Security policy</a></li>
+    <li><a href="https://github.com/downerboy/LazyVM/blob/main/CONTRIBUTING.md">Contributing</a></li>
+    <li><a href="https://github.com/downerboy/LazyVM/blob/main/SUPPORT.md">Getting support</a></li>
+    <li><a href="https://github.com/downerboy/LazyVM/blob/main/CHANGELOG.md">Changelog</a></li>
+  </ul>
+
+  <h2 id="license">License</h2>
+  <p>LazyVM is free for personal and other noncommercial use under the <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial License 1.0.0</a>. Commercial use needs a separate license; contact the author through GitHub.</p>
+  <p>LazyVM™ and the LazyVM logo are unregistered trademarks of Massokissed.</p>
+</main>
+
+<footer class="wrap">
+  <p><img class="logo" src="images/logo.svg" alt="LazyVM logo" width="240"></p>
+  <p>Built for accessibility first. <a href="https://github.com/downerboy/LazyVM">LazyVM on GitHub</a></p>
+</footer>
+</body>
+</html>
