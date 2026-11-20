@@ -1,0 +1,19 @@
+name: Accessibility issue
+description: Something is hard or impossible to use with a screen reader, magnifier, keyboard or other assistive technology.
+labels: [accessibility]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is hard or impossible to do
+    validations:
+      required: true
+  - type: input
+    id: tech
+    attributes:
+      label: Assistive technology and version
+      description: For example NVDA, JAWS, Narrator, Magnifier.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
