@@ -17,6 +17,10 @@
         <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
             <DockPanel>
                 <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <!-- Only while the selected VM builds: its progress window, opened again after it was closed (#498). -->
+                    <Button Content="Build progress" Command="{Binding BuildProgressCommand}" Margin="0,0,8,0"
+                            Visibility="{Binding SelectedVMIsBuilding, Converter={StaticResource VisibleWhenTrue}}"
+                            AutomationProperties.Name="{Binding SelectedVM.Name, StringFormat='Progress of the build of {0}'}" />
                     <Button Content="Build new VM" Command="{Binding BuildCommand}" Margin="0,0,8,0" />
                     <Button Content="Refresh" Command="{Binding RefreshCommand}"
                             AutomationProperties.Name="Refresh the list (F5)" />

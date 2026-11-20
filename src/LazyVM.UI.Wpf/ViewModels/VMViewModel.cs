@@ -123,7 +123,7 @@ public sealed class VMViewModel : ViewModelBase
     }
 
     /// <summary>True while a build of the VM is running.</summary>
-    public bool IsBuilding => _Entry.Run is { IsRunning: true, Command: null or VMRun.BUILD };
+    public bool IsBuilding => _Entry.IsBuilding;
 
     /// <summary>True while a build, maintenance or rebuild of the VM is running: no other may start.</summary>
     public bool IsBusy => _Entry.Run is { IsRunning: true };

@@ -116,6 +116,16 @@ public sealed class BuildProgressViewModel : ViewModelBase
 
     public bool HasAdvice => Advice is not null;
 
+    /// <summary>
+    /// While the build runs: closing the window does not stop it, and where
+    /// to open the window again. Empty once the build has ended.
+    /// </summary>
+    public string? ReturnText => IsFinished
+        ? null
+        : $"Closing this window does not stop the build. To see it again, select {VMName} in the list and choose Build progress, or choose Build progress in the window of {VMName}.";
+
+    public bool HasReturnText => ReturnText is not null;
+
     public bool IsFinished
     {
         get => _IsFinished;
@@ -124,6 +134,8 @@ public sealed class BuildProgressViewModel : ViewModelBase
             if (SetProperty(ref _IsFinished, value))
             {
                 _CancelCommand.RaiseCanExecuteChanged();
+                OnPropertyChanged(nameof(ReturnText));
+                OnPropertyChanged(nameof(HasReturnText));
             }
         }
     }

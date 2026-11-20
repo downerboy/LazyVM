@@ -130,6 +130,9 @@ public sealed record VMDashboard
         get; init;
     }
 
+    /// <summary>True while a build of the VM runs, so its progress window can be opened again.</summary>
+    public bool IsBuilding => Run is { IsRunning: true, Command: null or VMRun.BUILD };
+
     /// <summary>One line per part that could not be read, such as "Disks: access denied".</summary>
     public IReadOnlyList<string> Problems { get; init; } = [];
 

@@ -9,6 +9,9 @@ public sealed class VMRowViewModel(VMDashboard entry) : ViewModelBase
 
     public string State => Entry.State;
 
+    /// <summary>True while a build of the VM runs.</summary>
+    public bool IsBuilding => Entry.IsBuilding;
+
     /// <summary>True when the last maintenance failed, the VM's settings have a problem, or recovery keys are not exported.</summary>
     public bool NeedsAttention => AttentionText is not null;
 
