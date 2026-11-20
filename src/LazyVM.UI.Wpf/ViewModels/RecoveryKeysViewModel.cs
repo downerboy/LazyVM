@@ -123,7 +123,7 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
     {
         try
         {
-            var found = await _Tools.GetRecoveryKeysAsync(Name);
+            var found = await WorkAsync("Reading the recovery keys", () => _Tools.GetRecoveryKeysAsync(Name));
             Forget();
             Keys = found.Select(key => new RecoveryKeyRow(key, ToggleAsync)).ToList();
         }
@@ -169,7 +169,7 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
             string done;
             try
             {
-                var export = await _Tools.ExportRecoveryKeysAsync(Name, path, replace);
+                var export = await WorkAsync("Exporting the recovery keys", () => _Tools.ExportRecoveryKeysAsync(Name, path, replace));
                 Warnings = export.Warnings;
                 // The status line is what Narrator announces, so it says there are warnings to read.
                 var warned = export.Warnings.Count switch
@@ -212,7 +212,7 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
         }
         try
         {
-            row.Show(await _Tools.GetRecoveryPasswordAsync(Name, row.Key.DiskGuid));
+            row.Show(await WorkAsync("Reading the recovery password", () => _Tools.GetRecoveryPasswordAsync(Name, row.Key.DiskGuid)));
             Status = $"The recovery password of the {row.Key.Disk} is shown. Hide hides it again; closing this window does too.";
         }
         catch (Exception exception)

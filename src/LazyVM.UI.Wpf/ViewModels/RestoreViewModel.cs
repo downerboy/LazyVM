@@ -101,7 +101,7 @@ public sealed class RestoreViewModel : ViewModelBase
     {
         try
         {
-            var found = await _Tools.GetRestorePointsAsync(Name);
+            var found = await WorkAsync("Reading the restore points", () => _Tools.GetRestorePointsAsync(Name));
             Points = found.OrderByDescending(point => point.Taken).Select(point => new RestorePointOption(point)).ToList();
             SelectedPoint = Points.FirstOrDefault();
             if (Points.Count == 0)
@@ -139,7 +139,7 @@ public sealed class RestoreViewModel : ViewModelBase
             string done;
             try
             {
-                await _Tools.RestoreToolingAsync(Name, chosen.Point.Stamp);
+                await WorkAsync($"Restoring {Name}", () => _Tools.RestoreToolingAsync(Name, chosen.Point.Stamp));
                 done = $"{Name} is back at {when}. A restore point of how it was just before was taken, so this can be undone.";
             }
             catch (Exception exception)

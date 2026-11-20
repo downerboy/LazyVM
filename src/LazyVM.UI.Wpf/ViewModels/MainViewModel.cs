@@ -137,7 +137,7 @@ public sealed class MainViewModel : ViewModelBase
         _ListIsKnown = false;
         try
         {
-            var entries = await _Runner.GetDashboardAsync(cancel.Token);
+            var entries = await WorkAsync("Reading your VMs", () => _Runner.GetDashboardAsync(cancel.Token));
             ShowInList(entries);
             // The selected VM may have started or stopped building.
             SelectedVMChanged();

@@ -75,7 +75,7 @@ public sealed class ChecksViewModel : ViewModelBase
         CouldNotRun = false;
         try
         {
-            var results = await _Runner.GetChecksAsync(VMName, _HostOnly, cancel.Token);
+            var results = await WorkAsync("Running the checks", () => _Runner.GetChecksAsync(VMName, _HostOnly, cancel.Token));
             Checks = results.Select(result => new CheckRowViewModel(result)).ToList();
             Status = Summary(Checks);
         }

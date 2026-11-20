@@ -120,6 +120,36 @@
         <Setter Property="AutomationProperties.LiveSetting" Value="Polite" />
     </Style>
 
+    <!--
+      Working (#499): an indeterminate bar while a command the window ran
+      has not answered (ViewModelBase.IsWorking), named for what it is doing.
+      The module reports no progress, so the bar cannot say how far it is.
+      It has no live region of its own: the status line announces the work.
+    -->
+    <Style x:Key="LvWorkingBar" TargetType="ProgressBar">
+        <Setter Property="IsIndeterminate" Value="True" />
+        <Setter Property="Height" Value="6" />
+        <Setter Property="Margin" Value="0,8,0,0" />
+        <Setter Property="Foreground" Value="{DynamicResource LvAccent}" />
+        <Setter Property="Background" Value="{DynamicResource LvTint}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LvCardBorder}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="AutomationProperties.Name" Value="{Binding WorkingText}" />
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsWorking}" Value="True">
+                <Setter Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- How far a build has got: phases done of all of them (#499). -->
+    <Style x:Key="LvPhaseBar" TargetType="ProgressBar" BasedOn="{StaticResource LvWorkingBar}">
+        <Setter Property="IsIndeterminate" Value="False" />
+        <Setter Property="Height" Value="10" />
+        <Setter Property="Visibility" Value="Visible" />
+    </Style>
+
     <Style TargetType="DataGrid">
         <Setter Property="Background" Value="{DynamicResource LvCard}" />
         <Setter Property="Foreground" Value="{DynamicResource LvInk}" />

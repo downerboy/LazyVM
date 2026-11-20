@@ -93,7 +93,7 @@ public sealed partial class BuildViewModel : ViewModelBase
     {
         try
         {
-            var found = await _Runner.GetConfigTemplatesAsync(CancellationToken.None);
+            var found = await WorkAsync("Reading the config templates", () => _Runner.GetConfigTemplatesAsync(CancellationToken.None));
             Templates = found.Select(template => new TemplateOption(template)).ToList();
             SelectedTemplate = Templates.FirstOrDefault(option => string.Equals(option.Name, DEFAULT_TEMPLATE, StringComparison.OrdinalIgnoreCase))
                 ?? Templates.FirstOrDefault();
@@ -122,7 +122,7 @@ public sealed partial class BuildViewModel : ViewModelBase
         try
         {
             var request = new BuildRequest(Name, SelectedTemplate?.Name, UserName.Length == 0 ? null : UserName);
-            var moduleFolder = await _Runner.GetModuleFolderAsync(CancellationToken.None);
+            var moduleFolder = await WorkAsync("Starting the build", () => _Runner.GetModuleFolderAsync(CancellationToken.None));
             var build = _Launcher.Start(request, moduleFolder);
             _BuildStarted(Name, build);
             CloseRequested?.Invoke(this, EventArgs.Empty);

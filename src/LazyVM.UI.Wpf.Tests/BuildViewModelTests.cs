@@ -15,6 +15,18 @@ public sealed class BuildViewModelTests
     }
 
     [Fact]
+    public async Task LoadAndBuild_AreWorkingWhileTheTemplatesAreReadAndTheBuildStarts()
+    {
+        var watcher = new WorkWatcher(_Build);
+        await _Build.LoadAsync();
+        _Build.Name = "NewBox";
+
+        await _Build.BuildAsync();
+
+        Assert.Equal(["Reading the config templates", null, "Starting the build", null], watcher.Seen);
+    }
+
+    [Fact]
     public async Task Load_ListsTheTemplates_AndChoosesDeveloper()
     {
         await _Build.LoadAsync();

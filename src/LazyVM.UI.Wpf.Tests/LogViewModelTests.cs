@@ -13,6 +13,17 @@ public sealed class LogViewModelTests : IDisposable
         _Log = new LogViewModel(_Runner, "DevBox");
     }
 
+    [Fact]
+    public async Task Load_IsWorkingWhileTheLogIsRead()
+    {
+        _Runner.ReturnsLog();
+        var watcher = new WorkWatcher(_Log);
+
+        await _Log.LoadAsync();
+
+        Assert.Equal(["Reading the log", null], watcher.Seen);
+    }
+
     public void Dispose()
     {
         _Culture.Dispose();

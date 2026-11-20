@@ -30,6 +30,19 @@ public sealed class PasswordViewModelTests : IDisposable
         return window;
     }
 
+    [Fact]
+    public async Task Load_AndShow_AreWorkingWhileTheUserNameAndThePasswordAreRead()
+    {
+        var window = new PasswordViewModel(Sample.VM(), _Tools);
+        var watcher = new WorkWatcher(window);
+
+        await window.LoadAsync();
+        await window.ToggleAsync();
+
+        Assert.Equal(["Reading the user name", null, "Reading the password", null], watcher.Seen);
+        window.Forget();
+    }
+
     /// <summary>Everything the window shows, says in its status line or gives Narrator, but the password box itself.</summary>
     private static string Recorded(PasswordViewModel window)
     {

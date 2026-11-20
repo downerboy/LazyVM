@@ -220,6 +220,52 @@ public sealed class BuildProgressViewModelTests
     }
 
     [Fact]
+    public async Task ThePhaseBar_ShowsThePhasesDone_OfAllOfThem()
+    {
+        var progress = Started();
+        Assert.False(progress.HasPhases);
+        Assert.Null(progress.PhasesDoneText);
+        await progress.LoadPhasesAsync(CancellationToken.None);
+        _Runner.ReturnsRun(Running(7));
+
+        await progress.PollAsync(CancellationToken.None);
+
+        var done = progress.Phases.Count(phase => phase.State == PhaseRowViewModel.DONE);
+        Assert.True(progress.HasPhases);
+        Assert.Equal(progress.Phases.Count, progress.PhaseCount);
+        Assert.Equal(done, progress.PhasesDone);
+        Assert.True(done > 0);
+        Assert.Equal($"{done} of {progress.PhaseCount} phases done", progress.PhasesDoneText);
+    }
+
+    [Fact]
+    public async Task ThePhaseBar_IsFull_OnceTheBuildIsComplete()
+    {
+        var progress = await Loaded(Started());
+        _Runner.ReturnsRun(Ended(VMRun.COMPLETED, 8));
+
+        await progress.PollAsync(CancellationToken.None);
+
+        Assert.Equal(progress.PhaseCount, progress.PhasesDone);
+    }
+
+    [Fact]
+    public async Task ReadingThePhases_AndCancel_AreWorking_ButFollowingTheBuildIsNot()
+    {
+        var progress = Started();
+        var watcher = new WorkWatcher(progress);
+        await progress.LoadPhasesAsync(CancellationToken.None);
+        _Runner.ReturnsRun(Running(7));
+        await progress.PollAsync(CancellationToken.None);
+        _Runner.StopReturns(Running(7, stopRequested: true));
+
+        progress.CancelCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Equal(["Reading the build phases", null, "Asking the build to stop", null], watcher.Seen);
+    }
+
+    [Fact]
     public async Task WhileTheBuildRuns_SaysClosingDoesNotStopIt_AndHowToComeBack()
     {
         var progress = await Loaded(Started());

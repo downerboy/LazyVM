@@ -99,7 +99,7 @@ public sealed class LogViewModel : ViewModelBase
         Status = "Reading the log";
         try
         {
-            var read = await _Runner.GetLogAsync(VMName, TAIL, CancellationToken.None);
+            var read = await WorkAsync("Reading the log", () => _Runner.GetLogAsync(VMName, TAIL, CancellationToken.None));
             Entries = read.Select(entry => new LogEntryRowViewModel(entry)).ToList();
             Status = Summary(Entries);
             SelectedEntry = Entries.Count > 0 ? Entries[^1] : null;
