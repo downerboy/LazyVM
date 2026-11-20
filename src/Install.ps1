@@ -37,12 +37,33 @@ installed, and warns with the path of any copy that still comes first.
 Files downloaded from the internet are marked as such, and PowerShell will
 not load a marked module, so the copies are unblocked as they are installed.
 
+With the app installed, a LazyVM shortcut to it goes in the Start menu of
+every user, %ProgramData%\Microsoft\Windows\Start Menu\Programs, which only
+administrators can add to or change, so no other program can repoint a
+shortcut that asks for elevation. The shortcut itself is locked as the
+install folder is. Installing again replaces it.
+
+-Uninstall removes LazyVM from this computer, after listing what goes and
+what stays and asking: the Start menu shortcut, the app, the module and its
+folder on your PSModulePath, and LazyVM's scheduled tasks on the host, so
+nothing runs the VMs' nightly maintenance or security scan any more. The
+Hyper-V VMs and their disks, your LazyVM folder (settings, logs, templates,
+backups) and the stored passwords and recovery keys are kept: to remove a
+VM fully, run Remove-LazyVM first. Nothing that is, holds, or is reached
+through a junction, link or cloud placeholder is removed, and what cannot
+be removed is named, without stopping the rest.
+
 Run it in PowerShell 7 (pwsh) as administrator, signed in as the Windows
-user who will use LazyVM (approve the UAC prompt with your own account).
+user who will use LazyVM (approve the UAC prompt with your own account), or
+double-click Install LazyVM.cmd or Uninstall LazyVM.cmd beside it.
 
 .PARAMETER Path
 The folder that holds the LazyVM module folder, and the app's App folder.
 By default, this script's own folder, as in a release download.
+
+.PARAMETER Uninstall
+Removes LazyVM from this computer, keeping the VMs and their data. It asks
+first; -Confirm:$false does not, and -WhatIf only lists what would go.
 
 .EXAMPLE
 .\Install.ps1
@@ -54,10 +75,19 @@ Installs from a release download.
 
 Installs the module Invoke-AnalyzerAndTest.ps1 assembled from the repository,
 and the app Publish-App.ps1 published there, if it did.
+
+.EXAMPLE
+.\Install.ps1 -Uninstall
+
+Lists what goes and what stays, asks, then removes LazyVM, keeping the VMs.
 #>
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Install', SupportsShouldProcess, ConfirmImpact = 'High')]
 param(
-    [string]$Path = $PSScriptRoot
+    [Parameter(ParameterSetName = 'Install')]
+    [string]$Path = $PSScriptRoot,
+
+    [Parameter(Mandatory, ParameterSetName = 'Uninstall')]
+    [switch]$Uninstall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -149,6 +179,25 @@ function Test-ReparsePoint {
     return ([long](Get-Item -LiteralPath $Path -Force).Attributes -band [long][IO.FileAttributes]::ReparsePoint) -ne 0
 }
 
+function Test-ReparsePointOnPath {
+    <#
+      Whether a folder from the drive's root down to $Path, or $Path itself,
+      is a reparse point; what is inside $Path is not looked at. A part of
+      the path that does not exist yet is not one.
+    #>
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$Path)
+
+    $full = [IO.Path]::GetFullPath($Path)
+    $current = [IO.Path]::GetPathRoot($full)
+    foreach ($name in @($full.Substring($current.Length) -split '[\\/]' | Where-Object { $_ })) {
+        $current = Join-Path -Path $current -ChildPath $name
+        if (-not (Test-Path -LiteralPath $current)) { return $false }
+        if (Test-ReparsePoint -Path $current) { return $true }
+    }
+    return $false
+}
+
 function Test-ContainsReparsePoint {
     <#
       Whether a folder from the drive's root down to $Path, $Path itself, or
@@ -159,13 +208,8 @@ function Test-ContainsReparsePoint {
     [OutputType([bool])]
     param([Parameter(Mandatory)][string]$Path)
 
-    $full = [IO.Path]::GetFullPath($Path)
-    $current = [IO.Path]::GetPathRoot($full)
-    foreach ($name in @($full.Substring($current.Length) -split '[\\/]' | Where-Object { $_ })) {
-        $current = Join-Path -Path $current -ChildPath $name
-        if (Test-ReparsePoint -Path $current) { return $true }
-    }
-    return @(Get-ChildItem -LiteralPath $full -Recurse -Force | Where-Object { Test-ReparsePoint -Path $_.FullName }).Count -gt 0
+    if (Test-ReparsePointOnPath -Path $Path) { return $true }
+    return @(Get-ChildItem -LiteralPath ([IO.Path]::GetFullPath($Path)) -Recurse -Force | Where-Object { Test-ReparsePoint -Path $_.FullName }).Count -gt 0
 }
 
 function Test-ModuleCopy {
@@ -312,35 +356,244 @@ function Write-ShadowingCopyWarning {
     }
 }
 
-function Set-InstallFolderAccess {
+function Set-LockedAccess {
     <#
-      Locks $Path: full control for Administrators and SYSTEM, read and run
-      for the user $User, inherited by everything in it, nothing inherited
-      from above, and owned by Administrators. Nobody but an administrator
-      can change what is in it.
+      Locks the folder or file $Path: full control for Administrators and
+      SYSTEM, read and run for the user $User, inherited by everything in a
+      folder, nothing inherited from above, and owned by Administrators.
+      Nobody but an administrator can change it, or what is in it.
     #>
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][System.Security.Principal.SecurityIdentifier]$User
     )
 
+    $folder = Test-Path -LiteralPath $Path -PathType Container
     $administrators = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
     $access = [ordered]@{
         'S-1-5-32-544' = [System.Security.AccessControl.FileSystemRights]::FullControl
         'S-1-5-18'     = [System.Security.AccessControl.FileSystemRights]::FullControl
         $User.Value    = [System.Security.AccessControl.FileSystemRights]::ReadAndExecute
     }
-    $security = [System.Security.AccessControl.DirectorySecurity]::new()
+    $security = if ($folder) { [System.Security.AccessControl.DirectorySecurity]::new() } else { [System.Security.AccessControl.FileSecurity]::new() }
+    $inheritance = if ($folder) { [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit' } else { [System.Security.AccessControl.InheritanceFlags]::None }
     $security.SetAccessRuleProtection($true, $false)
     $security.SetOwner($administrators)
     foreach ($sid in $access.Keys) {
         $security.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
-                [System.Security.Principal.SecurityIdentifier]::new($sid), $access[$sid],
-                [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
+                [System.Security.Principal.SecurityIdentifier]::new($sid), $access[$sid], $inheritance,
                 [System.Security.AccessControl.PropagationFlags]::None,
                 [System.Security.AccessControl.AccessControlType]::Allow))
     }
     Set-Acl -LiteralPath $Path -AclObject $security
+}
+
+function Get-FolderAllowRule {
+    <# The allow rules on the folder $Path, as security identifier, rights and whether each applies to what is inside only. #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    foreach ($rule in (Get-Acl -LiteralPath $Path).GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
+        if ("$($rule.AccessControlType)" -ne 'Allow') { continue }
+        [pscustomobject]@{
+            Sid         = $rule.IdentityReference.Value
+            Rights      = [long]$rule.FileSystemRights
+            InheritOnly = [bool]($rule.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly)
+        }
+    }
+}
+
+function Get-ShortcutFolderProblem {
+    <#
+      Why the Start menu folder $Path, owned by $Owner, is not one only
+      administrators can change (security rule 6 in docs\Dashboard.md), or
+      nothing when it is.
+    #>
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Owner
+    )
+
+    # Administrators, SYSTEM and TrustedInstaller, as in TrustedCode.ps1.
+    $trusted = @('S-1-5-32-544', 'S-1-5-18', 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
+    # Rights that add to the folder or change it, short of delete: create
+    # files and folders (write and append data), change permissions, take
+    # ownership, and generic write or all. Windows lets the signed-in user
+    # delete from it, which removes a shortcut but puts none in its place.
+    $changeRights = [long]0x500C0006
+
+    if ($trusted -notcontains $Owner) {
+        return "it is owned by $Owner, who can change its permissions"
+    }
+    $writers = @(Get-FolderAllowRule -Path $Path | Where-Object {
+            -not $_.InheritOnly -and ($_.Rights -band $changeRights) -and $trusted -notcontains $_.Sid
+        } | ForEach-Object { $_.Sid } | Select-Object -Unique)
+    if ($writers.Count -gt 0) {
+        return "it can be changed by $($writers -join ', ')"
+    }
+}
+
+function Install-StartMenuShortcut {
+    <#
+      Adds the LazyVM shortcut $Path, to the app $Target, replacing one
+      that is there, and locks it to administrators, readable by $User.
+      Only in a folder administrators alone can change, reached through no
+      junction, link or cloud placeholder; otherwise, or when it fails,
+      warns, so the install still finishes.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Target,
+        [Parameter(Mandatory)][System.Security.Principal.SecurityIdentifier]$User
+    )
+
+    $folder = Split-Path -Path $Path -Parent
+    $without = "Start the app with $Target."
+    try {
+        if (Test-ReparsePointOnPath -Path $Path) {
+            Write-Warning "No Start menu shortcut was added: $Path, or a folder above it, is a junction, link or cloud placeholder, which Install.ps1 does not follow. $without"
+            return
+        }
+        $problem = Get-ShortcutFolderProblem -Path $folder -Owner (Get-Acl -LiteralPath $folder).GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+        if ($problem) {
+            Write-Warning "No Start menu shortcut was added to ${folder}: $problem, so another program could repoint a shortcut that asks for elevation. $without"
+            return
+        }
+        if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force }
+        $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($Path)
+        $shortcut.TargetPath = $Target
+        $shortcut.WorkingDirectory = Split-Path -Path $Target -Parent
+        $shortcut.Description = 'Build and look after your LazyVM development VMs'
+        $shortcut.Save()
+        Set-LockedAccess -Path $Path -User $User
+        Write-Information "Added the LazyVM shortcut to the Start menu: $Path" -InformationAction Continue
+    }
+    catch {
+        Write-Warning "Could not add the Start menu shortcut ${Path}: $($_.Exception.Message) $without"
+    }
+}
+
+function Get-LazyVMHostTask {
+    <# LazyVM's scheduled tasks on the host: in the root folder, named as LazyVM names them. #>
+    # As the module names them (Constants.ps1): each VM's daily maintenance,
+    # and the build that carries on after a host restart. Install.ps1 runs
+    # without the module.
+    $hostTaskPrefixes = @('LazyVM-Maintain-', 'LazyVM-ResumeAfterReboot-')
+    @(Get-ScheduledTask -TaskPath '\' -ErrorAction SilentlyContinue) | Where-Object {
+        $task = $_
+        $task.TaskPath -eq '\' -and @($hostTaskPrefixes | Where-Object { $task.TaskName.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+    }
+}
+
+function Get-UninstallPlan {
+    <#
+      What -Uninstall removes and what it keeps: Remove, the paths that are
+      there to remove, and Text, the list to show before anything goes.
+      $DataFolder is the LazyVM folder, named only.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [Parameter(Mandatory)][string]$ShortcutPath,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Task,
+        [Parameter(Mandatory)][string]$DataFolder
+    )
+
+    $app = Join-Path -Path $InstallDir -ChildPath 'App'
+    $modules = Join-Path -Path $InstallDir -ChildPath 'Modules'
+    $legacy = Join-Path -Path $InstallDir -ChildPath 'Legacy'
+    $labels = [ordered]@{
+        $ShortcutPath = 'the Start menu shortcut'
+        $app          = 'the LazyVM app'
+        $modules      = 'the LazyVM module'
+    }
+    $remove = @($labels.Keys | Where-Object { Test-Path -LiteralPath $_ })
+    $removes = @($remove | ForEach-Object { "  - $($labels[$_]), $_" }) +
+    "  - $modules, from your PSModulePath" +
+    @($Task | ForEach-Object { "  - the scheduled task $($_.TaskName)" })
+    if (@($Task).Count -gt 0) {
+        $removes += '    With the tasks gone, nothing runs the VMs'' nightly maintenance or security scan.'
+    }
+    $keeps = @(
+        '  - the Hyper-V VMs and their disks'
+        "  - your LazyVM folder, $DataFolder`: settings, logs, templates and backups"
+        '  - the stored passwords and the disks'' recovery keys'
+    ) + @(if (Test-Path -LiteralPath $legacy) { "  - LazyVM 5's copy, in $legacy" })
+    $text = @('Removes:') + $removes + '' + 'Keeps:' + $keeps + '' +
+    'To remove a VM fully, with its disks and data, run Remove-LazyVM -Name <VM> first: once LazyVM is uninstalled, it is not there to run.'
+    return [pscustomobject]@{ Remove = $remove; Task = @($Task); Text = $text -join [Environment]::NewLine }
+}
+
+function Remove-InstalledItem {
+    <#
+      Removes the installed file or folder $Path, and says so. A folder is
+      renamed first, so one in use, as by the app running, is kept whole,
+      not half removed. Nothing that is, holds, or is reached through a
+      junction, link or cloud placeholder is removed; that, and a failure,
+      are warnings naming the path, so the rest is still removed.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    $aside = "$Path.old"
+    try {
+        foreach ($item in @($Path, $aside) | Where-Object { Test-Path -LiteralPath $_ }) {
+            if (Test-ContainsReparsePoint -Path $item) {
+                Write-Warning "Kept ${item}: it, a folder above it, or something in it is a junction, link or cloud placeholder, which Install.ps1 does not follow. Look at it, and delete it yourself, as administrator."
+                return
+            }
+        }
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            Remove-Item -LiteralPath $Path -Force
+        }
+        else {
+            # Left over from an uninstall that stopped part way.
+            if (Test-Path -LiteralPath $aside) { Remove-Item -LiteralPath $aside -Recurse -Force }
+            try {
+                Rename-Item -LiteralPath $Path -NewName (Split-Path -Path $aside -Leaf) -ErrorAction Stop
+            }
+            catch {
+                Write-Warning "Could not remove ${Path}: it is in use ($($_.Exception.Message)). Close LazyVM, then run Install.ps1 -Uninstall again."
+                return
+            }
+            Remove-Item -LiteralPath $aside -Recurse -Force
+        }
+        Write-Information "Removed $Path" -InformationAction Continue
+    }
+    catch {
+        Write-Warning "Could not remove ${Path}: $($_.Exception.Message) Delete it yourself, as administrator."
+    }
+}
+
+function Unregister-LazyVMHostTask {
+    <# Unregisters each of the scheduled tasks $Task, listing each, and naming any it could not, then says what no longer runs. #>
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Task)
+
+    if (@($Task).Count -eq 0) { return }
+    foreach ($item in $Task) {
+        try {
+            Unregister-ScheduledTask -TaskName $item.TaskName -TaskPath $item.TaskPath -Confirm:$false -ErrorAction Stop
+            Write-Information "Unregistered the scheduled task $($item.TaskName)" -InformationAction Continue
+        }
+        catch {
+            Write-Warning "Could not unregister the scheduled task $($item.TaskName): $($_.Exception.Message) Delete it yourself in Task Scheduler, as administrator."
+        }
+    }
+    Write-Information 'Nothing runs the VMs'' nightly maintenance or security scan now.' -InformationAction Continue
+}
+
+function Remove-EmptyInstallFolder {
+    <# Removes the install folder $Path once nothing is left in it, and says so; a folder that holds anything, such as LazyVM 5's copy in Legacy, is kept. #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path) -or (Test-ReparsePoint -Path $Path)) { return }
+    if (@(Get-ChildItem -LiteralPath $Path -Force).Count -gt 0) { return }
+    try {
+        Remove-Item -LiteralPath $Path -Force
+        Write-Information "Removed $Path" -InformationAction Continue
+    }
+    catch {
+        Write-Warning "Could not remove ${Path}: $($_.Exception.Message) Delete it yourself, as administrator."
+    }
 }
 
 function Install-App {
@@ -401,6 +654,40 @@ function Install-App {
     Write-Information "Installed the LazyVM app in $target" -InformationAction Continue
 }
 
+# In Program Files, locked so only administrators can change it: the
+# scheduled tasks run it as SYSTEM (#284). The module names the same folder
+# (Get-InstalledModuleFolder). Asked of Windows, not read from
+# $env:ProgramFiles, which the user's own environment can change.
+$programFiles = [Environment]::GetFolderPath('ProgramFiles')
+$installDir = Join-Path -Path $programFiles -ChildPath $moduleName
+$modulesDir = Join-Path -Path $installDir -ChildPath 'Modules'
+$appExe = Join-Path -Path $installDir -ChildPath 'App\LazyVM.UI.Wpf.exe'
+# The Start menu of every user, which only administrators can add to or
+# change (security rule 6, #490), asked of Windows too.
+$shortcutPath = Join-Path -Path ([Environment]::GetFolderPath('CommonPrograms')) -ChildPath "$moduleName.lnk"
+$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+
+if ($Uninstall) {
+    # The LazyVM folder, named in the list only: it is kept.
+    $settingsKey = "HKCU:\SOFTWARE\$moduleName"
+    $dataFolder = if (Test-Path -LiteralPath $settingsKey) { (Get-Item -LiteralPath $settingsKey).GetValue('Root') }
+    if (-not $dataFolder) { $dataFolder = Join-Path -Path ([Environment]::GetFolderPath('UserProfile')) -ChildPath $moduleName }
+    $plan = Get-UninstallPlan -InstallDir $installDir -ShortcutPath $shortcutPath -Task @(Get-LazyVMHostTask) -DataFolder $dataFolder
+    if (-not $PSCmdlet.ShouldProcess($plan.Text, "$($plan.Text)$([Environment]::NewLine)$([Environment]::NewLine)Uninstall LazyVM from this computer?", 'Uninstall LazyVM')) {
+        Write-Information 'Nothing was removed.' -InformationAction Continue
+        return
+    }
+    Unregister-LazyVMHostTask -Task $plan.Task
+    foreach ($item in $plan.Remove) {
+        Remove-InstalledItem -Path $item
+    }
+    Update-UserModulePath -Change { param($List) Remove-PathListEntry -List $List -Entry $modulesDir }
+    $env:PSModulePath = Remove-PathListEntry -List $env:PSModulePath -Entry $modulesDir
+    Remove-EmptyInstallFolder -Path $installDir
+    Write-Information "LazyVM is uninstalled. The Hyper-V VMs, their disks and $dataFolder are kept. To use them again, install LazyVM again." -InformationAction Continue
+    return
+}
+
 # Only version folders, as a release download and the assembled module have
 # them: in the repository, src\LazyVM holds the module's source instead (#90).
 $versionDir = Get-ChildItem -LiteralPath (Join-Path -Path $Path -ChildPath $moduleName) -Directory -ErrorAction SilentlyContinue |
@@ -411,15 +698,8 @@ if (-not $versionDir) {
     throw "There is no $moduleName module folder in $Path. Extract the whole download and run Install.ps1 from it, or, from the repository's root folder, run: ./Invoke-AnalyzerAndTest.ps1 && ./src/Install.ps1 -Path out"
 }
 
-# In Program Files, locked so only administrators can change it: the
-# scheduled tasks run it as SYSTEM (#284). The module names the same folder
-# (Get-InstalledModuleFolder). Asked of Windows, not read from
-# $env:ProgramFiles, which the user's own environment can change.
-$programFiles = [Environment]::GetFolderPath('ProgramFiles')
-$installDir = Join-Path -Path $programFiles -ChildPath $moduleName
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-Set-InstallFolderAccess -Path $installDir -User ([System.Security.Principal.WindowsIdentity]::GetCurrent().User)
-$modulesDir = Join-Path -Path $installDir -ChildPath 'Modules'
+Set-LockedAccess -Path $installDir -User $user
 $target = Join-Path -Path $modulesDir -ChildPath "$moduleName\$($versionDir.Name)"
 if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
@@ -428,6 +708,10 @@ Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File
 Write-Information "Installed $moduleName $($versionDir.Name) in $target" -InformationAction Continue
 # The app, beside the module in the same locked folder (#489).
 Install-App -Source (Join-Path -Path $Path -ChildPath 'App') -InstallDir $installDir
+# Its shortcut, when it is installed: an app in use is kept, so may be the earlier one.
+if (Test-Path -LiteralPath $appExe -PathType Leaf) {
+    Install-StartMenuShortcut -Path $shortcutPath -Target $appExe -User $user
+}
 
 # Earlier LazyVM 6 builds installed into the user's own folders, which the
 # user, or OneDrive, can change.

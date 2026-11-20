@@ -13,7 +13,7 @@
         'A call that happens only in some cases says so in its box. **Also runs** lists the functions a step calls for its work.'
     )
     Groups    = @(
-        @{ Name = 'Install'; Diagrams = @('install-from-repo', 'install-from-release', 'convert-installation') }
+        @{ Name = 'Install'; Diagrams = @('install-from-repo', 'install-from-release', 'uninstall', 'convert-installation') }
         @{ Name = 'Set up'; Diagrams = @('show', 'set-root', 'new-profile', 'set-credential') }
         @{ Name = 'Build'; Diagrams = @('build', 'build-phases', 'stop-build') }
         @{ Name = 'Maintain'; Diagrams = @('maintenance', 'register-maintenance', 'start-maintenance', 'rebuild') }

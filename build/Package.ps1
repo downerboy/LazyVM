@@ -3,7 +3,7 @@
 function New-ReleasePackage {
     <#
       Zips the built module, the app Publish-App published in out\App
-      (#489), Install.ps1, the README, the logo the README shows and the
+      (#489), Install.ps1 and the launchers that run it (#490), the README, the logo the README shows and the
       licence into out\release\<ModuleName>-<version>.zip. Stops without the
       app, so no release ships without it.
     #>
@@ -33,7 +33,8 @@ function New-ReleasePackage {
     Copy-Item -LiteralPath (Join-Path -Path $outDir -ChildPath "$ModuleName/$version") -Destination (Join-Path -Path $staging -ChildPath $ModuleName) -Recurse
     # Beside the module, where Install.ps1 looks for it.
     Copy-Item -LiteralPath $app -Destination (Join-Path -Path $staging -ChildPath 'App') -Recurse
-    foreach ($file in 'src/Install.ps1', 'README.md', 'LICENSE.md') {
+    # The launchers a user double-clicks run Install.ps1 beside them (#490).
+    foreach ($file in 'src/Install.ps1', 'src/Install LazyVM.cmd', 'src/Uninstall LazyVM.cmd', 'README.md', 'LICENSE.md') {
         Copy-Item -LiteralPath (Join-Path -Path $Root -ChildPath $file) -Destination $staging
     }
     # The README shows the logo from this path, so it goes in the zip at the same path.
