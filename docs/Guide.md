@@ -67,7 +67,7 @@ These are detected and reported by name rather than migrated. Doing them correct
 
 ### Installing LazyVM
 
-LazyVM is a PowerShell module, installed in `%ProgramFiles%\LazyVM\Modules`, with its app in `%ProgramFiles%\LazyVM\App`: only administrators can change them, because LazyVM's scheduled tasks run the module as SYSTEM and the app runs elevated, and only you (and administrators) can read them. A task is registered only while that holds for the module, the app and PowerShell. The installer adds that folder to your `PSModulePath`. Install it in PowerShell 7 run as administrator, signed in as the Windows user who will use LazyVM (approve the UAC prompt with your own account). The simplest way to install it is from a [release](https://github.com/downerboy/LazyVM/releases): download the zip, then, in PowerShell 7 as administrator, in the folder you saved it to:
+LazyVM is a PowerShell module, installed in `%ProgramFiles%\LazyVM\Modules`: only administrators can change it, because LazyVM's scheduled tasks run it as SYSTEM, and only you (and administrators) can read it. The installer adds that folder to your `PSModulePath`. Install it in PowerShell 7 run as administrator, signed in as the Windows user who will use LazyVM (approve the UAC prompt with your own account). The simplest way to install it is from a [release](https://github.com/downerboy/LazyVM/releases): download the zip, then, in PowerShell 7 as administrator, in the folder you saved it to:
 
 ```powershell
 Unblock-File .\LazyVM-*.zip
@@ -76,10 +76,6 @@ Expand-Archive .\LazyVM-*.zip -DestinationPath .\LazyVM -Force
 ```
 
 `Unblock-File` matters: Windows marks downloaded files, and PowerShell will not run a marked script. To update, do the same with the newer release.
-
-Instead of typing those, extract the zip and double-click **Install LazyVM.cmd** in it. It asks for administrator rights, checks that PowerShell 7.6 or later is installed in `%ProgramFiles%\PowerShell\7` (if not, it says to run `winget install Microsoft.PowerShell`), runs `Install.ps1` with the execution policy bypassed for that one run, and keeps its window open so you can read the result. Windows may ask whether to run a downloaded file first.
-
-With the app installed, `Install.ps1` adds a **LazyVM** shortcut to it in the Start menu of every user, `%ProgramData%\Microsoft\Windows\Start Menu\Programs`. Only administrators can add to or change that folder, so no other program can repoint a shortcut that asks for elevation; the shortcut itself is locked as the install folder is. Windows lets you delete it, and installing again puts it back. If the folder can be changed by anyone else, `Install.ps1` adds no shortcut and says why.
 
 Or build it from the repository, in PowerShell 7 as administrator:
 
@@ -91,28 +87,11 @@ cd S:\Source\LazyVM
 
 Instead of typing those, you can double-click `Install-FromRepository.cmd` in the repository folder. It asks for administrator rights, runs the same two commands in PowerShell 7, and keeps its window open so you can read the result.
 
-`Invoke-AnalyzerAndTest.ps1` assembles the module, checks it with PSScriptAnalyzer and runs the Pester tests; only if they all pass does `Install.ps1` install it, for you. The scheduled tasks, which run as SYSTEM, load it from that folder by its path, always the newest version installed, and only while nobody but administrators can change it, nor the app beside it, nor PowerShell itself. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Once installed, PowerShell loads it by itself the first time you use one of its commands.
+`Invoke-AnalyzerAndTest.ps1` assembles the module, checks it with PSScriptAnalyzer and runs the Pester tests; only if they all pass does `Install.ps1` install it, for you. The scheduled tasks, which run as SYSTEM, load it from that folder by its path, always the newest version installed, and only while nobody but administrators can change it, nor PowerShell itself. The first time, it also installs the versions of Pester and PSScriptAnalyzer it uses. Once installed, PowerShell loads it by itself the first time you use one of its commands.
 
 `Install.ps1` also removes earlier copies that PowerShell would load instead, and lists each one: other versions in `C:\Program Files\LazyVM\Modules\LazyVM`, the ones an earlier LazyVM 6 put in your own folders, and LazyVM 5's, in `C:\Program Files\PowerShell\Modules\LazyVM`. While LazyVM 5's VMs are not moved to you yet, its copy is moved to `C:\Program Files\LazyVM\Legacy` instead, where PowerShell does not load it; LazyVM 5's scheduled tasks fail until you run `Convert-LazyVMInstallation`, which deletes that copy once it has moved them. Only a folder holding nothing but LazyVM version folders is removed, and none that is, holds, or is reached through a junction, link or cloud placeholder: such a copy is kept, with a warning naming it. Then `Install.ps1` warns if another copy still comes first on PSModulePath, with its path; `Test-LazyVM` checks the same.
 
 Make sure it is PowerShell 7 (`pwsh`): Windows PowerShell 5.1 cannot see the module, and reports its commands as not recognized. To update, pull the repository and run the same commands again. The scheduled tasks pick up the new version on their next run.
-
-### Uninstalling LazyVM
-
-To remove LazyVM from the computer and keep your VMs, double-click **Uninstall LazyVM.cmd** in the release folder, or run, in PowerShell 7 as administrator:
-
-```powershell
-.\LazyVM\Install.ps1 -Uninstall
-```
-
-It lists what goes and what stays, then asks; `-Confirm:$false` does not ask, and `-WhatIf` only lists. It removes:
-
-- the **LazyVM** Start menu shortcut, the app in `%ProgramFiles%\LazyVM\App` and the module in `%ProgramFiles%\LazyVM\Modules`, and that folder from your PSModulePath;
-- LazyVM's scheduled tasks on the host, each VM's daily maintenance task among them, listing each. With them gone, nothing runs the VMs' nightly maintenance or security scan.
-
-It keeps the Hyper-V VMs and their disks, your LazyVM folder (settings, logs, templates, backups), and the stored passwords and the disks' recovery keys, so installing again picks up where you left off. LazyVM 5's copy in `%ProgramFiles%\LazyVM\Legacy` is kept too, and `%ProgramFiles%\LazyVM` goes once nothing is left in it. To remove a VM fully, run `Remove-LazyVM` before you uninstall.
-
-Like the install, it follows no junction or link. An app that is running is kept whole: close it and run the uninstall again. Anything it cannot remove is named, with its path, and the rest is still removed.
 
 ### Who can use LazyVM
 
@@ -122,7 +101,7 @@ LazyVM belongs to the Windows user who installed it. Other standard users on the
 - **The LazyVM folder** ([below](#choosing-the-lazyvm-folder)) is open to you and SYSTEM only, with nothing inherited from the folder above. Hyper-V adds each VM's own access to its disks and configuration.
 - **Stored passwords**, the VMs' BitLocker recovery passwords among them, are encrypted with Windows DPAPI for this computer ([Credential storage](#credential-storage)), in the locked folder: they cannot be read on another computer, and only you and SYSTEM can open the files.
 - **The registry key**, `HKCU:\SOFTWARE\LazyVM`, is in your part of the registry. It records the LazyVM folder for your commands.
-- **The scheduled tasks** run as SYSTEM, whether or not you are signed in, so they need no password. SYSTEM cannot read your registry, so each task's command names the LazyVM folder (`-Root`) and you, by your security identifier (`-OwnerSid`); only an administrator can change a task. LazyVM uses the folder only if it is not a reparse point and is locked to you and SYSTEM. Because SYSTEM reads your folder, a task acts only on places inside it, or outside it where you allowed them while elevated (`Build-LazyVM` and `Register-LazyVMMaintenance` ask before recording each one, under HKLM; a drive's root, the Windows, Program Files and ProgramData folders and other users' profiles are never allowed, and a path with a `.` or `..` part, other than one leading `.\`, is refused); it writes through no junction or link in those places and nowhere else; and it runs only code administrators alone can change, so the module lives in Program Files, and a task is registered only while the module, the app in `%ProgramFiles%\LazyVM\App` and PowerShell are that way.
+- **The scheduled tasks** run as SYSTEM, whether or not you are signed in, so they need no password. SYSTEM cannot read your registry, so each task's command names the LazyVM folder (`-Root`) and you, by your security identifier (`-OwnerSid`); only an administrator can change a task. LazyVM uses the folder only if it is not a reparse point and is locked to you and SYSTEM. Because SYSTEM reads your folder, a task acts only on places inside it, or outside it where you allowed them while elevated (`Build-LazyVM` and `Register-LazyVMMaintenance` ask before recording each one, under HKLM; a drive's root, the Windows, Program Files and ProgramData folders and other users' profiles are never allowed, and a path with a `.` or `..` part, other than one leading `.\`, is refused); it writes through no junction or link in those places and nowhere else; and it runs only code administrators alone can change, so the module lives in Program Files.
 
 What this does not protect against: a local administrator can take ownership of the files, the `.vhdx` disks included, or run a program as SYSTEM, and so read LazyVM's files and decrypt its stored passwords. The data inside each VM stays protected by [BitLocker](#bitlocker). Deleting your Windows profile deletes the LazyVM folder in it, and the VMs with it. Keep the LazyVM folder out of OneDrive: LazyVM refuses a folder there, and `Test-LazyVM` warns if the folder or the module is in it.
 

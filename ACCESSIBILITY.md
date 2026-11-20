@@ -1,40 +1,48 @@
 # Accessibility
 
-I am legally blind, and I need tools that let me do what I need to do with the same ease as before. Accessibility and ease of use are the motivation for LazyVM.
+I am legally blind and I need tools to let me do what I need to do with the 
+same ease as before.  Accessibly and ease of use is the motivation of of 
+LazyVM.
 
 ## Priorities
 
-LazyVM exists to make tools that are not very accessible usable by everyone.
+A tool to make using tools that aren't very accessible, accessible. 
 
 ## Contributor expectations
 
-- Learn from real users. There are many excellent resources: watch people who use assistive technology review products, give tutorials and demonstrate different use cases.
-- Check that your change works with a screen reader and by keyboard alone.
+  * There are mounds of excellent resources.
+  * Watch real users review products and give tutorials
+    on using the various tools and demonstrate the many different use-cases.
 
 ## Reporting accessibility issues
 
-For now, [open an accessibility issue](https://github.com/downerboy/LazyVM/issues/new?template=accessibility.yml).
+For now post an issue.
 
 ### Severity
 
-Every accessibility issue gets the highest severity. A user must be able to use this product without exerting more effort than any other user. As a user myself, I find it disrespectful to report a problem and never receive a response or see it addressed.
+Every issue reported has gets the highest serverity level.
+The user has to be able this product without having to exert an more
+effort than any other user.  
+Being a user, I find it to be backhanded behavior, never
+receiving a response nor see the issue addressed.  
 
 ### How we respond
 
-An accessibility issue is addressed first, before any other work.
+The reported issue is addressed first thing.
 
 ## Ownership and maintenance
 
-I use a screen reader just to develop this project, so I feel these problems every day.
+I am having to use a screen reader just to develop the project...
 
 ## Supported environments
 
-LazyVM supports Windows.
+Supports Windows.
 
 ## Known limitations
 
-I cannot know the limitations unless they are brought to my attention. Everyone has different limitations, so please tell me about yours.
+I cannot know its limitations unless a limitation is brought 
+to my attention.  Everyone has different limitations.
 
 ## Feedback and improvements
 
-Open an issue.
+Submit an issue.
