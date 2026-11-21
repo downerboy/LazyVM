@@ -43,6 +43,7 @@
         'Set-LazyVMCredential'
         'Set-LazyVMRoot'
         'Show-LazyVM'
+        'Show-LazyVMHelp'
         'Start-LazyVMMaintenance'
         'Stop-LazyVMBuild'
     )

@@ -233,6 +233,9 @@ $script:RetiredSettingNames = @('GuestProjectPaths', 'ProjectExcludeDirs', 'MaxP
 $script:WindowsIsoDownloadPage = 'https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise'
 $script:SqlIsoUrl = 'https://download.microsoft.com/download/dea8c210-c44a-4a9d-9d80-0c81578860c5/ENU/SQLServer2025-x64-ENU-EntDev.iso'
 
+# The repository's address, where Show-LazyVMHelp opens the documentation (Documentation.ps1).
+$script:DocumentationBaseUrl = 'https://github.com/downerboy/LazyVM'
+
 # Checkpoint names: '<prefix> <yyyyMMdd-HHmmss>[ <note>]'.
 $script:ToolingCheckpointPrefix = 'Tooling'
 $script:ExpansionCheckpointPrefix = 'C: expansion'

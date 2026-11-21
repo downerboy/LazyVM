@@ -182,6 +182,7 @@ Every command has full help, with examples: `Get-Help New-LazyVM -Full`. While t
 | Command | What it does |
 |---|---|
 | `LazyVM` | Shows the installed version, the LazyVM folder and each VM in it, the folder the module is installed in, and every command with its synopsis. The same as `Show-LazyVM`. |
+| `Show-LazyVMHelp -Topic Diagrams` | Opens the guide (the default), the use cases (`UseCases`) or the diagrams (`Diagrams`) in your browser, on GitHub, for the release you have installed, so the page matches your commands. A build with a prerelease label opens the page on main. It only opens an address: nothing is downloaded or run. |
 | `Set-LazyVMRoot -Path D:\DevVM` | Chooses the LazyVM folder, open to you and SYSTEM only. |
 | `Convert-LazyVMInstallation` | Once, after updating from LazyVM 5: moves an install made for every user to your account. See [Updating from LazyVM 5](#updating-from-lazyvm-5-installed-for-every-user). |
 | `New-LazyVM -Name DevBox` | Creates the VM's profile, ready to build. `-From OtherVM` starts from another VM's settings and tooling list; `-ConfigTemplate PlainWindows` starts from a config template. |
