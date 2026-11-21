@@ -2,7 +2,7 @@
 
 # LazyVM Dashboard — specification
 
-Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, the Checks and Log windows (delivery plan steps 3 and 4), and step 5: the Build window with build progress and Cancel, a build from a chosen phase, and run maintenance now. Step 6, deleting a VM and restoring it to a restore point, is built too. Step 7, the recovery keys and the password, is built too. Step 8, the Security findings window with approving and revoking, is built too. Updated 2026-11-20 with what building from a phase does.
+Status: Draft. Tracks [#305](https://github.com/downerboy/LazyVM/issues/305). The module command (section 3) is built. The window has its main list, the read-only VM window, the Checks and Log windows (delivery plan steps 3 and 4), and step 5: the Build window with build progress and Cancel, a build from a chosen phase, and run maintenance now. Step 6, deleting a VM and restoring it to a restore point, is built too. Step 7, the recovery keys and the password, is built too. Step 8, the Security findings window with approving and revoking, is built too. Updated 2026-11-20 with text saying what each choice does where it is not plain (#500).
 
 ## 1. Purpose
 
