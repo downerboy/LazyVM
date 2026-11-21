@@ -23,10 +23,13 @@
 
         <!-- While a run of the VM is going, or for a point without its tooling list, Restore is disabled and the note says why. -->
         <StackPanel DockPanel.Dock="Bottom" Margin="24,0,24,24">
+            <!-- What restoring the chosen point does. Restore's help text is the same, so Narrator reads it too. -->
+            <TextBlock Text="{Binding RestoreHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8"
+                       Visibility="{Binding HasRestoreHelp, Converter={StaticResource VisibleWhenTrue}}" />
             <WrapPanel>
                 <Button Content="_Restore to this point..." Command="{Binding RestoreCommand}" Margin="0,0,8,8"
                         AutomationProperties.Name="{Binding Name, StringFormat='Restore {0} to the chosen point'}"
-                        AutomationProperties.HelpText="Asks first. All of the VM's disks go back to then, including the Dev Drive and the SQL data disk." />
+                        AutomationProperties.HelpText="{Binding RestoreHelp}" />
             </WrapPanel>
             <TextBlock Text="{Binding RestoreNote}" TextWrapping="Wrap"
                        Visibility="{Binding HasRestoreNote, Converter={StaticResource VisibleWhenTrue}}"
