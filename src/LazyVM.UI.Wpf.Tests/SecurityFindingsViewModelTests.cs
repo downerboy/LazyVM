@@ -42,7 +42,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         _Culture.Dispose();
     }
 
-    private static VMDashboard Scanned(DateTime? when = null)
+    private static LazyVMDashboard Scanned(DateTime? when = null)
     {
         return Sample.VM() with
         {
@@ -76,7 +76,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         Assert.Equal(["Reading the security findings", null, "Reading the approved findings", null], watcher.Seen);
     }
 
-    private async Task<SecurityFindingsViewModel> Loaded(VMDashboard entry, VMSecurityFinding[] findings, params VMSecurityApproval[] approvals)
+    private async Task<SecurityFindingsViewModel> Loaded(LazyVMDashboard entry, VMSecurityFinding[] findings, params VMSecurityApproval[] approvals)
     {
         _Runner.ReturnsSecurityFindings(findings);
         _Runner.ReturnsSecurityApprovals(approvals);

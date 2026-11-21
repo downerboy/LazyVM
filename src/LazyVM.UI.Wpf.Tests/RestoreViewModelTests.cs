@@ -22,7 +22,7 @@ public sealed class RestoreViewModelTests : IDisposable
         _Culture.Dispose();
     }
 
-    private async Task<RestoreViewModel> Loaded(VMDashboard? entry = null, params VMRestorePoint[] points)
+    private async Task<RestoreViewModel> Loaded(LazyVMDashboard? entry = null, params VMRestorePoint[] points)
     {
         _Runner.ReturnsRestorePoints(points);
         var restore = new RestoreViewModel(entry ?? Sample.VM(), _Tools);

@@ -22,13 +22,18 @@ public sealed record RemovalPlan
         get; init;
     }
 
-    /// <summary>The scheduled tasks that go, such as the VM's maintenance task.</summary>
-    public IReadOnlyList<string> Tasks { get; init; } = [];
+    /// <summary>
+    /// The scheduled tasks that go, such as
+    /// the VM's maintenance task.
+    /// </summary>
+    public IReadOnlyList<string> ScheduledTasks { get; init; } = [];
 
     public IReadOnlyList<RemovalItem> Items { get; init; } = [];
 
-    /// <summary>The space every item takes together.</summary>
-    public long Total
+    /// <summary>
+    /// The space every item takes together.
+    /// </summary>
+    public long TotalSize
     {
         get; init;
     }
@@ -39,7 +44,7 @@ public sealed record RemovalPlan
     public IReadOnlyList<WorkDisk> WorkDisks { get; init; } = [];
 
     /// <summary>True when nothing of the VM is left to delete.</summary>
-    public bool IsEmpty => HyperVState is null && Tasks.Count == 0 && Items.Count == 0;
+    public bool IsEmpty => HyperVState is null && ScheduledTasks.Count == 0 && Items.Count == 0;
 }
 
 /// <summary>A file or folder that goes. <see cref="Kind"/> is File or Folder.</summary>

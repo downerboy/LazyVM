@@ -32,8 +32,14 @@ public sealed class MainViewModelTests : IDisposable
     {
         _Runner.Returns(
             Sample.VM("Idle"),
-            Sample.VM("Building") with { Run = RunningNow(VMRun.BUILD) },
-            Sample.VM("Maintaining") with { Run = RunningNow("Maintenance") });
+            Sample.VM("Building") with
+            {
+                Run = RunningNow(VMRun.BUILD)
+            },
+            Sample.VM("Maintaining") with
+            {
+                Run = RunningNow("Maintenance")
+            });
         await _Main.RefreshAsync();
 
         // A loop, not a query: each row is selected in turn.
@@ -52,7 +58,10 @@ public sealed class MainViewModelTests : IDisposable
     [Fact]
     public async Task BuildProgress_OpensTheProgressOfTheSelectedVMsBuild()
     {
-        _Runner.Returns(Sample.VM("DevEnv") with { Run = RunningNow(VMRun.BUILD) });
+        _Runner.Returns(Sample.VM("DevEnv") with
+        {
+            Run = RunningNow(VMRun.BUILD)
+        });
         await _Main.RefreshAsync();
         _Main.SelectedVM = _Main.VMs.Single();
 
@@ -74,7 +83,10 @@ public sealed class MainViewModelTests : IDisposable
         var asked = 0;
         _Main.BuildProgressCommand.CanExecuteChanged += (_, _) => asked++;
 
-        _Runner.Returns(Sample.VM("DevEnv") with { Run = RunningNow(VMRun.BUILD) });
+        _Runner.Returns(Sample.VM("DevEnv") with
+        {
+            Run = RunningNow(VMRun.BUILD)
+        });
         await _Main.RefreshAsync();
 
         Assert.True(_Main.SelectedVMIsBuilding);

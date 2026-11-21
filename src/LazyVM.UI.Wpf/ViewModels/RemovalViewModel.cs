@@ -29,7 +29,7 @@ public sealed class RemovalViewModel(RemovalPlan plan) : ViewModelBase
         string[] left =
         [
             .. plan.HyperVState is null ? [] : new[] { $"the Hyper-V VM {plan.Name}" },
-            .. plan.Tasks.Select(task => "scheduled task " + task),
+            .. plan.ScheduledTasks.Select(task => "scheduled task " + task),
             .. plan.Items.Select(item => item.Path),
         ];
         return left.Length == 0 ? string.Empty : $"Still there: {string.Join(", ", left)}.";
@@ -43,10 +43,10 @@ public sealed class RemovalViewModel(RemovalPlan plan) : ViewModelBase
             .. plan.WorkDisks.Select(disk => new RemovalLine(
                 $"Warning: {disk.Name} goes too, {Size(disk.Size)}, {disk.Path}. {disk.Advice}", IsWarning: true)),
             .. plan.HyperVState is { } state ? new[] { new RemovalLine(MachineText(plan.Name, state, plan.CheckpointCount)) } : [],
-            .. plan.Tasks.Select(task => new RemovalLine("Scheduled task " + task)),
+            .. plan.ScheduledTasks.Select(task => new RemovalLine("Scheduled task " + task)),
             .. plan.Items.Select(item => new RemovalLine(
                 $"{(item.Kind == RemovalItem.FILE ? "File" : "Folder")} {item.Path}, {Size(item.Size)}")),
-            new($"{Size(plan.Total)} in all."),
+            new($"{Size(plan.TotalSize)} in all."),
             .. plan.Kept.Select(kept => new RemovalLine($"Kept: {kept.Path}. {kept.Reason}")),
         ];
     }

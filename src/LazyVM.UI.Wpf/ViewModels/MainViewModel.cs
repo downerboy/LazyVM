@@ -170,7 +170,7 @@ public sealed class MainViewModel : ViewModelBase
     }
 
     /// <summary>Updates the rows in place, so the selection and keyboard focus stay where they were.</summary>
-    private void ShowInList(IReadOnlyList<VMDashboard> entries)
+    private void ShowInList(IReadOnlyList<LazyVMDashboard> entries)
     {
         var names = entries.Select(entry => entry.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var gone in VMs.Where(row => !names.Contains(row.Name)).ToList())

@@ -326,11 +326,11 @@ public sealed class CommandRunnerTests
         Assert.Equal("DevBox", plan.Name);
         Assert.Equal("Running", plan.HyperVState);
         Assert.Equal(2, plan.CheckpointCount);
-        Assert.Equal([@"LazyVM\DevBox maintenance"], plan.Tasks);
+        Assert.Equal([@"LazyVM\DevBox maintenance"], plan.ScheduledTasks);
         Assert.Equal(
             [new RemovalItem("Folder", @"C:\LazyVM\DevBox", 1073741824), new RemovalItem("File", @"E:\Disks\DevBox\SQL.vhdx", 2048)],
             plan.Items);
-        Assert.Equal(1073743872, plan.Total);
+        Assert.Equal(1073743872, plan.TotalSize);
         Assert.Equal([new KeptItem(@"C:\LazyVM\Shared", "Every VM uses it.")], plan.Kept);
         Assert.Equal([new WorkDisk("The Dev Drive", @"C:\LazyVM\DevBox\Dev.vhdx", 512, "Push first.")], plan.WorkDisks);
     }

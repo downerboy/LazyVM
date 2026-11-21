@@ -1,6 +1,6 @@
+using System.IO;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
-using System.IO;
 namespace LazyVM.UI.Wpf;
 
 /// <summary>
@@ -244,14 +244,14 @@ public class PowerShellCommandRunner : IDisposable
 
     #region Dashboard
     /// <summary>Runs <c>Get-LazyVMDashboard</c>: one entry per VM.</summary>
-    public virtual async Task<IReadOnlyList<VMDashboard>> GetLazyVMDashboardAsync(CancellationToken cancellationToken)
+    public virtual async Task<IReadOnlyList<LazyVMDashboard>> GetLazyVMDashboardAsync(CancellationToken cancellationToken)
     {
         var output = await InvokeAsync("Get-LazyVMDashboard", [], cancellationToken).ConfigureAwait(false);
         return output.Select(LazyVMDashboard).ToList();
     }
 
     /// <summary>Runs <c>Get-LazyVMDashboard -Name</c>: the one VM, or nothing when there is no such VM.</summary>
-    public virtual async Task<VMDashboard?> GetLazyVMAsync(string name, CancellationToken cancellationToken)
+    public virtual async Task<LazyVMDashboard?> GetLazyVMAsync(string name, CancellationToken cancellationToken)
     {
         var output = await InvokeAsync("Get-LazyVMDashboard", [("Name", name)], cancellationToken).ConfigureAwait(false);
         return output.Select(LazyVMDashboard).FirstOrDefault(entry => string.Equals(entry.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -587,7 +587,7 @@ public class PowerShellCommandRunner : IDisposable
     /// is left empty and named in the VM's Problems, so one odd value never
     /// fails the whole refresh.
     /// </summary>
-    internal static VMDashboard LazyVMDashboard(PSObject entry)
+    internal static LazyVMDashboard LazyVMDashboard(PSObject entry)
     {
         var problems = ReadList(entry, "Problems").Select(problem => problem.BaseObject.ToString() ?? string.Empty).ToList();
         T? Value<T>(PSObject source, string name, string label)
@@ -675,9 +675,9 @@ public class PowerShellCommandRunner : IDisposable
             Name = PropertyText(plan, "Name"),
             HyperVState = PropertyText(plan, "HyperVState") is { Length: > 0 } state ? state : null,
             CheckpointCount = Read<int?>(plan, "CheckpointCount", "CheckpointCount", []) ?? 0,
-            Tasks = ReadList(plan, "Tasks").Select(task => task.BaseObject.ToString() ?? string.Empty).ToList(),
+            ScheduledTasks = ReadList(plan, "Tasks").Select(task => task.BaseObject.ToString() ?? string.Empty).ToList(),
             Items = ReadList(plan, "Items").Select(item => new RemovalItem(PropertyText(item, "Kind"), PropertyText(item, "Path"), Size(item, "Size"))).ToList(),
-            Total = Size(plan, "Total"),
+            TotalSize = Size(plan, "Total"),
             Kept = ReadList(plan, "Kept").Select(kept => new KeptItem(PropertyText(kept, "Path"), PropertyText(kept, "Reason"))).ToList(),
             WorkDisks = ReadList(plan, "WorkDisks")
                 .Select(disk => new WorkDisk(PropertyText(disk, "Name"), PropertyText(disk, "Path"), Size(disk, "Size"), PropertyText(disk, "Advice")))

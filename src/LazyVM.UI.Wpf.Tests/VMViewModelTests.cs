@@ -21,7 +21,7 @@ public sealed class VMViewModelTests : IDisposable
         _Culture.Dispose();
     }
 
-    private VMViewModel Open(VMDashboard entry)
+    private VMViewModel Open(LazyVMDashboard entry)
     {
         return new(entry, _Tools);
     }
@@ -403,7 +403,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void MissingValues_ReadAsNotKnown()
     {
-        var vm = Open(new VMDashboard { Name = "DevBox", State = "Unknown" });
+        var vm = Open(new LazyVMDashboard { Name = "DevBox", State = "Unknown" });
 
         Assert.Equal("Not known", Detail(vm, "Created"));
         Assert.Equal("Not known", Detail(vm, "Memory in use"));
@@ -413,7 +413,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void AVMNotBuiltYet_SaysSoInsteadOfNotKnown()
     {
-        var vm = Open(new VMDashboard { Name = "TestBox", State = "Not built" });
+        var vm = Open(new LazyVMDashboard { Name = "TestBox", State = "Not built" });
 
         Assert.Equal("Not built yet", Detail(vm, "Created"));
         Assert.Equal("Not built yet", Detail(vm, "Memory in use"));
@@ -514,7 +514,7 @@ public sealed class VMViewModelTests : IDisposable
         };
     }
 
-    private async Task<VMViewModel> Loaded(VMDashboard entry)
+    private async Task<VMViewModel> Loaded(LazyVMDashboard entry)
     {
         var vm = Open(entry);
         await vm.LoadAsync();
@@ -612,7 +612,10 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void DeleteHelp_SaysTheWorkDisksGoToo_ThatItCannotBeUndone_AndThatTheTemplateIsKept()
     {
-        var vm = Open(Sample.VM("DevEnv") with { GreenTemplate = "DevEnv-latest" });
+        var vm = Open(Sample.VM("DevEnv") with
+        {
+            GreenTemplate = "DevEnv-latest"
+        });
 
         Assert.Equal(
             "Deletes DevEnv and everything LazyVM made for it: its disks, tasks and folder. "
@@ -627,7 +630,10 @@ public sealed class VMViewModelTests : IDisposable
     [InlineData("")]
     public void DeleteHelp_ForAVMWithNoTemplate_NamesNone(string? template)
     {
-        var vm = Open(Sample.VM("DevEnv") with { GreenTemplate = template });
+        var vm = Open(Sample.VM("DevEnv") with
+        {
+            GreenTemplate = template
+        });
 
         Assert.Equal(
             "Deletes DevEnv and everything LazyVM made for it: its disks, tasks and folder. "
@@ -860,7 +866,7 @@ public sealed class VMViewModelTests : IDisposable
             Name = name,
             HyperVState = "Off",
             Items = [new("Folder", $@"C:\LazyVM\{name}", 50 * _GB)],
-            Total = 50 * _GB,
+            TotalSize = 50 * _GB,
         };
     }
 

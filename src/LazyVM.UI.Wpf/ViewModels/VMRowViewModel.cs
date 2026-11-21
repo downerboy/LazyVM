@@ -1,9 +1,9 @@
 namespace LazyVM.UI.Wpf.ViewModels;
 
 /// <summary>One VM's row in the main list: name, state, open findings and last maintenance.</summary>
-public sealed class VMRowViewModel(VMDashboard entry) : ViewModelBase
+public sealed class VMRowViewModel(LazyVMDashboard entry) : ViewModelBase
 {
-    internal VMDashboard Entry { get; private set; } = entry;
+    internal LazyVMDashboard Entry { get; private set; } = entry;
 
     public string Name => Entry.Name;
 
@@ -69,7 +69,7 @@ public sealed class VMRowViewModel(VMDashboard entry) : ViewModelBase
     }
 
     /// <summary>Shows what a newer refresh read for this VM.</summary>
-    public void Update(VMDashboard entry)
+    public void Update(LazyVMDashboard entry)
     {
         Entry = entry;
         OnPropertyChanged(string.Empty);
