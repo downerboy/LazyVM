@@ -46,3 +46,37 @@ to my attention.  Everyone has different limitations.
 ## Feedback and improvements
 
 Submit an issue.
+
+## Findings of the accessibility pass (#502)
+
+The automated checks run with the tests (`AccessibilityXamlTests`): every input
+control has a name, every button has text or a name, tab order follows the
+layout (no `TabIndex`), every window but the main one closes with Escape, and
+the windows and styles take their colors from the theme tokens, which the
+light, dark and High Contrast themes all define (High Contrast from system
+colors only).
+
+The checks below are done by hand. Record the date, the build and what was
+found; each problem becomes its own issue.
+
+### Narrator
+
+Each window: every control has a name and, where it helps, help text; the
+reading order follows the layout; changes are announced once.
+
+  * Main window: not yet checked.
+  * VM window: not yet checked.
+  * Build, build progress, checks, log, security findings: not yet checked.
+  * Password, recovery keys, restore, removal, question, reason: not yet checked.
+
+### 200% text size and 400% zoom
+
+Nothing cut off or overlapping, and no horizontal scrolling in a list.
+
+  * Not yet checked.
+
+### High Contrast
+
+Everything uses system colors, and no state is shown by color alone.
+
+  * Not yet checked.
