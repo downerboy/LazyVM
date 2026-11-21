@@ -72,8 +72,10 @@
                             AutomationProperties.HelpText="Starts the build in its own process, and shows its progress. Closing the app does not stop it." />
                     <Button Content="Run _maintenance now" Command="{Binding MaintenanceCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Run the maintenance of {0} now'}"
-                            AutomationProperties.HelpText="Starts the VM's maintenance task, so maintenance runs as its nightly run does." />
+                            AutomationProperties.HelpText="{Binding MaintenanceHelp}" />
                 </WrapPanel>
+                <!-- What Run maintenance now does. The button's help text is the same, so Narrator reads it too. -->
+                <TextBlock Text="{Binding MaintenanceHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
                 <TextBlock Text="{Binding RunNote}" TextWrapping="Wrap"
                            Visibility="{Binding HasRunNote, Converter={StaticResource VisibleWhenTrue}}"
                            AutomationProperties.Name="{Binding RunNote}" local:LiveRegion.Announce="True" />

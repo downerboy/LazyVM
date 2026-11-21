@@ -588,6 +588,14 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void MaintenanceHelp_SaysWhatTheRunDoes_IncludingARearmOrRebuildNearTheEndOfTheEvaluation()
+    {
+        var vm = Open(Sample.VM());
+
+        Assert.Equal("Runs the VM's nightly maintenance now: it records what changed in the VM, backs up its databases, installs updates and scans it for security problems. Near the end of the evaluation it also rearms Windows and restarts the VM, or, with no rearms left, rebuilds it.", vm.MaintenanceHelp);
+    }
+
+    [Fact]
     public async Task AfterABuildThatCompleted_TheFirstPhaseIsChosen()
     {
         var vm = await Loaded(Sample.VM() with

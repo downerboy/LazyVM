@@ -9,6 +9,7 @@ namespace LazyVM.UI.Wpf.ViewModels;
 public sealed class VMViewModel : ViewModelBase
 {
     private const string _MAINTENANCE_NOT_SCHEDULED = "Not registered";
+    private const string _MAINTENANCE_HELP = "Runs the VM's nightly maintenance now: it records what changed in the VM, backs up its databases, installs updates and scans it for security problems. Near the end of the evaluation it also rearms Windows and restarts the VM, or, with no rearms left, rebuilds it.";
 
     private readonly ToolWindows _Tools;
     private VMDashboard _Entry;
@@ -191,6 +192,13 @@ public sealed class VMViewModel : ViewModelBase
     }
 
     public bool HasPhaseHelp => PhaseHelp.Length > 0;
+
+    /// <summary>
+    /// What running maintenance now does, including the rearm or rebuild it
+    /// may do near the end of the evaluation. The window shows it and gives
+    /// it to Run maintenance now as its help text, so Narrator reads the same.
+    /// </summary>
+    public string MaintenanceHelp => _MAINTENANCE_HELP;
 
     /// <summary>
     /// Why a run cannot start now, or which phase is chosen and why, as text
