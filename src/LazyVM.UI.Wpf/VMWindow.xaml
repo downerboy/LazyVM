@@ -86,12 +86,12 @@
         <Border DockPanel.Dock="Top" Style="{StaticResource LvPanel}" Margin="24,24,24,0">
             <StackPanel>
                 <TextBlock Text="Delete" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
-                <TextBlock Text="Deletes the VM, its disks, its tasks and everything else LazyVM made for it. A list of what goes comes first, and you are asked before anything is deleted."
-                           Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                <!-- What deleting the VM takes with it. The button's help text is the same, so Narrator reads it too. -->
+                <TextBlock Text="{Binding DeleteHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
                 <WrapPanel Margin="0,8,0,0">
                     <Button Content="_Delete this VM..." Command="{Binding DeleteCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Delete {0}'}"
-                            AutomationProperties.HelpText="Lists what deleting the VM deletes, and asks before deleting anything." />
+                            AutomationProperties.HelpText="{Binding DeleteHelp}" />
                 </WrapPanel>
                 <TextBlock Text="{Binding DeleteNote}" TextWrapping="Wrap"
                            Visibility="{Binding HasDeleteNote, Converter={StaticResource VisibleWhenTrue}}"

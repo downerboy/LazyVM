@@ -588,6 +588,19 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void DeleteHelp_SaysTheWorkDisksGoToo_ThatItCannotBeUndone_AndThatTheTemplateIsKept()
+    {
+        var vm = Open(Sample.VM("DevEnv"));
+
+        Assert.Equal(
+            "Deletes DevEnv and everything LazyVM made for it: its disks, tasks and folder. "
+            + @"That includes the Dev Drive, with any code not yet pushed, and the User disk, with Documents, Desktop, Downloads, .ssh and source\repos, so push or copy your work first. "
+            + "It cannot be undone. Its template, DevEnv-latest, is kept, to build a matching VM from later. "
+            + "A list of what goes comes first, and you are asked before anything is deleted.",
+            vm.DeleteHelp);
+    }
+
+    [Fact]
     public void MaintenanceHelp_SaysWhatTheRunDoes_IncludingARearmOrRebuildNearTheEndOfTheEvaluation()
     {
         var vm = Open(Sample.VM());

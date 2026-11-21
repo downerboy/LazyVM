@@ -201,6 +201,16 @@ public sealed class VMViewModel : ViewModelBase
     public string MaintenanceHelp => _MAINTENANCE_HELP;
 
     /// <summary>
+    /// What deleting the VM takes with it, including the work on its Dev
+    /// Drive and User disk, and what is kept. The window shows it and gives
+    /// it to Delete as its help text, so Narrator reads the same.
+    /// </summary>
+    public string DeleteHelp => $"Deletes {Name} and everything LazyVM made for it: its disks, tasks and folder. "
+        + @"That includes the Dev Drive, with any code not yet pushed, and the User disk, with Documents, Desktop, Downloads, .ssh and source\repos, so push or copy your work first. "
+        + $"It cannot be undone. Its template, {Name}-latest, is kept, to build a matching VM from later. "
+        + "A list of what goes comes first, and you are asked before anything is deleted.";
+
+    /// <summary>
     /// Why a run cannot start now, or which phase is chosen and why, as text
     /// on the window: a disabled button cannot take focus, so a screen reader
     /// would never read a reason given only on it.
