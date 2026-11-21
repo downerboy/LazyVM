@@ -12,7 +12,7 @@ public sealed class VMViewModel : ViewModelBase
     private const string _MAINTENANCE_HELP = "Runs the VM's nightly maintenance now: it records what changed in the VM, backs up its databases, installs updates and scans it for security problems. Near the end of the evaluation it also rearms Windows and restarts the VM, or, with no rearms left, rebuilds it.";
 
     private readonly ToolWindows _Tools;
-    private VMDashboard _Entry;
+    private LazyVMDashboard _Entry;
     private IReadOnlyList<PhaseOption> _Phases = [];
     private PhaseOption? _SelectedPhase;
     private int? _SuggestedPhase;
@@ -22,7 +22,7 @@ public sealed class VMViewModel : ViewModelBase
     private RestoreViewModel? _Restore;
     private SecurityFindingsViewModel? _Findings;
 
-    public VMViewModel(VMDashboard entry, ToolWindows tools)
+    public VMViewModel(LazyVMDashboard entry, ToolWindows tools)
     {
         _Entry = entry;
         _Tools = tools;
@@ -454,7 +454,7 @@ public sealed class VMViewModel : ViewModelBase
     }
 
     /// <summary>Shows what a newer refresh read for this VM.</summary>
-    public void Update(VMDashboard entry)
+    public void Update(LazyVMDashboard entry)
     {
         _Entry = entry;
         Details = ReadDetails(entry);
@@ -475,7 +475,7 @@ public sealed class VMViewModel : ViewModelBase
     }
 
     /// <summary>Memory in use against the most the VM can use, for example "6 GB of 16 GB" (#420).</summary>
-    private static string MemoryText(VMDashboard vm, string missing)
+    private static string MemoryText(LazyVMDashboard vm, string missing)
     {
         var inUse = vm.MemoryAssigned switch
         {
@@ -488,7 +488,7 @@ public sealed class VMViewModel : ViewModelBase
             : inUse;
     }
 
-    private static List<VMDetail> ReadDetails(VMDashboard vm)
+    private static List<VMDetail> ReadDetails(LazyVMDashboard vm)
     {
         // Hyper-V has nothing to say about a VM that is not built yet; say why.
         var missing = vm.State == "Not built" ? "Not built yet" : DashboardText.NOT_KNOWN;
@@ -501,12 +501,12 @@ public sealed class VMViewModel : ViewModelBase
             new("Disk space used", vm.DiskSpaceUsed is { } used
                 ? $"{DashboardText.Size(used)} on {vm.Disks.Count} {(vm.Disks.Count == 1 ? "disk" : "disks")}"
                 : missing),
-            // Used counts the disk's checkpoint files too, so it can be more than the disk's size; say why then.
+            // UsedDiskSpace counts the disk's checkpoint files too, so it can be more than the disk's size; say why then.
             .. vm.Disks.Select(disk => new VMDetail(
-                "Disk " + disk.Name,
-                disk.Used > disk.Maximum
-                    ? $"{DashboardText.Size(disk.Used)} used with its checkpoints, disk size {DashboardText.Size(disk.Maximum)}, {disk.Path}"
-                    : $"{DashboardText.Size(disk.Used)} used of {DashboardText.Size(disk.Maximum)}, {disk.Path}")),
+                "Disk " + disk.DiskName,
+                disk.UsedDiskSpace > disk.MaximumDiskSpace
+                    ? $"{DashboardText.Size(disk.UsedDiskSpace)} used with its checkpoints, disk size {DashboardText.Size(disk.MaximumDiskSpace)}, {disk.DiskPath}"
+                    : $"{DashboardText.Size(disk.UsedDiskSpace)} used of {DashboardText.Size(disk.MaximumDiskSpace)}, {disk.DiskPath}")),
             new("Maintenance", MaintenanceText(vm)),
             new("Last maintenance", DashboardText.LastMaintenance(vm, DashboardText.When)),
             new("Last security scan", vm.LastSecurityScan is { } scanned
@@ -537,7 +537,7 @@ public sealed class VMViewModel : ViewModelBase
             : what;
     }
 
-    private static string MaintenanceText(VMDashboard vm)
+    private static string MaintenanceText(LazyVMDashboard vm)
     {
         var time = vm.MaintenanceTime is null ? DashboardText.NOT_KNOWN : $"Daily at {vm.MaintenanceTime}";
         var task = vm.MaintenanceTask is null ? "task not known" : "task " + DashboardText.InSentence(vm.MaintenanceTask);
@@ -545,7 +545,7 @@ public sealed class VMViewModel : ViewModelBase
     }
 
     /// <summary>Such as "3 stored, 1 not exported yet, last exported 15 November 2026 10:05", or "None stored yet".</summary>
-    private static string RecoveryKeysText(VMDashboard vm)
+    private static string RecoveryKeysText(LazyVMDashboard vm)
     {
         if (vm.RecoveryKeys is not { } stored || vm.UnexportedRecoveryKeys is not { } unexported)
         {
@@ -560,7 +560,7 @@ public sealed class VMViewModel : ViewModelBase
         return $"{stored} stored, {exported}, {last}";
     }
 
-    private static string GreenTemplateText(VMDashboard vm)
+    private static string GreenTemplateText(LazyVMDashboard vm)
     {
         return (vm.GreenTemplate, vm.GreenTemplateUpdated) switch
         {

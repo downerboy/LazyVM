@@ -21,13 +21,13 @@ public sealed class RemovalViewModelTests : IDisposable
             Name = "DevBox",
             HyperVState = "Running",
             CheckpointCount = 2,
-            Tasks = [@"LazyVM\DevBox maintenance"],
+            ScheduledTasks = [@"LazyVM\DevBox maintenance"],
             Items =
             [
                 new("Folder", @"C:\LazyVM\DevBox", 90 * _GB),
                 new(RemovalItem.FILE, @"E:\Disks\DevBox\SQL.vhdx", 10 * _GB),
             ],
-            Total = 100 * _GB,
+            TotalSize = 100 * _GB,
             Kept = [new(@"C:\LazyVM\Shared\Win11.iso", "Every VM uses it.")],
             WorkDisks =
             [
@@ -91,7 +91,7 @@ public sealed class RemovalViewModelTests : IDisposable
         {
             Name = "DevBox",
             Items = [new(RemovalItem.FILE, @"C:\Logs\DevBox.log", size)],
-            Total = size,
+            TotalSize = size,
         });
 
         Assert.Contains($@"File C:\Logs\DevBox.log, {said}", removal.Lines.Select(line => line.Text));

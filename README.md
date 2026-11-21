@@ -97,6 +97,7 @@ Type `LazyVM` on its own to see the installed version, the LazyVM folder and the
 | Command                                                       | What it does                                                                                           |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `LazyVM` (`Show-LazyVM`)                                    | The version, the LazyVM folder and its VMs, where the module is installed, and the command list.      |
+| `Show-LazyVMHelp`                                           | Opens the guide, the use cases or the diagrams, for the installed version, in your browser.            |
 | `Set-LazyVMRoot`                                            | Chooses your own folder for LazyVM instead of the automatic one.                                       |
 | `Convert-LazyVMInstallation`                                | Once, after updating from LazyVM 5: moves an install made for every user to your account.             |
 | `New-LazyVM`                                                | Creates a VM's profile without building it. `-From` starts from another VM's settings and tools; `-ConfigTemplate` from a config template. |

@@ -8,7 +8,7 @@ namespace LazyVM.UI.Wpf.Tests;
 /// </summary>
 internal sealed class FakeCommandRunner : PowerShellCommandRunner
 {
-    private readonly Answers<VMDashboard> _Dashboards = new();
+    private readonly Answers<LazyVMDashboard> _Dashboards = new();
     private readonly Answers<VMCheck> _Checks = new();
     private readonly Answers<VMLogEntry> _Logs = new();
 
@@ -21,7 +21,7 @@ internal sealed class FakeCommandRunner : PowerShellCommandRunner
 
     public List<(string Name, int Tail)> LogCalls { get; } = [];
 
-    public void Returns(params VMDashboard[] entries)
+    public void Returns(params LazyVMDashboard[] entries)
     {
         _Dashboards.Returns(entries);
     }
@@ -62,7 +62,7 @@ internal sealed class FakeCommandRunner : PowerShellCommandRunner
         _Logs.Throws(exception);
     }
 
-    public override Task<IReadOnlyList<VMDashboard>> GetLazyVMDashboardAsync(CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<LazyVMDashboard>> GetLazyVMDashboardAsync(CancellationToken cancellationToken)
     {
         DashboardCalls++;
         return _Dashboards.Next(cancellationToken);
@@ -80,7 +80,7 @@ internal sealed class FakeCommandRunner : PowerShellCommandRunner
         return _Logs.Next(cancellationToken);
     }
 
-    private readonly Answers<VMDashboard> _VMs = new();
+    private readonly Answers<LazyVMDashboard> _VMs = new();
     private readonly Answers<VMRun> _Stops = new();
 
     public IReadOnlyList<BuildPhase> Phases
@@ -140,7 +140,7 @@ internal sealed class FakeCommandRunner : PowerShellCommandRunner
         _Stops.Throws(exception);
     }
 
-    public override async Task<VMDashboard?> GetLazyVMAsync(string name, CancellationToken cancellationToken)
+    public override async Task<LazyVMDashboard?> GetLazyVMAsync(string name, CancellationToken cancellationToken)
     {
         VMCalls.Add(name);
         return (await _VMs.Next(cancellationToken)).FirstOrDefault();
@@ -179,6 +179,20 @@ internal sealed class FakeCommandRunner : PowerShellCommandRunner
     {
         MaintenanceCalls.Add(name);
         return MaintenanceFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
+    }
+
+    public List<HelpTopic> HelpCalls { get; } = [];
+
+    /// <summary>Show-LazyVMHelp fails with this, as it does when no browser opens.</summary>
+    public Exception? HelpFails
+    {
+        get; set;
+    }
+
+    public override Task ShowLazyVMHelpAsync(HelpTopic topic, CancellationToken cancellationToken)
+    {
+        HelpCalls.Add(topic);
+        return HelpFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
     }
 
     private readonly Answers<RemovalPlan> _RemovalPlans = new();
@@ -793,7 +807,7 @@ internal sealed class FixedClock(DateTimeOffset now) : TimeProvider
 
 internal static class Sample
 {
-    public static VMDashboard VM(string name = "DevBox", string state = "Running")
+    public static LazyVMDashboard VM(string name = "DevBox", string state = "Running")
     {
         return new()
         {

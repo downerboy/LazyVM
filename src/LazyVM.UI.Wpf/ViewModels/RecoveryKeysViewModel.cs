@@ -12,14 +12,14 @@ namespace LazyVM.UI.Wpf.ViewModels;
 public sealed class RecoveryKeysViewModel : ViewModelBase
 {
     private readonly ToolWindows _Tools;
-    private readonly VMDashboard _Entry;
+    private readonly LazyVMDashboard _Entry;
     private IReadOnlyList<RecoveryKeyRow> _Keys = [];
     private IReadOnlyList<string> _Warnings = [];
     private string _Status = string.Empty;
     private bool _IsLoaded;
     private bool _IsExporting;
 
-    public RecoveryKeysViewModel(VMDashboard entry, ToolWindows tools)
+    public RecoveryKeysViewModel(LazyVMDashboard entry, ToolWindows tools)
     {
         _Entry = entry;
         _Tools = tools;

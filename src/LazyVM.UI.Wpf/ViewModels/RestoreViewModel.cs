@@ -13,13 +13,13 @@ public sealed class RestoreViewModel : ViewModelBase
         + "so code not yet pushed, database changes and files in your personal folders changed since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.";
 
     private readonly ToolWindows _Tools;
-    private VMDashboard _Entry;
+    private LazyVMDashboard _Entry;
     private IReadOnlyList<RestorePointOption> _Points = [];
     private RestorePointOption? _SelectedPoint;
     private string _Status = string.Empty;
     private bool _IsRestoring;
 
-    public RestoreViewModel(VMDashboard entry, ToolWindows tools)
+    public RestoreViewModel(LazyVMDashboard entry, ToolWindows tools)
     {
         _Entry = entry;
         _Tools = tools;
@@ -160,7 +160,7 @@ public sealed class RestoreViewModel : ViewModelBase
     }
 
     /// <summary>Shows what a newer refresh read for this VM, such as a run that has started.</summary>
-    public void Update(VMDashboard entry)
+    public void Update(LazyVMDashboard entry)
     {
         _Entry = entry;
         OnPropertyChanged(nameof(IsBusy));

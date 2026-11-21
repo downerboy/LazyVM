@@ -15,14 +15,14 @@ public sealed class PasswordViewModel : ViewModelBase
     private const string _HIDDEN = "Password hidden";
 
     private readonly ToolWindows _Tools;
-    private readonly VMDashboard _Entry;
+    private readonly LazyVMDashboard _Entry;
     private string _UserName = string.Empty;
     private string? _Password;
     private string _Note = string.Empty;
     private string _Status = string.Empty;
     private bool _IsBusy;
 
-    public PasswordViewModel(VMDashboard entry, ToolWindows tools)
+    public PasswordViewModel(LazyVMDashboard entry, ToolWindows tools)
     {
         _Entry = entry;
         _Tools = tools;

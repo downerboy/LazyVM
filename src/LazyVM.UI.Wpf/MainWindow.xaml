@@ -11,6 +11,7 @@
         Style="{StaticResource LvWindow}">
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
+        <KeyBinding Key="F1" Command="{Binding GuideCommand}" />
     </Window.InputBindings>
 
     <DockPanel>
@@ -28,6 +29,16 @@
                             Visibility="{Binding IsRefreshing, Converter={StaticResource VisibleWhenTrue}}" />
                     <Button Content="Checks" Command="{Binding HostChecksCommand}" Margin="8,0,0,0"
                             AutomationProperties.Name="Checks of this host" />
+                    <!-- The documentation for the installed version, opened in the browser (#501). Nothing is run from a page. -->
+                    <Button Content="Help" Command="{Binding GuideCommand}" Margin="8,0,0,0"
+                            AutomationProperties.Name="Open the guide in your browser (F1)"
+                            AutomationProperties.HelpText="Opens the guide for the installed version of LazyVM on GitHub." />
+                    <Button Content="Use cases" Command="{Binding UseCasesCommand}" Margin="8,0,0,0"
+                            AutomationProperties.Name="Open the use cases in your browser"
+                            AutomationProperties.HelpText="Opens what LazyVM is for, case by case, for the installed version, on GitHub." />
+                    <Button Content="Diagrams" Command="{Binding DiagramsCommand}" Margin="8,0,0,0"
+                            AutomationProperties.Name="Open the diagrams in your browser"
+                            AutomationProperties.HelpText="Opens the flow of each command, as pictures and numbered lists, for the installed version, on GitHub." />
                 </WrapPanel>
                 <TextBlock Text="LazyVM" Style="{StaticResource LvTitle}" VerticalAlignment="Center" />
             </DockPanel>

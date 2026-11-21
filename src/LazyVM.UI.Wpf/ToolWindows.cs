@@ -56,6 +56,12 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
         RunStarted?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Opens the documentation page in the browser. Throws with the reason when the browser did not open.</summary>
+    public virtual Task OpenHelpAsync(HelpTopic topic)
+    {
+        return runner.ShowLazyVMHelpAsync(topic, CancellationToken.None);
+    }
+
     /// <summary>Raised when a delete has ended, even one that removed only part of the VM, so the list can be read again.</summary>
     public event EventHandler? VMRemoved;
 
@@ -116,7 +122,7 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     /// Shows the VM's restore points, or brings its open window to the front,
     /// and returns the window's view model, so a refresh can reach it.
     /// </summary>
-    public RestoreViewModel OpenRestore(VMDashboard entry)
+    public RestoreViewModel OpenRestore(LazyVMDashboard entry)
     {
         var key = "restore:" + entry.Name;
         if (_Open.TryGetValue(key, out var existing) && existing is RestoreViewModel open)
@@ -173,7 +179,7 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     /// Shows the VM's recovery keys, or brings its open window to the front.
     /// Closing the window forgets every password it showed.
     /// </summary>
-    public RecoveryKeysViewModel OpenRecoveryKeys(VMDashboard entry)
+    public RecoveryKeysViewModel OpenRecoveryKeys(LazyVMDashboard entry)
     {
         var key = "recovery-keys:" + entry.Name;
         if (_Open.TryGetValue(key, out var existing) && existing is RecoveryKeysViewModel open)
@@ -239,7 +245,7 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     }
 
     /// <summary>Shows the account LazyVM signs in to the VM with, or brings its open window to the front. Closing the window forgets the password.</summary>
-    public PasswordViewModel OpenPassword(VMDashboard entry)
+    public PasswordViewModel OpenPassword(LazyVMDashboard entry)
     {
         var key = "password:" + entry.Name;
         if (_Open.TryGetValue(key, out var existing) && existing is PasswordViewModel open)
@@ -318,7 +324,7 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     /// open window to the front, and returns the window's view model, so a
     /// refresh can reach it.
     /// </summary>
-    public SecurityFindingsViewModel OpenSecurityFindings(VMDashboard entry)
+    public SecurityFindingsViewModel OpenSecurityFindings(LazyVMDashboard entry)
     {
         var key = "security-findings:" + entry.Name;
         if (_Open.TryGetValue(key, out var existing) && existing is SecurityFindingsViewModel open)

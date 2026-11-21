@@ -27,13 +27,52 @@ public sealed class MainViewModelTests : IDisposable
         return new VMRun { Command = command, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 };
     }
 
+    [Theory]
+    [InlineData(HelpTopic.Guide, "the guide")]
+    [InlineData(HelpTopic.UseCases, "the use cases")]
+    [InlineData(HelpTopic.Diagrams, "the diagrams")]
+    public async Task OpenHelp_AsksForThePage_AndSaysWhichOpened(HelpTopic topic, string said)
+    {
+        await _Main.OpenHelpAsync(topic);
+
+        Assert.Equal([topic], _Runner.HelpCalls);
+        Assert.Equal($"Opened {said} in your browser", _Main.Status);
+    }
+
+    [Fact]
+    public async Task OpenHelp_WhenTheBrowserDoesNotOpen_SaysWhy()
+    {
+        _Runner.HelpFails = new InvalidOperationException("Could not open your browser: none is set.");
+
+        await _Main.OpenHelpAsync(HelpTopic.UseCases);
+
+        Assert.Equal("Could not open the use cases: Could not open your browser: none is set.", _Main.Status);
+        Assert.False(_Main.IsWorking);
+    }
+
+    [Fact]
+    public void HelpCommands_EachOpenTheirOwnPage()
+    {
+        _Main.GuideCommand.Execute(null);
+        _Main.UseCasesCommand.Execute(null);
+        _Main.DiagramsCommand.Execute(null);
+
+        Assert.Equal([HelpTopic.Guide, HelpTopic.UseCases, HelpTopic.Diagrams], _Runner.HelpCalls);
+    }
+
     [Fact]
     public async Task BuildProgress_IsOfferedForTheSelectedVM_OnlyWhileItBuilds()
     {
         _Runner.Returns(
             Sample.VM("Idle"),
-            Sample.VM("Building") with { Run = RunningNow(VMRun.BUILD) },
-            Sample.VM("Maintaining") with { Run = RunningNow("Maintenance") });
+            Sample.VM("Building") with
+            {
+                Run = RunningNow(VMRun.BUILD)
+            },
+            Sample.VM("Maintaining") with
+            {
+                Run = RunningNow("Maintenance")
+            });
         await _Main.RefreshAsync();
 
         // A loop, not a query: each row is selected in turn.
@@ -52,7 +91,10 @@ public sealed class MainViewModelTests : IDisposable
     [Fact]
     public async Task BuildProgress_OpensTheProgressOfTheSelectedVMsBuild()
     {
-        _Runner.Returns(Sample.VM("DevEnv") with { Run = RunningNow(VMRun.BUILD) });
+        _Runner.Returns(Sample.VM("DevEnv") with
+        {
+            Run = RunningNow(VMRun.BUILD)
+        });
         await _Main.RefreshAsync();
         _Main.SelectedVM = _Main.VMs.Single();
 
@@ -74,7 +116,10 @@ public sealed class MainViewModelTests : IDisposable
         var asked = 0;
         _Main.BuildProgressCommand.CanExecuteChanged += (_, _) => asked++;
 
-        _Runner.Returns(Sample.VM("DevEnv") with { Run = RunningNow(VMRun.BUILD) });
+        _Runner.Returns(Sample.VM("DevEnv") with
+        {
+            Run = RunningNow(VMRun.BUILD)
+        });
         await _Main.RefreshAsync();
 
         Assert.True(_Main.SelectedVMIsBuilding);

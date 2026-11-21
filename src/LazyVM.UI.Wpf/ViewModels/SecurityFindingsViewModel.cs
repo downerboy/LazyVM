@@ -18,7 +18,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
     private const string _REVOKE_HELP = "Revoking undoes an approval. The next nightly scan reports the finding again, as new, if it still finds it.";
 
     private readonly ToolWindows _Tools;
-    private VMDashboard _Entry;
+    private LazyVMDashboard _Entry;
     private IReadOnlyList<SecurityFindingRow> _Findings = [];
     private IReadOnlyList<SecurityApprovalRow> _Approvals = [];
     private SecurityFindingRow? _SelectedFinding;
@@ -28,7 +28,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
     private bool _IsChanging;
     private string _Status = string.Empty;
 
-    public SecurityFindingsViewModel(VMDashboard entry, ToolWindows tools)
+    public SecurityFindingsViewModel(LazyVMDashboard entry, ToolWindows tools)
     {
         _Entry = entry;
         _Tools = tools;
@@ -359,7 +359,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
     }
 
     /// <summary>Shows what a newer refresh read for this VM; reads the findings again when a newer scan has run.</summary>
-    public Task Update(VMDashboard entry)
+    public Task Update(LazyVMDashboard entry)
     {
         var rescanned = entry.LastSecurityScan != _Entry.LastSecurityScan;
         _Entry = entry;

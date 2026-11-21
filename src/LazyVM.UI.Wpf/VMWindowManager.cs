@@ -9,7 +9,7 @@ public class VMWindowManager(ToolWindows tools)
 {
     private readonly Dictionary<string, VMViewModel> _Open = new(StringComparer.OrdinalIgnoreCase);
 
-    public void Open(VMDashboard entry)
+    public void Open(LazyVMDashboard entry)
     {
         if (_Open.TryGetValue(entry.Name, out var existing))
         {
@@ -25,7 +25,7 @@ public class VMWindowManager(ToolWindows tools)
     }
 
     /// <summary>Shows what a refresh read in the windows that are open.</summary>
-    public void Update(IEnumerable<VMDashboard> entries)
+    public void Update(IEnumerable<LazyVMDashboard> entries)
     {
         foreach (var entry in entries.Where(entry => _Open.ContainsKey(entry.Name)))
         {
