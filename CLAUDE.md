@@ -9,3 +9,7 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md). For every issue:
 5. Merge the release-please pull request (`chore(main): release x.y.z`) to publish the release. `docs`, `refactor`, `test`, `build`, `ci`, `chore` and `style` changes do not make one on their own.
 
 Work that has no issue gets one first.
+
+CONTRIBUTING.md, loaded here so every session follows it:
+
+@CONTRIBUTING.md
