@@ -85,6 +85,16 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
 
     public bool HasExportNote => ExportNote.Length > 0;
 
+    /// <summary>
+    /// What exporting writes, why the file must be kept offline, what
+    /// replacing a file loses, and when to export again. The window shows it
+    /// and gives it to Export as its help text, so Narrator reads the same.
+    /// </summary>
+    public string ExportHelp => $"Writes the BitLocker recovery passwords of {Name} to a file you choose, as plain text. "
+        + "If LazyVM's own copy is lost, as when your Windows profile is deleted, this file is the only way to unlock the disks; anyone who has it can unlock them too. "
+        + "Keep it offline, such as on a USB drive kept somewhere safe, not on this computer or in the cloud. "
+        + $"Replacing a file, after you are asked, keeps nothing that was in it, so give each VM a file of its own. Export again after a build or rebuild of {Name}, which can add new keys: the VM window says when some are not exported yet.";
+
     /// <summary>The warnings the last export gave, such as for a file in OneDrive, each shown as text of its own.</summary>
     public IReadOnlyList<string> Warnings
     {

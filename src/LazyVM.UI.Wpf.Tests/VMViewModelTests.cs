@@ -548,6 +548,103 @@ public sealed class VMViewModelTests : IDisposable
         Assert.Equal($"The last build {said} in phase 7, so phase 7 is chosen. Let any install still running inside the VM finish first.", vm.RunNote);
     }
 
+    [Theory]
+    [InlineData(0, "Runs every phase again")]
+    [InlineData(1, "Skips the phases before phase 1, then runs phase 1 and those after it again")]
+    [InlineData(7, "Skips the phases before phase 7, then runs phase 7 and those after it again")]
+    [InlineData(8, "Skips the phases before phase 8, then runs only phase 8 again")]
+    public async Task PhaseHelp_SaysWhatBuildingFromTheChosenPhaseSkipsAndKeeps(int number, string runs)
+    {
+        var vm = await Loaded(Sample.VM());
+
+        vm.SelectedPhase = vm.Phases.Single(phase => phase.Number == number);
+
+        Assert.Equal(runs + ", skipping work already done: the VM, its disks and what is installed are kept. Use it after fixing what stopped a build, from the phase it stopped in.", vm.PhaseHelp);
+        Assert.True(vm.HasPhaseHelp);
+    }
+
+    [Fact]
+    public async Task PhaseHelp_FollowsTheChosenPhase()
+    {
+        var vm = await Loaded(Sample.VM());
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        vm.SelectedPhase = vm.Phases.Single(phase => phase.Number == 7);
+
+        Assert.Contains(nameof(VMViewModel.PhaseHelp), changed);
+        Assert.Contains(nameof(VMViewModel.HasPhaseHelp), changed);
+        Assert.Contains(nameof(VMViewModel.BuildFromPhaseHelp), changed);
+    }
+
+    [Fact]
+    public async Task BuildFromPhaseHelp_SaysWhatTheChosenPhaseDoes_ThenHowTheBuildRuns()
+    {
+        var vm = await Loaded(Sample.VM());
+
+        vm.SelectedPhase = vm.Phases.Single(phase => phase.Number == 7);
+
+        Assert.Equal(vm.PhaseHelp + " Starts the build in its own process, and shows its progress. Closing the app does not stop it.", vm.BuildFromPhaseHelp);
+        Assert.StartsWith("Skips the phases before phase 7", vm.BuildFromPhaseHelp);
+    }
+
+    [Fact]
+    public async Task BuildFromPhaseHelp_WithNoPhaseChosen_SaysOnlyHowTheBuildRuns()
+    {
+        _Runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
+
+        var vm = await Loaded(Sample.VM());
+
+        Assert.Equal("Starts the build in its own process, and shows its progress. Closing the app does not stop it.", vm.BuildFromPhaseHelp);
+    }
+
+    [Fact]
+    public async Task PhaseHelp_WhenThePhasesCannotBeRead_IsEmpty()
+    {
+        _Runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
+
+        var vm = await Loaded(Sample.VM());
+
+        Assert.Equal(string.Empty, vm.PhaseHelp);
+        Assert.False(vm.HasPhaseHelp);
+    }
+
+    [Fact]
+    public void DeleteHelp_SaysTheWorkDisksGoToo_ThatItCannotBeUndone_AndThatTheTemplateIsKept()
+    {
+        var vm = Open(Sample.VM("DevEnv") with { GreenTemplate = "DevEnv-latest" });
+
+        Assert.Equal(
+            "Deletes DevEnv and everything LazyVM made for it: its disks, tasks and folder. "
+            + @"That includes the Dev Drive, with any code not yet pushed, and the User disk, with Documents, Desktop, Downloads, .ssh and source\repos, so push or copy your work first. "
+            + "It cannot be undone. Its template, DevEnv-latest, is kept, to build a matching VM from later. "
+            + "A list of what goes comes first, and you are asked before anything is deleted.",
+            vm.DeleteHelp);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void DeleteHelp_ForAVMWithNoTemplate_NamesNone(string? template)
+    {
+        var vm = Open(Sample.VM("DevEnv") with { GreenTemplate = template });
+
+        Assert.Equal(
+            "Deletes DevEnv and everything LazyVM made for it: its disks, tasks and folder. "
+            + @"That includes the Dev Drive, with any code not yet pushed, and the User disk, with Documents, Desktop, Downloads, .ssh and source\repos, so push or copy your work first. "
+            + "It cannot be undone. "
+            + "A list of what goes comes first, and you are asked before anything is deleted.",
+            vm.DeleteHelp);
+    }
+
+    [Fact]
+    public void MaintenanceHelp_SaysWhatTheRunDoes_IncludingARearmOrRebuildNearTheEndOfTheEvaluation()
+    {
+        var vm = Open(Sample.VM());
+
+        Assert.Equal("Runs the VM's nightly maintenance now: it records what changed in the VM, backs up its databases, installs updates and scans it for security problems. Near the end of the evaluation it also rearms Windows and restarts the VM, or, with no rearms left, rebuilds it.", vm.MaintenanceHelp);
+    }
+
     [Fact]
     public async Task AfterABuildThatCompleted_TheFirstPhaseIsChosen()
     {

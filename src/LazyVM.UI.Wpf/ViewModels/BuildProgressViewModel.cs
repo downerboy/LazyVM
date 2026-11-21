@@ -13,7 +13,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <summary>How often the run state is read while the window is open.</summary>
     internal static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
 
-    private readonly CommandRunner _Runner;
+    private readonly PowerShellCommandRunner _Runner;
     private readonly StartedBuild? _Started;
     private readonly TimeProvider _Clock;
     private readonly RelayCommand _CancelCommand;
@@ -35,7 +35,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <param name="vmName">The VM whose build is followed.</param>
     /// <param name="started">The build process the app started; empty to follow the VM's build that is running now.</param>
     /// <param name="startFromPhase">Starts a new build of the VM from the phase it is given, and shows it; empty offers no Carry on.</param>
-    public BuildProgressViewModel(CommandRunner runner, string vmName, StartedBuild? started, TimeProvider clock, Func<int, Task>? startFromPhase = null)
+    public BuildProgressViewModel(PowerShellCommandRunner runner, string vmName, StartedBuild? started, TimeProvider clock, Func<int, Task>? startFromPhase = null)
     {
         _Runner = runner;
         _Started = started;
@@ -226,7 +226,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     {
         try
         {
-            _Phases = await WorkAsync("Reading the build phases", () => _Runner.GetBuildPhasesAsync(cancellationToken));
+            _Phases = await WorkAsync("Reading the build phases", () => _Runner.GetLazyVMBuildPhasesAsync(cancellationToken));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -242,7 +242,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         VMRun? latest;
         try
         {
-            latest = (await _Runner.GetVMAsync(VMName, cancellationToken))?.Run;
+            latest = (await _Runner.GetLazyVMAsync(VMName, cancellationToken))?.Run;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -401,7 +401,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         _CancelCommand.RaiseCanExecuteChanged();
         try
         {
-            var stopping = await WorkAsync("Asking the build to stop", () => _Runner.StopBuildAsync(VMName, CancellationToken.None));
+            var stopping = await WorkAsync("Asking the build to stop", () => _Runner.StopLazyVMBuildAsync(VMName, CancellationToken.None));
             if (stopping is null)
             {
                 Status = $"No build of {VMName} is running, so there is nothing to stop.";

@@ -48,6 +48,19 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task ExportHelp_SaysWhyTheFileMatters_WhereToKeepIt_WhatReplacingLoses_AndWhenToExportAgain()
+    {
+        var window = await Loaded(_OsKey);
+
+        Assert.Equal(
+            $"Writes the BitLocker recovery passwords of {window.Name} to a file you choose, as plain text. "
+            + "If LazyVM's own copy is lost, as when your Windows profile is deleted, this file is the only way to unlock the disks; anyone who has it can unlock them too. "
+            + "Keep it offline, such as on a USB drive kept somewhere safe, not on this computer or in the cloud. "
+            + $"Replacing a file, after you are asked, keeps nothing that was in it, so give each VM a file of its own. Export again after a build or rebuild of {window.Name}, which can add new keys: the VM window says when some are not exported yet.",
+            window.ExportHelp);
+    }
+
+    [Fact]
     public async Task Keys_ListEachDisk_WithItsKeyID_TheDateItWasRecorded_AndWhetherItIsExported()
     {
         var window = await Loaded(_OsKey, _UserKey);

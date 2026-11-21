@@ -42,8 +42,10 @@
                 <WrapPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                     <Button x:Name="RevokeButton" Content="Re_voke..." Command="{Binding RevokeCommand}"
                             AutomationProperties.Name="Revoke the approval of the chosen finding"
-                            AutomationProperties.HelpText="Asks first. The next nightly scan then reports the finding again if it still finds it." />
+                            AutomationProperties.HelpText="{Binding RevokeHelp}" />
                 </WrapPanel>
+                <!-- What Revoke does. The button's help text is the same, so Narrator reads it too. -->
+                <TextBlock DockPanel.Dock="Bottom" Text="{Binding RevokeHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,8,0,0" />
                 <ListBox x:Name="ApprovalList" ItemsSource="{Binding Approvals}" SelectedItem="{Binding SelectedApproval}"
                          MaxHeight="180" AutomationProperties.Name="Approved findings"
                          BorderThickness="0" Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
@@ -71,10 +73,12 @@
                 <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,0,0,8"
                            AutomationProperties.Name="{Binding Summary}" />
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                    <!-- What Approve does. The button's help text is the same, so Narrator reads it too. -->
+                    <TextBlock Text="{Binding ApproveHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
                     <WrapPanel>
                         <Button x:Name="ApproveButton" Content="_Approve..." Command="{Binding ApproveCommand}"
                                 AutomationProperties.Name="Approve the chosen finding"
-                                AutomationProperties.HelpText="Asks for a reason, then asks first. The nightly scan then stops reporting the finding until it changes." />
+                                AutomationProperties.HelpText="{Binding ApproveHelp}" />
                     </WrapPanel>
                     <!-- Why Approve is disabled, as text of its own: a disabled button cannot take focus. -->
                     <TextBlock Text="{Binding ApproveNote}" TextWrapping="Wrap" Margin="0,4,0,0"

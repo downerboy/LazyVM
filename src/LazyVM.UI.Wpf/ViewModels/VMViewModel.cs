@@ -9,6 +9,7 @@ namespace LazyVM.UI.Wpf.ViewModels;
 public sealed class VMViewModel : ViewModelBase
 {
     private const string _MAINTENANCE_NOT_SCHEDULED = "Not registered";
+    private const string _MAINTENANCE_HELP = "Runs the VM's nightly maintenance now: it records what changed in the VM, backs up its databases, installs updates and scans it for security problems. Near the end of the evaluation it also rearms Windows and restarts the VM, or, with no rearms left, rebuilds it.";
 
     private readonly ToolWindows _Tools;
     private VMDashboard _Entry;
@@ -160,9 +161,69 @@ public sealed class VMViewModel : ViewModelBase
             if (SetProperty(ref _SelectedPhase, value))
             {
                 BuildFromPhaseCommand.RaiseCanExecuteChanged();
+                OnPropertyChanged(nameof(PhaseHelp));
+                OnPropertyChanged(nameof(HasPhaseHelp));
+                OnPropertyChanged(nameof(BuildFromPhaseHelp));
             }
         }
     }
+
+    /// <summary>
+    /// Build from this phase's help text: <see cref="PhaseHelp"/> for the
+    /// phase chosen, then how the build runs. Focus moves from the phase list
+    /// to the button, and Narrator reads the button's help, not the list's,
+    /// so the button says what the chosen phase does too.
+    /// </summary>
+    public string BuildFromPhaseHelp => string.Join(" ",
+        new[] { PhaseHelp, "Starts the build in its own process, and shows its progress. Closing the app does not stop it." }.Where(text => text.Length > 0));
+
+    /// <summary>
+    /// What building from <see cref="SelectedPhase"/> skips, what it runs
+    /// again and what it keeps, and when to use it; empty when no phase is
+    /// chosen. The window shows it and gives it to the phase list as its
+    /// help text, so Narrator reads the same.
+    /// </summary>
+    public string PhaseHelp
+    {
+        get
+        {
+            if (SelectedPhase is not { } chosen)
+            {
+                return string.Empty;
+            }
+            var number = chosen.Number;
+            var runs = number == Phases[0].Number
+                ? "Runs every phase again"
+                : number == Phases[^1].Number
+                    ? $"Skips the phases before phase {number}, then runs only phase {number} again"
+                    : $"Skips the phases before phase {number}, then runs phase {number} and those after it again";
+            return runs + ", skipping work already done: the VM, its disks and what is installed are kept. Use it after fixing what stopped a build, from the phase it stopped in.";
+        }
+    }
+
+    public bool HasPhaseHelp => PhaseHelp.Length > 0;
+
+    /// <summary>
+    /// What running maintenance now does, including the rearm or rebuild it
+    /// may do near the end of the evaluation. The window shows it and gives
+    /// it to Run maintenance now as its help text, so Narrator reads the same.
+    /// </summary>
+    public string MaintenanceHelp => _MAINTENANCE_HELP;
+
+    /// <summary>
+    /// What deleting the VM takes with it, including the work on its Dev
+    /// Drive and User disk, and what is kept. The window shows it and gives
+    /// it to Delete as its help text, so Narrator reads the same. The
+    /// template is named only when the VM has one.
+    /// </summary>
+    public string DeleteHelp => string.Join(" ", new[]
+    {
+        $"Deletes {Name} and everything LazyVM made for it: its disks, tasks and folder.",
+        @"That includes the Dev Drive, with any code not yet pushed, and the User disk, with Documents, Desktop, Downloads, .ssh and source\repos, so push or copy your work first.",
+        "It cannot be undone.",
+        string.IsNullOrEmpty(_Entry.GreenTemplate) ? string.Empty : $"Its template, {_Entry.GreenTemplate}, is kept, to build a matching VM from later.",
+        "A list of what goes comes first, and you are asked before anything is deleted.",
+    }.Where(text => text.Length > 0));
 
     /// <summary>
     /// Why a run cannot start now, or which phase is chosen and why, as text

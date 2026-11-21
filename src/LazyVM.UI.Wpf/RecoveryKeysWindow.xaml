@@ -23,10 +23,12 @@
 
         <!-- Exporting. With no key stored, Export is disabled and the note says why. Each warning the module gives is text of its own, so Narrator reads it. -->
         <StackPanel DockPanel.Dock="Bottom" Margin="24,0,24,24">
+            <!-- What Export does and where to keep the file. The button's help text is the same, so Narrator reads it too. -->
+            <TextBlock Text="{Binding ExportHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
             <WrapPanel>
                 <Button Content="_Export..." Command="{Binding ExportCommand}" Margin="0,0,8,8"
                         AutomationProperties.Name="{Binding Name, StringFormat='Export the recovery keys of {0}'}"
-                        AutomationProperties.HelpText="Asks for a file, such as one on a USB drive, and writes the VM's recovery passwords to it. Asks first before replacing a file." />
+                        AutomationProperties.HelpText="{Binding ExportHelp}" />
             </WrapPanel>
             <TextBlock Text="{Binding ExportNote}" TextWrapping="Wrap"
                        Visibility="{Binding HasExportNote, Converter={StaticResource VisibleWhenTrue}}"

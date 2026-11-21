@@ -6,7 +6,7 @@ namespace LazyVM.UI.Wpf.Tests;
 /// A command runner that answers from memory instead of PowerShell. Each
 /// command has its own queue of answers, and each call's parameters are kept.
 /// </summary>
-internal sealed class FakeCommandRunner : CommandRunner
+internal sealed class FakeCommandRunner : PowerShellCommandRunner
 {
     private readonly Answers<VMDashboard> _Dashboards = new();
     private readonly Answers<VMCheck> _Checks = new();
@@ -62,19 +62,19 @@ internal sealed class FakeCommandRunner : CommandRunner
         _Logs.Throws(exception);
     }
 
-    public override Task<IReadOnlyList<VMDashboard>> GetDashboardAsync(CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<VMDashboard>> GetLazyVMDashboardAsync(CancellationToken cancellationToken)
     {
         DashboardCalls++;
         return _Dashboards.Next(cancellationToken);
     }
 
-    public override Task<IReadOnlyList<VMCheck>> GetChecksAsync(string? name, bool hostOnly, CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<VMCheck>> GetLazyVMChecksAsync(string? name, bool hostOnly, CancellationToken cancellationToken)
     {
         CheckCalls.Add((name, hostOnly));
         return _Checks.Next(cancellationToken);
     }
 
-    public override Task<IReadOnlyList<VMLogEntry>> GetLogAsync(string name, int tail, CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<VMLogEntry>> GetLazyVMLogAsync(string name, int tail, CancellationToken cancellationToken)
     {
         LogCalls.Add((name, tail));
         return _Logs.Next(cancellationToken);
@@ -140,23 +140,23 @@ internal sealed class FakeCommandRunner : CommandRunner
         _Stops.Throws(exception);
     }
 
-    public override async Task<VMDashboard?> GetVMAsync(string name, CancellationToken cancellationToken)
+    public override async Task<VMDashboard?> GetLazyVMAsync(string name, CancellationToken cancellationToken)
     {
         VMCalls.Add(name);
         return (await _VMs.Next(cancellationToken)).FirstOrDefault();
     }
 
-    public override Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<BuildPhase>> GetLazyVMBuildPhasesAsync(CancellationToken cancellationToken)
     {
         return PhasesFail is { } failure ? Task.FromException<IReadOnlyList<BuildPhase>>(failure) : Task.FromResult(Phases);
     }
 
-    public override Task<IReadOnlyList<ConfigTemplate>> GetConfigTemplatesAsync(CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<ConfigTemplate>> GetLazyVMConfigTemplatesAsync(CancellationToken cancellationToken)
     {
         return TemplatesFail is { } failure ? Task.FromException<IReadOnlyList<ConfigTemplate>>(failure) : Task.FromResult(Templates);
     }
 
-    public override async Task<VMRun?> StopBuildAsync(string name, CancellationToken cancellationToken)
+    public override async Task<VMRun?> StopLazyVMBuildAsync(string name, CancellationToken cancellationToken)
     {
         StopCalls.Add(name);
         return (await _Stops.Next(cancellationToken)).FirstOrDefault();
@@ -175,7 +175,7 @@ internal sealed class FakeCommandRunner : CommandRunner
         get; set;
     }
 
-    public override Task StartMaintenanceAsync(string name, CancellationToken cancellationToken)
+    public override Task StartLazyVMMaintenanceAsync(string name, CancellationToken cancellationToken)
     {
         MaintenanceCalls.Add(name);
         return MaintenanceFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
@@ -210,13 +210,13 @@ internal sealed class FakeCommandRunner : CommandRunner
         _RemovalPlans.Throws(exception);
     }
 
-    public override async Task<RemovalPlan> GetRemovalPlanAsync(string name, CancellationToken cancellationToken)
+    public override async Task<RemovalPlan> GetLazyVMRemovalPlanAsync(string name, CancellationToken cancellationToken)
     {
         RemovalPlanCalls.Add(name);
         return (await _RemovalPlans.Next(cancellationToken))[0];
     }
 
-    public override async Task RemoveVMAsync(string name)
+    public override async Task RemoveLazyVMAsync(string name)
     {
         RemoveCalls.Add(name);
         if (RemoveGate is { } gate)
@@ -258,13 +258,13 @@ internal sealed class FakeCommandRunner : CommandRunner
         _RestorePoints.Throws(exception);
     }
 
-    public override Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(string name, CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<VMRestorePoint>> GetLazyVMRestorePointsAsync(string name, CancellationToken cancellationToken)
     {
         RestorePointCalls.Add(name);
         return _RestorePoints.Next(cancellationToken);
     }
 
-    public override async Task RestoreToolingAsync(string name, string stamp)
+    public override async Task RestoreLazyVMToolingAsync(string name, string stamp)
     {
         RestoreCalls.Add((name, stamp));
         if (RestoreGate is { } gate)
@@ -314,19 +314,19 @@ internal sealed class FakeCommandRunner : CommandRunner
         _RecoveryKeys.Throws(exception);
     }
 
-    public override Task<IReadOnlyList<VMRecoveryKey>> GetRecoveryKeysAsync(string name, CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<VMRecoveryKey>> GetLazyVMRecoveryKeysAsync(string name, CancellationToken cancellationToken)
     {
         RecoveryKeyCalls.Add(name);
         return _RecoveryKeys.Next(cancellationToken);
     }
 
-    public override Task<string> GetRecoveryPasswordAsync(string name, string diskGuid, CancellationToken cancellationToken)
+    public override Task<string> GetLazyVMRecoveryPasswordAsync(string name, string diskGuid, CancellationToken cancellationToken)
     {
         RecoveryPasswordCalls.Add((name, diskGuid));
         return RecoveryPasswordFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(RecoveryPasswords[diskGuid]);
     }
 
-    public override Task<RecoveryKeyExport> ExportRecoveryKeysAsync(string name, string path, bool force)
+    public override Task<RecoveryKeyExport> ExportLazyVMRecoveryKeysAsync(string name, string path, bool force)
     {
         ExportCalls.Add((name, path, force));
         return ExportFails is { } failure
@@ -363,13 +363,13 @@ internal sealed class FakeCommandRunner : CommandRunner
         _SecurityApprovals.Throws(exception);
     }
 
-    public override Task<IReadOnlyList<VMSecurityFinding>> GetSecurityFindingsAsync(string name, CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<VMSecurityFinding>> GetLazyVMSecurityFindingsAsync(string name, CancellationToken cancellationToken)
     {
         SecurityFindingCalls.Add(name);
         return _SecurityFindings.Next(cancellationToken);
     }
 
-    public override Task<IReadOnlyList<VMSecurityApproval>> GetSecurityApprovalsAsync(string name, CancellationToken cancellationToken)
+    public override Task<IReadOnlyList<VMSecurityApproval>> GetLazyVMSecurityApprovalsAsync(string name, CancellationToken cancellationToken)
     {
         SecurityApprovalCalls.Add(name);
         return _SecurityApprovals.Next(cancellationToken);
@@ -397,7 +397,7 @@ internal sealed class FakeCommandRunner : CommandRunner
         get; set;
     }
 
-    public override async Task ApproveSecurityFindingAsync(string name, string id, string reason)
+    public override async Task ApproveLazyVMSecurityFindingAsync(string name, string id, string reason)
     {
         ApproveCalls.Add((name, id, reason));
         if (ApproveGate is { } gate)
@@ -410,7 +410,7 @@ internal sealed class FakeCommandRunner : CommandRunner
         }
     }
 
-    public override Task RevokeSecurityFindingAsync(string name, string id)
+    public override Task RevokeLazyVMSecurityFindingAsync(string name, string id)
     {
         RevokeCalls.Add((name, id));
         return RevokeFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
@@ -432,7 +432,7 @@ internal sealed class FakeCommandRunner : CommandRunner
 
     public List<string> PasswordCalls { get; } = [];
 
-    public override Task<string> GetUserNameAsync(string name, CancellationToken cancellationToken)
+    public override Task<string> GetLazyVMUserNameAsync(string name, CancellationToken cancellationToken)
     {
         UserNameCalls.Add(name);
         return UserName is { } userName
@@ -441,7 +441,7 @@ internal sealed class FakeCommandRunner : CommandRunner
                 $"No credential is stored for '{name}' yet. Build-LazyVM creates one, or store one with: Set-LazyVMCredential -Name {name}"));
     }
 
-    public override Task<string> GetPasswordAsync(string name, CancellationToken cancellationToken)
+    public override Task<string> GetLazyVMPasswordAsync(string name, CancellationToken cancellationToken)
     {
         PasswordCalls.Add(name);
         return PasswordFails is { } failure ? Task.FromException<string>(failure) : Task.FromResult(Password);
@@ -509,7 +509,7 @@ internal sealed class FakeBuildLauncher : BuildLauncher
 }
 
 /// <summary>Records the windows shown, brought to the front and closed, without making windows.</summary>
-internal sealed class FakeToolWindows(CommandRunner runner, BuildLauncher? launcher = null, FakeSecretClipboard? clipboard = null)
+internal sealed class FakeToolWindows(PowerShellCommandRunner runner, BuildLauncher? launcher = null, FakeSecretClipboard? clipboard = null)
     : ToolWindows(runner, launcher ?? new FakeBuildLauncher(), new FixedClock(DateTimeOffset.UnixEpoch),
         clipboard ?? new FakeSecretClipboard(new ManualClock(DateTimeOffset.UnixEpoch)))
 {

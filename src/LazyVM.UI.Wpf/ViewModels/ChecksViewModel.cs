@@ -6,7 +6,7 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// </summary>
 public sealed class ChecksViewModel : ViewModelBase
 {
-    private readonly CommandRunner _Runner;
+    private readonly PowerShellCommandRunner _Runner;
     private readonly bool _HostOnly;
     private readonly RelayCommand _RunCommand;
     private readonly RelayCommand _CancelCommand;
@@ -16,7 +16,7 @@ public sealed class ChecksViewModel : ViewModelBase
 
     /// <param name="vmName">The VM to check; empty for the host.</param>
     /// <param name="hostOnly">Check the host alone. Without it and without a VM, the only VM is checked too, or a note says there are none yet.</param>
-    public ChecksViewModel(CommandRunner runner, string? vmName, bool hostOnly)
+    public ChecksViewModel(PowerShellCommandRunner runner, string? vmName, bool hostOnly)
     {
         _Runner = runner;
         _HostOnly = hostOnly;
@@ -75,7 +75,7 @@ public sealed class ChecksViewModel : ViewModelBase
         CouldNotRun = false;
         try
         {
-            var results = await WorkAsync("Running the checks", () => _Runner.GetChecksAsync(VMName, _HostOnly, cancel.Token));
+            var results = await WorkAsync("Running the checks", () => _Runner.GetLazyVMChecksAsync(VMName, _HostOnly, cancel.Token));
             Checks = results.Select(result => new CheckRowViewModel(result)).ToList();
             Status = Summary(Checks);
         }

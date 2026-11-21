@@ -51,6 +51,19 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task ApproveHelp_AndRevokeHelp_SayWhatEachDoesToTheNightlyScan()
+    {
+        var window = await Loaded(Scanned(), [_Firewall], _Approval);
+
+        Assert.Equal(
+            "Approving accepts a finding you expect, such as a service you installed yourself, with your reason. "
+            + "The nightly scan stops reporting it until it changes. An approved event, such as a Defender detection, covers that one occurrence only. "
+            + "Approve only what you recognize.",
+            window.ApproveHelp);
+        Assert.Equal("Revoking undoes an approval. The next nightly scan reports the finding again, as new, if it still finds it.", window.RevokeHelp);
+    }
+
+    [Fact]
     public async Task Load_IsWorkingWhileTheFindingsAndTheApprovalsAreRead()
     {
         _Runner.ReturnsSecurityFindings([_Firewall]);

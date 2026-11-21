@@ -8,6 +8,10 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// </summary>
 public sealed class RestoreViewModel : ViewModelBase
 {
+    /// <summary>What a restore puts back and loses, said both in the window and in the question before it.</summary>
+    private const string _WHAT_GOES_BACK = "All of its disks go back to then, including the Dev Drive, the SQL data disk and the User disk, "
+        + "so code not yet pushed, database changes and files in your personal folders changed since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.";
+
     private readonly ToolWindows _Tools;
     private VMDashboard _Entry;
     private IReadOnlyList<RestorePointOption> _Points = [];
@@ -163,16 +167,29 @@ public sealed class RestoreViewModel : ViewModelBase
         RaiseRestoreChanged();
     }
 
+    /// <summary>
+    /// What restoring <see cref="SelectedPoint"/> puts back, what it keeps and
+    /// what is lost; empty with no point, or one that cannot be restored. The
+    /// window shows it and gives it to Restore as its help text, and the
+    /// question before a restore says the same.
+    /// </summary>
+    public string RestoreHelp => SelectedPoint is { Point.HasToolingList: true } point
+        ? $"Returns {Name} to {point.When}, with the tooling list it had then; every other setting stays as it is now. {_WHAT_GOES_BACK} Push your work first."
+        : string.Empty;
+
+    public bool HasRestoreHelp => RestoreHelp.Length > 0;
+
     private string Question(string when)
     {
-        return $"Do you really want to restore {Name} to {when}? All of its disks go back to then, including the Dev Drive and the SQL data disk, "
-            + "so code not yet pushed and database changes made since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.";
+        return $"Do you really want to restore {Name} to {when}? {_WHAT_GOES_BACK}";
     }
 
     private void RaiseRestoreChanged()
     {
         OnPropertyChanged(nameof(RestoreNote));
         OnPropertyChanged(nameof(HasRestoreNote));
+        OnPropertyChanged(nameof(RestoreHelp));
+        OnPropertyChanged(nameof(HasRestoreHelp));
         RestoreCommand.RaiseCanExecuteChanged();
     }
 }

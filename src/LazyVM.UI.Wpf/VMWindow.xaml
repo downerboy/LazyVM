@@ -49,12 +49,14 @@
             <StackPanel>
                 <TextBlock Text="Build and maintain" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
                 <Label Content="_Phase to build from" Target="{Binding ElementName=PhaseList}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
-                <TextBlock Text="Phases before it are skipped. After a build that failed or stopped, choose the phase it was in." Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                <!-- What building from the chosen phase skips, runs again and keeps. The list's help text is the same, so Narrator reads it too. -->
+                <TextBlock Text="{Binding PhaseHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap"
+                           Visibility="{Binding HasPhaseHelp, Converter={StaticResource VisibleWhenTrue}}" />
                 <!-- A list rather than a drop-down, as in the Build window, so the arrow keys move through the phases and Narrator reads each one. -->
                 <ListBox x:Name="PhaseList" ItemsSource="{Binding Phases}" SelectedItem="{Binding SelectedPhase}"
                          DisplayMemberPath="Text" Margin="0,4,0,8" MaxHeight="190"
                          AutomationProperties.Name="Phase to build from"
-                         AutomationProperties.HelpText="Phases before it are skipped. After a build that failed or stopped, choose the phase it was in."
+                         AutomationProperties.HelpText="{Binding PhaseHelp}"
                          BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
                          Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -67,11 +69,13 @@
                 <WrapPanel>
                     <Button Content="_Build from this phase" Command="{Binding BuildFromPhaseCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Build {0} from the chosen phase'}"
-                            AutomationProperties.HelpText="Starts the build in its own process, and shows its progress. Closing the app does not stop it." />
+                            AutomationProperties.HelpText="{Binding BuildFromPhaseHelp}" />
                     <Button Content="Run _maintenance now" Command="{Binding MaintenanceCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Run the maintenance of {0} now'}"
-                            AutomationProperties.HelpText="Starts the VM's maintenance task, so maintenance runs as its nightly run does." />
+                            AutomationProperties.HelpText="{Binding MaintenanceHelp}" />
                 </WrapPanel>
+                <!-- What Run maintenance now does. The button's help text is the same, so Narrator reads it too. -->
+                <TextBlock Text="{Binding MaintenanceHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
                 <TextBlock Text="{Binding RunNote}" TextWrapping="Wrap"
                            Visibility="{Binding HasRunNote, Converter={StaticResource VisibleWhenTrue}}"
                            AutomationProperties.Name="{Binding RunNote}" local:LiveRegion.Announce="True" />
@@ -82,12 +86,12 @@
         <Border DockPanel.Dock="Top" Style="{StaticResource LvPanel}" Margin="24,24,24,0">
             <StackPanel>
                 <TextBlock Text="Delete" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
-                <TextBlock Text="Deletes the VM, its disks, its tasks and everything else LazyVM made for it. A list of what goes comes first, and you are asked before anything is deleted."
-                           Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                <!-- What deleting the VM takes with it. The button's help text is the same, so Narrator reads it too. -->
+                <TextBlock Text="{Binding DeleteHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
                 <WrapPanel Margin="0,8,0,0">
                     <Button Content="_Delete this VM..." Command="{Binding DeleteCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Delete {0}'}"
-                            AutomationProperties.HelpText="Lists what deleting the VM deletes, and asks before deleting anything." />
+                            AutomationProperties.HelpText="{Binding DeleteHelp}" />
                 </WrapPanel>
                 <TextBlock Text="{Binding DeleteNote}" TextWrapping="Wrap"
                            Visibility="{Binding HasDeleteNote, Converter={StaticResource VisibleWhenTrue}}"
