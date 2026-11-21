@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.38.0](https://github.com/downerboy/LazyVM/compare/v6.37.0...v6.38.0) (2026-11-21)
+
+
+### Features
+
+* **gui:** show progress while a window's command runs ([#506](https://github.com/downerboy/LazyVM/issues/506)) ([3be0901](https://github.com/downerboy/LazyVM/commit/3be090173ddec06d6f199da529d446f67fc0da76))
+
 ## [6.37.0](https://github.com/downerboy/LazyVM/compare/v6.36.0...v6.37.0) (2026-11-20)
 
 
