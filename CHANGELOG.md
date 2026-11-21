@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.40.0](https://github.com/downerboy/LazyVM/compare/v6.39.0...v6.40.0) (2026-11-21)
+
+
+### Features
+
+* open the usage docs and diagrams from the app and from a command ([#512](https://github.com/downerboy/LazyVM/issues/512)) ([bfaa9b5](https://github.com/downerboy/LazyVM/commit/bfaa9b5083116e840b61929c21e5f7714dfc869c))
+
 ## [6.39.0](https://github.com/downerboy/LazyVM/compare/v6.38.0...v6.39.0) (2026-11-21)
 
 
