@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.39.0](https://github.com/downerboy/LazyVM/compare/v6.38.0...v6.39.0) (2026-11-21)
+
+
+### Features
+
+* **gui:** explain what each window and choice does, where it is not obvious ([#508](https://github.com/downerboy/LazyVM/issues/508)) ([69404c1](https://github.com/downerboy/LazyVM/commit/69404c1c39d6ddfe1b43a805398799d5adcde896))
+
 ## [6.38.0](https://github.com/downerboy/LazyVM/compare/v6.37.0...v6.38.0) (2026-11-21)
 
 
