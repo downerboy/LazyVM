@@ -6,7 +6,10 @@ using System.Windows;
 
 namespace LazyVM.UI.Wpf;
 
-/// <summary>Starts the app: picks the theme, makes the command runner and opens the main window.</summary>
+/// <summary>Starts the app: picks the theme, 
+/// makes the command runner and opens the main 
+/// window.
+/// </summary>
 public partial class App : Application
 {
     private PowerShellCommandRunner? _Runner;
