@@ -19,7 +19,7 @@ namespace LazyVM.UI.Wpf;
 /// Security findings window per VM lists what its last scan found, and the
 /// findings approved, and approves or revokes one after asking.
 /// </summary>
-public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
+public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
 {
     private const string _BUILD_KEY = "build";
     private readonly Dictionary<string, ViewModelBase> _Open = new(StringComparer.OrdinalIgnoreCase);
@@ -33,7 +33,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     /// <summary>Every phase of a build, for choosing the one a build starts at.</summary>
     public virtual Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken)
     {
-        return runner.GetBuildPhasesAsync(cancellationToken);
+        return runner.GetLazyVMBuildPhasesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -52,7 +52,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     /// <summary>Starts the VM's maintenance task, as the nightly run does. Throws with the reason when it did not start.</summary>
     public virtual async Task StartMaintenanceAsync(string vmName)
     {
-        await runner.StartMaintenanceAsync(vmName, CancellationToken.None);
+        await runner.StartLazyVMMaintenanceAsync(vmName, CancellationToken.None);
         RunStarted?.Invoke(this, EventArgs.Empty);
     }
 
@@ -62,7 +62,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     /// <summary>What deleting the VM would delete and keep. Throws with the reason when it cannot be deleted.</summary>
     public virtual Task<RemovalPlan> GetRemovalPlanAsync(string vmName)
     {
-        return runner.GetRemovalPlanAsync(vmName, CancellationToken.None);
+        return runner.GetLazyVMRemovalPlanAsync(vmName, CancellationToken.None);
     }
 
     /// <summary>Deletes the VM, without asking: <see cref="ConfirmRemoval"/> has. Throws with what went wrong, such as what is left.</summary>
@@ -70,7 +70,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     {
         try
         {
-            await runner.RemoveVMAsync(vmName);
+            await runner.RemoveLazyVMAsync(vmName);
         }
         finally
         {
@@ -96,7 +96,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     /// <summary>The VM's restore points, oldest first.</summary>
     public virtual Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(string vmName)
     {
-        return runner.GetRestorePointsAsync(vmName, CancellationToken.None);
+        return runner.GetLazyVMRestorePointsAsync(vmName, CancellationToken.None);
     }
 
     /// <summary>Returns the VM to a restore point, without asking: <see cref="ConfirmRestore"/> has. Throws with the module's reason when it did not.</summary>
@@ -104,7 +104,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     {
         try
         {
-            await runner.RestoreToolingAsync(vmName, stamp);
+            await runner.RestoreLazyVMToolingAsync(vmName, stamp);
         }
         finally
         {
@@ -147,13 +147,13 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     /// <summary>The VM's recovery keys, without their passwords.</summary>
     public virtual Task<IReadOnlyList<VMRecoveryKey>> GetRecoveryKeysAsync(string vmName)
     {
-        return runner.GetRecoveryKeysAsync(vmName, CancellationToken.None);
+        return runner.GetLazyVMRecoveryKeysAsync(vmName, CancellationToken.None);
     }
 
     /// <summary>The recovery password of one of the VM's disks, read now, to be shown.</summary>
     public virtual Task<string> GetRecoveryPasswordAsync(string vmName, string diskGuid)
     {
-        return runner.GetRecoveryPasswordAsync(vmName, diskGuid, CancellationToken.None);
+        return runner.GetLazyVMRecoveryPasswordAsync(vmName, diskGuid, CancellationToken.None);
     }
 
     /// <summary>Writes the VM's recovery keys to <paramref name="path"/>, replacing it when <paramref name="force"/>. Throws with the module's reason when it did not.</summary>
@@ -161,7 +161,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     {
         try
         {
-            return await runner.ExportRecoveryKeysAsync(vmName, path, force);
+            return await runner.ExportLazyVMRecoveryKeysAsync(vmName, path, force);
         }
         finally
         {
@@ -229,13 +229,13 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     /// <summary>The user name LazyVM signs in to the VM with. Throws with the module's reason, such as when none is stored.</summary>
     public virtual Task<string> GetUserNameAsync(string vmName)
     {
-        return runner.GetUserNameAsync(vmName, CancellationToken.None);
+        return runner.GetLazyVMUserNameAsync(vmName, CancellationToken.None);
     }
 
     /// <summary>The VM's password, read now, to be shown or copied.</summary>
     public virtual Task<string> GetPasswordAsync(string vmName)
     {
-        return runner.GetPasswordAsync(vmName, CancellationToken.None);
+        return runner.GetLazyVMPasswordAsync(vmName, CancellationToken.None);
     }
 
     /// <summary>Shows the account LazyVM signs in to the VM with, or brings its open window to the front. Closing the window forgets the password.</summary>
@@ -256,13 +256,13 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     /// <summary>The findings of the VM's last security scan, less the approved ones.</summary>
     public virtual Task<IReadOnlyList<VMSecurityFinding>> GetSecurityFindingsAsync(string vmName)
     {
-        return runner.GetSecurityFindingsAsync(vmName, CancellationToken.None);
+        return runner.GetLazyVMSecurityFindingsAsync(vmName, CancellationToken.None);
     }
 
     /// <summary>The VM's approved findings, with when and why each was approved.</summary>
     public virtual Task<IReadOnlyList<VMSecurityApproval>> GetSecurityApprovalsAsync(string vmName)
     {
-        return runner.GetSecurityApprovalsAsync(vmName, CancellationToken.None);
+        return runner.GetLazyVMSecurityApprovalsAsync(vmName, CancellationToken.None);
     }
 
     /// <summary>Raised when an approval or a revoke has ended, even one refused, so the list can be read again.</summary>
@@ -273,7 +273,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     {
         try
         {
-            await runner.ApproveSecurityFindingAsync(vmName, id, reason);
+            await runner.ApproveLazyVMSecurityFindingAsync(vmName, id, reason);
         }
         finally
         {
@@ -286,7 +286,7 @@ public class ToolWindows(CommandRunner runner, BuildLauncher launcher, TimeProvi
     {
         try
         {
-            await runner.RevokeSecurityFindingAsync(vmName, id);
+            await runner.RevokeLazyVMSecurityFindingAsync(vmName, id);
         }
         finally
         {

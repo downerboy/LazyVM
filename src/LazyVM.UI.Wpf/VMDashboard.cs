@@ -2,7 +2,7 @@ namespace LazyVM.UI.Wpf;
 
 /// <summary>
 /// What <c>Get-LazyVMDashboard</c> says about one VM, as plain values. View
-/// models get these from <see cref="CommandRunner"/> and never see PowerShell.
+/// models get these from <see cref="PowerShellCommandRunner"/> and never see PowerShell.
 /// </summary>
 public sealed record VMDashboard
 {

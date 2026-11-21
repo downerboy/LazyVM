@@ -22,20 +22,20 @@ public sealed class CommandRunnerTests
         password.AppendChar('x');
         var credential = new PSCredential("devadmin", password);
 
-        Assert.Equal("devadmin", CommandRunner.UserNameOf([PSObject.AsPSObject(credential)]));
+        Assert.Equal("devadmin", PowerShellCommandRunner.LazyVMUserNameOf([PSObject.AsPSObject(credential)]));
         Assert.Throws<ObjectDisposedException>(() => password.Length);
     }
 
     [Fact]
     public void PasswordOf_APlainCredential_GivesItsPassword()
     {
-        Assert.Equal("Correct-Horse-9", CommandRunner.PasswordOf([Entry(("UserName", "devadmin"), ("Password", "Correct-Horse-9"))]));
+        Assert.Equal("Correct-Horse-9", PowerShellCommandRunner.LazyVMPasswordOf([Entry(("UserName", "devadmin"), ("Password", "Correct-Horse-9"))]));
     }
 
     [Fact]
     public void UserNameOf_Nothing_Throws()
     {
-        Assert.Throws<InvalidOperationException>(() => CommandRunner.UserNameOf([]));
+        Assert.Throws<InvalidOperationException>(() => PowerShellCommandRunner.LazyVMUserNameOf([]));
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class CommandRunnerTests
     {
         var recorded = new DateTime(2026, 10, 1, 9, 30, 0);
 
-        var key = CommandRunner.ToRecoveryKey(Entry(
+        var key = PowerShellCommandRunner.LazyVMRecoveryKey(Entry(
             ("Name", "DevBox"),
             ("Disk", "OS disk"),
             ("DiskGuid", "{AAAAAAAA-0000-0000-0000-000000000001}"),
@@ -57,7 +57,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToRecoveryKey_WithNoKeyIDOrDate_LeavesThemEmpty()
     {
-        var key = CommandRunner.ToRecoveryKey(Entry(("Disk", "User disk"), ("DiskGuid", "{B}"), ("KeyId", ""), ("Recorded", null), ("Exported", false)));
+        var key = PowerShellCommandRunner.LazyVMRecoveryKey(Entry(("Disk", "User disk"), ("DiskGuid", "{B}"), ("KeyId", ""), ("Recorded", null), ("Exported", false)));
 
         Assert.Equal(string.Empty, key.KeyId);
         Assert.Null(key.Recorded);
@@ -73,7 +73,7 @@ public sealed class CommandRunnerTests
             Entry(("DiskGuid", "{BBBBBBBB-0000-0000-0000-000000000002}"), ("RecoveryPassword", "222222")),
         };
 
-        Assert.Equal("222222", CommandRunner.RecoveryPasswordOf(keys, "{bbbbbbbb-0000-0000-0000-000000000002}"));
+        Assert.Equal("222222", PowerShellCommandRunner.LazyVMDisRecoveryPasswordOf(keys, "{bbbbbbbb-0000-0000-0000-000000000002}"));
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public sealed class CommandRunnerTests
     {
         var keys = new[] { Entry(("DiskGuid", "{A}"), ("RecoveryPassword", "111111")) };
 
-        var thrown = Assert.Throws<InvalidOperationException>(() => CommandRunner.RecoveryPasswordOf(keys, "{B}"));
+        var thrown = Assert.Throws<InvalidOperationException>(() => PowerShellCommandRunner.LazyVMDisRecoveryPasswordOf(keys, "{B}"));
 
         Assert.Equal("No recovery password is stored for that disk now. Close this window and open it again to see the keys stored now.", thrown.Message);
     }
@@ -92,7 +92,7 @@ public sealed class CommandRunnerTests
         var created = new DateTime(2026, 10, 1, 9, 0, 0);
         var disk = Entry(("Name", "DevBox.vhdx"), ("Path", @"D:\VMs\DevBox.vhdx"), ("Used", 10L), ("Maximum", 20L));
 
-        var vm = CommandRunner.ToDashboard(Entry(
+        var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(
             ("Name", "DevBox"),
             ("State", "Running"),
             ("Created", created),
@@ -143,7 +143,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToDashboard_OfAVMNotBuiltYet_LeavesTheEmptyFieldsEmpty()
     {
-        var vm = CommandRunner.ToDashboard(Entry(
+        var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(
             ("Name", "NewBox"),
             ("State", "Not built"),
             ("Created", null),
@@ -169,7 +169,7 @@ public sealed class CommandRunnerTests
     public void ToDashboard_WrappedValues_AreUnwrapped()
     {
         // PowerShell often hands values back wrapped in a PSObject.
-        var vm = CommandRunner.ToDashboard(Entry(
+        var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(
             ("Name", PSObject.AsPSObject("DevBox")),
             ("State", PSObject.AsPSObject("Off")),
             ("OpenFindings", PSObject.AsPSObject(1)),
@@ -187,7 +187,7 @@ public sealed class CommandRunnerTests
         // LastSecurityScan comes from the scan record as a DateTimeOffset.
         var scanned = new DateTimeOffset(2026, 11, 15, 2, 6, 10, TimeSpan.FromHours(-8));
 
-        var vm = CommandRunner.ToDashboard(Entry(
+        var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(
             ("Name", "DevBox"),
             ("Created", scanned),
             ("LastMaintenance", scanned),
@@ -205,7 +205,7 @@ public sealed class CommandRunnerTests
     public void ToDashboard_AValueThatCannotBeRead_IsLeftEmptyAndNamedInProblems()
     {
         // One odd value must not fail the whole refresh: the rest of the VM still shows.
-        var vm = CommandRunner.ToDashboard(Entry(
+        var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(
             ("Name", "DevBox"),
             ("State", "Running"),
             ("LastSecurityScan", "not a date"),
@@ -225,7 +225,7 @@ public sealed class CommandRunnerTests
         // in a hosted runspace those errors still reach the error stream.
         var errors = new[] { Error("Hyper-V was unable to find a virtual machine with name 'NewBox'.") };
 
-        CommandRunner.ThrowIfFailed([PSObject.AsPSObject("an entry")], errors);
+        PowerShellCommandRunner.ThrowIfFailed([PSObject.AsPSObject("an entry")], errors);
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public sealed class CommandRunnerTests
     {
         var errors = new[] { Error("The LazyVM folder was not found.") };
 
-        var failure = Assert.Throws<InvalidOperationException>(() => CommandRunner.ThrowIfFailed([], errors));
+        var failure = Assert.Throws<InvalidOperationException>(() => PowerShellCommandRunner.ThrowIfFailed([], errors));
 
         Assert.Equal("The LazyVM folder was not found.", failure.Message);
     }
@@ -241,7 +241,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ThrowIfFailed_WithNoVMsAndNoErrors_DoesNotThrow()
     {
-        CommandRunner.ThrowIfFailed([], []);
+        PowerShellCommandRunner.ThrowIfFailed([], []);
     }
 
     [Fact]
@@ -253,7 +253,7 @@ public sealed class CommandRunnerTests
         // error they throw is their failure.
         var errors = new[] { Error("No MSFT_ScheduledTask objects found.") };
 
-        CommandRunner.ThrowIfFailed([], errors, failsOnlyByThrowing: true);
+        PowerShellCommandRunner.ThrowIfFailed([], errors, failsOnlyByThrowing: true);
     }
 
     [Fact]
@@ -280,7 +280,7 @@ public sealed class CommandRunnerTests
         Assert.Equal(2, shell.Streams.Error.Count);
 
         var failure = Assert.Throws<InvalidOperationException>(
-            () => CommandRunner.ThrowIfCommandWroteError("Approve-LazyVMSecurityFinding", shell.Streams.Error));
+            () => PowerShellCommandRunner.ThrowIfCommandWroteError("Approve-LazyVMSecurityFinding", shell.Streams.Error));
 
         Assert.Equal("The finding Task:x:1 is not an open finding of the last scan.", failure.Message);
     }
@@ -303,13 +303,13 @@ public sealed class CommandRunnerTests
         shell.AddCommand("Revoke-LazyVMSecurityFinding").Invoke();
         Assert.NotEmpty(shell.Streams.Error);
 
-        CommandRunner.ThrowIfCommandWroteError("Revoke-LazyVMSecurityFinding", shell.Streams.Error);
+        PowerShellCommandRunner.ThrowIfCommandWroteError("Revoke-LazyVMSecurityFinding", shell.Streams.Error);
     }
 
     [Fact]
     public void ToRemovalPlan_ReadsEveryField()
     {
-        var plan = CommandRunner.ToRemovalPlan(Entry(
+        var plan = PowerShellCommandRunner.LazyVMRemovalPlan(Entry(
             ("Name", "DevBox"),
             ("HyperVState", "Running"),
             ("CheckpointCount", 2),
@@ -340,7 +340,7 @@ public sealed class CommandRunnerTests
     {
         var firstSeen = new DateTimeOffset(2026, 11, 12, 2, 31, 0, TimeSpan.Zero);
 
-        var finding = CommandRunner.ToSecurityFinding(Entry(
+        var finding = PowerShellCommandRunner.LazyVMSecurityFinding(Entry(
             ("Name", "DevBox"),
             ("Id", "Defender:Detection:Trojan"),
             ("Severity", "Medium"),
@@ -366,7 +366,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToSecurityFinding_WithNoFilesOrFirstSeen_LeavesThemEmpty()
     {
-        var finding = CommandRunner.ToSecurityFinding(Entry(("Id", "Firewall:Public:Off"), ("Where", Array.Empty<string>()), ("FirstSeen", null)));
+        var finding = PowerShellCommandRunner.LazyVMSecurityFinding(Entry(("Id", "Firewall:Public:Off"), ("Where", Array.Empty<string>()), ("FirstSeen", null)));
 
         Assert.Empty(finding.Where);
         Assert.Null(finding.FirstSeen);
@@ -378,7 +378,7 @@ public sealed class CommandRunnerTests
     {
         var approvedOn = new DateTimeOffset(2026, 11, 10, 9, 15, 0, TimeSpan.Zero);
 
-        var approval = CommandRunner.ToSecurityApproval(Entry(
+        var approval = PowerShellCommandRunner.LazyVMSecurityApproval(Entry(
             ("Name", "DevBox"),
             ("Id", "Rdp:On"),
             ("Severity", "Medium"),
@@ -392,7 +392,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToRestorePoint_ReadsEveryField()
     {
-        var point = CommandRunner.ToRestorePoint(Entry(
+        var point = PowerShellCommandRunner.LazyVMToRestorePoint(Entry(
             ("Name", "DevBox"),
             ("RestorePoint", "20261008-193000"),
             ("Taken", new DateTime(2026, 10, 8, 19, 30, 0)),
@@ -405,7 +405,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToRemovalPlan_WithNothingLeft_IsEmpty()
     {
-        var plan = CommandRunner.ToRemovalPlan(Entry(
+        var plan = PowerShellCommandRunner.LazyVMRemovalPlan(Entry(
             ("Name", "DevBox"),
             ("HyperVState", null),
             ("CheckpointCount", 0),
@@ -430,7 +430,7 @@ public sealed class CommandRunnerTests
     {
         // The app runs elevated: a module autoloaded from a folder the user can
         // write to, such as Documents\PowerShell\Modules, would run as administrator.
-        var folders = CommandRunner.ModuleSearchPath.Split(System.IO.Path.PathSeparator);
+        var folders = PowerShellCommandRunner.ModuleSearchPath.Split(System.IO.Path.PathSeparator);
 
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
@@ -450,7 +450,7 @@ public sealed class CommandRunnerTests
     public void Constructor_DoesNotStartPowerShell()
     {
         // A fake _Runner, or the window before its first refresh, must not need the module installed.
-        using var runner = new CommandRunner();
+        using var runner = new PowerShellCommandRunner();
 
         Assert.False(runner.IsStarted);
     }
@@ -458,7 +458,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToCheck_ReadsEveryField()
     {
-        var check = CommandRunner.ToCheck(Entry(
+        var check = PowerShellCommandRunner.LazyVMCheck(Entry(
             ("Name", "DevBox"),
             ("Area", "Schedule"),
             ("Check", "Maintenance task"),
@@ -472,7 +472,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToCheck_WithoutAFix_HasAnEmptyFix()
     {
-        var check = CommandRunner.ToCheck(Entry(("Area", "Host"), ("Check", "LazyVM folder"), ("Status", "OK"), ("Detail", @"C:\Users\me\LazyVM")));
+        var check = PowerShellCommandRunner.LazyVMCheck(Entry(("Area", "Host"), ("Check", "LazyVM folder"), ("Status", "OK"), ("Detail", @"C:\Users\me\LazyVM")));
 
         Assert.Equal(string.Empty, check.Fix);
     }
@@ -482,7 +482,7 @@ public sealed class CommandRunnerTests
     {
         var time = new DateTime(2026, 11, 12, 2, 10, 5);
 
-        var entry = CommandRunner.ToLogEntry(Entry(("Time", time), ("Level", "Error"), ("Message", "Windows Update failed\nwith 0x80070005")));
+        var entry = PowerShellCommandRunner.LazyVMLogEntry(Entry(("Time", time), ("Level", "Error"), ("Message", "Windows Update failed\nwith 0x80070005")));
 
         Assert.Equal(new VMLogEntry(time, "Error", "Windows Update failed\nwith 0x80070005"), entry);
     }
@@ -490,7 +490,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToLogEntry_ATimeThatCannotBeRead_IsLeftEmpty()
     {
-        var entry = CommandRunner.ToLogEntry(Entry(("Time", "yesterday"), ("Level", "Info"), ("Message", "Started")));
+        var entry = PowerShellCommandRunner.LazyVMLogEntry(Entry(("Time", "yesterday"), ("Level", "Info"), ("Message", "Started")));
 
         Assert.Null(entry.Time);
         Assert.Equal("Started", entry.Message);
@@ -505,7 +505,7 @@ public sealed class CommandRunnerTests
             ("Phase", 7), ("PhaseName", "Windows"), ("UnfinishedPhase", null), ("PhasesWithProblems", Array.Empty<object>()),
             ("StopRequested", true));
 
-        var vm = CommandRunner.ToDashboard(Entry(("Name", "DevBox"), ("State", "Running"), ("Run", run), ("LastBuild", run)));
+        var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(("Name", "DevBox"), ("State", "Running"), ("Run", run), ("LastBuild", run)));
 
         var expected = new VMRun
         {
@@ -527,7 +527,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToDashboard_WithNoRunYet_LeavesItEmpty()
     {
-        var vm = CommandRunner.ToDashboard(Entry(("Name", "DevBox"), ("State", "Off"), ("Run", null)));
+        var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(("Name", "DevBox"), ("State", "Off"), ("Run", null)));
 
         Assert.Null(vm.Run);
         Assert.Null(vm.LastBuild);
@@ -536,7 +536,7 @@ public sealed class CommandRunnerTests
     [Fact]
     public void ToDashboard_ARunValueThatCannotBeRead_IsNamedInProblems()
     {
-        var vm = CommandRunner.ToDashboard(Entry(("Name", "DevBox"), ("State", "Off"), ("Run", Entry(("Status", "Failed"), ("Phase", "seven")))));
+        var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(("Name", "DevBox"), ("State", "Off"), ("Run", Entry(("Status", "Failed"), ("Phase", "seven")))));
 
         Assert.Equal("Failed", vm.Run!.Status);
         Assert.Null(vm.Run.Phase);

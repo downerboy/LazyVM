@@ -6,7 +6,7 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// <summary>The main window: the list of VMs, refreshing it, and opening a VM's window.</summary>
 public sealed class MainViewModel : ViewModelBase
 {
-    private readonly CommandRunner _Runner;
+    private readonly PowerShellCommandRunner _Runner;
     private readonly VMWindowManager _Windows;
     private readonly ToolWindows _Tools;
     private readonly TimeProvider _Clock;
@@ -19,7 +19,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _Status = string.Empty;
     private bool _ListIsKnown;
 
-    public MainViewModel(CommandRunner runner, VMWindowManager windows, ToolWindows tools, TimeProvider clock)
+    public MainViewModel(PowerShellCommandRunner runner, VMWindowManager windows, ToolWindows tools, TimeProvider clock)
     {
         _Runner = runner;
         _Windows = windows;
@@ -137,7 +137,7 @@ public sealed class MainViewModel : ViewModelBase
         _ListIsKnown = false;
         try
         {
-            var entries = await WorkAsync("Reading your VMs", () => _Runner.GetDashboardAsync(cancel.Token));
+            var entries = await WorkAsync("Reading your VMs", () => _Runner.GetLazyVMDashboardAsync(cancel.Token));
             ShowInList(entries);
             // The selected VM may have started or stopped building.
             SelectedVMChanged();
