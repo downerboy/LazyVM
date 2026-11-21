@@ -56,7 +56,7 @@ public sealed class RestoreViewModelTests : IDisposable
 
         Assert.Equal(
             "Returns DevBox to 8 October 2026 19:30, with the tooling list it had then; every other setting stays as it is now. "
-            + "All of its disks go back to then, including the Dev Drive and the SQL data disk, so code not yet pushed and database changes made since then are lost. "
+            + "All of its disks go back to then, including the Dev Drive, the SQL data disk and the User disk, so code not yet pushed, database changes and files in your personal folders changed since then are lost. "
             + "A checkpoint of how it is now is taken first, so this restore can be undone. Push your work first.",
             restore.RestoreHelp);
         Assert.True(restore.HasRestoreHelp);
@@ -123,7 +123,7 @@ public sealed class RestoreViewModelTests : IDisposable
         await restore.RestoreAsync();
 
         Assert.Equal(
-            "Do you really want to restore DevBox to 8 October 2026 19:30? All of its disks go back to then, including the Dev Drive and the SQL data disk, so code not yet pushed and database changes made since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.",
+            "Do you really want to restore DevBox to 8 October 2026 19:30? All of its disks go back to then, including the Dev Drive, the SQL data disk and the User disk, so code not yet pushed, database changes and files in your personal folders changed since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.",
             Assert.Single(_Tools.RestoreQuestions));
         Assert.Equal([("DevBox", "20261008-193000")], _Runner.RestoreCalls);
         Assert.Equal(1, listChanged);

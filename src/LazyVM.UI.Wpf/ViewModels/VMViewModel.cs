@@ -163,9 +163,19 @@ public sealed class VMViewModel : ViewModelBase
                 BuildFromPhaseCommand.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(PhaseHelp));
                 OnPropertyChanged(nameof(HasPhaseHelp));
+                OnPropertyChanged(nameof(BuildFromPhaseHelp));
             }
         }
     }
+
+    /// <summary>
+    /// Build from this phase's help text: <see cref="PhaseHelp"/> for the
+    /// phase chosen, then how the build runs. Focus moves from the phase list
+    /// to the button, and Narrator reads the button's help, not the list's,
+    /// so the button says what the chosen phase does too.
+    /// </summary>
+    public string BuildFromPhaseHelp => string.Join(" ",
+        new[] { PhaseHelp, "Starts the build in its own process, and shows its progress. Closing the app does not stop it." }.Where(text => text.Length > 0));
 
     /// <summary>
     /// What building from <see cref="SelectedPhase"/> skips, what it runs
@@ -203,12 +213,17 @@ public sealed class VMViewModel : ViewModelBase
     /// <summary>
     /// What deleting the VM takes with it, including the work on its Dev
     /// Drive and User disk, and what is kept. The window shows it and gives
-    /// it to Delete as its help text, so Narrator reads the same.
+    /// it to Delete as its help text, so Narrator reads the same. The
+    /// template is named only when the VM has one.
     /// </summary>
-    public string DeleteHelp => $"Deletes {Name} and everything LazyVM made for it: its disks, tasks and folder. "
-        + @"That includes the Dev Drive, with any code not yet pushed, and the User disk, with Documents, Desktop, Downloads, .ssh and source\repos, so push or copy your work first. "
-        + $"It cannot be undone. Its template, {Name}-latest, is kept, to build a matching VM from later. "
-        + "A list of what goes comes first, and you are asked before anything is deleted.";
+    public string DeleteHelp => string.Join(" ", new[]
+    {
+        $"Deletes {Name} and everything LazyVM made for it: its disks, tasks and folder.",
+        @"That includes the Dev Drive, with any code not yet pushed, and the User disk, with Documents, Desktop, Downloads, .ssh and source\repos, so push or copy your work first.",
+        "It cannot be undone.",
+        string.IsNullOrEmpty(_Entry.GreenTemplate) ? string.Empty : $"Its template, {_Entry.GreenTemplate}, is kept, to build a matching VM from later.",
+        "A list of what goes comes first, and you are asked before anything is deleted.",
+    }.Where(text => text.Length > 0));
 
     /// <summary>
     /// Why a run cannot start now, or which phase is chosen and why, as text

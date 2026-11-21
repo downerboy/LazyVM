@@ -9,8 +9,8 @@ namespace LazyVM.UI.Wpf.ViewModels;
 public sealed class RestoreViewModel : ViewModelBase
 {
     /// <summary>What a restore puts back and loses, said both in the window and in the question before it.</summary>
-    private const string _WHAT_GOES_BACK = "All of its disks go back to then, including the Dev Drive and the SQL data disk, "
-        + "so code not yet pushed and database changes made since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.";
+    private const string _WHAT_GOES_BACK = "All of its disks go back to then, including the Dev Drive, the SQL data disk and the User disk, "
+        + "so code not yet pushed, database changes and files in your personal folders changed since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.";
 
     private readonly ToolWindows _Tools;
     private VMDashboard _Entry;

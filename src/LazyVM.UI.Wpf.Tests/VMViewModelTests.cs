@@ -574,6 +574,28 @@ public sealed class VMViewModelTests : IDisposable
 
         Assert.Contains(nameof(VMViewModel.PhaseHelp), changed);
         Assert.Contains(nameof(VMViewModel.HasPhaseHelp), changed);
+        Assert.Contains(nameof(VMViewModel.BuildFromPhaseHelp), changed);
+    }
+
+    [Fact]
+    public async Task BuildFromPhaseHelp_SaysWhatTheChosenPhaseDoes_ThenHowTheBuildRuns()
+    {
+        var vm = await Loaded(Sample.VM());
+
+        vm.SelectedPhase = vm.Phases.Single(phase => phase.Number == 7);
+
+        Assert.Equal(vm.PhaseHelp + " Starts the build in its own process, and shows its progress. Closing the app does not stop it.", vm.BuildFromPhaseHelp);
+        Assert.StartsWith("Skips the phases before phase 7", vm.BuildFromPhaseHelp);
+    }
+
+    [Fact]
+    public async Task BuildFromPhaseHelp_WithNoPhaseChosen_SaysOnlyHowTheBuildRuns()
+    {
+        _Runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
+
+        var vm = await Loaded(Sample.VM());
+
+        Assert.Equal("Starts the build in its own process, and shows its progress. Closing the app does not stop it.", vm.BuildFromPhaseHelp);
     }
 
     [Fact]
@@ -590,12 +612,27 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void DeleteHelp_SaysTheWorkDisksGoToo_ThatItCannotBeUndone_AndThatTheTemplateIsKept()
     {
-        var vm = Open(Sample.VM("DevEnv"));
+        var vm = Open(Sample.VM("DevEnv") with { GreenTemplate = "DevEnv-latest" });
 
         Assert.Equal(
             "Deletes DevEnv and everything LazyVM made for it: its disks, tasks and folder. "
             + @"That includes the Dev Drive, with any code not yet pushed, and the User disk, with Documents, Desktop, Downloads, .ssh and source\repos, so push or copy your work first. "
             + "It cannot be undone. Its template, DevEnv-latest, is kept, to build a matching VM from later. "
+            + "A list of what goes comes first, and you are asked before anything is deleted.",
+            vm.DeleteHelp);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void DeleteHelp_ForAVMWithNoTemplate_NamesNone(string? template)
+    {
+        var vm = Open(Sample.VM("DevEnv") with { GreenTemplate = template });
+
+        Assert.Equal(
+            "Deletes DevEnv and everything LazyVM made for it: its disks, tasks and folder. "
+            + @"That includes the Dev Drive, with any code not yet pushed, and the User disk, with Documents, Desktop, Downloads, .ssh and source\repos, so push or copy your work first. "
+            + "It cannot be undone. "
             + "A list of what goes comes first, and you are asked before anything is deleted.",
             vm.DeleteHelp);
     }

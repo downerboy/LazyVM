@@ -69,7 +69,7 @@
                 <WrapPanel>
                     <Button Content="_Build from this phase" Command="{Binding BuildFromPhaseCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Build {0} from the chosen phase'}"
-                            AutomationProperties.HelpText="Starts the build in its own process, and shows its progress. Closing the app does not stop it." />
+                            AutomationProperties.HelpText="{Binding BuildFromPhaseHelp}" />
                     <Button Content="Run _maintenance now" Command="{Binding MaintenanceCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Run the maintenance of {0} now'}"
                             AutomationProperties.HelpText="{Binding MaintenanceHelp}" />
