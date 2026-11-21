@@ -12,6 +12,11 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// </summary>
 public sealed class SecurityFindingsViewModel : ViewModelBase
 {
+    private const string _APPROVE_HELP = "Approving accepts a finding you expect, such as a service you installed yourself, with your reason. "
+        + "The nightly scan stops reporting it until it changes. An approved event, such as a Defender detection, covers that one occurrence only. "
+        + "Approve only what you recognize.";
+    private const string _REVOKE_HELP = "Revoking undoes an approval. The next nightly scan reports the finding again, as new, if it still finds it.";
+
     private readonly ToolWindows _Tools;
     private VMDashboard _Entry;
     private IReadOnlyList<SecurityFindingRow> _Findings = [];
@@ -99,6 +104,12 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         : string.Empty;
 
     public bool HasApproveNote => ApproveNote.Length > 0;
+
+    /// <summary>What approving a finding does. The window shows it and gives it to Approve as its help text, so Narrator reads the same.</summary>
+    public string ApproveHelp => _APPROVE_HELP;
+
+    /// <summary>What revoking an approval does. The window shows it and gives it to Revoke as its help text, so Narrator reads the same.</summary>
+    public string RevokeHelp => _REVOKE_HELP;
 
     private bool CanApprove => !IsChanging && SelectedFinding is { IsResolved: false };
 
