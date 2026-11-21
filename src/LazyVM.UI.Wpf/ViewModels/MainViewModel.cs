@@ -27,6 +27,9 @@ public sealed class MainViewModel : ViewModelBase
         _Clock = clock;
         HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, HostOnly()));
         BuildCommand = new RelayCommand(() => tools.OpenBuild(VMs.Select(row => row.Name).ToList()));
+        GuideCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.Guide));
+        UseCasesCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.UseCases));
+        DiagramsCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.Diagrams));
         // A build that ended, a build or maintenance that started, a delete, a restore or an export of recovery keys changed the list: read it again.
         tools.BuildEnded += (_, _) => _ = RefreshAsync();
         tools.RunStarted += (_, _) => _ = RefreshAsync();
@@ -88,6 +91,47 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand BuildCommand
     {
         get;
+    }
+
+    /// <summary>Opens the guide in the browser (F1).</summary>
+    public RelayCommand GuideCommand
+    {
+        get;
+    }
+
+    /// <summary>Opens the use cases in the browser.</summary>
+    public RelayCommand UseCasesCommand
+    {
+        get;
+    }
+
+    /// <summary>Opens the diagrams in the browser.</summary>
+    public RelayCommand DiagramsCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Opens a documentation page in the browser, for the installed version,
+    /// and says in <see cref="Status"/> what opened or why it did not.
+    /// </summary>
+    public async Task OpenHelpAsync(HelpTopic topic)
+    {
+        var page = topic switch
+        {
+            HelpTopic.UseCases => "the use cases",
+            HelpTopic.Diagrams => "the diagrams",
+            _ => "the guide",
+        };
+        try
+        {
+            await WorkAsync($"Opening {page}", () => _Tools.OpenHelpAsync(topic));
+            Status = $"Opened {page} in your browser";
+        }
+        catch (Exception exception)
+        {
+            Status = $"Could not open {page}: {exception.Message}";
+        }
     }
 
     /// <summary>

@@ -181,6 +181,20 @@ internal sealed class FakeCommandRunner : PowerShellCommandRunner
         return MaintenanceFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
     }
 
+    public List<HelpTopic> HelpCalls { get; } = [];
+
+    /// <summary>Show-LazyVMHelp fails with this, as it does when no browser opens.</summary>
+    public Exception? HelpFails
+    {
+        get; set;
+    }
+
+    public override Task ShowLazyVMHelpAsync(HelpTopic topic, CancellationToken cancellationToken)
+    {
+        HelpCalls.Add(topic);
+        return HelpFails is { } failure ? Task.FromException(failure) : Task.CompletedTask;
+    }
+
     private readonly Answers<RemovalPlan> _RemovalPlans = new();
 
     public List<string> RemovalPlanCalls { get; } = [];

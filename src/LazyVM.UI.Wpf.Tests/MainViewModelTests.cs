@@ -27,6 +27,39 @@ public sealed class MainViewModelTests : IDisposable
         return new VMRun { Command = command, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 };
     }
 
+    [Theory]
+    [InlineData(HelpTopic.Guide, "the guide")]
+    [InlineData(HelpTopic.UseCases, "the use cases")]
+    [InlineData(HelpTopic.Diagrams, "the diagrams")]
+    public async Task OpenHelp_AsksForThePage_AndSaysWhichOpened(HelpTopic topic, string said)
+    {
+        await _Main.OpenHelpAsync(topic);
+
+        Assert.Equal([topic], _Runner.HelpCalls);
+        Assert.Equal($"Opened {said} in your browser", _Main.Status);
+    }
+
+    [Fact]
+    public async Task OpenHelp_WhenTheBrowserDoesNotOpen_SaysWhy()
+    {
+        _Runner.HelpFails = new InvalidOperationException("Could not open your browser: none is set.");
+
+        await _Main.OpenHelpAsync(HelpTopic.UseCases);
+
+        Assert.Equal("Could not open the use cases: Could not open your browser: none is set.", _Main.Status);
+        Assert.False(_Main.IsWorking);
+    }
+
+    [Fact]
+    public void HelpCommands_EachOpenTheirOwnPage()
+    {
+        _Main.GuideCommand.Execute(null);
+        _Main.UseCasesCommand.Execute(null);
+        _Main.DiagramsCommand.Execute(null);
+
+        Assert.Equal([HelpTopic.Guide, HelpTopic.UseCases, HelpTopic.Diagrams], _Runner.HelpCalls);
+    }
+
     [Fact]
     public async Task BuildProgress_IsOfferedForTheSelectedVM_OnlyWhileItBuilds()
     {

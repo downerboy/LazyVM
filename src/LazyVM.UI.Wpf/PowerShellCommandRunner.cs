@@ -306,6 +306,17 @@ public class PowerShellCommandRunner : IDisposable
     }
 
     /// <summary>
+    /// Runs <c>Show-LazyVMHelp -Topic</c>: opens the page in the browser, for
+    /// the installed version. It only opens an address. Throws with the
+    /// module's reason when the browser did not open.
+    /// </summary>
+    public virtual async Task ShowLazyVMHelpAsync(HelpTopic topic, CancellationToken cancellationToken)
+    {
+        await InvokeAsync("Show-LazyVMHelp", [("Topic", topic.ToString())], cancellationToken, failsOnlyByThrowing: true, failsByItsOwnErrors: true)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Runs <c>Get-LazyVMRemovalPlan -Name</c>: what deleting the VM would
     /// delete and keep. Throws with the module's reason when nothing could be
     /// removed, such as when another VM's settings cannot be read.

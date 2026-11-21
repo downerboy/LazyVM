@@ -56,6 +56,12 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
         RunStarted?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Opens the documentation page in the browser. Throws with the reason when the browser did not open.</summary>
+    public virtual Task OpenHelpAsync(HelpTopic topic)
+    {
+        return runner.ShowLazyVMHelpAsync(topic, CancellationToken.None);
+    }
+
     /// <summary>Raised when a delete has ended, even one that removed only part of the VM, so the list can be read again.</summary>
     public event EventHandler? VMRemoved;
 
