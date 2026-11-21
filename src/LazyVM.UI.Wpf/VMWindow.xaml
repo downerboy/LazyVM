@@ -120,6 +120,7 @@
         <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" Style="{StaticResource LvStatus}" Margin="24,12,24,0"
                    Visibility="{Binding HasStatus, Converter={StaticResource VisibleWhenTrue}}"
                    AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+        <ProgressBar DockPanel.Dock="Top" Style="{StaticResource LvWorkingBar}" Margin="24,8,24,0" />
 
         <Border Style="{StaticResource LvPanel}" Margin="24">
             <DockPanel>

@@ -83,6 +83,17 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Refresh_IsWorkingWhileTheListIsRead()
+    {
+        _Runner.Returns(Sample.VM());
+        var watcher = new WorkWatcher(_Main);
+
+        await _Main.RefreshAsync();
+
+        Assert.Equal(["Reading your VMs", null], watcher.Seen);
+    }
+
+    [Fact]
     public async Task Refresh_ShowsOneRowPerVM()
     {
         _Runner.Returns(Sample.VM("DevBox"), Sample.VM("PlainWin"), Sample.VM("TestBox"));

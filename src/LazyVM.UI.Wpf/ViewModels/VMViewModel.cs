@@ -212,7 +212,7 @@ public sealed class VMViewModel : ViewModelBase
     {
         try
         {
-            var found = await _Tools.GetBuildPhasesAsync(CancellationToken.None);
+            var found = await WorkAsync("Reading the build phases", () => _Tools.GetBuildPhasesAsync(CancellationToken.None));
             Phases = found.Select(phase => new PhaseOption(phase)).ToList();
             SelectSuggestedPhase();
         }
@@ -233,7 +233,7 @@ public sealed class VMViewModel : ViewModelBase
         Status = $"Starting the build of {Name} from phase {phase.Number}";
         try
         {
-            await _Tools.StartBuildAsync(new BuildRequest(Name, null, null, phase.Number));
+            await WorkAsync($"Starting the build from phase {phase.Number}", () => _Tools.StartBuildAsync(new BuildRequest(Name, null, null, phase.Number)));
             Status = $"The build of {Name} has started from phase {phase.Number}. Its progress is in its own window.";
         }
         catch (Exception exception)
@@ -257,7 +257,7 @@ public sealed class VMViewModel : ViewModelBase
         Status = $"Starting the maintenance of {Name}";
         try
         {
-            await _Tools.StartMaintenanceAsync(Name);
+            await WorkAsync("Starting the maintenance", () => _Tools.StartMaintenanceAsync(Name));
             Status = $"The maintenance of {Name} has started, as its nightly run does. Running now shows it once it has begun, and the Log says how it goes.";
         }
         catch (Exception exception)
@@ -288,7 +288,7 @@ public sealed class VMViewModel : ViewModelBase
             RemovalPlan plan;
             try
             {
-                plan = await _Tools.GetRemovalPlanAsync(Name);
+                plan = await WorkAsync("Reading what deleting the VM removes", () => _Tools.GetRemovalPlanAsync(Name));
             }
             catch (Exception exception)
             {
@@ -303,7 +303,7 @@ public sealed class VMViewModel : ViewModelBase
             Status = $"Deleting {Name}";
             try
             {
-                await _Tools.RemoveVMAsync(Name);
+                await WorkAsync($"Deleting {Name}", () => _Tools.RemoveVMAsync(Name));
             }
             catch (Exception exception)
             {
@@ -325,7 +325,7 @@ public sealed class VMViewModel : ViewModelBase
     {
         try
         {
-            return RemovalViewModel.Left(await _Tools.GetRemovalPlanAsync(Name));
+            return RemovalViewModel.Left(await WorkAsync("Checking what is left of the VM", () => _Tools.GetRemovalPlanAsync(Name)));
         }
         catch (Exception)
         {

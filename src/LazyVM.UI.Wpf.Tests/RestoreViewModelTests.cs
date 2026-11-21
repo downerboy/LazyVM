@@ -67,6 +67,24 @@ public sealed class RestoreViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadAndRestore_AreWorkingWhileThePointsAreReadAndTheVMIsRestored()
+    {
+        _Runner.ReturnsRestorePoints(_October);
+        var restore = new RestoreViewModel(Sample.VM(), _Tools);
+        var watcher = new WorkWatcher(restore);
+        await restore.LoadAsync();
+        restore.SelectedPoint = restore.Points[0];
+        _Tools.ConfirmsRestore = true;
+        _Runner.ReturnsRestorePoints(_October);
+
+        await restore.RestoreAsync();
+
+        Assert.Equal(
+            ["Reading the restore points", null, "Restoring DevBox", null, "Reading the restore points", null],
+            watcher.Seen);
+    }
+
+    [Fact]
     public async Task Restore_AsksWhatItDoes_AndOnYes_RestoresThatPoint_ThenReadsThePointsAgain()
     {
         var restore = await Loaded(null, _October, _November);

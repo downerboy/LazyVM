@@ -33,6 +33,11 @@
                 <TextBlock Text="Progress" Style="{StaticResource LvHeading}" />
                 <TextBlock Text="{Binding Status}" Style="{StaticResource LvStatus}"
                            AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+                <!-- How far the build has got: the phases done, of all of them (#499). -->
+                <ProgressBar Style="{StaticResource LvPhaseBar}" Maximum="{Binding PhaseCount, Mode=OneWay}" Value="{Binding PhasesDone, Mode=OneWay}"
+                             AutomationProperties.Name="{Binding PhasesDoneText}"
+                             Visibility="{Binding HasPhases, Converter={StaticResource VisibleWhenTrue}}" />
+                <ProgressBar Style="{StaticResource LvWorkingBar}" />
                 <TextBlock Text="{Binding Advice}" TextWrapping="Wrap" Margin="0,8,0,0"
                            Visibility="{Binding HasAdvice, Converter={StaticResource VisibleWhenTrue}}"
                            AutomationProperties.Name="{Binding Advice}" local:LiveRegion.Announce="True" />

@@ -31,6 +31,7 @@
         <TextBlock x:Name="StatusText" DockPanel.Dock="Bottom" Text="{Binding Status}" Style="{StaticResource LvStatus}" Margin="24,0,24,24" TextWrapping="Wrap"
                    Visibility="{Binding HasStatus, Converter={StaticResource VisibleWhenTrue}}"
                    AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+        <ProgressBar DockPanel.Dock="Bottom" Style="{StaticResource LvWorkingBar}" Margin="24,0,24,8" />
 
         <!-- The approved findings, each with when and why it was approved. -->
         <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24">

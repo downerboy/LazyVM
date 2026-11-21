@@ -91,8 +91,28 @@ public sealed class BuildProgressViewModel : ViewModelBase
     public IReadOnlyList<PhaseRowViewModel> Phases
     {
         get => _PhaseRows;
-        private set => SetProperty(ref _PhaseRows, value);
+        private set
+        {
+            if (SetProperty(ref _PhaseRows, value))
+            {
+                OnPropertyChanged(nameof(PhasesDone));
+                OnPropertyChanged(nameof(PhaseCount));
+                OnPropertyChanged(nameof(HasPhases));
+                OnPropertyChanged(nameof(PhasesDoneText));
+            }
+        }
     }
+
+    /// <summary>How many phases are done, for the progress bar: the build knows how far it has got (#499).</summary>
+    public int PhasesDone => Phases.Count(phase => phase.State is PhaseRowViewModel.DONE or PhaseRowViewModel.DONE_WITH_PROBLEMS);
+
+    public int PhaseCount => Phases.Count;
+
+    /// <summary>True once the phases are known, so the bar can show how far the build has got.</summary>
+    public bool HasPhases => PhaseCount > 0;
+
+    /// <summary>Such as "3 of 9 phases done", for the progress bar's name; empty before the phases are known.</summary>
+    public string? PhasesDoneText => PhaseCount == 0 ? null : $"{PhasesDone} of {PhaseCount} phases done";
 
     /// <summary>Where the build is, such as "Phase 7: Install Windows and the tools", or how it ended.</summary>
     public string Status
@@ -206,7 +226,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     {
         try
         {
-            _Phases = await _Runner.GetBuildPhasesAsync(cancellationToken);
+            _Phases = await WorkAsync("Reading the build phases", () => _Runner.GetBuildPhasesAsync(cancellationToken));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -362,7 +382,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         Status = $"Starting the build of {VMName} from phase {phase}";
         try
         {
-            await _StartFromPhase(phase);
+            await WorkAsync($"Starting the build from phase {phase}", () => _StartFromPhase(phase));
         }
         catch (Exception exception)
         {
@@ -381,7 +401,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         _CancelCommand.RaiseCanExecuteChanged();
         try
         {
-            var stopping = await _Runner.StopBuildAsync(VMName, CancellationToken.None);
+            var stopping = await WorkAsync("Asking the build to stop", () => _Runner.StopBuildAsync(VMName, CancellationToken.None));
             if (stopping is null)
             {
                 Status = $"No build of {VMName} is running, so there is nothing to stop.";

@@ -38,6 +38,7 @@
                 <TextBlock Text="Activity" Style="{StaticResource LvHeading}" />
                 <TextBlock Text="{Binding Status}" Style="{StaticResource LvStatus}"
                            AutomationProperties.Name="{Binding Status}" local:LiveRegion.Announce="True" />
+                <ProgressBar Style="{StaticResource LvWorkingBar}" />
             </StackPanel>
         </Border>
 

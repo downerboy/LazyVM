@@ -206,7 +206,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         var problems = new List<string>();
         try
         {
-            var found = await _Tools.GetSecurityFindingsAsync(Name);
+            var found = await WorkAsync("Reading the security findings", () => _Tools.GetSecurityFindingsAsync(Name));
             _FindingsRead = true;
             Findings = found
                 .Select(finding => new SecurityFindingRow(finding))
@@ -222,7 +222,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         }
         try
         {
-            var approved = await _Tools.GetSecurityApprovalsAsync(Name);
+            var approved = await WorkAsync("Reading the approved findings", () => _Tools.GetSecurityApprovalsAsync(Name));
             _ApprovalsRead = true;
             Approvals = approved.Select(approval => new SecurityApprovalRow(approval)).ToList();
         }
@@ -302,7 +302,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
             string outcome;
             try
             {
-                await change();
+                await WorkAsync(doing, change);
                 outcome = done;
             }
             catch (Exception exception)

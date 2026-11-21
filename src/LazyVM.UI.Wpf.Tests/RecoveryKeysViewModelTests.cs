@@ -161,6 +161,23 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadAndExport_AreWorkingWhileTheKeysAreReadAndWritten()
+    {
+        _Runner.ReturnsRecoveryKeys(_OsKey);
+        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools);
+        var watcher = new WorkWatcher(window);
+        await window.LoadAsync();
+        _Tools.ChosenExportFile = _FILE;
+        _Runner.ReturnsRecoveryKeys(_OsKey);
+
+        await window.ExportAsync();
+
+        Assert.Equal(
+            ["Reading the recovery keys", null, "Exporting the recovery keys", null, "Reading the recovery keys", null],
+            watcher.Seen);
+    }
+
+    [Fact]
     public async Task Export_ToANewFile_WritesTheVMsKeysThere_SaysWhere_AndReadsTheKeysAgain()
     {
         var window = await Loaded(_OsKey, _UserKey);

@@ -599,6 +599,31 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Load_AndRunMaintenance_AreWorkingWhileThePhasesAreReadAndTheMaintenanceStarts()
+    {
+        var vm = Open(Sample.VM("DevEnv"));
+        var watcher = new WorkWatcher(vm);
+
+        await vm.LoadAsync();
+        await vm.RunMaintenanceAsync();
+
+        Assert.Equal(["Reading the build phases", null, "Starting the maintenance", null], watcher.Seen);
+    }
+
+    [Fact]
+    public async Task Delete_IsWorkingWhileWhatGoesIsReadAndTheVMIsDeleted()
+    {
+        _Runner.ReturnsRemovalPlan(PlanOf());
+        _Tools.ConfirmsRemoval = true;
+        var vm = await Loaded(Sample.VM());
+        var watcher = new WorkWatcher(vm);
+
+        await vm.DeleteAsync();
+
+        Assert.Equal(["Reading what deleting the VM removes", null, "Deleting DevBox", null], watcher.Seen);
+    }
+
+    [Fact]
     public async Task RunMaintenance_StartsTheVMsMaintenance_AndSaysSo()
     {
         var vm = await Loaded(Sample.VM("DevEnv"));

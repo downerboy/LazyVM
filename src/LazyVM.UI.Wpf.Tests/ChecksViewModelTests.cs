@@ -7,6 +7,32 @@ public sealed class ChecksViewModelTests
     private readonly FakeCommandRunner _Runner = new();
 
     [Fact]
+    public async Task Run_IsWorkingWhileTheChecksRun()
+    {
+        _Runner.ReturnsChecks();
+        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+        var watcher = new WorkWatcher(checks);
+
+        await checks.RunAsync();
+
+        Assert.Equal(["Running the checks", null], watcher.Seen);
+    }
+
+    [Fact]
+    public async Task Run_ThatIsCancelled_IsNoLongerWorking()
+    {
+        _Runner.ChecksWaitForCancel();
+        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+
+        var running = checks.RunAsync();
+        Assert.True(checks.IsWorking);
+        checks.CancelCommand.Execute(null);
+        await running;
+
+        Assert.False(checks.IsWorking);
+    }
+
+    [Fact]
     public void Title_OfTheHostChecks_SaysHost()
     {
         var checks = new ChecksViewModel(_Runner, null, hostOnly: true);

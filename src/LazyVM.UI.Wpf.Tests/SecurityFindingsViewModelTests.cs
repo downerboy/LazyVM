@@ -50,6 +50,19 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         };
     }
 
+    [Fact]
+    public async Task Load_IsWorkingWhileTheFindingsAndTheApprovalsAreRead()
+    {
+        _Runner.ReturnsSecurityFindings([_Firewall]);
+        _Runner.ReturnsSecurityApprovals([]);
+        var window = new SecurityFindingsViewModel(Sample.VM(), _Tools);
+        var watcher = new WorkWatcher(window);
+
+        await window.LoadAsync();
+
+        Assert.Equal(["Reading the security findings", null, "Reading the approved findings", null], watcher.Seen);
+    }
+
     private async Task<SecurityFindingsViewModel> Loaded(VMDashboard entry, VMSecurityFinding[] findings, params VMSecurityApproval[] approvals)
     {
         _Runner.ReturnsSecurityFindings(findings);
