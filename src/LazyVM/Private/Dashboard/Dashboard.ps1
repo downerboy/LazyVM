@@ -16,6 +16,7 @@ function New-DashboardEntry {
     $entry = [ordered]@{
         PSTypeName            = 'LazyVM.Dashboard'
         Name                  = $VM.Name
+        Id                    = $null
         State                 = $VM.State
         Created               = $null
         MemoryAssigned        = $null
@@ -45,6 +46,8 @@ function New-DashboardEntry {
     if ($VM.State -notin 'Not built', 'Unknown') {
         try {
             $machine = Get-VM -Name $VM.Name -ErrorAction Stop
+            # Hyper-V's GUID for the VM: unlike the name, it never changes (#522).
+            $entry.Id = $machine.Id
             $entry.Created = $machine.CreationTime
             $entry.MemoryAssigned = [long]$machine.MemoryAssigned
             # The most the VM can use: its dynamic memory maximum, or its startup memory when dynamic memory is off (#420).

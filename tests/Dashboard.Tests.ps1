@@ -33,7 +33,7 @@ BeforeAll {
 
         $rootPath = $Root
         Mock -ModuleName $module Resolve-LazyVMRoot { [pscustomobject]@{ Path = $rootPath; Source = 'a test' } }.GetNewClosure()
-        Mock -ModuleName $module Get-VM { [pscustomobject]@{ State = 'Off'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 0; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }.GetNewClosure()
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Id = [guid]::NewGuid(); State = 'Off'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 0; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }.GetNewClosure()
         Mock -ModuleName $module Get-VMHardDiskDrive { }
         Mock -ModuleName $module Get-ScheduledTask { }
         Use-MemorySecretStore
@@ -84,7 +84,7 @@ Describe 'Get-LazyVMDashboard' {
 
     It 'gives when the VM was created and the memory it is using, from Hyper-V' {
         Use-TestRoot -Root (New-TestRoot -VMs 'Alpha')
-        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 8GB; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }.GetNewClosure()
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Id = [guid]::NewGuid(); Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 8GB; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }.GetNewClosure()
 
         $row = Get-LazyVMDashboard -Name 'Alpha'
 
@@ -92,16 +92,24 @@ Describe 'Get-LazyVMDashboard' {
         $row.MemoryAssigned | Should -Be 8GB
     }
 
+    It 'gives the VM''s Hyper-V Id, which stays the same when the VM is renamed (#522)' {
+        Use-TestRoot -Root (New-TestRoot -VMs 'Alpha')
+        $id = [guid]'4f2c9a1e-7b3d-4c8e-9a10-2d5e6f7a8b9c'
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; Id = $id; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 8GB; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }.GetNewClosure()
+
+        (Get-LazyVMDashboard -Name 'Alpha').Id | Should -Be $id
+    }
+
     It 'gives the dynamic memory maximum as the most memory the VM can use' {
         Use-TestRoot -Root (New-TestRoot -VMs 'Alpha')
-        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 6GB; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Id = [guid]::NewGuid(); Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 6GB; DynamicMemoryEnabled = $true; MemoryStartup = 8GB; MemoryMaximum = 16GB } }
 
         (Get-LazyVMDashboard -Name 'Alpha').MemoryMaximum | Should -Be 16GB
     }
 
     It 'gives the startup memory as the most the VM can use when dynamic memory is off' {
         Use-TestRoot -Root (New-TestRoot -VMs 'Alpha')
-        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 8GB; DynamicMemoryEnabled = $false; MemoryStartup = 8GB; MemoryMaximum = 1TB } }
+        Mock -ModuleName $module Get-VM { [pscustomobject]@{ Id = [guid]::NewGuid(); Name = 'Alpha'; State = 'Running'; CreationTime = [datetime]'2026-10-01 09:30'; MemoryAssigned = 8GB; DynamicMemoryEnabled = $false; MemoryStartup = 8GB; MemoryMaximum = 1TB } }
 
         (Get-LazyVMDashboard -Name 'Alpha').MemoryMaximum | Should -Be 8GB
     }
@@ -133,6 +141,7 @@ Describe 'Get-LazyVMDashboard' {
         $row = Get-LazyVMDashboard -Name 'Alpha'
 
         $row.State | Should -Be 'Not built'
+        $row.Id | Should -BeNullOrEmpty
         $row.Created | Should -BeNullOrEmpty
         $row.MemoryMaximum | Should -BeNullOrEmpty
         $row.Disks | Should -BeNullOrEmpty

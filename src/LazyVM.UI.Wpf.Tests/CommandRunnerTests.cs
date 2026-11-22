@@ -141,6 +141,16 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
+    public void ToDashboard_ReadsTheVMsHyperVId()
+    {
+        var id = Guid.Parse("4f2c9a1e-7b3d-4c8e-9a10-2d5e6f7a8b9c");
+
+        var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(("Name", "DevBox"), ("Id", id), ("State", "Running")));
+
+        Assert.Equal(id, vm.Id);
+    }
+
+    [Fact]
     public void ToDashboard_OfAVMNotBuiltYet_LeavesTheEmptyFieldsEmpty()
     {
         var vm = PowerShellCommandRunner.LazyVMDashboard(Entry(
@@ -156,6 +166,7 @@ public sealed class CommandRunnerTests
             ("Problems", Array.Empty<string>())));
 
         Assert.Equal("Not built", vm.State);
+        Assert.Null(vm.Id);
         Assert.Null(vm.Created);
         Assert.Null(vm.MemoryAssigned);
         Assert.Null(vm.MemoryMaximum);
