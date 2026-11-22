@@ -11,6 +11,12 @@ public sealed record LazyVMDashboard
         get; init;
     }
 
+    /// <summary>Hyper-V's GUID for the VM, which never changes, unlike its name; empty for a VM not built yet (#522).</summary>
+    public Guid? Id
+    {
+        get; init;
+    }
+
     /// <summary>Running, Off, Not built, Unknown and the other Hyper-V states.</summary>
     public required string State
     {

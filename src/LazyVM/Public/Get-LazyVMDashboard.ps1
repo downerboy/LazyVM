@@ -4,8 +4,9 @@ function Get-LazyVMDashboard {
     Lists every VM with what the LazyVM dashboard shows about it.
 
     .DESCRIPTION
-    One object per VM profile: everything Get-LazyVM gives, and when the VM
-    was created, the memory it is using and the most it can use, its disks
+    One object per VM profile: everything Get-LazyVM gives, and the VM's
+    Hyper-V Id (a GUID that, unlike the name, never changes; empty for a VM
+    not built yet), when the VM was created, the memory it is using and the most it can use, its disks
     and the space they take, its last maintenance run and how it ended, its
     last security scan and the findings still open, the configuration it was
     first built from, the config template its profile was created from

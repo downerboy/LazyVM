@@ -614,6 +614,7 @@ public class PowerShellCommandRunner : IDisposable
         return new()
         {
             Name = Value<string>(entry, "Name", "Name") ?? string.Empty,
+            Id = Value<Guid?>(entry, "Id", "Hyper-V Id"),
             State = Value<string>(entry, "State", "State") ?? "Unknown",
             Created = Date("Created", "Created"),
             MemoryAssigned = Value<long?>(entry, "MemoryAssigned", "Memory in use"),
