@@ -570,24 +570,3 @@ public sealed class VMViewModel : ViewModelBase
         };
     }
 }
-
-/// <summary>One line of a VM's details, such as "Memory in use: 8 GB".</summary>
-public sealed record VMDetail(string Label, string Value)
-{
-    /// <summary>The line as a screen reader reads it.</summary>
-    public string AutomationName => $"{Label}: {Value}";
-}
-
-/// <summary>A phase a build can start at, in the list to choose from.</summary>
-public sealed class PhaseOption(BuildPhase phase)
-{
-    public int Number => phase.Number;
-
-    /// <summary>Such as "Phase 7: Install Windows, then the tools and Windows updates".</summary>
-    public string Text => phase.Goal.Length > 0 ? $"Phase {phase.Number}: {phase.Goal}" : $"Phase {phase.Number}";
-
-    public override string ToString()
-    {
-        return Text;
-    }
-}

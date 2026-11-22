@@ -7,6 +7,3 @@ namespace LazyVM.UI.Wpf;
 /// was recorded, and whether the last export held it.
 /// </summary>
 public sealed record VMRecoveryKey(string Disk, string DiskGuid, string KeyId, DateTime? Recorded, bool Exported);
-
-/// <summary>What <c>Export-LazyVMRecoveryKey</c> did: the file it wrote, and the warnings it gave, such as for a file in OneDrive.</summary>
-public sealed record RecoveryKeyExport(string Path, IReadOnlyList<string> Warnings);
