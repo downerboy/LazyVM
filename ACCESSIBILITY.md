@@ -96,4 +96,9 @@ Nothing cut off or overlapping, and no horizontal scrolling in a list.
 
 Everything uses system colors, and no state is shown by color alone.
 
-  * Not yet checked.
+  * Checked 2026-11-21 on screenshots of every window with sample data, taken
+    with Windows High Contrast switched on. Everything takes its colors from
+    the system, every button and list shows its border, and a disabled
+    button is shown in the system's disabled color with its text unchanged.
+    A VM that needs attention shows a diamond and the words "Needs
+    attention", not a color alone. No problems found.
