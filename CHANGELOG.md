@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.42.0](https://github.com/downerboy/LazyVM/compare/v6.41.0...v6.42.0) (2026-11-22)
+
+
+### Features
+
+* Get-LazyVMDashboard gives each VM's Hyper-V Id ([#525](https://github.com/downerboy/LazyVM/issues/525)) ([2b2f2d6](https://github.com/downerboy/LazyVM/commit/2b2f2d62248609a2bb66513cfb79ef07460df866))
+
 ## [6.41.0](https://github.com/downerboy/LazyVM/compare/v6.40.0...v6.41.0) (2026-11-22)
 
 
