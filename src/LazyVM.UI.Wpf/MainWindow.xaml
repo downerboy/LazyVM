@@ -7,17 +7,20 @@
         xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
-        Title="LazyVM" Width="1100" Height="600" MinWidth="320"
+        Title="LazyVM" Width="1100" Height="720" MinWidth="320"
         Style="{StaticResource LvWindow}">
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
         <KeyBinding Key="F1" Command="{Binding GuideCommand}" />
     </Window.InputBindings>
 
-    <DockPanel>
+    <!-- At large text sizes and zoom the page scrolls instead of squeezing the list out of sight (#502). -->
+    <ScrollViewer x:Name="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <DockPanel Height="{Binding ViewportHeight, ElementName=Page}" MinHeight="660">
         <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
-            <DockPanel>
-                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+            <WrapPanel>
+                <TextBlock Text="LazyVM" Style="{StaticResource LvTitle}" VerticalAlignment="Center" Margin="0,0,24,0" />
+                <WrapPanel VerticalAlignment="Center">
                     <!-- Only while the selected VM builds: its progress window, opened again after it was closed (#498). -->
                     <Button Content="Build progress" Command="{Binding BuildProgressCommand}" Margin="0,0,8,0"
                             Visibility="{Binding SelectedVMIsBuilding, Converter={StaticResource VisibleWhenTrue}}"
@@ -40,8 +43,7 @@
                             AutomationProperties.Name="Open the diagrams in your browser"
                             AutomationProperties.HelpText="Opens the flow of each command, as pictures and numbered lists, for the installed version, on GitHub." />
                 </WrapPanel>
-                <TextBlock Text="LazyVM" Style="{StaticResource LvTitle}" VerticalAlignment="Center" />
-            </DockPanel>
+            </WrapPanel>
         </Border>
 
         <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24" Padding="24,16">
@@ -135,4 +137,5 @@
             </DockPanel>
         </Border>
     </DockPanel>
+    </ScrollViewer>
 </Window>

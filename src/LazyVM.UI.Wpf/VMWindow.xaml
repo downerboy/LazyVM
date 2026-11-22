@@ -16,10 +16,16 @@
         <KeyBinding Key="Escape" Command="Close" />
     </Window.InputBindings>
 
+    <!-- At large text sizes and zoom the window scrolls instead of cutting off its lower panels (#502). -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <DockPanel>
         <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
-            <DockPanel>
-                <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+            <WrapPanel>
+                <StackPanel Margin="0,0,24,0">
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource LvTitle}" />
+                    <TextBlock Text="{Binding State}" Style="{StaticResource LvSubtitle}" />
+                </StackPanel>
+                <WrapPanel VerticalAlignment="Center">
                     <Button Content="Checks" Command="{Binding ChecksCommand}"
                             AutomationProperties.Name="{Binding Name, StringFormat='Checks of {0}'}" />
                     <Button Content="Log" Command="{Binding LogCommand}" Margin="8,0,0,0"
@@ -37,11 +43,7 @@
                             Visibility="{Binding IsBuilding, Converter={StaticResource VisibleWhenTrue}}"
                             AutomationProperties.Name="{Binding Name, StringFormat='Progress of the build of {0}'}" />
                 </WrapPanel>
-                <StackPanel>
-                    <TextBlock Text="{Binding Name}" Style="{StaticResource LvTitle}" />
-                    <TextBlock Text="{Binding State}" Style="{StaticResource LvSubtitle}" />
-                </StackPanel>
-            </DockPanel>
+            </WrapPanel>
         </Border>
 
         <!-- Starting a build or maintenance. While a run of the VM is going, both buttons are disabled and the note says why. -->
@@ -155,4 +157,5 @@
             </DockPanel>
         </Border>
     </DockPanel>
+    </ScrollViewer>
 </Window>
