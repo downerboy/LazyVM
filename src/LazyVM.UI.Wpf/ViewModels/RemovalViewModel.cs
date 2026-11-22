@@ -75,6 +75,3 @@ public sealed class RemovalViewModel(RemovalPlan plan) : ViewModelBase
         };
     }
 }
-
-/// <summary>One line of the delete dialog's list. A warning is about a disk holding your own work.</summary>
-public sealed record RemovalLine(string Text, bool IsWarning = false);

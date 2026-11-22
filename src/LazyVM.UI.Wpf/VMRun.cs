@@ -71,28 +71,3 @@ public sealed record VMRun
     public const string STOPPED = "Stopped";
     public const string ENDED_UNEXPECTEDLY = "EndedUnexpectedly";
 }
-
-/// <summary>One phase of a build, from <c>Get-LazyVMBuildPhase</c>.</summary>
-public sealed record BuildPhase(int Number, string Name, string Goal);
-
-/// <summary>A config template a new VM can be built from, from <c>Get-LazyVMConfigTemplate</c>.</summary>
-public sealed record ConfigTemplate(string Name, bool BuiltIn, bool Automatic);
-
-/// <summary>
-/// What to build: the VM's name and, for a new VM, optionally its config
-/// template and administrator account. <see cref="FromPhase"/> starts at
-/// that phase, such as the one a failed build was in; empty starts at the
-/// beginning.
-/// </summary>
-public sealed record BuildRequest(string Name, string? ConfigTemplate, string? UserName, int? FromPhase = null);
-
-/// <summary>
-/// How a build process ended, as its script wrote it: Completed, Stopped or
-/// Failed, with the error ID and message when it did not complete.
-/// </summary>
-public sealed record BuildResult(string Outcome, string? ErrorId, string? Message)
-{
-    public const string COMPLETED = "Completed";
-    public const string STOPPED = "Stopped";
-    public const string FAILED = "Failed";
-}

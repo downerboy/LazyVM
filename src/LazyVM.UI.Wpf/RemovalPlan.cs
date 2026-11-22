@@ -46,15 +46,3 @@ public sealed record RemovalPlan
     /// <summary>True when nothing of the VM is left to delete.</summary>
     public bool IsEmpty => HyperVState is null && ScheduledTasks.Count == 0 && Items.Count == 0;
 }
-
-/// <summary>A file or folder that goes. <see cref="Kind"/> is File or Folder.</summary>
-public sealed record RemovalItem(string Kind, string Path, long Size)
-{
-    public const string FILE = "File";
-}
-
-/// <summary>Something the VM uses that is kept, and why, such as a disk another VM uses too.</summary>
-public sealed record KeptItem(string Path, string Reason);
-
-/// <summary>A disk holding your own work that goes, with advice on what to save from it first.</summary>
-public sealed record WorkDisk(string Name, string Path, long Size, string Advice);
