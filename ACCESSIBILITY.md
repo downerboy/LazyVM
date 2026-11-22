@@ -78,17 +78,19 @@ Nothing cut off or overlapping, and no horizontal scrolling in a list.
 
   * Checked 2026-11-21 on screenshots of every window with sample data, laid
     out in 640 by 450 units (200%) and 320 by 225 units (400%), the size a
-    1280 wide screen leaves at that zoom. It found problems, not yet fixed:
-    * Main window: at 200% the list of VMs is squeezed to a sliver, and at 400%
-      the title breaks one letter per line and the list is gone. The window
-      does not scroll.
-    * VM window: at 200% the VM's name and state break one letter per line
-      beside the buttons.
-    * Question window: at 200% the No button runs off the right edge.
-    * The log and checks windows were captured before their lists loaded, so
-      their lists are not yet checked. The other windows showed nothing cut off.
-    * This is a first look with a test harness, not a hand check at a real
-      200% or 400% setting; confirm each in the app.
+    1280 wide screen leaves at that zoom. It found two problems, now fixed
+    (`ZoomLayoutTests` keep them fixed):
+    * Main window: the list of VMs was squeezed to a sliver at 200%, and at
+      400% the title broke one letter per line and the list was gone. The
+      title now stays on one line, the buttons wrap under it, and the page
+      scrolls.
+    * VM window: the VM's name and state broke one letter per line beside the
+      buttons, and the lower panels were cut off. The name stays on one line,
+      the buttons wrap under it, and the window scrolls.
+    * The other windows showed nothing cut off. The log and checks windows were
+      captured before their lists loaded, so their lists are not yet checked.
+    * This is a check with a test harness, not by hand at a real 200% or 400%
+      setting; confirm in the app.
 
 ### High Contrast
 
