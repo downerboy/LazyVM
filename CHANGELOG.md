@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.41.0](https://github.com/downerboy/LazyVM/compare/v6.40.0...v6.41.0) (2026-11-22)
+
+
+### Features
+
+* **gui:** accessibility pass with Narrator, zoom and High Contrast ([#514](https://github.com/downerboy/LazyVM/issues/514)) ([3bfc5d5](https://github.com/downerboy/LazyVM/commit/3bfc5d50d80821cabe222479598a006c4a41dbc4))
+
 ## [6.40.0](https://github.com/downerboy/LazyVM/compare/v6.39.0...v6.40.0) (2026-11-21)
 
 
