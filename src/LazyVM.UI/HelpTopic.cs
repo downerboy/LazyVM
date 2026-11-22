@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// The documentation pages <c>Show-LazyVMHelp -Topic</c> opens (#501). The

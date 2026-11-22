@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// What <c>Get-LazyVMDashboard</c> says about one VM, as plain values. View
@@ -190,5 +190,5 @@ public sealed record LazyVMDashboard
     /// </summary>
     public IReadOnlyList<string> Problems { get; init; } = [];
 
-    internal const string SETTINGS_OK = "OK";
+    public const string SETTINGS_OK = "OK";
 }

@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>One entry of a VM's log, as <c>Get-LazyVMLog</c> reads it.</summary>
 /// <param name="Time">When it was written; empty when it could not be read.</param>

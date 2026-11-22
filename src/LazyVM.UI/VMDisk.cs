@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// A virtual hard disk attached to a VM. 

@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// A build, maintenance, rebuild, restore or removal of a VM, as <c>Get-LazyVMDashboard</c>

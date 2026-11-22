@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// What to build: the VM's name and, for a new VM, optionally its config

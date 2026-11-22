@@ -1,7 +1,7 @@
 using System.IO;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// Runs the LazyVM module's commands in PowerShell hosted in the app, and
