@@ -66,17 +66,29 @@ reading order follows the layout; changes are announced once.
 
   * Main window (the Dashboard): checked 2026-11-21 with Narrator on Windows,
     build 6.40.0. Narrator worked well; no problems found.
-  * VM window: not yet checked.
   * Log: checked 2026-11-21 with Narrator on Windows, build 6.40.0. Narrator
     worked well; no problems found.
-  * Build, build progress, checks, security findings: not yet checked.
-  * Password, recovery keys, restore, removal, question, reason: not yet checked.
+  * VM window, build, build progress, checks, security findings, password,
+    recovery keys, restore, removal, question, reason: checked 2026-11-21 with
+    Narrator on Windows. Narrator worked well; no problems found.
 
 ### 200% text size and 400% zoom
 
 Nothing cut off or overlapping, and no horizontal scrolling in a list.
 
-  * Not yet checked.
+  * Checked 2026-11-21 on screenshots of every window with sample data, laid
+    out in 640 by 450 units (200%) and 320 by 225 units (400%), the size a
+    1280 wide screen leaves at that zoom. It found problems, not yet fixed:
+    * Main window: at 200% the list of VMs is squeezed to a sliver, and at 400%
+      the title breaks one letter per line and the list is gone. The window
+      does not scroll.
+    * VM window: at 200% the VM's name and state break one letter per line
+      beside the buttons.
+    * Question window: at 200% the No button runs off the right edge.
+    * The log and checks windows were captured before their lists loaded, so
+      their lists are not yet checked. The other windows showed nothing cut off.
+    * This is a first look with a test harness, not a hand check at a real
+      200% or 400% setting; confirm each in the app.
 
 ### High Contrast
 
