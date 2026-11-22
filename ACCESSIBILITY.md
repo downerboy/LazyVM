@@ -64,9 +64,12 @@ found; each problem becomes its own issue.
 Each window: every control has a name and, where it helps, help text; the
 reading order follows the layout; changes are announced once.
 
-  * Main window: not yet checked.
+  * Main window (the Dashboard): checked 2026-11-21 with Narrator on Windows,
+    build 6.40.0. Narrator worked well; no problems found.
   * VM window: not yet checked.
-  * Build, build progress, checks, log, security findings: not yet checked.
+  * Log: checked 2026-11-21 with Narrator on Windows, build 6.40.0. Narrator
+    worked well; no problems found.
+  * Build, build progress, checks, security findings: not yet checked.
   * Password, recovery keys, restore, removal, question, reason: not yet checked.
 
 ### 200% text size and 400% zoom
