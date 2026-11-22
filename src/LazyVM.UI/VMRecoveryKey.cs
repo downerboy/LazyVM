@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// One BitLocker recovery key <c>Get-LazyVMRecoveryKey</c> lists, without

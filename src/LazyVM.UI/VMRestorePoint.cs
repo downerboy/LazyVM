@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// One restore point <c>Get-LazyVMRestorePoint</c> lists: a tooling version

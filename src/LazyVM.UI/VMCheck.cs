@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// One check <c>Test-LazyVM</c> made, as plain values: what was checked,

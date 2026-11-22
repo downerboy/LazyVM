@@ -1,6 +1,4 @@
-using LazyVM.UI.Wpf.ViewModels;
-
-namespace LazyVM.UI.Wpf.Tests;
+namespace LazyVM.UI.Tests;
 
 /// <summary>Runs a test with a fixed culture, so dates and numbers read the same on every machine.</summary>
 internal sealed class CultureScope : IDisposable

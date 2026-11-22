@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The GUI-agnostic layer: records, the PowerShell runners and the launchers,
+       with no WPF (#523). LazyVM.UI.Wpf is one GUI on top of it; another GUI
+       can use this library without carrying WPF. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Hosts PowerShell in the app to run the module's commands. The 7.6
+         line is the one the module supports (PowerShell 7.6 minimum). -->
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LazyVM.UI.Tests" />
+    <InternalsVisibleTo Include="LazyVM.UI.Wpf.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -18,7 +18,7 @@ LazyVM uses [GitHub Flow](https://docs.github.com/en/get-started/using-github/gi
 
    If the change adds, removes or reorders what a command calls, update that command's diagram source in `docs/diagrams/source` and run `./Update-Diagram.ps1`; the tests fail until the diagrams match the code. Update the [guide](docs/Guide.md), the [use cases](docs/UseCases.md) and the command's own help in the same pull request.
 
-   In the C# code (the app in `src/LazyVM.UI.Wpf` and its tests), follow these rules. `src/.editorconfig` sets them, and the build fails on a break, in Visual Studio and in CI:
+   In the C# code (the app in `src/LazyVM.UI` and `src/LazyVM.UI.Wpf`, and their tests), follow these rules. `src/.editorconfig` sets them, and the build fails on a break, in Visual Studio and in CI:
    - Name private fields with a leading underscore and Pascal casing, such as `_Runner`, so a field can be told from a local or a parameter at a glance.
    - Name constants in all caps, with an underscore between words, so a constant can be told from a property or a variable at a glance. A constant other classes use (public, internal or protected) has no prefix, such as `NOT_STARTED`. A private constant, used only in its own class, and a local constant, used only in its own method, start with an underscore, such as `_BYTES_PER_GB` (#470).
    - Put every block in braces, even a one-line `if`, `else`, `for`, `foreach`, `while` or `using` body, so no block is implied.

@@ -15,10 +15,14 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="LazyVM.UI" />
+    <Using Include="LazyVM.UI.Tests" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\LazyVM.UI.Wpf\LazyVM.UI.Wpf.csproj" />
+    <!-- For the test helpers shared with the GUI-agnostic layer's tests, such as CultureScope. -->
+    <ProjectReference Include="..\LazyVM.UI.Tests\LazyVM.UI.Tests.csproj" />
   </ItemGroup>
 
 </Project>

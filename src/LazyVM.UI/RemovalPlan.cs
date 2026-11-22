@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// What <c>Get-LazyVMRemovalPlan</c> says deleting a VM would delete and

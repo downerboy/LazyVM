@@ -1,6 +1,6 @@
 using System.Management.Automation;
 
-namespace LazyVM.UI.Wpf.Tests;
+namespace LazyVM.UI.Tests;
 
 /// <summary>How the _Runner turns what Get-LazyVMDashboard returns into plain C# values.</summary>
 public sealed class CommandRunnerTests

@@ -1,4 +1,4 @@
-namespace LazyVM.UI.Wpf;
+namespace LazyVM.UI;
 
 /// <summary>
 /// A finding approved with <c>Approve-LazyVMSecurityFinding</c>, as

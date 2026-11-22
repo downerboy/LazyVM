@@ -1,6 +1,4 @@
-using LazyVM.UI.Wpf.ViewModels;
-
-namespace LazyVM.UI.Wpf.Tests;
+namespace LazyVM.UI.Tests;
 
 public sealed class BuildLauncherTests
 {

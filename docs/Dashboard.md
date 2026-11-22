@@ -15,7 +15,7 @@ The settings editor, upgrade and migration, and import of existing VMs (#303) co
 | Decision | Choice | Why |
 |---|---|---|
 | UI framework | WPF on .NET 10 (LTS), C# | Visual Studio XAML designer, built-in `DataGrid`, UI Automation support, and a fit for data-driven dashboards. WinUI 3 has no designer or first-party `DataGrid`. |
-| Structure | One WPF project, `LazyVM.UI.Wpf`, that wraps the module's commands, and one test project, `LazyVM.UI.Wpf.Tests`, with unit tests for the behavior | A wrapper needs no extra layers. No business-object, data or service layers and no abstract-class seams. |
+| Structure | A library with no WPF, `LazyVM.UI`, that holds what any GUI needs (the records, the PowerShell runners, the launchers and, once #519 frees them, the view models), a thin WPF app on top, `LazyVM.UI.Wpf`, and a test project for each (#523) | Another GUI can reuse `LazyVM.UI` without carrying WPF, and the compiler keeps WPF out of it. Seams are abstract classes. |
 | Pattern | MVVM, constructor injection, no code-behind logic | Testable without a window (TDD, SOLID). |
 | Commands first | A feature ships as a command in the module first, then gets a screen | The module stays the single source of truth. The GUI never reads `VM.json` or Hyper-V on its own. |
 | Running the commands | In-process through the PowerShell SDK for reads and short actions; each build in its own elevated `pwsh` process | A build outlives the window. |
@@ -24,7 +24,7 @@ The settings editor, upgrade and migration, and import of existing VMs (#303) co
 | Look | The [brand spec](Brand.md), mapped to XAML (section 6) | One look across the findings page, console and GUI. |
 | Accessibility target | Narrator | The screen reader the author uses. See section 7. |
 
-WinUI 3 stays possible later: only `LazyVM.UI.Wpf` depends on WPF.
+WinUI 3 stays possible later: only `LazyVM.UI.Wpf` depends on WPF, and a WinUI app would use `LazyVM.UI` as it is.
 
 ## 3. What the dashboard shows
 
@@ -98,8 +98,10 @@ The VM window names the config template the VM was created from, or says "None r
 
 ```
 src/LazyVM.slnx
-src/LazyVM.UI.Wpf/           WPF app: views (XAML), view models, one small class that runs the module's commands
-src/LazyVM.UI.Wpf.Tests/     xUnit: view-model behavior against a fake command runner, no window
+src/LazyVM.UI/               No WPF: the records, the class that runs the module's commands, the build launcher
+src/LazyVM.UI.Tests/         xUnit: the command runner's readers and the build launcher
+src/LazyVM.UI.Wpf/           WPF app: views (XAML), view models (moving to LazyVM.UI after #519)
+src/LazyVM.UI.Wpf.Tests/     xUnit: view-model behavior against a fake command runner, and the XAML checks
 ```
 
 - View models take the command-runner class through their constructor and never see PowerShell. Members a test replaces are `virtual`.

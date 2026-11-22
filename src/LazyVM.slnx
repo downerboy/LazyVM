@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="LazyVM.UI.Tests/LazyVM.UI.Tests.csproj" />
   <Project Path="LazyVM.UI.Wpf.Tests/LazyVM.UI.Wpf.Tests.csproj" />
+  <Project Path="LazyVM.UI/LazyVM.UI.csproj" />
   <Project Path="LazyVM.UI.Wpf/LazyVM.UI.Wpf.csproj" />
 </Solution>

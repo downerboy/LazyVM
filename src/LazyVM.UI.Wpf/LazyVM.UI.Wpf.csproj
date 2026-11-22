@@ -10,9 +10,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Hosts PowerShell in the app to run the module's commands. The 7.6
-         line is the one the module supports (PowerShell 7.6 minimum). -->
-    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.10" />
+    <!-- The GUI-agnostic layer (#523); it brings the PowerShell SDK with it. -->
+    <ProjectReference Include="..\LazyVM.UI\LazyVM.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="LazyVM.UI" />
   </ItemGroup>
 
   <ItemGroup>
