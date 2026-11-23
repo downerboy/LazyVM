@@ -1,5 +1,3 @@
-using LazyVM.UI.Wpf.ViewModels;
-
 using Microsoft.Win32;
 
 using System.Windows;
@@ -13,7 +11,7 @@ namespace LazyVM.UI.Wpf;
 public partial class App : Application
 {
     private PowerShellSessionFactory? _Sessions;
-    private SecretClipboard? _Clipboard;
+    private WpfSecretClipboard? _Clipboard;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -25,10 +23,10 @@ public partial class App : Application
 
         _Sessions = new PowerShellSessionFactory();
         var runners = Runners.On(_Sessions);
-        var clipboard = _Clipboard = new SecretClipboard(TimeProvider.System);
+        var clipboard = _Clipboard = new WpfSecretClipboard(TimeProvider.System);
         var changes = new ListChanges();
         var starter = new BuildStarter(runners.Build, new BuildLauncher());
-        var tools = new ToolWindows(runners, new WindowTracker(), new WpfDialogs(), starter, clipboard, changes, TimeProvider.System);
+        var tools = new ToolWindows(runners, new WpfWindowTracker(), new WpfDialogs(), starter, clipboard, changes, TimeProvider.System);
         var main = new MainViewModel(runners.Dashboard, runners.Checks, runners.Help, tools, changes, TimeProvider.System);
         MainWindow = new MainWindow { DataContext = main };
         MainWindow.Show();

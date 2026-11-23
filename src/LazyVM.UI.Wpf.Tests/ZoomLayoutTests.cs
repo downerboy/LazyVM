@@ -1,4 +1,4 @@
-using LazyVM.UI.Wpf.ViewModels;
+using LazyVM.UI.ViewModels;
 
 using System.Windows;
 using System.Windows.Controls;

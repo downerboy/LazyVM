@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:LazyVM.UI.Wpf"
-        xmlns:vm="clr-namespace:LazyVM.UI.Wpf.ViewModels"
+        xmlns:vm="clr-namespace:LazyVM.UI.ViewModels;assembly=LazyVM.UI"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:ChecksViewModel}"
         Title="{Binding Title}" Width="860" Height="760" MinWidth="320"
