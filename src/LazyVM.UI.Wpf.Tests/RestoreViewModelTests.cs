@@ -118,7 +118,7 @@ public sealed class RestoreViewModelTests : IDisposable
         _Tools.ConfirmsRestore = true;
         _Runners.Restore.ReturnsRestorePoints(_October, _November, new("20261118-090000", new DateTime(2026, 11, 18, 9, 0, 0), true));
         var listChanged = 0;
-        _Tools.ToolingRestored += (_, _) => listChanged++;
+        _Tools.Changes.Changed += (_, _) => listChanged++;
 
         await restore.RestoreAsync();
 
@@ -153,7 +153,7 @@ public sealed class RestoreViewModelTests : IDisposable
         _Runners.Restore.RestoreFails = new InvalidOperationException("A build of DevBox is running now.");
         _Runners.Restore.ReturnsRestorePoints(_October);
         var listChanged = 0;
-        _Tools.ToolingRestored += (_, _) => listChanged++;
+        _Tools.Changes.Changed += (_, _) => listChanged++;
 
         await restore.RestoreAsync();
 

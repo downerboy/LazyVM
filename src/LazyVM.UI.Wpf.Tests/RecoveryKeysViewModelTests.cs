@@ -200,7 +200,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
             Exported = true
         });
         var exported = 0;
-        _Tools.RecoveryKeysExported += (_, _) => exported++;
+        _Tools.Changes.Changed += (_, _) => exported++;
 
         await window.ExportAsync();
 

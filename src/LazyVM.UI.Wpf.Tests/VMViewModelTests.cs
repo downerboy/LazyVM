@@ -894,7 +894,7 @@ public sealed class VMViewModelTests : IDisposable
         var removed = 0;
         vm.Removed += (_, _) => removed++;
         var listChanged = 0;
-        _Tools.VMRemoved += (_, _) => listChanged++;
+        _Tools.Changes.Changed += (_, _) => listChanged++;
 
         await vm.DeleteAsync();
 
@@ -951,7 +951,7 @@ public sealed class VMViewModelTests : IDisposable
         var removed = 0;
         vm.Removed += (_, _) => removed++;
         var listChanged = 0;
-        _Tools.VMRemoved += (_, _) => listChanged++;
+        _Tools.Changes.Changed += (_, _) => listChanged++;
 
         await vm.DeleteAsync();
 

@@ -161,7 +161,7 @@ public sealed class ToolWindowsTests
         var launcher = new FakeBuildLauncher();
         var withLauncher = new FakeToolWindows(_Runners, launcher);
         var started = 0;
-        withLauncher.RunStarted += (_, _) => started++;
+        withLauncher.Changes.Changed += (_, _) => started++;
         _Runners.Dashboard.ReturnsRun(null);
 
         await withLauncher.StartBuildAsync(null, new BuildRequest("DevBox", null, null, 7));
@@ -180,7 +180,7 @@ public sealed class ToolWindowsTests
         var launcher = new FakeBuildLauncher { Fails = new InvalidOperationException("PowerShell 7.6 or later was not found.") };
         var withLauncher = new FakeToolWindows(_Runners, launcher);
         var started = 0;
-        withLauncher.RunStarted += (_, _) => started++;
+        withLauncher.Changes.Changed += (_, _) => started++;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => withLauncher.StartBuildAsync(null, new BuildRequest("DevBox", null, null, 7)));
 
@@ -215,7 +215,7 @@ public sealed class ToolWindowsTests
     public async Task StartMaintenance_RunsTheModulesCommand_AndReportsIt()
     {
         var started = 0;
-        _Tools.RunStarted += (_, _) => started++;
+        _Tools.Changes.Changed += (_, _) => started++;
 
         await _Tools.StartMaintenanceAsync(null, "DevBox");
 
@@ -227,7 +227,7 @@ public sealed class ToolWindowsTests
     public async Task StartMaintenance_WhenTheModuleStartsNothing_ThrowsItsReason_AndReportsNothing()
     {
         var started = 0;
-        _Tools.RunStarted += (_, _) => started++;
+        _Tools.Changes.Changed += (_, _) => started++;
         _Runners.Build.MaintenanceFails = new InvalidOperationException("A build of DevBox is running, so maintenance was not started.");
 
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => _Tools.StartMaintenanceAsync(null, "DevBox"));
@@ -240,7 +240,7 @@ public sealed class ToolWindowsTests
     public void ABuildThatEnds_IsReported_SoTheListIsReadAgain()
     {
         var ended = 0;
-        _Tools.BuildEnded += (_, _) => ended++;
+        _Tools.Changes.Changed += (_, _) => ended++;
         _Runners.Dashboard.ReturnsRun(null);
 
         _Tools.OpenProgress(null, "DevBox", started: null);

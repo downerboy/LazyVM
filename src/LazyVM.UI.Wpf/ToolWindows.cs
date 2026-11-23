@@ -26,11 +26,12 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
     private const string _BUILD_KEY = "build";
     private readonly Dictionary<string, ViewModelBase> _Open = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Raised when a build followed in a progress window has ended, so the list can be read again.</summary>
-    public event EventHandler? BuildEnded;
-
-    /// <summary>Raised when a build or maintenance has started from a VM or progress window, so the list can be read again.</summary>
-    public event EventHandler? RunStarted;
+    /// <summary>
+    /// Raised when a build ended, a build or maintenance started, a delete,
+    /// a restore or an export of recovery keys ended (even one that failed),
+    /// or a security finding was approved or revoked, so the list can be read again.
+    /// </summary>
+    public ListChanges Changes { get; } = new();
 
     /// <summary>Every phase of a build, for choosing the one a build starts at.</summary>
     public virtual Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken)
@@ -48,14 +49,14 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         var moduleFolder = await runners.Build.GetModuleFolderAsync(CancellationToken.None);
         var build = launcher.Start(request, moduleFolder);
         OpenProgress(vmId, request.Name, build);
-        RunStarted?.Invoke(this, EventArgs.Empty);
+        Changes.Raise();
     }
 
     /// <summary>Starts the VM's maintenance task, as the nightly run does. Throws with the reason when it did not start.</summary>
     public virtual async Task StartMaintenanceAsync(Guid? vmId, string vmName)
     {
         await runners.Build.StartLazyVMMaintenanceAsync(vmId, vmName, CancellationToken.None);
-        RunStarted?.Invoke(this, EventArgs.Empty);
+        Changes.Raise();
     }
 
     /// <summary>Opens the documentation page in the browser. Throws with the reason when the browser did not open.</summary>
@@ -63,9 +64,6 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
     {
         return runners.Help.ShowLazyVMHelpAsync(topic, CancellationToken.None);
     }
-
-    /// <summary>Raised when a delete has ended, even one that removed only part of the VM, so the list can be read again.</summary>
-    public event EventHandler? VMRemoved;
 
     /// <summary>What deleting the VM would delete and keep. Throws with the reason when it cannot be deleted.</summary>
     public virtual Task<RemovalPlan> GetRemovalPlanAsync(Guid? vmId, string vmName)
@@ -86,7 +84,7 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         }
         finally
         {
-            VMRemoved?.Invoke(this, EventArgs.Empty);
+            Changes.Raise();
         }
     }
 
@@ -101,9 +99,6 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         var dialog = new RemovalWindow { DataContext = removal, Owner = owner ?? Application.Current.MainWindow };
         return dialog.ShowDialog() == true;
     }
-
-    /// <summary>Raised when a restore has ended, even one that failed, so the list can be read again.</summary>
-    public event EventHandler? ToolingRestored;
 
     /// <summary>The VM's restore points, oldest first.</summary>
     public virtual Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(Guid? vmId, string vmName)
@@ -120,7 +115,7 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         }
         finally
         {
-            ToolingRestored?.Invoke(this, EventArgs.Empty);
+            Changes.Raise();
         }
     }
 
@@ -153,9 +148,6 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         return dialog.ShowDialog() == true;
     }
 
-    /// <summary>Raised when an export of recovery keys has ended, even one that failed, so the list can be read again.</summary>
-    public event EventHandler? RecoveryKeysExported;
-
     /// <summary>The VM's recovery keys, without their passwords.</summary>
     public virtual Task<IReadOnlyList<VMRecoveryKey>> GetRecoveryKeysAsync(Guid? vmId, string vmName)
     {
@@ -177,7 +169,7 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         }
         finally
         {
-            RecoveryKeysExported?.Invoke(this, EventArgs.Empty);
+            Changes.Raise();
         }
     }
 
@@ -277,9 +269,6 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         return runners.SecurityFindings.GetLazyVMSecurityApprovalsAsync(vmId, vmName, CancellationToken.None);
     }
 
-    /// <summary>Raised when an approval or a revoke has ended, even one refused, so the list can be read again.</summary>
-    public event EventHandler? SecurityFindingsChanged;
-
     /// <summary>Approves the finding, without asking: <see cref="ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
     public virtual async Task ApproveSecurityFindingAsync(Guid? vmId, string vmName, string id, string reason)
     {
@@ -289,7 +278,7 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         }
         finally
         {
-            SecurityFindingsChanged?.Invoke(this, EventArgs.Empty);
+            Changes.Raise();
         }
     }
 
@@ -302,7 +291,7 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         }
         finally
         {
-            SecurityFindingsChanged?.Invoke(this, EventArgs.Empty);
+            Changes.Raise();
         }
     }
 
@@ -412,7 +401,7 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         }
         var progress = new BuildProgressViewModel(runners.Dashboard, runners.Build, vmId, vmName, started, clock,
             phase => StartBuildAsync(vmId, new BuildRequest(vmName, null, null, phase)));
-        progress.Ended += (_, _) => BuildEnded?.Invoke(this, EventArgs.Empty);
+        progress.Ended += (_, _) => Changes.Raise();
         Track(key, progress, progress.StopFollowing);
         _ = progress.FollowAsync();
     }

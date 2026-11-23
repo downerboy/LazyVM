@@ -434,7 +434,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         var window = await Chosen(_Firewall);
         _Tools.ConfirmsSecurityChange = false;
         var changed = 0;
-        _Tools.SecurityFindingsChanged += (_, _) => changed++;
+        _Tools.Changes.Changed += (_, _) => changed++;
 
         await window.ApproveAsync();
 
@@ -449,7 +449,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         var window = await Chosen(_Firewall);
         _Tools.ConfirmsSecurityChange = true;
         var changed = 0;
-        _Tools.SecurityFindingsChanged += (_, _) => changed++;
+        _Tools.Changes.Changed += (_, _) => changed++;
         var approved = new VMSecurityApproval(_Firewall.Id, _Firewall.Severity, _Firewall.Title, _Scanned, string.Empty);
         ReadAgainGives([], _Approval, approved);
 
@@ -470,7 +470,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         _Tools.ConfirmsSecurityChange = true;
         _Runners.SecurityFindings.ApproveFails = new InvalidOperationException("Firewall:Public:Off is not an open finding of the last scan of DevBox.");
         var changed = 0;
-        _Tools.SecurityFindingsChanged += (_, _) => changed++;
+        _Tools.Changes.Changed += (_, _) => changed++;
         ReadAgainGives([_Firewall]);
 
         await window.ApproveAsync();
@@ -553,7 +553,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         window.SelectedApproval = window.Approvals.Single();
         _Tools.ConfirmsSecurityChange = true;
         var changed = 0;
-        _Tools.SecurityFindingsChanged += (_, _) => changed++;
+        _Tools.Changes.Changed += (_, _) => changed++;
         ReadAgainGives([]);
 
         await window.RevokeAsync();

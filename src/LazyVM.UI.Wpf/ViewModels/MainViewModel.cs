@@ -32,13 +32,8 @@ public sealed class MainViewModel : ViewModelBase
         GuideCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.Guide));
         UseCasesCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.UseCases));
         DiagramsCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.Diagrams));
-        // A build that ended, a build or maintenance that started, a delete, a restore or an export of recovery keys changed the list: read it again.
-        tools.BuildEnded += (_, _) => _ = RefreshAsync();
-        tools.RunStarted += (_, _) => _ = RefreshAsync();
-        tools.VMRemoved += (_, _) => _ = RefreshAsync();
-        tools.ToolingRestored += (_, _) => _ = RefreshAsync();
-        tools.RecoveryKeysExported += (_, _) => _ = RefreshAsync();
-        tools.SecurityFindingsChanged += (_, _) => _ = RefreshAsync();
+        // A build that ended, a build or maintenance that started, a delete, a restore, an export of recovery keys or a security finding changed the list: read it again.
+        tools.Changes.Changed += (_, _) => _ = RefreshAsync();
         _RefreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         _CancelRefreshCommand = new RelayCommand(() => _Refreshing?.Cancel(), () => IsRefreshing);
         _OpenVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);
