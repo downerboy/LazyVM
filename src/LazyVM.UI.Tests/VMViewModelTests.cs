@@ -840,6 +840,62 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ClosingTheVMWindow_ClosesEveryWindowItOpened()
+    {
+        _Runners.Checks.ReturnsChecks(Sample.Check());
+        _Runners.Log.ReturnsLog();
+        _Runners.Restore.ReturnsRestorePoints();
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys();
+        _Runners.SecurityFindings.ReturnsSecurityFindings();
+        _Runners.SecurityFindings.ReturnsSecurityApprovals();
+        _Runners.Dashboard.ReturnsRun(RunningNow(VMRun.BUILD));
+        _Tools.OpenVM(Sample.VM() with { Run = RunningNow(VMRun.BUILD) });
+        var window = Assert.IsType<VMViewModel>(Assert.Single(_Tools.Windows.Shown));
+        window.ChecksCommand.Execute(null);
+        window.LogCommand.Execute(null);
+        window.RestorePointsCommand.Execute(null);
+        window.RecoveryKeysCommand.Execute(null);
+        window.PasswordCommand.Execute(null);
+        window.SecurityFindingsCommand.Execute(null);
+        window.BuildProgressCommand.Execute(null);
+        var opened = _Tools.Windows.Shown.Skip(1).ToList();
+        Assert.Equal(7, opened.Count);
+
+        _Tools.Windows.UserCloses(window);
+
+        Assert.Equal(opened, _Tools.Windows.Closed);
+    }
+
+    [Fact]
+    public async Task ABuildStartedFromTheVMWindow_HasItsProgressClosedWithIt()
+    {
+        _Runners.Dashboard.ReturnsRun(null, "DevBox");
+        _Tools.OpenVM(Sample.VM());
+        var window = Assert.IsType<VMViewModel>(Assert.Single(_Tools.Windows.Shown));
+        await window.BuildFromPhase.LoadAsync();
+
+        await window.BuildFromPhase.BuildAsync();
+        var progress = Assert.IsType<BuildProgressViewModel>(_Tools.Windows.Shown[1]);
+        _Tools.Windows.UserCloses(window);
+
+        Assert.Same(progress, Assert.Single(_Tools.Windows.Closed));
+    }
+
+    [Fact]
+    public void ClosingAWindowTheVMWindowOpened_LeavesTheVMWindowOpen()
+    {
+        _Runners.Log.ReturnsLog();
+        _Tools.OpenVM(Sample.VM());
+        var window = Assert.IsType<VMViewModel>(Assert.Single(_Tools.Windows.Shown));
+        window.LogCommand.Execute(null);
+
+        _Tools.Windows.UserCloses(_Tools.Windows.Shown[1]);
+
+        Assert.Same(window, _Tools.Windows.Find<VMViewModel>("vm:DevBox"));
+        Assert.Empty(_Tools.Windows.Closed);
+    }
+
+    [Fact]
     public async Task RestorePoints_OpensTheVMsRestoreWindow_AndReadsThePoints()
     {
         _Runners.Restore.ReturnsRestorePoints();

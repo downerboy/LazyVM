@@ -58,6 +58,68 @@ public sealed class WindowTrackerTests
     }
 
     [Fact]
+    public void ClosingAWindow_ClosesTheWindowsItOpened_AndTheirs()
+    {
+        var parent = new Page();
+        var child = new Page();
+        var grandchild = new Page();
+        _Windows.Track("vm:DevBox", parent);
+        _Windows.Track("log:DevBox", child, opener: parent);
+        _Windows.Track("keys:DevBox", grandchild, opener: child);
+
+        _Windows.UserCloses(parent);
+
+        Assert.Equal([child, grandchild], _Windows.Closed);
+        Assert.Null(_Windows.Find<Page>("log:DevBox"));
+        Assert.Null(_Windows.Find<Page>("keys:DevBox"));
+    }
+
+    [Fact]
+    public void AWindowThatClosesWithItsOpener_RunsItsOwnCleanUp()
+    {
+        var forgot = false;
+        var parent = new Page();
+        _Windows.Track("vm:DevBox", parent);
+        _Windows.Track("password:DevBox", new Page(), () => forgot = true, opener: parent);
+
+        _Windows.UserCloses(parent);
+
+        Assert.True(forgot);
+    }
+
+    [Fact]
+    public void ClosingAWindowItOpened_LeavesTheOpenerOpen_AndLaterClosesNothingTwice()
+    {
+        var parent = new Page();
+        var child = new Page();
+        _Windows.Track("vm:DevBox", parent);
+        _Windows.Track("log:DevBox", child, opener: parent);
+
+        _Windows.UserCloses(child);
+
+        Assert.Same(parent, _Windows.Find<Page>("vm:DevBox"));
+        Assert.Empty(_Windows.Closed);
+
+        _Windows.UserCloses(parent);
+
+        Assert.Empty(_Windows.Closed);
+    }
+
+    [Fact]
+    public void AWindowWithNoOpener_ClosesAlone()
+    {
+        var first = new Page();
+        var second = new Page();
+        _Windows.Track("checks:", first);
+        _Windows.Track("build", second);
+
+        _Windows.UserCloses(first);
+
+        Assert.Empty(_Windows.Closed);
+        Assert.Same(second, _Windows.Find<Page>("build"));
+    }
+
+    [Fact]
     public void AfterTheUserClosesTheWindow_TheKeyIsFree()
     {
         var first = new Page();

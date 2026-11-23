@@ -114,6 +114,37 @@ public sealed class ToolWindowsTests
     }
 
     [Fact]
+    public async Task TheProgressOfABuildStartedFromTheBuildWindow_ClosesWithIt_WithoutStoppingTheBuild()
+    {
+        var withLauncher = new FakeToolWindows(_Runners, new FakeBuildLauncher());
+        _Runners.Dashboard.ReturnsRun(null, "TestBox");
+        withLauncher.OpenBuild([]);
+        var build = Assert.IsType<BuildViewModel>(withLauncher.Windows.Shown[0]);
+        await build.LoadAsync();
+        build.Name = "TestBox";
+        await build.BuildAsync();
+        var progress = Assert.IsType<BuildProgressViewModel>(withLauncher.Windows.Shown[1]);
+
+        withLauncher.Windows.UserCloses(build);
+
+        Assert.Same(progress, Assert.Single(withLauncher.Windows.Closed));
+        Assert.Empty(_Runners.Build.StopCalls);
+    }
+
+    [Fact]
+    public void AWindowOpenedFromTheMainWindow_HasNoOpenerToCloseItWith()
+    {
+        _Runners.Checks.ReturnsChecks(Sample.Check());
+        _Runners.Log.ReturnsLog();
+
+        _Tools.OpenChecks(null, null, hostOnly: true);
+        _Tools.OpenLog(null, "DevBox");
+        _Tools.Windows.UserCloses(_Tools.Windows.Shown[0]);
+
+        Assert.Empty(_Tools.Windows.Closed);
+    }
+
+    [Fact]
     public void OpenProgress_Twice_BringsTheOpenWindowToTheFront()
     {
         _Runners.Dashboard.ReturnsRun(new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 });
