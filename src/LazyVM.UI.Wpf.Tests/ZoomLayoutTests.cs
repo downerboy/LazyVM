@@ -15,45 +15,7 @@ namespace LazyVM.UI.Wpf.Tests;
 /// </summary>
 public sealed class ZoomLayoutTests
 {
-    private static Dispatcher? _Ui;
-
-    /// <summary>One thread owns the WPF application for every test: there can be only one per process.</summary>
-    private static Dispatcher Ui
-    {
-        get
-        {
-            lock (typeof(ZoomLayoutTests))
-            {
-                if (_Ui is null)
-                {
-                    using var ready = new ManualResetEventSlim();
-                    var thread = new Thread(() =>
-                    {
-                        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-                        app.Resources.MergedDictionaries.Add(new ResourceDictionary
-                        {
-                            Source = new Uri("pack://application:,,,/LazyVM.UI.Wpf;component/Themes/Light.xaml"),
-                        });
-                        app.Resources.MergedDictionaries.Add(new ResourceDictionary
-                        {
-                            Source = new Uri("pack://application:,,,/LazyVM.UI.Wpf;component/Themes/Styles.xaml"),
-                        });
-                        app.Resources["VisibleWhenTrue"] = new BooleanToVisibilityConverter();
-                        _Ui = Dispatcher.CurrentDispatcher;
-                        ready.Set();
-                        Dispatcher.Run();
-                    })
-                    {
-                        IsBackground = true,
-                    };
-                    thread.SetApartmentState(ApartmentState.STA);
-                    thread.Start();
-                    ready.Wait();
-                }
-                return _Ui;
-            }
-        }
-    }
+    private static Dispatcher Ui => WpfThread.Dispatcher;
 
     private static T Layout<T>(Window window, Size size, Func<FrameworkElement, T> read)
     {
