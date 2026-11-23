@@ -1,5 +1,3 @@
-using LazyVM.UI.Wpf.ViewModels;
-
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;

@@ -1,5 +1,3 @@
-using LazyVM.UI.Wpf.ViewModels;
-
 using Microsoft.Win32;
 
 using System.Windows;
@@ -13,7 +11,7 @@ namespace LazyVM.UI.Wpf;
 public partial class App : Application
 {
     private PowerShellSessionFactory? _Sessions;
-    private ToolWindows? _Tools;
+    private WpfSecretClipboard? _Clipboard;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -25,8 +23,11 @@ public partial class App : Application
 
         _Sessions = new PowerShellSessionFactory();
         var runners = Runners.On(_Sessions);
-        var tools = _Tools = new ToolWindows(runners, new BuildLauncher(), TimeProvider.System);
-        var main = new MainViewModel(runners.Dashboard, runners.Checks, new VMWindowManager(tools), tools, TimeProvider.System);
+        var clipboard = _Clipboard = new WpfSecretClipboard(TimeProvider.System);
+        var changes = new ListChanges();
+        var starter = new BuildStarter(runners.Build, new BuildLauncher());
+        var tools = new ToolWindows(runners, new WpfWindowTracker(), new WpfDialogs(), starter, clipboard, changes, TimeProvider.System);
+        var main = new MainViewModel(runners.Dashboard, runners.Checks, runners.Help, tools, changes, TimeProvider.System);
         MainWindow = new MainWindow { DataContext = main };
         MainWindow.Show();
         _ = main.StartAsync();
@@ -35,7 +36,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         // A password copied less than three minutes ago goes now, if the clipboard still holds it (#469).
-        _Tools?.Clipboard.ClearNow();
+        _Clipboard?.ClearNow();
         _Sessions?.Dispose();
         base.OnExit(e);
     }

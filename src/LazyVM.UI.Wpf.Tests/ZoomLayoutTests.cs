@@ -1,4 +1,4 @@
-using LazyVM.UI.Wpf.ViewModels;
+using LazyVM.UI.ViewModels;
 
 using System.Windows;
 using System.Windows.Controls;
@@ -15,45 +15,7 @@ namespace LazyVM.UI.Wpf.Tests;
 /// </summary>
 public sealed class ZoomLayoutTests
 {
-    private static Dispatcher? _Ui;
-
-    /// <summary>One thread owns the WPF application for every test: there can be only one per process.</summary>
-    private static Dispatcher Ui
-    {
-        get
-        {
-            lock (typeof(ZoomLayoutTests))
-            {
-                if (_Ui is null)
-                {
-                    using var ready = new ManualResetEventSlim();
-                    var thread = new Thread(() =>
-                    {
-                        var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-                        app.Resources.MergedDictionaries.Add(new ResourceDictionary
-                        {
-                            Source = new Uri("pack://application:,,,/LazyVM.UI.Wpf;component/Themes/Light.xaml"),
-                        });
-                        app.Resources.MergedDictionaries.Add(new ResourceDictionary
-                        {
-                            Source = new Uri("pack://application:,,,/LazyVM.UI.Wpf;component/Themes/Styles.xaml"),
-                        });
-                        app.Resources["VisibleWhenTrue"] = new BooleanToVisibilityConverter();
-                        _Ui = Dispatcher.CurrentDispatcher;
-                        ready.Set();
-                        Dispatcher.Run();
-                    })
-                    {
-                        IsBackground = true,
-                    };
-                    thread.SetApartmentState(ApartmentState.STA);
-                    thread.Start();
-                    ready.Wait();
-                }
-                return _Ui;
-            }
-        }
-    }
+    private static Dispatcher Ui => WpfThread.Dispatcher;
 
     private static T Layout<T>(Window window, Size size, Func<FrameworkElement, T> read)
     {
@@ -80,12 +42,18 @@ public sealed class ZoomLayoutTests
         return title.ActualHeight < title.FontSize * 1.8;
     }
 
+    private static VMViewModel VMViewModelOf(FakeRunners runners)
+    {
+        var tools = new FakeToolWindows(runners);
+        return new VMViewModel(Sample.VM("Alpha"), tools, tools.Dialogs, runners.Build, runners.Removal, tools.Changes);
+    }
+
     private static MainWindow MainWindowFor(FakeRunners runners)
     {
         return Ui.Invoke(() =>
         {
             var tools = new FakeToolWindows(runners);
-            var model = new MainViewModel(runners.Dashboard, runners.Checks, new FakeVMWindowManager(tools), tools, TimeProvider.System);
+            var model = new MainViewModel(runners.Dashboard, runners.Checks, runners.Help, tools, tools.Changes, TimeProvider.System);
             return new MainWindow { DataContext = model };
         });
     }
@@ -121,7 +89,7 @@ public sealed class ZoomLayoutTests
     public void VMWindow_KeepsTheNameOnOneLine(double width, double height)
     {
         var runner = new FakeRunners();
-        var window = Ui.Invoke(() => new VMWindow { DataContext = new VMViewModel(Sample.VM("Alpha"), new FakeToolWindows(runner)) });
+        var window = Ui.Invoke(() => new VMWindow { DataContext = VMViewModelOf(runner) });
 
         var oneLine = Layout(window, new Size(width, height), root => OnOneLine(root, "Alpha"));
 
@@ -134,7 +102,7 @@ public sealed class ZoomLayoutTests
     public void VMWindow_ScrollsWhatDoesNotFit(double width, double height)
     {
         var runner = new FakeRunners();
-        var window = Ui.Invoke(() => new VMWindow { DataContext = new VMViewModel(Sample.VM("Alpha"), new FakeToolWindows(runner)) });
+        var window = Ui.Invoke(() => new VMWindow { DataContext = VMViewModelOf(runner) });
 
         var scrolls = Layout(window, new Size(width, height),
             root => root is ScrollViewer { ScrollableHeight: > 0 });

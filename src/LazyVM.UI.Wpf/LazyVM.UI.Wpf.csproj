@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <Using Include="LazyVM.UI" />
+    <Using Include="LazyVM.UI.ViewModels" />
   </ItemGroup>
 
   <ItemGroup>
