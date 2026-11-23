@@ -18,20 +18,20 @@ public sealed class VMViewModel : ViewModelBase
     public VMViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs, LazyVMBuildRunner builds, LazyVMRemovalRunner removals, ListChanges changes)
     {
         _Gate = new VMRunGate(entry);
-        BuildFromPhase = new BuildFromPhaseViewModel(_Gate, builds, tools);
+        BuildFromPhase = new BuildFromPhaseViewModel(_Gate, builds, tools, this);
         Maintenance = new MaintenanceViewModel(_Gate, builds, changes);
         Deletion = new VMDeletionViewModel(_Gate, removals, dialogs, changes);
         Hold(BuildFromPhase);
         Hold(Maintenance);
         Hold(Deletion);
         Details = VMDetails.Read(entry);
-        ChecksCommand = new RelayCommand(() => tools.OpenChecks(Entry.Id, Name, hostOnly: false));
-        LogCommand = new RelayCommand(() => tools.OpenLog(Entry.Id, Name));
-        BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(Entry.Id, Name, started: null), () => IsBuilding);
-        RestorePointsCommand = new RelayCommand(() => _Restore = tools.OpenRestore(Entry));
-        RecoveryKeysCommand = new RelayCommand(() => tools.OpenRecoveryKeys(Entry));
-        PasswordCommand = new RelayCommand(() => tools.OpenPassword(Entry));
-        SecurityFindingsCommand = new RelayCommand(() => _Findings = tools.OpenSecurityFindings(Entry));
+        ChecksCommand = new RelayCommand(() => tools.OpenChecks(Entry.Id, Name, hostOnly: false, opener: this));
+        LogCommand = new RelayCommand(() => tools.OpenLog(Entry.Id, Name, this));
+        BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(Entry.Id, Name, started: null, opener: this), () => IsBuilding);
+        RestorePointsCommand = new RelayCommand(() => _Restore = tools.OpenRestore(Entry, this));
+        RecoveryKeysCommand = new RelayCommand(() => tools.OpenRecoveryKeys(Entry, this));
+        PasswordCommand = new RelayCommand(() => tools.OpenPassword(Entry, this));
+        SecurityFindingsCommand = new RelayCommand(() => _Findings = tools.OpenSecurityFindings(Entry, this));
     }
 
     /// <summary>Building the VM again from a chosen phase.</summary>

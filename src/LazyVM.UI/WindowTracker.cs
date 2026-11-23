@@ -4,13 +4,17 @@ namespace LazyVM.UI;
 
 /// <summary>
 /// Keeps one window per key: opening one that is open brings it to the front
-/// instead. What a window is, and how it is shown, brought to the front and
-/// closed, is the GUI's: it derives from this class, and tests derive a fake
-/// that makes no windows.
+/// instead. A window is shown for the window that opened it, and closes with
+/// it, so the windows form a tree (#531). What a window is, and how it is
+/// shown, brought to the front and closed, is the GUI's: it derives from this
+/// class, and tests derive a fake that makes no windows.
 /// </summary>
 public abstract class WindowTracker
 {
     private readonly Dictionary<string, ViewModelBase> _Open = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The windows each window opened, which close with it.</summary>
+    private readonly Dictionary<ViewModelBase, List<ViewModelBase>> _Opened = [];
 
     /// <summary>The view model of the window open for <paramref name="key"/>, left where it is; nothing when no window of that kind is open.</summary>
     public T? Find<T>(string key) where T : ViewModelBase
@@ -35,10 +39,17 @@ public abstract class WindowTracker
     /// <summary>
     /// Shows a new window for <paramref name="viewModel"/> under
     /// <paramref name="key"/>, and calls <paramref name="closed"/> when it closes.
+    /// It closes with the window of <paramref name="opener"/>, when it has one,
+    /// and the windows it opened close with it.
     /// </summary>
-    public void Track(string key, ViewModelBase viewModel, Action? closed = null)
+    public void Track(string key, ViewModelBase viewModel, Action? closed = null, ViewModelBase? opener = null)
     {
         _Open.Add(key, viewModel);
+        if (opener is not null)
+        {
+            _Opened.TryAdd(opener, []);
+            _Opened[opener].Add(viewModel);
+        }
         Show(viewModel, () =>
         {
             // Only this window's own entry: a newer window may have taken its key.
@@ -46,7 +57,19 @@ public abstract class WindowTracker
             {
                 _Open.Remove(key);
             }
+            if (opener is not null && _Opened.TryGetValue(opener, out var siblings))
+            {
+                siblings.Remove(viewModel);
+            }
             closed?.Invoke();
+            // Each of these is closed by the GUI, and so ends up here in turn.
+            if (_Opened.Remove(viewModel, out var children))
+            {
+                foreach (var child in children)
+                {
+                    CloseWindow(child);
+                }
+            }
         });
     }
 

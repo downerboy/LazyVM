@@ -23,10 +23,10 @@ public class ToolWindows(
     /// was in, in a pwsh process of its own, and shows its progress. Throws
     /// when it could not start.
     /// </summary>
-    public virtual async Task StartBuildAsync(Guid? vmId, BuildRequest request)
+    public virtual async Task StartBuildAsync(Guid? vmId, BuildRequest request, ViewModelBase? opener = null)
     {
         var build = await starter.StartAsync(request, CancellationToken.None);
-        OpenProgress(vmId, request.Name, build);
+        OpenProgress(vmId, request.Name, build, opener);
         changes.Raise();
     }
 
@@ -34,7 +34,7 @@ public class ToolWindows(
     /// Shows the VM's restore points, or brings its open window to the front,
     /// and returns the window's view model, so a refresh can reach it.
     /// </summary>
-    public RestoreViewModel OpenRestore(LazyVMDashboard entry)
+    public RestoreViewModel OpenRestore(LazyVMDashboard entry, ViewModelBase? opener = null)
     {
         var key = "restore:" + entry.Name;
         if (windows.Activate<RestoreViewModel>(key) is { } open)
@@ -42,7 +42,7 @@ public class ToolWindows(
             return open;
         }
         var restore = new RestoreViewModel(entry, runners.Restore, dialogs, changes);
-        windows.Track(key, restore);
+        windows.Track(key, restore, opener: opener);
         _ = restore.LoadAsync();
         return restore;
     }
@@ -51,7 +51,7 @@ public class ToolWindows(
     /// Shows the VM's recovery keys, or brings its open window to the front.
     /// Closing the window forgets every password it showed.
     /// </summary>
-    public RecoveryKeysViewModel OpenRecoveryKeys(LazyVMDashboard entry)
+    public RecoveryKeysViewModel OpenRecoveryKeys(LazyVMDashboard entry, ViewModelBase? opener = null)
     {
         var key = "recovery-keys:" + entry.Name;
         if (windows.Activate<RecoveryKeysViewModel>(key) is { } open)
@@ -59,13 +59,13 @@ public class ToolWindows(
             return open;
         }
         var keys = new RecoveryKeysViewModel(entry, runners.RecoveryKeys, dialogs, changes);
-        windows.Track(key, keys, keys.Forget);
+        windows.Track(key, keys, keys.Forget, opener);
         _ = keys.LoadAsync();
         return keys;
     }
 
     /// <summary>Shows the account LazyVM signs in to the VM with, or brings its open window to the front. Closing the window forgets the password.</summary>
-    public PasswordViewModel OpenPassword(LazyVMDashboard entry)
+    public PasswordViewModel OpenPassword(LazyVMDashboard entry, ViewModelBase? opener = null)
     {
         var key = "password:" + entry.Name;
         if (windows.Activate<PasswordViewModel>(key) is { } open)
@@ -73,7 +73,7 @@ public class ToolWindows(
             return open;
         }
         var password = new PasswordViewModel(entry, runners.Credentials, clipboard);
-        windows.Track(key, password, password.Forget);
+        windows.Track(key, password, password.Forget, opener);
         _ = password.LoadAsync();
         return password;
     }
@@ -83,7 +83,7 @@ public class ToolWindows(
     /// open window to the front, and returns the window's view model, so a
     /// refresh can reach it.
     /// </summary>
-    public SecurityFindingsViewModel OpenSecurityFindings(LazyVMDashboard entry)
+    public SecurityFindingsViewModel OpenSecurityFindings(LazyVMDashboard entry, ViewModelBase? opener = null)
     {
         var key = "security-findings:" + entry.Name;
         if (windows.Activate<SecurityFindingsViewModel>(key) is { } open)
@@ -91,20 +91,20 @@ public class ToolWindows(
             return open;
         }
         var findings = new SecurityFindingsViewModel(entry, runners.SecurityFindings, dialogs, changes);
-        windows.Track(key, findings);
+        windows.Track(key, findings, opener: opener);
         _ = findings.LoadAsync();
         return findings;
     }
 
     /// <summary>Shows the checks of the VM <paramref name="vmName"/>, or of the host, and runs them.</summary>
-    public void OpenChecks(Guid? vmId, string? vmName, bool hostOnly)
+    public void OpenChecks(Guid? vmId, string? vmName, bool hostOnly, ViewModelBase? opener = null)
     {
         if (windows.Activate<ChecksViewModel>(ChecksKey(vmName)) is not null)
         {
             return;
         }
         var checks = new ChecksViewModel(runners.Checks, vmId, vmName, hostOnly);
-        windows.Track(ChecksKey(vmName), checks);
+        windows.Track(ChecksKey(vmName), checks, opener: opener);
         _ = checks.RunAsync();
     }
 
@@ -118,7 +118,7 @@ public class ToolWindows(
     }
 
     /// <summary>Shows the VM's log and reads it.</summary>
-    public void OpenLog(Guid? vmId, string vmName)
+    public void OpenLog(Guid? vmId, string vmName, ViewModelBase? opener = null)
     {
         var key = "log:" + vmName;
         if (windows.Activate<LogViewModel>(key) is not null)
@@ -126,7 +126,7 @@ public class ToolWindows(
             return;
         }
         var log = new LogViewModel(runners.Log, vmId, vmName);
-        windows.Track(key, log);
+        windows.Track(key, log, opener: opener);
         _ = log.LoadAsync();
     }
 
@@ -138,7 +138,9 @@ public class ToolWindows(
             return;
         }
         // A new VM has no Hyper-V Id until its build creates it.
-        var build = new BuildViewModel(runners.Build, starter, existingNames, (name, started) => OpenProgress(null, name, started));
+        // Its builds' progress windows close with it; the builds go on.
+        BuildViewModel? build = null;
+        build = new BuildViewModel(runners.Build, starter, existingNames, (name, started) => OpenProgress(null, name, started, build));
         windows.Track(_BUILD_KEY, build);
         _ = build.LoadAsync();
     }
@@ -172,7 +174,7 @@ public class ToolWindows(
     /// the build the app has just started, or with none, of the build
     /// running now. Closing the window stops only the following.
     /// </summary>
-    public void OpenProgress(Guid? vmId, string vmName, StartedRun? started)
+    public void OpenProgress(Guid? vmId, string vmName, StartedRun? started, ViewModelBase? opener = null)
     {
         var key = "progress:" + vmName;
         if (windows.Find<BuildProgressViewModel>(key) is { } existing)
@@ -186,9 +188,9 @@ public class ToolWindows(
             windows.Close(key);
         }
         var progress = new BuildProgressViewModel(runners.Dashboard, runners.Build, vmId, vmName, started, clock,
-            phase => StartBuildAsync(vmId, new BuildRequest(vmName, null, null, phase)));
+            phase => StartBuildAsync(vmId, new BuildRequest(vmName, null, null, phase), opener));
         progress.Ended += (_, _) => changes.Raise();
-        windows.Track(key, progress, progress.StopFollowing);
+        windows.Track(key, progress, progress.StopFollowing, opener);
         _ = progress.FollowAsync();
     }
 

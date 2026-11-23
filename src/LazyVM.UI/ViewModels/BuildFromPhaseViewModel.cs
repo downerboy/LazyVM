@@ -10,15 +10,17 @@ public sealed class BuildFromPhaseViewModel : VMPartViewModel
 {
     private readonly LazyVMBuildRunner _Builds;
     private readonly ToolWindows _Tools;
+    private readonly ViewModelBase _Opener;
     private IReadOnlyList<PhaseOption> _Phases = [];
     private PhaseOption? _SelectedPhase;
     private int? _SuggestedPhase;
 
-    public BuildFromPhaseViewModel(VMRunGate gate, LazyVMBuildRunner builds, ToolWindows tools)
+    public BuildFromPhaseViewModel(VMRunGate gate, LazyVMBuildRunner builds, ToolWindows tools, ViewModelBase opener)
         : base(gate)
     {
         _Builds = builds;
         _Tools = tools;
+        _Opener = opener;
         _SuggestedPhase = CarryOnPhase(gate.Entry.LastBuild);
         BuildCommand = new RelayCommand(() => _ = BuildAsync(), () => Gate.CanStart && SelectedPhase is not null);
     }
@@ -118,7 +120,7 @@ public sealed class BuildFromPhaseViewModel : VMPartViewModel
         Status = $"Starting the build of {Name} from phase {phase.Number}";
         try
         {
-            await WorkAsync($"Starting the build from phase {phase.Number}", () => _Tools.StartBuildAsync(Gate.Entry.Id, new BuildRequest(Name, null, null, phase.Number)));
+            await WorkAsync($"Starting the build from phase {phase.Number}", () => _Tools.StartBuildAsync(Gate.Entry.Id, new BuildRequest(Name, null, null, phase.Number), _Opener));
             Status = $"The build of {Name} has started from phase {phase.Number}. Its progress is in its own window.";
         }
         catch (Exception exception)
