@@ -11,6 +11,7 @@ BeforeAll {
     $moduleDir = Join-Path -Path $TestDrive -ChildPath 'LazyVM'
     $null = New-Item -ItemType Directory -Path (Join-Path -Path $moduleDir -ChildPath 'Scripts')
     Copy-Item -LiteralPath $source -Destination (Join-Path -Path $moduleDir -ChildPath 'Scripts')
+    Copy-Item -LiteralPath (Join-Path -Path (Split-Path -Path $source -Parent) -ChildPath 'AppProcess.ps1') -Destination (Join-Path -Path $moduleDir -ChildPath 'Scripts')
     $script = Join-Path -Path $moduleDir -ChildPath 'Scripts\Start-AppBuild.ps1'
     $calls = Join-Path -Path $TestDrive -ChildPath 'calls.json'
     $modulePathFile = Join-Path -Path $TestDrive -ChildPath 'module-path.txt'

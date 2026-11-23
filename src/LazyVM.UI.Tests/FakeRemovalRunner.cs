@@ -1,7 +1,7 @@
 namespace LazyVM.UI.Tests;
 
 /// <summary>Get-LazyVMRemovalPlan and Remove-LazyVM, answered from memory.</summary>
-internal sealed class FakeRemovalRunner() : LazyVMRemovalRunner(UnusedSessions.Factory)
+internal sealed class FakeRemovalRunner() : LazyVMRemovalRunner(UnusedSessions.Factory, new RemovalLauncher())
 {
     private readonly Answers<RemovalPlan> _RemovalPlans = new();
 

@@ -172,7 +172,7 @@ public class ToolWindows(
     /// the build the app has just started, or with none, of the build
     /// running now. Closing the window stops only the following.
     /// </summary>
-    public void OpenProgress(Guid? vmId, string vmName, StartedBuild? started)
+    public void OpenProgress(Guid? vmId, string vmName, StartedRun? started)
     {
         var key = "progress:" + vmName;
         if (windows.Find<BuildProgressViewModel>(key) is { } existing)

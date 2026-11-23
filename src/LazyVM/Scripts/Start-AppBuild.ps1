@@ -43,39 +43,13 @@ param(
     [Parameter(Mandatory)][string]$ResultPath
 )
 
-Set-StrictMode -Version 3.0
-$ErrorActionPreference = 'Stop'
-
-$result = [ordered]@{ Outcome = 'Failed'; ErrorId = $null; Message = $null }
-$exitCode = 1
-try {
-    # The build runs elevated, so a module the user could change, such as
-    # one in Documents\PowerShell\Modules, must never load into it: only
-    # folders administrators control, as in the app itself.
-    $env:PSModulePath = @(
-        Join-Path -Path ([Environment]::GetFolderPath('ProgramFiles')) -ChildPath 'LazyVM\Modules'
-        Join-Path -Path ([Environment]::GetFolderPath('Windows')) -ChildPath 'System32\WindowsPowerShell\v1.0\Modules'
-        Join-Path -Path $PSHOME -ChildPath 'Modules'
-    ) -join [IO.Path]::PathSeparator
-    # By full path, from the folder this script ships in, never through PSModulePath.
-    Import-Module -Name (Join-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -ChildPath 'LazyVM.psd1') -Force
-    $build = @{ Name = $Name }
-    if ($ConfigTemplate) { $build.ConfigTemplate = $ConfigTemplate }
-    if ($UserName) { $build.UserName = $UserName }
-    if ($PSBoundParameters.ContainsKey('FromPhase')) { $build.FromPhase = $FromPhase }
-    Build-LazyVM @build
-    $result.Outcome = 'Completed'
-    $exitCode = 0
+. (Join-Path -Path $PSScriptRoot -ChildPath 'AppProcess.ps1')
+$build = @{ Name = $Name }
+if ($ConfigTemplate) { $build.ConfigTemplate = $ConfigTemplate }
+if ($UserName) { $build.UserName = $UserName }
+if ($PSBoundParameters.ContainsKey('FromPhase')) { $build.FromPhase = $FromPhase }
+$work = {
+    param($Parameters)
+    Build-LazyVM @Parameters
 }
-catch {
-    $result.ErrorId = ($_.FullyQualifiedErrorId -split ',')[0]
-    $result.Message = $_.Exception.Message
-    if ($result.ErrorId -eq 'LazyVM.RunStopped') {
-        $result.Outcome = 'Stopped'
-        $exitCode = 2
-    }
-}
-finally {
-    [IO.File]::WriteAllText($ResultPath, ($result | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
-}
-exit $exitCode
+exit (Invoke-AppProcess -ResultPath $ResultPath -Work $work -ArgumentList $build)

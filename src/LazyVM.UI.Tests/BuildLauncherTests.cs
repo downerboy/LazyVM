@@ -59,7 +59,7 @@ public sealed class BuildLauncherTests
     {
         var root = ProgramFiles(@"PowerShell\7", $@"WindowsApps\Microsoft.PowerShell_7.7.0.0_{Arch}__8wekyb3d8bbwe");
 
-        Assert.Equal(Path.Combine(root, "PowerShell", "7", "pwsh.exe"), BuildLauncher.FindPwsh(root));
+        Assert.Equal(Path.Combine(root, "PowerShell", "7", "pwsh.exe"), AppProcessLauncher.FindPwsh(root));
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public sealed class BuildLauncherTests
 
         Assert.Equal(
             Path.Combine(root, "WindowsApps", $"Microsoft.PowerShell-LTS_7.6.10.0_{Arch}__8wekyb3d8bbwe", "pwsh.exe"),
-            BuildLauncher.FindPwsh(root));
+            AppProcessLauncher.FindPwsh(root));
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public sealed class BuildLauncherTests
     {
         var root = ProgramFiles($@"WindowsApps\Microsoft.PowerShell_7.6.10.0_{Arch}__notmicrosoft1");
 
-        Assert.Null(BuildLauncher.FindPwsh(root));
+        Assert.Null(AppProcessLauncher.FindPwsh(root));
     }
 
     [Fact]
@@ -89,27 +89,54 @@ public sealed class BuildLauncherTests
     {
         var root = ProgramFiles($@"WindowsApps\Microsoft.PowerShell_7.5.4.0_{Arch}__8wekyb3d8bbwe");
 
-        Assert.Null(BuildLauncher.FindPwsh(root));
+        Assert.Null(AppProcessLauncher.FindPwsh(root));
     }
 
     [Fact]
     public void FindPwsh_WithNoPowerShell_FindsNothing()
     {
-        Assert.Null(BuildLauncher.FindPwsh(Path.Combine(Path.GetTempPath(), "LazyVM-tests-" + Guid.NewGuid().ToString("N"))));
+        Assert.Null(AppProcessLauncher.FindPwsh(Path.Combine(Path.GetTempPath(), "LazyVM-tests-" + Guid.NewGuid().ToString("N"))));
     }
 
     [Fact]
     public void ScriptPath_IsInTheModulesScriptsFolder()
     {
-        Assert.Equal(@"C:\M\LazyVM\6.20.0\Scripts\Start-AppBuild.ps1", BuildLauncher.ScriptPath(@"C:\M\LazyVM\6.20.0"));
+        Assert.Equal(@"C:\M\LazyVM\6.20.0\Scripts\Start-AppBuild.ps1", AppProcessLauncher.ScriptPath(@"C:\M\LazyVM\6.20.0", BuildLauncher.SCRIPT));
+    }
+
+    [Fact]
+    public void ADeleteAndARestore_HaveAScriptEach_NextToTheBuildsInTheModulesScriptsFolder()
+    {
+        Assert.Equal(@"C:\M\LazyVM\Scripts\Start-AppRemove.ps1", AppProcessLauncher.ScriptPath(@"C:\M\LazyVM", RemovalLauncher.SCRIPT));
+        Assert.Equal(@"C:\M\LazyVM\Scripts\Start-AppRestore.ps1", AppProcessLauncher.ScriptPath(@"C:\M\LazyVM", RestoreLauncher.SCRIPT));
+    }
+
+    [Fact]
+    public void Arguments_OfADelete_GiveTheNameOnly_EachValueItsOwnItem()
+    {
+        var arguments = RemovalLauncher.Arguments(new RemovalRequest("Dev Box'; calc"), "script.ps1", "result.json");
+
+        Assert.Equal(
+            ["-NoProfile", "-NonInteractive", "-File", "script.ps1", "-Name", "Dev Box'; calc", "-ResultPath", "result.json"],
+            arguments);
+    }
+
+    [Fact]
+    public void Arguments_OfARestore_GiveTheNameAndTheRestorePoint_EachValueItsOwnItem()
+    {
+        var arguments = RestoreLauncher.Arguments(new RestoreRequest("DevBox", "20261008-193000"), "script.ps1", "result.json");
+
+        Assert.Equal(
+            ["-NoProfile", "-NonInteractive", "-File", "script.ps1", "-Name", "DevBox", "-RestorePoint", "20261008-193000", "-ResultPath", "result.json"],
+            arguments);
     }
 
     [Fact]
     public void ReadResult_ReadsWhatTheScriptWrote()
     {
-        var result = BuildLauncher.ReadResult("""{"Outcome":"Stopped","ErrorId":"LazyVM.RunStopped","Message":"Stopped in phase 7."}""", 2);
+        var result = AppProcessLauncher.ReadResult("""{"Outcome":"Stopped","ErrorId":"LazyVM.RunStopped","Message":"Stopped in phase 7."}""", 2);
 
-        Assert.Equal(new BuildResult(BuildResult.STOPPED, "LazyVM.RunStopped", "Stopped in phase 7."), result);
+        Assert.Equal(new RunResult(RunResult.STOPPED, "LazyVM.RunStopped", "Stopped in phase 7."), result);
     }
 
     [Theory]
@@ -118,9 +145,9 @@ public sealed class BuildLauncherTests
     [InlineData("not json")]
     public void ReadResult_WithoutAResult_SaysTheExitCode(string? json)
     {
-        var result = BuildLauncher.ReadResult(json, 1);
+        var result = AppProcessLauncher.ReadResult(json, 1);
 
-        Assert.Equal(BuildResult.FAILED, result.Outcome);
-        Assert.Equal("PowerShell ended with exit code 1 before saying how the build went.", result.Message);
+        Assert.Equal(RunResult.FAILED, result.Outcome);
+        Assert.Equal("PowerShell ended with exit code 1 before saying how it went.", result.Message);
     }
 }

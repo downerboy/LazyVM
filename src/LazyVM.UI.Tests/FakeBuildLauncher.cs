@@ -7,7 +7,7 @@ internal sealed class FakeBuildLauncher : BuildLauncher
 {
     public List<(BuildRequest Request, string ModuleFolder)> Started { get; } = [];
 
-    public TaskCompletionSource<BuildResult> Ending { get; private set; } = new();
+    public TaskCompletionSource<RunResult> Ending { get; private set; } = new();
 
     public Exception? Fails
     {
@@ -16,7 +16,7 @@ internal sealed class FakeBuildLauncher : BuildLauncher
 
     public int ProcessId { get; set; } = 4242;
 
-    public override StartedBuild Start(BuildRequest request, string moduleFolder)
+    public override StartedRun Start(BuildRequest request, string moduleFolder)
     {
         if (Fails is { } failure)
         {
@@ -24,6 +24,6 @@ internal sealed class FakeBuildLauncher : BuildLauncher
         }
         Started.Add((request, moduleFolder));
         Ending = new();
-        return new StartedBuild(ProcessId, Ending.Task);
+        return new StartedRun(ProcessId, Ending.Task);
     }
 }

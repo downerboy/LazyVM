@@ -1,7 +1,7 @@
 namespace LazyVM.UI.Tests;
 
 /// <summary>Get-LazyVMRestorePoint and Restore-LazyVMTooling, answered from memory.</summary>
-internal sealed class FakeRestoreRunner() : LazyVMRestoreRunner(UnusedSessions.Factory)
+internal sealed class FakeRestoreRunner() : LazyVMRestoreRunner(UnusedSessions.Factory, new RestoreLauncher())
 {
     private readonly Answers<VMRestorePoint> _RestorePoints = new();
 

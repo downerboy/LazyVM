@@ -22,7 +22,7 @@ public partial class App : Application
         });
 
         _Sessions = new PowerShellSessionFactory();
-        var runners = Runners.On(_Sessions);
+        var runners = Runners.On(_Sessions, new RemovalLauncher(), new RestoreLauncher());
         var clipboard = _Clipboard = new WpfSecretClipboard(TimeProvider.System);
         var changes = new ListChanges();
         var starter = new BuildStarter(runners.Build, new BuildLauncher());

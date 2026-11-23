@@ -15,7 +15,7 @@ public sealed partial class BuildViewModel : ViewModelBase
     private readonly LazyVMBuildRunner _Runner;
     private readonly BuildStarter _Starter;
     private readonly IReadOnlySet<string> _ExistingNames;
-    private readonly Action<string, StartedBuild> _BuildStarted;
+    private readonly Action<string, StartedRun> _BuildStarted;
     private readonly RelayCommand _BuildCommand;
     private IReadOnlyList<TemplateOption> _Templates = [];
     private TemplateOption? _SelectedTemplate;
@@ -26,7 +26,7 @@ public sealed partial class BuildViewModel : ViewModelBase
 
     /// <param name="existingNames">The VMs there are already: a new VM needs a name of its own.</param>
     /// <param name="buildStarted">Called with the VM's name and its build once the build has started.</param>
-    public BuildViewModel(LazyVMBuildRunner runner, BuildStarter starter, IEnumerable<string> existingNames, Action<string, StartedBuild> buildStarted)
+    public BuildViewModel(LazyVMBuildRunner runner, BuildStarter starter, IEnumerable<string> existingNames, Action<string, StartedRun> buildStarted)
     {
         _Runner = runner;
         _Starter = starter;

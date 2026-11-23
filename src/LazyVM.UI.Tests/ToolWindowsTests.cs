@@ -148,7 +148,7 @@ public sealed class ToolWindowsTests
         Assert.True(ended.IsFinished);
         _Runners.Dashboard.ReturnsRun(null);
 
-        _Tools.OpenProgress(null, "DevBox", new StartedBuild(4242, new TaskCompletionSource<BuildResult>().Task));
+        _Tools.OpenProgress(null, "DevBox", new StartedRun(4242, new TaskCompletionSource<RunResult>().Task));
 
         Assert.Same(ended, Assert.Single(_Tools.Windows.Closed));
         Assert.Equal(2, _Tools.Windows.Shown.Count);
