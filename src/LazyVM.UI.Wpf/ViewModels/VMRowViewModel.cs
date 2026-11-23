@@ -7,6 +7,9 @@ public sealed class VMRowViewModel(LazyVMDashboard entry) : ViewModelBase
 
     public string Name => Entry.Name;
 
+    /// <summary>The VM's Hyper-V Id; empty for a VM not built yet.</summary>
+    public Guid? Id => Entry.Id;
+
     public string State => Entry.State;
 
     /// <summary>True while a build of the VM runs.</summary>

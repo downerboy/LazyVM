@@ -11,7 +11,8 @@ public sealed class LogViewModel : ViewModelBase
     /// <summary>How many of the newest entries are read: a log grows for as long as the VM lives.</summary>
     public const int TAIL = 1000;
 
-    private readonly PowerShellCommandRunner _Runner;
+    private readonly LazyVMLogRunner _Runner;
+    private readonly Guid? _VMId;
     private readonly RelayCommand _ReloadCommand;
     private readonly RelayCommand _NextProblemCommand;
     private readonly RelayCommand _PreviousProblemCommand;
@@ -20,9 +21,11 @@ public sealed class LogViewModel : ViewModelBase
     private string _Status = string.Empty;
     private bool _IsLoading;
 
-    public LogViewModel(PowerShellCommandRunner runner, string vmName)
+    /// <param name="vmId">The VM's Hyper-V Id; empty for a VM not built yet.</param>
+    public LogViewModel(LazyVMLogRunner runner, Guid? vmId, string vmName)
     {
         _Runner = runner;
+        _VMId = vmId;
         VMName = vmName;
         _ReloadCommand = new RelayCommand(() => _ = LoadAsync(), () => !IsLoading);
         _NextProblemCommand = new RelayCommand(() => JumpToProblem(1), () => Entries.Count > 0);
@@ -99,7 +102,7 @@ public sealed class LogViewModel : ViewModelBase
         Status = "Reading the log";
         try
         {
-            var read = await WorkAsync("Reading the log", () => _Runner.GetLazyVMLogAsync(VMName, TAIL, CancellationToken.None));
+            var read = await WorkAsync("Reading the log", () => _Runner.GetLazyVMLogAsync(_VMId, VMName, TAIL, CancellationToken.None));
             Entries = read.Select(entry => new LogEntryRowViewModel(entry)).ToList();
             Status = Summary(Entries);
             SelectedEntry = Entries.Count > 0 ? Entries[^1] : null;

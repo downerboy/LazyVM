@@ -4,13 +4,13 @@ namespace LazyVM.UI.Wpf.Tests;
 
 public sealed class ChecksViewModelTests
 {
-    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeRunners _Runners = new();
 
     [Fact]
     public async Task Run_IsWorkingWhileTheChecksRun()
     {
-        _Runner.ReturnsChecks();
-        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+        _Runners.Checks.ReturnsChecks();
+        var checks = new ChecksViewModel(_Runners.Checks, null, null, hostOnly: true);
         var watcher = new WorkWatcher(checks);
 
         await checks.RunAsync();
@@ -21,8 +21,8 @@ public sealed class ChecksViewModelTests
     [Fact]
     public async Task Run_ThatIsCancelled_IsNoLongerWorking()
     {
-        _Runner.ChecksWaitForCancel();
-        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+        _Runners.Checks.ChecksWaitForCancel();
+        var checks = new ChecksViewModel(_Runners.Checks, null, null, hostOnly: true);
 
         var running = checks.RunAsync();
         Assert.True(checks.IsWorking);
@@ -35,7 +35,7 @@ public sealed class ChecksViewModelTests
     [Fact]
     public void Title_OfTheHostChecks_SaysHost()
     {
-        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+        var checks = new ChecksViewModel(_Runners.Checks, null, null, hostOnly: true);
 
         Assert.Equal("Host checks - LazyVM", checks.Title);
         Assert.Equal("Checks of this host", checks.Heading);
@@ -44,7 +44,7 @@ public sealed class ChecksViewModelTests
     [Fact]
     public void Title_OfAVMsChecks_NamesTheVM()
     {
-        var checks = new ChecksViewModel(_Runner, "DevBox", hostOnly: false);
+        var checks = new ChecksViewModel(_Runners.Checks, null, "DevBox", hostOnly: false);
 
         Assert.Equal("DevBox checks - LazyVM", checks.Title);
         Assert.Equal("Checks of DevBox", checks.Heading);
@@ -53,20 +53,20 @@ public sealed class ChecksViewModelTests
     [Fact]
     public async Task Run_PassesTheVMAndHostOnlyAsTheyAre()
     {
-        _Runner.ReturnsChecks(Sample.Check());
-        _Runner.ReturnsChecks(Sample.Check());
+        _Runners.Checks.ReturnsChecks(Sample.Check());
+        _Runners.Checks.ReturnsChecks(Sample.Check());
 
-        await new ChecksViewModel(_Runner, null, hostOnly: true).RunAsync();
-        await new ChecksViewModel(_Runner, "DevBox", hostOnly: false).RunAsync();
+        await new ChecksViewModel(_Runners.Checks, null, null, hostOnly: true).RunAsync();
+        await new ChecksViewModel(_Runners.Checks, null, "DevBox", hostOnly: false).RunAsync();
 
-        Assert.Equal([(null, true), ("DevBox", false)], _Runner.CheckCalls);
+        Assert.Equal([(null, true), ("DevBox", false)], _Runners.Checks.CheckCalls);
     }
 
     [Fact]
     public async Task Run_ShowsOneRowPerCheck_InTheOrderTheyCame()
     {
-        _Runner.ReturnsChecks(Sample.Check(check: "LazyVM folder"), Sample.Check(check: "Folder access"), Sample.Check(check: "OneDrive"));
-        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+        _Runners.Checks.ReturnsChecks(Sample.Check(check: "LazyVM folder"), Sample.Check(check: "Folder access"), Sample.Check(check: "OneDrive"));
+        var checks = new ChecksViewModel(_Runners.Checks, null, null, hostOnly: true);
 
         await checks.RunAsync();
 
@@ -76,13 +76,13 @@ public sealed class ChecksViewModelTests
     [Fact]
     public async Task Run_SaysHowManyFailedAndWarned()
     {
-        _Runner.ReturnsChecks(
+        _Runners.Checks.ReturnsChecks(
             Sample.Check(VMCheck.FAILED),
             Sample.Check(VMCheck.WARNING),
             Sample.Check(VMCheck.WARNING),
             Sample.Check(VMCheck.INFO),
             Sample.Check(VMCheck.OK));
-        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+        var checks = new ChecksViewModel(_Runners.Checks, null, null, hostOnly: true);
 
         await checks.RunAsync();
 
@@ -93,8 +93,8 @@ public sealed class ChecksViewModelTests
     [Fact]
     public async Task Run_WithNothingWrong_SaysSo()
     {
-        _Runner.ReturnsChecks(Sample.Check(VMCheck.OK), Sample.Check(VMCheck.INFO));
-        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+        _Runners.Checks.ReturnsChecks(Sample.Check(VMCheck.OK), Sample.Check(VMCheck.INFO));
+        var checks = new ChecksViewModel(_Runners.Checks, null, null, hostOnly: true);
 
         await checks.RunAsync();
 
@@ -105,8 +105,8 @@ public sealed class ChecksViewModelTests
     [Fact]
     public async Task Run_WhenTheChecksCannotRun_SaysWhy()
     {
-        _Runner.ChecksThrow(new InvalidOperationException("The LazyVM folder was not found."));
-        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+        _Runners.Checks.ChecksThrow(new InvalidOperationException("The LazyVM folder was not found."));
+        var checks = new ChecksViewModel(_Runners.Checks, null, null, hostOnly: true);
 
         await checks.RunAsync();
 
@@ -118,8 +118,8 @@ public sealed class ChecksViewModelTests
     [Fact]
     public async Task Cancel_StopsTheChecksAndSaysSo()
     {
-        _Runner.ChecksWaitForCancel();
-        var checks = new ChecksViewModel(_Runner, "DevBox", hostOnly: false);
+        _Runners.Checks.ChecksWaitForCancel();
+        var checks = new ChecksViewModel(_Runners.Checks, null, "DevBox", hostOnly: false);
 
         var run = checks.RunAsync();
         Assert.True(checks.IsRunning);
@@ -135,8 +135,8 @@ public sealed class ChecksViewModelTests
     [Fact]
     public async Task Row_ReadsStatusCheckDetailAndFix()
     {
-        _Runner.ReturnsChecks(Sample.Check(VMCheck.FAILED, "Folder access", "others can change it", "Lock it with: Set-LazyVMRoot -Path C:\\LazyVM"));
-        var checks = new ChecksViewModel(_Runner, null, hostOnly: true);
+        _Runners.Checks.ReturnsChecks(Sample.Check(VMCheck.FAILED, "Folder access", "others can change it", "Lock it with: Set-LazyVMRoot -Path C:\\LazyVM"));
+        var checks = new ChecksViewModel(_Runners.Checks, null, null, hostOnly: true);
 
         await checks.RunAsync();
 

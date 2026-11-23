@@ -9,12 +9,12 @@ public sealed class RestoreViewModelTests : IDisposable
     private static readonly VMRestorePoint _NoList = new("20260901-120000", new DateTime(2026, 9, 1, 12, 0, 0), HasToolingList: false);
 
     private readonly CultureScope _Culture = new("en-GB");
-    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeRunners _Runners = new();
     private readonly FakeToolWindows _Tools;
 
     public RestoreViewModelTests()
     {
-        _Tools = new FakeToolWindows(_Runner);
+        _Tools = new FakeToolWindows(_Runners);
     }
 
     public void Dispose()
@@ -24,7 +24,7 @@ public sealed class RestoreViewModelTests : IDisposable
 
     private async Task<RestoreViewModel> Loaded(LazyVMDashboard? entry = null, params VMRestorePoint[] points)
     {
-        _Runner.ReturnsRestorePoints(points);
+        _Runners.Restore.ReturnsRestorePoints(points);
         var restore = new RestoreViewModel(entry ?? Sample.VM(), _Tools);
         await restore.LoadAsync();
         return restore;
@@ -42,7 +42,7 @@ public sealed class RestoreViewModelTests : IDisposable
             "1 September 2026 12:00, restore point 20260901-120000, tooling list missing, so it cannot be restored",
         ], restore.Points.Select(point => point.Text));
         Assert.Same(restore.Points[0], restore.SelectedPoint);
-        Assert.Equal(["DevBox"], _Runner.RestorePointCalls);
+        Assert.Equal(["DevBox"], _Runners.Restore.RestorePointCalls);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class RestoreViewModelTests : IDisposable
     [Fact]
     public async Task WhenThePointsCannotBeRead_TheWindowSaysWhy()
     {
-        _Runner.RestorePointsThrow(new InvalidOperationException("Hyper-V is not running."));
+        _Runners.Restore.RestorePointsThrow(new InvalidOperationException("Hyper-V is not running."));
         var restore = new RestoreViewModel(Sample.VM(), _Tools);
 
         await restore.LoadAsync();
@@ -95,13 +95,13 @@ public sealed class RestoreViewModelTests : IDisposable
     [Fact]
     public async Task LoadAndRestore_AreWorkingWhileThePointsAreReadAndTheVMIsRestored()
     {
-        _Runner.ReturnsRestorePoints(_October);
+        _Runners.Restore.ReturnsRestorePoints(_October);
         var restore = new RestoreViewModel(Sample.VM(), _Tools);
         var watcher = new WorkWatcher(restore);
         await restore.LoadAsync();
         restore.SelectedPoint = restore.Points[0];
         _Tools.ConfirmsRestore = true;
-        _Runner.ReturnsRestorePoints(_October);
+        _Runners.Restore.ReturnsRestorePoints(_October);
 
         await restore.RestoreAsync();
 
@@ -116,7 +116,7 @@ public sealed class RestoreViewModelTests : IDisposable
         var restore = await Loaded(null, _October, _November);
         restore.SelectedPoint = restore.Points[1];
         _Tools.ConfirmsRestore = true;
-        _Runner.ReturnsRestorePoints(_October, _November, new("20261118-090000", new DateTime(2026, 11, 18, 9, 0, 0), true));
+        _Runners.Restore.ReturnsRestorePoints(_October, _November, new("20261118-090000", new DateTime(2026, 11, 18, 9, 0, 0), true));
         var listChanged = 0;
         _Tools.ToolingRestored += (_, _) => listChanged++;
 
@@ -125,7 +125,7 @@ public sealed class RestoreViewModelTests : IDisposable
         Assert.Equal(
             "Do you really want to restore DevBox to 8 October 2026 19:30? All of its disks go back to then, including the Dev Drive, the SQL data disk and the User disk, so code not yet pushed, database changes and files in your personal folders changed since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.",
             Assert.Single(_Tools.RestoreQuestions));
-        Assert.Equal([("DevBox", "20261008-193000")], _Runner.RestoreCalls);
+        Assert.Equal([("DevBox", "20261008-193000")], _Runners.Restore.RestoreCalls);
         Assert.Equal(1, listChanged);
         Assert.Equal("DevBox is back at 8 October 2026 19:30. A restore point of how it was just before was taken, so this can be undone.", restore.Status);
         Assert.Equal(3, restore.Points.Count);
@@ -141,7 +141,7 @@ public sealed class RestoreViewModelTests : IDisposable
         await restore.RestoreAsync();
 
         Assert.Single(_Tools.RestoreQuestions);
-        Assert.Empty(_Runner.RestoreCalls);
+        Assert.Empty(_Runners.Restore.RestoreCalls);
         Assert.Equal("DevBox was not restored.", restore.Status);
     }
 
@@ -150,8 +150,8 @@ public sealed class RestoreViewModelTests : IDisposable
     {
         var restore = await Loaded(null, _October);
         _Tools.ConfirmsRestore = true;
-        _Runner.RestoreFails = new InvalidOperationException("A build of DevBox is running now.");
-        _Runner.ReturnsRestorePoints(_October);
+        _Runners.Restore.RestoreFails = new InvalidOperationException("A build of DevBox is running now.");
+        _Runners.Restore.ReturnsRestorePoints(_October);
         var listChanged = 0;
         _Tools.ToolingRestored += (_, _) => listChanged++;
 
@@ -159,7 +159,7 @@ public sealed class RestoreViewModelTests : IDisposable
 
         Assert.Equal("The restore did not finish: A build of DevBox is running now.", restore.Status);
         Assert.Equal(1, listChanged);
-        Assert.Equal(2, _Runner.RestorePointCalls.Count);
+        Assert.Equal(2, _Runners.Restore.RestorePointCalls.Count);
     }
 
     [Fact]
@@ -211,17 +211,17 @@ public sealed class RestoreViewModelTests : IDisposable
     {
         var restore = await Loaded(null, _October);
         _Tools.ConfirmsRestore = true;
-        _Runner.RestoreGate = new TaskCompletionSource();
-        _Runner.ReturnsRestorePoints(_October);
+        _Runners.Restore.RestoreGate = new TaskCompletionSource();
+        _Runners.Restore.ReturnsRestorePoints(_October);
 
         var restoring = restore.RestoreAsync();
 
         Assert.True(restore.IsRestoring);
         Assert.Equal("Restoring DevBox to 8 October 2026 19:30", restore.Status);
         Assert.False(restore.RestoreCommand.CanExecute(null));
-        _Runner.RestoreGate.SetResult();
+        _Runners.Restore.RestoreGate.SetResult();
         await restoring;
-        Assert.Single(_Runner.RestoreCalls);
+        Assert.Single(_Runners.Restore.RestoreCalls);
     }
 
     [Fact]

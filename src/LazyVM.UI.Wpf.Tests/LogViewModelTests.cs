@@ -5,18 +5,18 @@ namespace LazyVM.UI.Wpf.Tests;
 public sealed class LogViewModelTests : IDisposable
 {
     private readonly CultureScope _Culture = new("en-GB");
-    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeRunners _Runners = new();
     private readonly LogViewModel _Log;
 
     public LogViewModelTests()
     {
-        _Log = new LogViewModel(_Runner, "DevBox");
+        _Log = new LogViewModel(_Runners.Log, null, "DevBox");
     }
 
     [Fact]
     public async Task Load_IsWorkingWhileTheLogIsRead()
     {
-        _Runner.ReturnsLog();
+        _Runners.Log.ReturnsLog();
         var watcher = new WorkWatcher(_Log);
 
         await _Log.LoadAsync();
@@ -39,17 +39,17 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task Load_AsksForTheVMsLastEntriesOnly()
     {
-        _Runner.ReturnsLog();
+        _Runners.Log.ReturnsLog();
 
         await _Log.LoadAsync();
 
-        Assert.Equal([("DevBox", LogViewModel.TAIL)], _Runner.LogCalls);
+        Assert.Equal([("DevBox", LogViewModel.TAIL)], _Runners.Log.LogCalls);
     }
 
     [Fact]
     public async Task Load_ShowsTheEntriesOldestFirst_AndSelectsTheNewest()
     {
-        _Runner.ReturnsLog(Sample.Log("Phase", "Build", 1), Sample.Log("Info", "Copying the ISO", 2), Sample.Log("OK", "Done", 3));
+        _Runners.Log.ReturnsLog(Sample.Log("Phase", "Build", 1), Sample.Log("Info", "Copying the ISO", 2), Sample.Log("OK", "Done", 3));
 
         await _Log.LoadAsync();
 
@@ -60,7 +60,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task Load_SaysHowManyEntriesWarningsAndErrors()
     {
-        _Runner.ReturnsLog(
+        _Runners.Log.ReturnsLog(
             Sample.Log("Info", "a"), Sample.Log("Error", "b"), Sample.Log("Warning", "c"),
             Sample.Log("Warning", "d"), Sample.Log("Error", "e"), Sample.Log("Error", "f"));
 
@@ -72,7 +72,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task Load_OfAQuietLog_SaysThereAreNoWarningsOrErrors()
     {
-        _Runner.ReturnsLog(Sample.Log("Info", "a"));
+        _Runners.Log.ReturnsLog(Sample.Log("Info", "a"));
 
         await _Log.LoadAsync();
 
@@ -82,7 +82,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task Load_BeforeThereIsALog_SaysSo()
     {
-        _Runner.ReturnsLog();
+        _Runners.Log.ReturnsLog();
 
         await _Log.LoadAsync();
 
@@ -94,7 +94,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task Load_OfAFullTail_SaysOnlyTheLastAreShown()
     {
-        _Runner.ReturnsLog([.. Enumerable.Range(0, LogViewModel.TAIL).Select(_ => Sample.Log("Info", "a"))]);
+        _Runners.Log.ReturnsLog([.. Enumerable.Range(0, LogViewModel.TAIL).Select(_ => Sample.Log("Info", "a"))]);
 
         await _Log.LoadAsync();
 
@@ -104,7 +104,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task Load_WhenTheLogCannotBeRead_SaysWhy()
     {
-        _Runner.LogThrows(new InvalidOperationException("Access to the path is denied."));
+        _Runners.Log.LogThrows(new InvalidOperationException("Access to the path is denied."));
 
         await _Log.LoadAsync();
 
@@ -114,7 +114,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task Entry_IsReadAsLevelTimeAndMessage()
     {
-        _Runner.ReturnsLog(Sample.Log("Error", "Windows Update failed", 10));
+        _Runners.Log.ReturnsLog(Sample.Log("Error", "Windows Update failed", 10));
 
         await _Log.LoadAsync();
 
@@ -127,7 +127,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task PreviousProblem_FromTheNewest_JumpsToTheLastWarningOrError()
     {
-        _Runner.ReturnsLog(Sample.Log("Error", "a"), Sample.Log("Info", "b"), Sample.Log("Warning", "c"), Sample.Log("Info", "d"));
+        _Runners.Log.ReturnsLog(Sample.Log("Error", "a"), Sample.Log("Info", "b"), Sample.Log("Warning", "c"), Sample.Log("Info", "d"));
         await _Log.LoadAsync();
         LogEntryRowViewModel? jumpedTo = null;
         _Log.JumpedTo += entry => jumpedTo = entry;
@@ -141,7 +141,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task NextProblem_SkipsEntriesThatAreNotWarningsOrErrors()
     {
-        _Runner.ReturnsLog(Sample.Log("Info", "a"), Sample.Log("OK", "b"), Sample.Log("Phase", "c"), Sample.Log("Error", "d"), Sample.Log("Info", "e"));
+        _Runners.Log.ReturnsLog(Sample.Log("Info", "a"), Sample.Log("OK", "b"), Sample.Log("Phase", "c"), Sample.Log("Error", "d"), Sample.Log("Info", "e"));
         await _Log.LoadAsync();
         _Log.SelectedEntry = _Log.Entries[0];
 
@@ -153,7 +153,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task NextProblem_WithNoneLeft_StaysAndSaysSo()
     {
-        _Runner.ReturnsLog(Sample.Log("Error", "a"), Sample.Log("Info", "b"));
+        _Runners.Log.ReturnsLog(Sample.Log("Error", "a"), Sample.Log("Info", "b"));
         await _Log.LoadAsync();
 
         _Log.NextProblemCommand.Execute(null);
@@ -165,7 +165,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task PreviousProblem_WithNoneBefore_StaysAndSaysSo()
     {
-        _Runner.ReturnsLog(Sample.Log("Info", "a"), Sample.Log("Error", "b"));
+        _Runners.Log.ReturnsLog(Sample.Log("Info", "a"), Sample.Log("Error", "b"));
         await _Log.LoadAsync();
         _Log.SelectedEntry = _Log.Entries[0];
 
@@ -178,7 +178,7 @@ public sealed class LogViewModelTests : IDisposable
     [Fact]
     public async Task NextProblem_WithNothingSelected_StartsAtTheTop()
     {
-        _Runner.ReturnsLog(Sample.Log("Warning", "a"), Sample.Log("Info", "b"));
+        _Runners.Log.ReturnsLog(Sample.Log("Warning", "a"), Sample.Log("Info", "b"));
         await _Log.LoadAsync();
         _Log.SelectedEntry = null;
 

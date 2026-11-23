@@ -6,13 +6,13 @@ using System.Windows;
 
 namespace LazyVM.UI.Wpf;
 
-/// <summary>Starts the app: picks the theme, 
-/// makes the command runner and opens the main 
+/// <summary>Starts the app: picks the theme,
+/// makes the PowerShell sessions and the runners, and opens the main
 /// window.
 /// </summary>
 public partial class App : Application
 {
-    private PowerShellCommandRunner? _Runner;
+    private PowerShellSessionFactory? _Sessions;
     private ToolWindows? _Tools;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -23,9 +23,10 @@ public partial class App : Application
             Source = new Uri($"Themes/{ThemeName()}.xaml", UriKind.Relative),
         });
 
-        _Runner = new PowerShellCommandRunner();
-        var tools = _Tools = new ToolWindows(_Runner, new BuildLauncher(), TimeProvider.System);
-        var main = new MainViewModel(_Runner, new VMWindowManager(tools), tools, TimeProvider.System);
+        _Sessions = new PowerShellSessionFactory();
+        var runners = Runners.On(_Sessions);
+        var tools = _Tools = new ToolWindows(runners, new BuildLauncher(), TimeProvider.System);
+        var main = new MainViewModel(runners.Dashboard, runners.Checks, new VMWindowManager(tools), tools, TimeProvider.System);
         MainWindow = new MainWindow { DataContext = main };
         MainWindow.Show();
         _ = main.StartAsync();
@@ -35,7 +36,7 @@ public partial class App : Application
     {
         // A password copied less than three minutes ago goes now, if the clipboard still holds it (#469).
         _Tools?.Clipboard.ClearNow();
-        _Runner?.Dispose();
+        _Sessions?.Dispose();
         base.OnExit(e);
     }
 

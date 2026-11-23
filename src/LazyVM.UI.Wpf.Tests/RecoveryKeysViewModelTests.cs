@@ -14,14 +14,14 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     private static readonly VMRecoveryKey _UserKey = new("User disk", _USER_GUID, string.Empty, new DateTime(2026, 11, 18, 8, 0, 0), Exported: false);
 
     private readonly CultureScope _Culture = new("en-GB");
-    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeRunners _Runners = new();
     private readonly FakeToolWindows _Tools;
 
     public RecoveryKeysViewModelTests()
     {
-        _Tools = new FakeToolWindows(_Runner);
-        _Runner.RecoveryPasswords[_OS_GUID] = _OS_PASSWORD;
-        _Runner.RecoveryPasswords[_USER_GUID] = _USER_PASSWORD;
+        _Tools = new FakeToolWindows(_Runners);
+        _Runners.RecoveryKeys.RecoveryPasswords[_OS_GUID] = _OS_PASSWORD;
+        _Runners.RecoveryKeys.RecoveryPasswords[_USER_GUID] = _USER_PASSWORD;
     }
 
     public void Dispose()
@@ -31,7 +31,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
 
     private async Task<RecoveryKeysViewModel> Loaded(params VMRecoveryKey[] keys)
     {
-        _Runner.ReturnsRecoveryKeys(keys);
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(keys);
         var window = new RecoveryKeysViewModel(Sample.VM(), _Tools);
         await window.LoadAsync();
         return window;
@@ -71,7 +71,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
             "User disk, key ID not known yet, recorded 18 November 2026, not exported yet",
         ], window.Keys.Select(key => key.Text));
         Assert.Equal("2 recovery keys, 1 not exported yet.", window.Summary);
-        Assert.Equal(["DevBox"], _Runner.RecoveryKeyCalls);
+        Assert.Equal(["DevBox"], _Runners.RecoveryKeys.RecoveryKeyCalls);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
             window.Keys[0].AutomationName);
         Assert.Equal("Show", window.Keys[0].ToggleText);
         Assert.Equal("Show the recovery password of the OS disk recorded 1 October 2026", window.Keys[0].ToggleName);
-        Assert.Empty(_Runner.RecoveryPasswordCalls);
+        Assert.Empty(_Runners.RecoveryKeys.RecoveryPasswordCalls);
         Assert.DoesNotContain(_OS_PASSWORD, AllText(window));
     }
 
@@ -96,7 +96,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
 
         await window.Keys[1].ToggleAsync();
 
-        Assert.Equal([("DevBox", _USER_GUID)], _Runner.RecoveryPasswordCalls);
+        Assert.Equal([("DevBox", _USER_GUID)], _Runners.RecoveryKeys.RecoveryPasswordCalls);
         Assert.Equal(_USER_PASSWORD, window.Keys[1].PasswordText);
         Assert.Equal(
             "User disk, key ID not known yet, recorded 18 November 2026, not exported yet. Recovery password " + _USER_PASSWORD,
@@ -119,14 +119,14 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
         Assert.Equal("Recovery password hidden", window.Keys[0].PasswordText);
         Assert.False(window.Keys[0].IsShown);
         Assert.DoesNotContain(_OS_PASSWORD, AllText(window));
-        Assert.Single(_Runner.RecoveryPasswordCalls);
+        Assert.Single(_Runners.RecoveryKeys.RecoveryPasswordCalls);
     }
 
     [Fact]
     public async Task APasswordThatCannotBeRead_StaysHidden_AndTheStatusSaysWhy()
     {
         var window = await Loaded(_OsKey);
-        _Runner.RecoveryPasswordFails = new InvalidOperationException("Key not valid for use in specified state.");
+        _Runners.RecoveryKeys.RecoveryPasswordFails = new InvalidOperationException("Key not valid for use in specified state.");
 
         await window.Keys[0].ToggleAsync();
 
@@ -137,7 +137,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     [Fact]
     public async Task ClosingTheWindow_ForgetsEveryPasswordShown()
     {
-        _Runner.ReturnsRecoveryKeys(_OsKey, _UserKey);
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(_OsKey, _UserKey);
         var window = _Tools.OpenRecoveryKeys(Sample.VM());
         await window.Keys[0].ToggleAsync();
         Assert.True(window.Keys[0].IsShown);
@@ -164,7 +164,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     [Fact]
     public async Task WhenTheKeysCannotBeRead_TheWindowSaysWhy()
     {
-        _Runner.RecoveryKeysThrow(new InvalidOperationException("Key not valid for use in specified state."));
+        _Runners.RecoveryKeys.RecoveryKeysThrow(new InvalidOperationException("Key not valid for use in specified state."));
         var window = new RecoveryKeysViewModel(Sample.VM(), _Tools);
 
         await window.LoadAsync();
@@ -176,12 +176,12 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     [Fact]
     public async Task LoadAndExport_AreWorkingWhileTheKeysAreReadAndWritten()
     {
-        _Runner.ReturnsRecoveryKeys(_OsKey);
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(_OsKey);
         var window = new RecoveryKeysViewModel(Sample.VM(), _Tools);
         var watcher = new WorkWatcher(window);
         await window.LoadAsync();
         _Tools.ChosenExportFile = _FILE;
-        _Runner.ReturnsRecoveryKeys(_OsKey);
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(_OsKey);
 
         await window.ExportAsync();
 
@@ -195,7 +195,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     {
         var window = await Loaded(_OsKey, _UserKey);
         _Tools.ChosenExportFile = _FILE;
-        _Runner.ReturnsRecoveryKeys(_OsKey, _UserKey with
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(_OsKey, _UserKey with
         {
             Exported = true
         });
@@ -206,7 +206,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
 
         Assert.Equal(["DevBox-recovery-keys.txt"], _Tools.ExportFileSuggestions);
         Assert.Empty(_Tools.ReplaceQuestions);
-        Assert.Equal([("DevBox", _FILE, false)], _Runner.ExportCalls);
+        Assert.Equal([("DevBox", _FILE, false)], _Runners.RecoveryKeys.ExportCalls);
         Assert.Equal(
             @"The recovery passwords of DevBox were written to E:\DevBox-recovery-keys.txt. Keep that file offline, such as on a USB drive, somewhere safe.",
             window.Status);
@@ -222,7 +222,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
         _Tools.ChosenExportFile = _FILE;
         _Tools.ExistingFiles.Add(_FILE);
         _Tools.ConfirmsReplace = true;
-        _Runner.ReturnsRecoveryKeys(_UserKey with
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(_UserKey with
         {
             Exported = true
         });
@@ -232,7 +232,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
         Assert.Equal(
             @"E:\DevBox-recovery-keys.txt already exists. Do you want to replace it? Nothing in it now is kept: it will hold only the recovery passwords of DevBox, so those of any other VM in it are removed.",
             Assert.Single(_Tools.ReplaceQuestions));
-        Assert.Equal([("DevBox", _FILE, true)], _Runner.ExportCalls);
+        Assert.Equal([("DevBox", _FILE, true)], _Runners.RecoveryKeys.ExportCalls);
     }
 
     [Fact]
@@ -245,7 +245,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
 
         await window.ExportAsync();
 
-        Assert.Empty(_Runner.ExportCalls);
+        Assert.Empty(_Runners.RecoveryKeys.ExportCalls);
         Assert.Equal("Nothing was exported.", window.Status);
     }
 
@@ -257,7 +257,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
 
         await window.ExportAsync();
 
-        Assert.Empty(_Runner.ExportCalls);
+        Assert.Empty(_Runners.RecoveryKeys.ExportCalls);
         Assert.Empty(_Tools.ReplaceQuestions);
         Assert.Equal("Nothing was exported.", window.Status);
     }
@@ -267,18 +267,18 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     {
         var window = await Loaded(_UserKey);
         _Tools.ChosenExportFile = @"C:\Users\me\OneDrive\keys.txt";
-        _Runner.ExportWarnings =
+        _Runners.RecoveryKeys.ExportWarnings =
         [
             @"C:\Users\me\OneDrive\keys.txt is in OneDrive (or another folder kept in step with the cloud), which copies it off this computer. Keep the file offline, such as on a USB drive.",
         ];
-        _Runner.ReturnsRecoveryKeys(_UserKey with
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(_UserKey with
         {
             Exported = true
         });
 
         await window.ExportAsync();
 
-        Assert.Equal(_Runner.ExportWarnings, window.Warnings);
+        Assert.Equal(_Runners.RecoveryKeys.ExportWarnings, window.Warnings);
         Assert.True(window.HasWarnings);
         Assert.EndsWith("somewhere safe. 1 warning is shown below.", window.Status);
     }
@@ -288,8 +288,8 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     {
         var window = await Loaded(_UserKey);
         _Tools.ChosenExportFile = _FILE;
-        _Runner.ExportWarnings = ["One.", "Two."];
-        _Runner.ReturnsRecoveryKeys(_UserKey with
+        _Runners.RecoveryKeys.ExportWarnings = ["One.", "Two."];
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(_UserKey with
         {
             Exported = true
         });
@@ -304,7 +304,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     {
         var window = await Loaded(_UserKey);
         _Tools.ChosenExportFile = @"F:\keys.txt";
-        _Runner.ExportFails = new InvalidOperationException(@"The folder F:\ is not there. Plug in the drive, or choose a folder that exists.");
+        _Runners.RecoveryKeys.ExportFails = new InvalidOperationException(@"The folder F:\ is not there. Plug in the drive, or choose a folder that exists.");
 
         await window.ExportAsync();
 
@@ -317,11 +317,11 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     {
         var window = await Loaded(_UserKey);
         _Tools.ChosenExportFile = _FILE;
-        _Runner.ExportWarnings = ["A warning."];
-        _Runner.ReturnsRecoveryKeys(_UserKey);
+        _Runners.RecoveryKeys.ExportWarnings = ["A warning."];
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(_UserKey);
         await window.ExportAsync();
-        _Runner.ExportWarnings = [];
-        _Runner.ReturnsRecoveryKeys(_UserKey);
+        _Runners.RecoveryKeys.ExportWarnings = [];
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys(_UserKey);
 
         await window.ExportAsync();
 
