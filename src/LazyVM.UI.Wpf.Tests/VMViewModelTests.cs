@@ -24,7 +24,7 @@ public sealed class VMViewModelTests : IDisposable
 
     private VMViewModel Open(LazyVMDashboard entry)
     {
-        return new(entry, _Tools, _Tools.Dialogs);
+        return new(entry, _Tools, _Tools.Dialogs, _Runners.Build, _Runners.Removal, _Tools.Changes);
     }
 
     [Fact]
@@ -761,6 +761,21 @@ public sealed class VMViewModelTests : IDisposable
         await vm.RunMaintenanceAsync();
 
         Assert.Equal("Maintenance did not start: The maintenance of DevBox is running already, so it was not started again.", vm.Status);
+    }
+
+    [Fact]
+    public async Task RunMaintenance_TellsTheListItStarted_ButNotWhenItDidNot()
+    {
+        var changed = 0;
+        _Tools.Changes.Changed += (_, _) => changed++;
+        var vm = await Loaded(Sample.VM());
+
+        await vm.RunMaintenanceAsync();
+        Assert.Equal(1, changed);
+
+        _Runners.Build.MaintenanceFails = new InvalidOperationException("A build of DevBox is running, so maintenance was not started.");
+        await vm.RunMaintenanceAsync();
+        Assert.Equal(1, changed);
     }
 
     [Theory]

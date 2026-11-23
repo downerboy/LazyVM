@@ -25,7 +25,7 @@ public sealed class PasswordViewModelTests : IDisposable
 
     private async Task<PasswordViewModel> Loaded()
     {
-        var window = new PasswordViewModel(Sample.VM(), _Tools);
+        var window = new PasswordViewModel(Sample.VM(), _Runners.Credentials, _Clipboard);
         await window.LoadAsync();
         return window;
     }
@@ -34,7 +34,7 @@ public sealed class PasswordViewModelTests : IDisposable
     public async Task Show_ReadsThePasswordInTheVMsSession()
     {
         var id = Guid.Parse("4f2c9a1e-7b3d-4c8e-9a10-2d5e6f7a8b9c");
-        var window = new PasswordViewModel(Sample.VM() with { Id = id }, _Tools);
+        var window = new PasswordViewModel(Sample.VM() with { Id = id }, _Runners.Credentials, _Clipboard);
         await window.LoadAsync();
 
         await window.ToggleAsync();
@@ -46,7 +46,7 @@ public sealed class PasswordViewModelTests : IDisposable
     [Fact]
     public async Task Load_AndShow_AreWorkingWhileTheUserNameAndThePasswordAreRead()
     {
-        var window = new PasswordViewModel(Sample.VM(), _Tools);
+        var window = new PasswordViewModel(Sample.VM(), _Runners.Credentials, _Clipboard);
         var watcher = new WorkWatcher(window);
 
         await window.LoadAsync();
@@ -202,7 +202,7 @@ public sealed class PasswordViewModelTests : IDisposable
     [Fact]
     public void Title_NamesTheVM()
     {
-        var window = new PasswordViewModel(Sample.VM(), _Tools);
+        var window = new PasswordViewModel(Sample.VM(), _Runners.Credentials, _Clipboard);
 
         Assert.Equal("Password of DevBox - LazyVM", window.Title);
         Assert.Equal("DevBox", window.Name);

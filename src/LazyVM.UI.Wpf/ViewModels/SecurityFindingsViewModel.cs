@@ -17,8 +17,9 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         + "Approve only what you recognize.";
     private const string _REVOKE_HELP = "Revoking undoes an approval. The next nightly scan reports the finding again, as new, if it still finds it.";
 
-    private readonly ToolWindows _Tools;
+    private readonly LazyVMSecurityFindingsRunner _Runner;
     private readonly Dialogs _Dialogs;
+    private readonly ListChanges _Changes;
     private LazyVMDashboard _Entry;
     private IReadOnlyList<SecurityFindingRow> _Findings = [];
     private IReadOnlyList<SecurityApprovalRow> _Approvals = [];
@@ -29,11 +30,12 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
     private bool _IsChanging;
     private string _Status = string.Empty;
 
-    public SecurityFindingsViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs)
+    public SecurityFindingsViewModel(LazyVMDashboard entry, LazyVMSecurityFindingsRunner runner, Dialogs dialogs, ListChanges changes)
     {
         _Entry = entry;
-        _Tools = tools;
+        _Runner = runner;
         _Dialogs = dialogs;
+        _Changes = changes;
         ReloadCommand = new RelayCommand(() => _ = ReloadAsync());
         ApproveCommand = new RelayCommand(() => _ = ApproveAsync(), () => CanApprove);
         RevokeCommand = new RelayCommand(() => _ = RevokeAsync(), () => CanRevoke);
@@ -219,7 +221,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         var problems = new List<string>();
         try
         {
-            var found = await WorkAsync("Reading the security findings", () => _Tools.GetSecurityFindingsAsync(_Entry.Id, Name));
+            var found = await WorkAsync("Reading the security findings", () => _Runner.GetLazyVMSecurityFindingsAsync(_Entry.Id, Name, CancellationToken.None));
             _FindingsRead = true;
             Findings = found
                 .Select(finding => new SecurityFindingRow(finding))
@@ -235,7 +237,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         }
         try
         {
-            var approved = await WorkAsync("Reading the approved findings", () => _Tools.GetSecurityApprovalsAsync(_Entry.Id, Name));
+            var approved = await WorkAsync("Reading the approved findings", () => _Runner.GetLazyVMSecurityApprovalsAsync(_Entry.Id, Name, CancellationToken.None));
             _ApprovalsRead = true;
             Approvals = approved.Select(approval => new SecurityApprovalRow(approval)).ToList();
         }
@@ -268,7 +270,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         await ChangeAsync(
             () => _Dialogs.AskApprovalReason(this, chosen) is { } reason
                 && _Dialogs.ConfirmSecurityChange(this, $"Approve a security finding of {Name} - LazyVM", ApproveQuestion(chosen))
-                ? () => _Tools.ApproveSecurityFindingAsync(_Entry.Id, Name,id, reason.Trim())
+                ? () => ApproveFindingAsync(id, reason.Trim())
                 : null,
             $"Approving {id}",
             $"{id} is approved. The nightly scan stops reporting it until it changes.",
@@ -289,7 +291,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         var id = chosen.Approval.Id;
         await ChangeAsync(
             () => _Dialogs.ConfirmSecurityChange(this, $"Revoke an approval of {Name} - LazyVM", RevokeQuestion(chosen.Approval))
-                ? () => _Tools.RevokeSecurityFindingAsync(_Entry.Id, Name,id)
+                ? () => RevokeApprovalAsync(id)
                 : null,
             $"Revoking the approval of {id}",
             $"The approval of {id} is revoked. The next nightly scan reports it again, as new, if it still finds it.",
@@ -352,6 +354,32 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasApproveNote));
         ApproveCommand.RaiseCanExecuteChanged();
         RevokeCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>Approves the finding, then tells the list, even when the approval was refused.</summary>
+    private async Task ApproveFindingAsync(string id, string reason)
+    {
+        try
+        {
+            await _Runner.ApproveLazyVMSecurityFindingAsync(_Entry.Id, Name, id, reason);
+        }
+        finally
+        {
+            _Changes.Raise();
+        }
+    }
+
+    /// <summary>Revokes the approval, then tells the list, even when the revoke was refused.</summary>
+    private async Task RevokeApprovalAsync(string id)
+    {
+        try
+        {
+            await _Runner.RevokeLazyVMSecurityFindingAsync(_Entry.Id, Name, id);
+        }
+        finally
+        {
+            _Changes.Raise();
+        }
     }
 
     /// <summary>Reads both again.</summary>

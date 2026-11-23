@@ -13,7 +13,7 @@ public sealed partial class BuildViewModel : ViewModelBase
     internal const string DEFAULT_TEMPLATE = "Developer";
 
     private readonly LazyVMBuildRunner _Runner;
-    private readonly BuildLauncher _Launcher;
+    private readonly BuildStarter _Starter;
     private readonly IReadOnlySet<string> _ExistingNames;
     private readonly Action<string, StartedBuild> _BuildStarted;
     private readonly RelayCommand _BuildCommand;
@@ -26,10 +26,10 @@ public sealed partial class BuildViewModel : ViewModelBase
 
     /// <param name="existingNames">The VMs there are already: a new VM needs a name of its own.</param>
     /// <param name="buildStarted">Called with the VM's name and its build once the build has started.</param>
-    public BuildViewModel(LazyVMBuildRunner runner, BuildLauncher launcher, IEnumerable<string> existingNames, Action<string, StartedBuild> buildStarted)
+    public BuildViewModel(LazyVMBuildRunner runner, BuildStarter starter, IEnumerable<string> existingNames, Action<string, StartedBuild> buildStarted)
     {
         _Runner = runner;
-        _Launcher = launcher;
+        _Starter = starter;
         _ExistingNames = existingNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         _BuildStarted = buildStarted;
         _BuildCommand = new RelayCommand(() => _ = BuildAsync(), () => !IsStarting);
@@ -122,8 +122,7 @@ public sealed partial class BuildViewModel : ViewModelBase
         try
         {
             var request = new BuildRequest(Name, SelectedTemplate?.Name, UserName.Length == 0 ? null : UserName);
-            var moduleFolder = await WorkAsync("Starting the build", () => _Runner.GetModuleFolderAsync(CancellationToken.None));
-            var build = _Launcher.Start(request, moduleFolder);
+            var build = await WorkAsync("Starting the build", () => _Starter.StartAsync(request, CancellationToken.None));
             _BuildStarted(Name, build);
             CloseRequested?.Invoke(this, EventArgs.Empty);
         }

@@ -11,8 +11,9 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// </summary>
 public sealed class RecoveryKeysViewModel : ViewModelBase
 {
-    private readonly ToolWindows _Tools;
+    private readonly LazyVMRecoveryKeysRunner _Runner;
     private readonly Dialogs _Dialogs;
+    private readonly ListChanges _Changes;
     private readonly LazyVMDashboard _Entry;
     private IReadOnlyList<RecoveryKeyRow> _Keys = [];
     private IReadOnlyList<string> _Warnings = [];
@@ -20,11 +21,12 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
     private bool _IsLoaded;
     private bool _IsExporting;
 
-    public RecoveryKeysViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs)
+    public RecoveryKeysViewModel(LazyVMDashboard entry, LazyVMRecoveryKeysRunner runner, Dialogs dialogs, ListChanges changes)
     {
         _Entry = entry;
-        _Tools = tools;
+        _Runner = runner;
         _Dialogs = dialogs;
+        _Changes = changes;
         ExportCommand = new RelayCommand(() => _ = ExportAsync(), () => CanExport);
     }
 
@@ -135,7 +137,7 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
     {
         try
         {
-            var found = await WorkAsync("Reading the recovery keys", () => _Tools.GetRecoveryKeysAsync(_Entry.Id, Name));
+            var found = await WorkAsync("Reading the recovery keys", () => _Runner.GetLazyVMRecoveryKeysAsync(_Entry.Id, Name, CancellationToken.None));
             Forget();
             Keys = found.Select(key => new RecoveryKeyRow(key, ToggleAsync)).ToList();
         }
@@ -181,7 +183,7 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
             string done;
             try
             {
-                var export = await WorkAsync("Exporting the recovery keys", () => _Tools.ExportRecoveryKeysAsync(_Entry.Id, Name,path, replace));
+                var export = await WorkAsync("Exporting the recovery keys", () => ExportKeysAsync(path, replace));
                 Warnings = export.Warnings;
                 // The status line is what Narrator announces, so it says there are warnings to read.
                 var warned = export.Warnings.Count switch
@@ -205,6 +207,19 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Writes the keys to the file, then tells the list, even when the export failed.</summary>
+    private async Task<RecoveryKeyExport> ExportKeysAsync(string path, bool force)
+    {
+        try
+        {
+            return await _Runner.ExportLazyVMRecoveryKeysAsync(_Entry.Id, Name, path, force);
+        }
+        finally
+        {
+            _Changes.Raise();
+        }
+    }
+
     /// <summary>Hides every password shown, as when the window closes.</summary>
     public void Forget()
     {
@@ -224,7 +239,7 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
         }
         try
         {
-            row.Show(await WorkAsync("Reading the recovery password", () => _Tools.GetRecoveryPasswordAsync(_Entry.Id, Name,row.Key.DiskGuid)));
+            row.Show(await WorkAsync("Reading the recovery password", () => _Runner.GetLazyVMRecoveryPasswordAsync(_Entry.Id, Name, row.Key.DiskGuid, CancellationToken.None)));
             Status = $"The recovery password of the {row.Key.Disk} is shown. Hide hides it again; closing this window does too.";
         }
         catch (Exception exception)

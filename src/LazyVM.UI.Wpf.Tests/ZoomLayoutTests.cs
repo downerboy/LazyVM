@@ -45,7 +45,7 @@ public sealed class ZoomLayoutTests
     private static VMViewModel VMViewModelOf(FakeRunners runners)
     {
         var tools = new FakeToolWindows(runners);
-        return new VMViewModel(Sample.VM("Alpha"), tools, tools.Dialogs);
+        return new VMViewModel(Sample.VM("Alpha"), tools, tools.Dialogs, runners.Build, runners.Removal, tools.Changes);
     }
 
     private static MainWindow MainWindowFor(FakeRunners runners)
@@ -53,7 +53,7 @@ public sealed class ZoomLayoutTests
         return Ui.Invoke(() =>
         {
             var tools = new FakeToolWindows(runners);
-            var model = new MainViewModel(runners.Dashboard, runners.Checks, tools, TimeProvider.System);
+            var model = new MainViewModel(runners.Dashboard, runners.Checks, runners.Help, tools, tools.Changes, TimeProvider.System);
             return new MainWindow { DataContext = model };
         });
     }

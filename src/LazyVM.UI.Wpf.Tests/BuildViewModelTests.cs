@@ -11,7 +11,7 @@ public sealed class BuildViewModelTests
 
     public BuildViewModelTests()
     {
-        _Build = new BuildViewModel(_Runners.Build, _Launcher, ["DevBox"], (name, process) => _Started.Add((name, process)));
+        _Build = new BuildViewModel(_Runners.Build, new BuildStarter(_Runners.Build, _Launcher), ["DevBox"], (name, process) => _Started.Add((name, process)));
     }
 
     [Fact]

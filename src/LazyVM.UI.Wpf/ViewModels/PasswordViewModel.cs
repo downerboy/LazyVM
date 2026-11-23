@@ -14,7 +14,8 @@ public sealed class PasswordViewModel : ViewModelBase
 {
     private const string _HIDDEN = "Password hidden";
 
-    private readonly ToolWindows _Tools;
+    private readonly LazyVMCredentialsRunner _Runner;
+    private readonly SecretClipboard _Clipboard;
     private readonly LazyVMDashboard _Entry;
     private string _UserName = string.Empty;
     private string? _Password;
@@ -22,10 +23,11 @@ public sealed class PasswordViewModel : ViewModelBase
     private string _Status = string.Empty;
     private bool _IsBusy;
 
-    public PasswordViewModel(LazyVMDashboard entry, ToolWindows tools)
+    public PasswordViewModel(LazyVMDashboard entry, LazyVMCredentialsRunner runner, SecretClipboard clipboard)
     {
         _Entry = entry;
-        _Tools = tools;
+        _Runner = runner;
+        _Clipboard = clipboard;
         ToggleCommand = new RelayCommand(() => _ = ToggleAsync(), () => CanUse);
         CopyCommand = new RelayCommand(() => _ = CopyAsync(), () => CanUse);
     }
@@ -107,7 +109,7 @@ public sealed class PasswordViewModel : ViewModelBase
     {
         try
         {
-            UserName = await WorkAsync("Reading the user name", () => _Tools.GetUserNameAsync(_Entry.Id, Name));
+            UserName = await WorkAsync("Reading the user name", () => _Runner.GetLazyVMUserNameAsync(_Entry.Id, Name, CancellationToken.None));
         }
         catch (Exception exception)
         {
@@ -132,7 +134,7 @@ public sealed class PasswordViewModel : ViewModelBase
         {
             try
             {
-                SetPassword(await WorkAsync("Reading the password", () => _Tools.GetPasswordAsync(_Entry.Id, Name)));
+                SetPassword(await WorkAsync("Reading the password", () => _Runner.GetLazyVMPasswordAsync(_Entry.Id, Name, CancellationToken.None)));
                 Status = "The password is shown. Hide password hides it again; closing this window does too.";
             }
             catch (Exception exception)
@@ -153,7 +155,7 @@ public sealed class PasswordViewModel : ViewModelBase
         {
             try
             {
-                var until = _Tools.Clipboard.Put(await WorkAsync("Reading the password", () => _Tools.GetPasswordAsync(_Entry.Id, Name)));
+                var until = _Clipboard.Put(await WorkAsync("Reading the password", () => _Runner.GetLazyVMPasswordAsync(_Entry.Id, Name, CancellationToken.None)));
                 Status = $"The password is on the clipboard until {until.ToString("t", CultureInfo.CurrentCulture)}. "
                     + "It is left out of clipboard history, and cleared then if it is still there.";
             }

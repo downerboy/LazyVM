@@ -2,9 +2,9 @@ namespace LazyVM.UI.Wpf;
 
 /// <summary>
 /// The app's runners, one per area of the module, all on the same
-/// sessions. <see cref="ToolWindows"/> takes them all, to pass on to the
-/// windows it opens, until it is broken up (#519); each view model takes
-/// only the runners it uses.
+/// sessions. <see cref="ToolWindows"/> takes them all, to make the view
+/// model of each window it opens; each view model takes only the runners
+/// it uses.
 /// </summary>
 public sealed record Runners(
     LazyVMDashboardRunner Dashboard,

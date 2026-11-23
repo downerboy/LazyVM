@@ -68,7 +68,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     {
         _Runners.SecurityFindings.ReturnsSecurityFindings([_Firewall]);
         _Runners.SecurityFindings.ReturnsSecurityApprovals([]);
-        var window = new SecurityFindingsViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
+        var window = new SecurityFindingsViewModel(Sample.VM(), _Runners.SecurityFindings, _Tools.Dialogs, _Tools.Changes);
         var watcher = new WorkWatcher(window);
 
         await window.LoadAsync();
@@ -80,7 +80,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     {
         _Runners.SecurityFindings.ReturnsSecurityFindings(findings);
         _Runners.SecurityFindings.ReturnsSecurityApprovals(approvals);
-        var window = new SecurityFindingsViewModel(entry, _Tools, _Tools.Dialogs);
+        var window = new SecurityFindingsViewModel(entry, _Runners.SecurityFindings, _Tools.Dialogs, _Tools.Changes);
         await window.LoadAsync();
         return window;
     }
@@ -253,7 +253,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     {
         _Runners.SecurityFindings.SecurityFindingsThrow(new InvalidOperationException("Access is denied."));
         _Runners.SecurityFindings.ReturnsSecurityApprovals(_Approval);
-        var window = new SecurityFindingsViewModel(Scanned(), _Tools, _Tools.Dialogs);
+        var window = new SecurityFindingsViewModel(Scanned(), _Runners.SecurityFindings, _Tools.Dialogs, _Tools.Changes);
 
         await window.LoadAsync();
 
@@ -267,7 +267,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     {
         _Runners.SecurityFindings.ReturnsSecurityFindings(_Firewall);
         _Runners.SecurityFindings.SecurityApprovalsThrow(new InvalidOperationException("The file is damaged."));
-        var window = new SecurityFindingsViewModel(Scanned(), _Tools, _Tools.Dialogs);
+        var window = new SecurityFindingsViewModel(Scanned(), _Runners.SecurityFindings, _Tools.Dialogs, _Tools.Changes);
 
         await window.LoadAsync();
 

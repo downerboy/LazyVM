@@ -25,7 +25,7 @@ public sealed class RestoreViewModelTests : IDisposable
     private async Task<RestoreViewModel> Loaded(LazyVMDashboard? entry = null, params VMRestorePoint[] points)
     {
         _Runners.Restore.ReturnsRestorePoints(points);
-        var restore = new RestoreViewModel(entry ?? Sample.VM(), _Tools, _Tools.Dialogs);
+        var restore = new RestoreViewModel(entry ?? Sample.VM(), _Runners.Restore, _Tools.Dialogs, _Tools.Changes);
         await restore.LoadAsync();
         return restore;
     }
@@ -85,7 +85,7 @@ public sealed class RestoreViewModelTests : IDisposable
     public async Task WhenThePointsCannotBeRead_TheWindowSaysWhy()
     {
         _Runners.Restore.RestorePointsThrow(new InvalidOperationException("Hyper-V is not running."));
-        var restore = new RestoreViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
+        var restore = new RestoreViewModel(Sample.VM(), _Runners.Restore, _Tools.Dialogs, _Tools.Changes);
 
         await restore.LoadAsync();
 
@@ -96,7 +96,7 @@ public sealed class RestoreViewModelTests : IDisposable
     public async Task LoadAndRestore_AreWorkingWhileThePointsAreReadAndTheVMIsRestored()
     {
         _Runners.Restore.ReturnsRestorePoints(_October);
-        var restore = new RestoreViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
+        var restore = new RestoreViewModel(Sample.VM(), _Runners.Restore, _Tools.Dialogs, _Tools.Changes);
         var watcher = new WorkWatcher(restore);
         await restore.LoadAsync();
         restore.SelectedPoint = restore.Points[0];
@@ -227,7 +227,7 @@ public sealed class RestoreViewModelTests : IDisposable
     [Fact]
     public void Title_NamesTheVM()
     {
-        var restore = new RestoreViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
+        var restore = new RestoreViewModel(Sample.VM(), _Runners.Restore, _Tools.Dialogs, _Tools.Changes);
 
         Assert.Equal("Restore points of DevBox - LazyVM", restore.Title);
         Assert.Equal("DevBox", restore.Name);

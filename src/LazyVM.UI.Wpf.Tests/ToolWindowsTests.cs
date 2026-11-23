@@ -212,31 +212,6 @@ public sealed class ToolWindowsTests
     }
 
     [Fact]
-    public async Task StartMaintenance_RunsTheModulesCommand_AndReportsIt()
-    {
-        var started = 0;
-        _Tools.Changes.Changed += (_, _) => started++;
-
-        await _Tools.StartMaintenanceAsync(null, "DevBox");
-
-        Assert.Equal(["DevBox"], _Runners.Build.MaintenanceCalls);
-        Assert.Equal(1, started);
-    }
-
-    [Fact]
-    public async Task StartMaintenance_WhenTheModuleStartsNothing_ThrowsItsReason_AndReportsNothing()
-    {
-        var started = 0;
-        _Tools.Changes.Changed += (_, _) => started++;
-        _Runners.Build.MaintenanceFails = new InvalidOperationException("A build of DevBox is running, so maintenance was not started.");
-
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => _Tools.StartMaintenanceAsync(null, "DevBox"));
-
-        Assert.Contains("A build of DevBox is running", failure.Message);
-        Assert.Equal(0, started);
-    }
-
-    [Fact]
     public void ABuildThatEnds_IsReported_SoTheListIsReadAgain()
     {
         var ended = 0;

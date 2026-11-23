@@ -12,19 +12,21 @@ public sealed class RestoreViewModel : ViewModelBase
     private const string _WHAT_GOES_BACK = "All of its disks go back to then, including the Dev Drive, the SQL data disk and the User disk, "
         + "so code not yet pushed, database changes and files in your personal folders changed since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.";
 
-    private readonly ToolWindows _Tools;
+    private readonly LazyVMRestoreRunner _Runner;
     private readonly Dialogs _Dialogs;
+    private readonly ListChanges _Changes;
     private LazyVMDashboard _Entry;
     private IReadOnlyList<RestorePointOption> _Points = [];
     private RestorePointOption? _SelectedPoint;
     private string _Status = string.Empty;
     private bool _IsRestoring;
 
-    public RestoreViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs)
+    public RestoreViewModel(LazyVMDashboard entry, LazyVMRestoreRunner runner, Dialogs dialogs, ListChanges changes)
     {
         _Entry = entry;
-        _Tools = tools;
+        _Runner = runner;
         _Dialogs = dialogs;
+        _Changes = changes;
         RestoreCommand = new RelayCommand(() => _ = RestoreAsync(), () => CanRestore);
     }
 
@@ -107,7 +109,7 @@ public sealed class RestoreViewModel : ViewModelBase
     {
         try
         {
-            var found = await WorkAsync("Reading the restore points", () => _Tools.GetRestorePointsAsync(_Entry.Id, Name));
+            var found = await WorkAsync("Reading the restore points", () => _Runner.GetLazyVMRestorePointsAsync(_Entry.Id, Name, CancellationToken.None));
             Points = found.OrderByDescending(point => point.Taken).Select(point => new RestorePointOption(point)).ToList();
             SelectedPoint = Points.FirstOrDefault();
             if (Points.Count == 0)
@@ -145,7 +147,7 @@ public sealed class RestoreViewModel : ViewModelBase
             string done;
             try
             {
-                await WorkAsync($"Restoring {Name}", () => _Tools.RestoreToolingAsync(_Entry.Id, Name,chosen.Point.Stamp));
+                await WorkAsync($"Restoring {Name}", () => RestoreToPointAsync(chosen.Point.Stamp));
                 done = $"{Name} is back at {when}. A restore point of how it was just before was taken, so this can be undone.";
             }
             catch (Exception exception)
@@ -158,6 +160,19 @@ public sealed class RestoreViewModel : ViewModelBase
         finally
         {
             IsRestoring = false;
+        }
+    }
+
+    /// <summary>Returns the VM to the restore point, then tells the list, even when the restore failed.</summary>
+    private async Task RestoreToPointAsync(string stamp)
+    {
+        try
+        {
+            await _Runner.RestoreLazyVMToolingAsync(_Entry.Id, Name, stamp);
+        }
+        finally
+        {
+            _Changes.Raise();
         }
     }
 

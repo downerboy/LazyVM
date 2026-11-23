@@ -8,6 +8,7 @@ public sealed class MainViewModel : ViewModelBase
 {
     private readonly LazyVMDashboardRunner _Dashboard;
     private readonly LazyVMChecksRunner _Checks;
+    private readonly LazyVMHelpRunner _Help;
     private readonly ToolWindows _Tools;
     private readonly TimeProvider _Clock;
     private readonly RelayCommand _RefreshCommand;
@@ -19,10 +20,11 @@ public sealed class MainViewModel : ViewModelBase
     private string _Status = string.Empty;
     private bool _ListIsKnown;
 
-    public MainViewModel(LazyVMDashboardRunner dashboard, LazyVMChecksRunner checks, ToolWindows tools, TimeProvider clock)
+    public MainViewModel(LazyVMDashboardRunner dashboard, LazyVMChecksRunner checks, LazyVMHelpRunner help, ToolWindows tools, ListChanges changes, TimeProvider clock)
     {
         _Dashboard = dashboard;
         _Checks = checks;
+        _Help = help;
         _Tools = tools;
         _Clock = clock;
         HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, null, HostOnly()));
@@ -31,7 +33,7 @@ public sealed class MainViewModel : ViewModelBase
         UseCasesCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.UseCases));
         DiagramsCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.Diagrams));
         // A build that ended, a build or maintenance that started, a delete, a restore, an export of recovery keys or a security finding changed the list: read it again.
-        tools.Changes.Changed += (_, _) => _ = RefreshAsync();
+        changes.Changed += (_, _) => _ = RefreshAsync();
         _RefreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         _CancelRefreshCommand = new RelayCommand(() => _Refreshing?.Cancel(), () => IsRefreshing);
         _OpenVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);
@@ -120,7 +122,7 @@ public sealed class MainViewModel : ViewModelBase
         };
         try
         {
-            await WorkAsync($"Opening {page}", () => _Tools.OpenHelpAsync(topic));
+            await WorkAsync($"Opening {page}", () => _Help.ShowLazyVMHelpAsync(topic, CancellationToken.None));
             Status = $"Opened {page} in your browser";
         }
         catch (Exception exception)

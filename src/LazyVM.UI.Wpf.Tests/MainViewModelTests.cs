@@ -15,7 +15,7 @@ public sealed class MainViewModelTests : IDisposable
     public MainViewModelTests()
     {
         _Tools = new FakeToolWindows(_Runners);
-        _Main = new MainViewModel(_Runners.Dashboard, _Runners.Checks, _Tools, new FixedClock(new DateTimeOffset(2026, 11, 14, 14, 52, 0, TimeSpan.Zero)));
+        _Main = new MainViewModel(_Runners.Dashboard, _Runners.Checks, _Runners.Help, _Tools, _Tools.Changes, new FixedClock(new DateTimeOffset(2026, 11, 14, 14, 52, 0, TimeSpan.Zero)));
     }
 
     public void Dispose()
@@ -431,53 +431,12 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task MaintenanceStartedFromAVMWindow_ReadsTheListAgain()
+    public async Task AChangeThatSomethingElseReports_ReadsTheListAgain()
     {
+        // A run started, a delete, a restore, an export or an approval: whatever changed it reports it, and the list is read again.
         _Runners.Dashboard.Returns(Sample.VM("DevBox"));
 
-        await _Tools.StartMaintenanceAsync(null, "DevBox");
-        await Task.Yield();
-
-        Assert.Equal(1, _Runners.Dashboard.DashboardCalls);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ADelete_EvenOneThatOnlyPartlyRemoved_ReadsTheListAgain(bool fails)
-    {
-        _Runners.Dashboard.Returns(Sample.VM("PlainWin"));
-        _Runners.Removal.RemoveFails = fails ? new InvalidOperationException("'DevBox' was only partly removed.") : null;
-
-        await Record.ExceptionAsync(() => _Tools.RemoveVMAsync(null, "DevBox"));
-        await Task.Yield();
-
-        Assert.Equal(1, _Runners.Dashboard.DashboardCalls);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ARestore_EvenOneThatFailed_ReadsTheListAgain(bool fails)
-    {
-        _Runners.Dashboard.Returns(Sample.VM("DevBox"));
-        _Runners.Restore.RestoreFails = fails ? new InvalidOperationException("The revert failed.") : null;
-
-        await Record.ExceptionAsync(() => _Tools.RestoreToolingAsync(null, "DevBox", "20261008-193000"));
-        await Task.Yield();
-
-        Assert.Equal(1, _Runners.Dashboard.DashboardCalls);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task AnExport_EvenOneThatFailed_ReadsTheListAgain(bool fails)
-    {
-        _Runners.Dashboard.Returns(Sample.VM("DevBox"));
-        _Runners.RecoveryKeys.ExportFails = fails ? new InvalidOperationException("The folder is not there.") : null;
-
-        await Record.ExceptionAsync(() => _Tools.ExportRecoveryKeysAsync(null, "DevBox", @"E:\keys.txt", force: false));
+        _Tools.Changes.Raise();
         await Task.Yield();
 
         Assert.Equal(1, _Runners.Dashboard.DashboardCalls);

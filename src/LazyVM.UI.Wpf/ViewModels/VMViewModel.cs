@@ -13,6 +13,9 @@ public sealed class VMViewModel : ViewModelBase
 
     private readonly ToolWindows _Tools;
     private readonly Dialogs _Dialogs;
+    private readonly LazyVMBuildRunner _Builds;
+    private readonly LazyVMRemovalRunner _Removals;
+    private readonly ListChanges _Changes;
     private LazyVMDashboard _Entry;
     private IReadOnlyList<PhaseOption> _Phases = [];
     private PhaseOption? _SelectedPhase;
@@ -23,11 +26,14 @@ public sealed class VMViewModel : ViewModelBase
     private RestoreViewModel? _Restore;
     private SecurityFindingsViewModel? _Findings;
 
-    public VMViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs)
+    public VMViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs, LazyVMBuildRunner builds, LazyVMRemovalRunner removals, ListChanges changes)
     {
         _Entry = entry;
         _Tools = tools;
         _Dialogs = dialogs;
+        _Builds = builds;
+        _Removals = removals;
+        _Changes = changes;
         Details = ReadDetails(entry);
         _SuggestedPhase = CarryOnPhase(entry.LastBuild);
         ChecksCommand = new RelayCommand(() => tools.OpenChecks(_Entry.Id, Name, hostOnly: false));
@@ -275,7 +281,7 @@ public sealed class VMViewModel : ViewModelBase
     {
         try
         {
-            var found = await WorkAsync("Reading the build phases", () => _Tools.GetBuildPhasesAsync(CancellationToken.None));
+            var found = await WorkAsync("Reading the build phases", () => _Builds.GetLazyVMBuildPhasesAsync(CancellationToken.None));
             Phases = found.Select(phase => new PhaseOption(phase)).ToList();
             SelectSuggestedPhase();
         }
@@ -320,7 +326,7 @@ public sealed class VMViewModel : ViewModelBase
         Status = $"Starting the maintenance of {Name}";
         try
         {
-            await WorkAsync("Starting the maintenance", () => _Tools.StartMaintenanceAsync(_Entry.Id, Name));
+            await WorkAsync("Starting the maintenance", StartMaintenanceAsync);
             Status = $"The maintenance of {Name} has started, as its nightly run does. Running now shows it once it has begun, and the Log says how it goes.";
         }
         catch (Exception exception)
@@ -351,7 +357,7 @@ public sealed class VMViewModel : ViewModelBase
             RemovalPlan plan;
             try
             {
-                plan = await WorkAsync("Reading what deleting the VM removes", () => _Tools.GetRemovalPlanAsync(_Entry.Id, Name));
+                plan = await WorkAsync("Reading what deleting the VM removes", () => _Removals.GetLazyVMRemovalPlanAsync(_Entry.Id, Name, CancellationToken.None));
             }
             catch (Exception exception)
             {
@@ -366,7 +372,7 @@ public sealed class VMViewModel : ViewModelBase
             Status = $"Deleting {Name}";
             try
             {
-                await WorkAsync($"Deleting {Name}", () => _Tools.RemoveVMAsync(_Entry.Id, Name));
+                await WorkAsync($"Deleting {Name}", RemoveAsync);
             }
             catch (Exception exception)
             {
@@ -383,13 +389,33 @@ public sealed class VMViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Starts the maintenance task, then tells the list, so it shows the run once it has begun.</summary>
+    private async Task StartMaintenanceAsync()
+    {
+        await _Builds.StartLazyVMMaintenanceAsync(_Entry.Id, Name, CancellationToken.None);
+        _Changes.Raise();
+    }
+
+    /// <summary>Deletes the VM, then tells the list, even when only part was deleted.</summary>
+    private async Task RemoveAsync()
+    {
+        try
+        {
+            await _Removals.RemoveLazyVMAsync(_Entry.Id, Name);
+        }
+        finally
+        {
+            _Changes.Raise();
+        }
+    }
+
     /// <summary>What a delete that did not finish left, read again; empty when that cannot be read, such as once the VM's settings are gone.</summary>
     private async Task<string> LeftAsync()
     {
         try
         {
             // In the host's session: the delete closed the VM's, and its Hyper-V Id may be gone.
-            return RemovalViewModel.Left(await WorkAsync("Checking what is left of the VM", () => _Tools.GetRemovalPlanAsync(null, Name)));
+            return RemovalViewModel.Left(await WorkAsync("Checking what is left of the VM", () => _Removals.GetLazyVMRemovalPlanAsync(null, Name, CancellationToken.None)));
         }
         catch (Exception)
         {

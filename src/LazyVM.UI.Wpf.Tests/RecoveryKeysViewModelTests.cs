@@ -32,7 +32,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     private async Task<RecoveryKeysViewModel> Loaded(params VMRecoveryKey[] keys)
     {
         _Runners.RecoveryKeys.ReturnsRecoveryKeys(keys);
-        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
+        var window = new RecoveryKeysViewModel(Sample.VM(), _Runners.RecoveryKeys, _Tools.Dialogs, _Tools.Changes);
         await window.LoadAsync();
         return window;
     }
@@ -165,7 +165,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task WhenTheKeysCannotBeRead_TheWindowSaysWhy()
     {
         _Runners.RecoveryKeys.RecoveryKeysThrow(new InvalidOperationException("Key not valid for use in specified state."));
-        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
+        var window = new RecoveryKeysViewModel(Sample.VM(), _Runners.RecoveryKeys, _Tools.Dialogs, _Tools.Changes);
 
         await window.LoadAsync();
 
@@ -177,7 +177,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task LoadAndExport_AreWorkingWhileTheKeysAreReadAndWritten()
     {
         _Runners.RecoveryKeys.ReturnsRecoveryKeys(_OsKey);
-        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
+        var window = new RecoveryKeysViewModel(Sample.VM(), _Runners.RecoveryKeys, _Tools.Dialogs, _Tools.Changes);
         var watcher = new WorkWatcher(window);
         await window.LoadAsync();
         _Tools.Dialogs.ChosenExportFile = _FILE;
@@ -332,7 +332,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     [Fact]
     public void Title_NamesTheVM()
     {
-        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
+        var window = new RecoveryKeysViewModel(Sample.VM(), _Runners.RecoveryKeys, _Tools.Dialogs, _Tools.Changes);
 
         Assert.Equal("Recovery keys of DevBox - LazyVM", window.Title);
         Assert.Equal("DevBox", window.Name);

@@ -1,42 +1,22 @@
 using LazyVM.UI.Wpf.ViewModels;
 
-using System.Windows;
-
 namespace LazyVM.UI.Wpf;
 
 /// <summary>
-/// Opens the Checks, Log, Build and build progress windows: one Checks window
-/// for the host and one per VM, one Log window per VM, one Build window, and
-/// one progress window per VM. Opening one that is open brings it to the
-/// front instead. It also starts the runs a VM window offers: a build from
-/// a chosen phase, shown in its progress window, and maintenance; and
-/// deletes a VM, once its delete dialog has had a Yes. One Restore window
-/// per VM lists its restore points, and returns the VM to one after asking.
-/// One Recovery keys window per VM lists its BitLocker recovery keys, shows
-/// a password only when asked, and exports the keys to a file. One Password
-/// window per VM shows the account LazyVM signs in with, its password hidden
-/// until asked for, and copies it to the clipboard for three minutes. One
-/// Security findings window per VM lists what its last scan found, and the
-/// findings approved, and approves or revokes one after asking. A command
-/// about a VM takes its Hyper-V Id, empty for a VM not built yet, so it runs
-/// in the VM's own PowerShell session.
+/// Opens the app's windows, each with its view model: one VM window per VM;
+/// one Checks window for the host and one per VM; one Log, Restore, Recovery
+/// keys, Password, Security findings and build progress window per VM; and
+/// one Build window. Opening one that is open brings it to the front instead.
+/// The windows are tracked by a <see cref="WindowTracker"/>. It gives each
+/// view model the runners, dialogs and clipboard it works with, and starts
+/// the build of a VM a VM window offers, shown in its progress window. A
+/// command about a VM takes its Hyper-V Id, empty for a VM not built yet, so
+/// it runs in the VM's own PowerShell session.
 /// </summary>
-public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
+public class ToolWindows(
+    Runners runners, WindowTracker windows, Dialogs dialogs, BuildStarter starter, SecretClipboard clipboard, ListChanges changes, TimeProvider clock)
 {
     private const string _BUILD_KEY = "build";
-
-    /// <summary>
-    /// Raised when a build ended, a build or maintenance started, a delete,
-    /// a restore or an export of recovery keys ended (even one that failed),
-    /// or a security finding was approved or revoked, so the list can be read again.
-    /// </summary>
-    public ListChanges Changes { get; } = new();
-
-    /// <summary>Every phase of a build, for choosing the one a build starts at.</summary>
-    public virtual Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken)
-    {
-        return runners.Build.GetLazyVMBuildPhasesAsync(cancellationToken);
-    }
 
     /// <summary>
     /// Starts building an existing VM, such as from the phase a failed build
@@ -45,65 +25,9 @@ public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs
     /// </summary>
     public virtual async Task StartBuildAsync(Guid? vmId, BuildRequest request)
     {
-        var moduleFolder = await runners.Build.GetModuleFolderAsync(CancellationToken.None);
-        var build = launcher.Start(request, moduleFolder);
+        var build = await starter.StartAsync(request, CancellationToken.None);
         OpenProgress(vmId, request.Name, build);
-        Changes.Raise();
-    }
-
-    /// <summary>Starts the VM's maintenance task, as the nightly run does. Throws with the reason when it did not start.</summary>
-    public virtual async Task StartMaintenanceAsync(Guid? vmId, string vmName)
-    {
-        await runners.Build.StartLazyVMMaintenanceAsync(vmId, vmName, CancellationToken.None);
-        Changes.Raise();
-    }
-
-    /// <summary>Opens the documentation page in the browser. Throws with the reason when the browser did not open.</summary>
-    public virtual Task OpenHelpAsync(HelpTopic topic)
-    {
-        return runners.Help.ShowLazyVMHelpAsync(topic, CancellationToken.None);
-    }
-
-    /// <summary>What deleting the VM would delete and keep. Throws with the reason when it cannot be deleted.</summary>
-    public virtual Task<RemovalPlan> GetRemovalPlanAsync(Guid? vmId, string vmName)
-    {
-        return runners.Removal.GetLazyVMRemovalPlanAsync(vmId, vmName, CancellationToken.None);
-    }
-
-    /// <summary>
-    /// Deletes the VM, without asking: <see cref="Dialogs.ConfirmRemoval"/> has, and
-    /// closes its PowerShell session. Throws with what went wrong, such as
-    /// what is left.
-    /// </summary>
-    public virtual async Task RemoveVMAsync(Guid? vmId, string vmName)
-    {
-        try
-        {
-            await runners.Removal.RemoveLazyVMAsync(vmId, vmName);
-        }
-        finally
-        {
-            Changes.Raise();
-        }
-    }
-
-    /// <summary>The VM's restore points, oldest first.</summary>
-    public virtual Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(Guid? vmId, string vmName)
-    {
-        return runners.Restore.GetLazyVMRestorePointsAsync(vmId, vmName, CancellationToken.None);
-    }
-
-    /// <summary>Returns the VM to a restore point, without asking: <see cref="Dialogs.ConfirmRestore"/> has. Throws with the module's reason when it did not.</summary>
-    public virtual async Task RestoreToolingAsync(Guid? vmId, string vmName, string stamp)
-    {
-        try
-        {
-            await runners.Restore.RestoreLazyVMToolingAsync(vmId, vmName, stamp);
-        }
-        finally
-        {
-            Changes.Raise();
-        }
+        changes.Raise();
     }
 
     /// <summary>
@@ -117,35 +41,10 @@ public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs
         {
             return open;
         }
-        var restore = new RestoreViewModel(entry, this, dialogs);
+        var restore = new RestoreViewModel(entry, runners.Restore, dialogs, changes);
         windows.Track(key, restore);
         _ = restore.LoadAsync();
         return restore;
-    }
-
-    /// <summary>The VM's recovery keys, without their passwords.</summary>
-    public virtual Task<IReadOnlyList<VMRecoveryKey>> GetRecoveryKeysAsync(Guid? vmId, string vmName)
-    {
-        return runners.RecoveryKeys.GetLazyVMRecoveryKeysAsync(vmId, vmName, CancellationToken.None);
-    }
-
-    /// <summary>The recovery password of one of the VM's disks, read now, to be shown.</summary>
-    public virtual Task<string> GetRecoveryPasswordAsync(Guid? vmId, string vmName, string diskGuid)
-    {
-        return runners.RecoveryKeys.GetLazyVMRecoveryPasswordAsync(vmId, vmName, diskGuid, CancellationToken.None);
-    }
-
-    /// <summary>Writes the VM's recovery keys to <paramref name="path"/>, replacing it when <paramref name="force"/>. Throws with the module's reason when it did not.</summary>
-    public virtual async Task<RecoveryKeyExport> ExportRecoveryKeysAsync(Guid? vmId, string vmName, string path, bool force)
-    {
-        try
-        {
-            return await runners.RecoveryKeys.ExportLazyVMRecoveryKeysAsync(vmId, vmName, path, force);
-        }
-        finally
-        {
-            Changes.Raise();
-        }
     }
 
     /// <summary>
@@ -159,25 +58,10 @@ public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs
         {
             return open;
         }
-        var keys = new RecoveryKeysViewModel(entry, this, dialogs);
+        var keys = new RecoveryKeysViewModel(entry, runners.RecoveryKeys, dialogs, changes);
         windows.Track(key, keys, keys.Forget);
         _ = keys.LoadAsync();
         return keys;
-    }
-
-    /// <summary>The clipboard a copied password goes on, for the whole app: the app clears it when it closes.</summary>
-    public SecretClipboard Clipboard { get; } = clipboard ?? new SecretClipboard(clock);
-
-    /// <summary>The user name LazyVM signs in to the VM with. Throws with the module's reason, such as when none is stored.</summary>
-    public virtual Task<string> GetUserNameAsync(Guid? vmId, string vmName)
-    {
-        return runners.Credentials.GetLazyVMUserNameAsync(vmId, vmName, CancellationToken.None);
-    }
-
-    /// <summary>The VM's password, read now, to be shown or copied.</summary>
-    public virtual Task<string> GetPasswordAsync(Guid? vmId, string vmName)
-    {
-        return runners.Credentials.GetLazyVMPasswordAsync(vmId, vmName, CancellationToken.None);
     }
 
     /// <summary>Shows the account LazyVM signs in to the VM with, or brings its open window to the front. Closing the window forgets the password.</summary>
@@ -188,48 +72,10 @@ public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs
         {
             return open;
         }
-        var password = new PasswordViewModel(entry, this);
+        var password = new PasswordViewModel(entry, runners.Credentials, clipboard);
         windows.Track(key, password, password.Forget);
         _ = password.LoadAsync();
         return password;
-    }
-
-    /// <summary>The findings of the VM's last security scan, less the approved ones.</summary>
-    public virtual Task<IReadOnlyList<VMSecurityFinding>> GetSecurityFindingsAsync(Guid? vmId, string vmName)
-    {
-        return runners.SecurityFindings.GetLazyVMSecurityFindingsAsync(vmId, vmName, CancellationToken.None);
-    }
-
-    /// <summary>The VM's approved findings, with when and why each was approved.</summary>
-    public virtual Task<IReadOnlyList<VMSecurityApproval>> GetSecurityApprovalsAsync(Guid? vmId, string vmName)
-    {
-        return runners.SecurityFindings.GetLazyVMSecurityApprovalsAsync(vmId, vmName, CancellationToken.None);
-    }
-
-    /// <summary>Approves the finding, without asking: <see cref="Dialogs.ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
-    public virtual async Task ApproveSecurityFindingAsync(Guid? vmId, string vmName, string id, string reason)
-    {
-        try
-        {
-            await runners.SecurityFindings.ApproveLazyVMSecurityFindingAsync(vmId, vmName, id, reason);
-        }
-        finally
-        {
-            Changes.Raise();
-        }
-    }
-
-    /// <summary>Revokes the approval, without asking: <see cref="Dialogs.ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
-    public virtual async Task RevokeSecurityFindingAsync(Guid? vmId, string vmName, string id)
-    {
-        try
-        {
-            await runners.SecurityFindings.RevokeLazyVMSecurityFindingAsync(vmId, vmName, id);
-        }
-        finally
-        {
-            Changes.Raise();
-        }
     }
 
     /// <summary>
@@ -244,7 +90,7 @@ public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs
         {
             return open;
         }
-        var findings = new SecurityFindingsViewModel(entry, this, dialogs);
+        var findings = new SecurityFindingsViewModel(entry, runners.SecurityFindings, dialogs, changes);
         windows.Track(key, findings);
         _ = findings.LoadAsync();
         return findings;
@@ -292,7 +138,7 @@ public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs
             return;
         }
         // A new VM has no Hyper-V Id until its build creates it.
-        var build = new BuildViewModel(runners.Build, launcher, existingNames, (name, started) => OpenProgress(null, name, started));
+        var build = new BuildViewModel(runners.Build, starter, existingNames, (name, started) => OpenProgress(null, name, started));
         windows.Track(_BUILD_KEY, build);
         _ = build.LoadAsync();
     }
@@ -305,7 +151,7 @@ public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs
         {
             return;
         }
-        var viewModel = new VMViewModel(entry, this, dialogs);
+        var viewModel = new VMViewModel(entry, this, dialogs, runners.Build, runners.Removal, changes);
         // A deleted VM has nothing left to show.
         viewModel.Removed += (_, _) => windows.Close(viewModel);
         windows.Track(key, viewModel);
@@ -341,7 +187,7 @@ public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs
         }
         var progress = new BuildProgressViewModel(runners.Dashboard, runners.Build, vmId, vmName, started, clock,
             phase => StartBuildAsync(vmId, new BuildRequest(vmName, null, null, phase)));
-        progress.Ended += (_, _) => Changes.Raise();
+        progress.Ended += (_, _) => changes.Raise();
         windows.Track(key, progress, progress.StopFollowing);
         _ = progress.FollowAsync();
     }
