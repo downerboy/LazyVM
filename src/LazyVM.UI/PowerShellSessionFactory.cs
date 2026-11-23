@@ -7,7 +7,7 @@ namespace LazyVM.UI;
 /// unlike its name, never changes. The app makes one factory when it
 /// starts and disposes it, with every session, when it exits.
 /// </summary>
-public sealed class PowerShellSessionFactory : IDisposable
+public class PowerShellSessionFactory : IDisposable
 {
     private readonly Lock _Gate = new();
     private readonly Dictionary<Guid, PowerShellSession> _VMs = [];
@@ -20,7 +20,7 @@ public sealed class PowerShellSessionFactory : IDisposable
         lock (_Gate)
         {
             ObjectDisposedException.ThrowIf(_Disposed, this);
-            return _Host ??= new PowerShellSession();
+            return _Host ??= CreateSession();
         }
     }
 
@@ -32,7 +32,7 @@ public sealed class PowerShellSessionFactory : IDisposable
             ObjectDisposedException.ThrowIf(_Disposed, this);
             if (!_VMs.TryGetValue(id, out var session))
             {
-                session = new PowerShellSession();
+                session = CreateSession();
                 _VMs.Add(id, session);
             }
             return session;
@@ -53,6 +53,12 @@ public sealed class PowerShellSessionFactory : IDisposable
     /// <summary>Closes every session.</summary>
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
         List<PowerShellSession> closing;
         lock (_Gate)
         {
@@ -65,9 +71,19 @@ public sealed class PowerShellSessionFactory : IDisposable
             _VMs.Clear();
             _Host = null;
         }
+        if (!disposing)
+        {
+            return;
+        }
         foreach (var session in closing)
         {
             session.Dispose();
         }
+    }
+
+    /// <summary>A new session, not started. Tests make sessions that answer without the module.</summary>
+    protected virtual PowerShellSession CreateSession()
+    {
+        return new PowerShellSession();
     }
 }

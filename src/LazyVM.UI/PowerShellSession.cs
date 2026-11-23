@@ -15,9 +15,10 @@ namespace LazyVM.UI;
 /// imported by full path from %ProgramFiles%\LazyVM\Modules, never found
 /// through PSModulePath, no profile scripts, and a module search path of
 /// folders only administrators control. Commands are fixed commands with
-/// fixed parameters, never script text.
+/// fixed parameters, never script text. Tests replace
+/// <see cref="InvokeAsync"/> to answer without the module.
 /// </remarks>
-public sealed class PowerShellSession : IDisposable
+public class PowerShellSession : IDisposable
 {
     /// <summary>
     /// One runspace opens at a time, in the whole app: PSModulePath belongs
@@ -76,7 +77,7 @@ public sealed class PowerShellSession : IDisposable
     /// <see cref="OperationCanceledException"/> when cancelled, and
     /// <see cref="ObjectDisposedException"/> once the session is closed.
     /// </summary>
-    public async Task<PowerShellResult> InvokeAsync(
+    public virtual async Task<PowerShellResult> InvokeAsync(
         string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
@@ -115,6 +116,12 @@ public sealed class PowerShellSession : IDisposable
     /// </summary>
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
         Runspace? closing;
         lock (_State)
         {
@@ -128,7 +135,10 @@ public sealed class PowerShellSession : IDisposable
         }
         // _OneAtATime is left for the collector, not disposed: a call running
         // now still releases it in its finally, and it has no wait handle.
-        closing?.Dispose();
+        if (disposing)
+        {
+            closing?.Dispose();
+        }
     }
 
     private void ThrowIfDisposed()
