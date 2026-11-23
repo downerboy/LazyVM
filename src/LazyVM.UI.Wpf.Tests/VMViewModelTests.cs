@@ -5,15 +5,16 @@ namespace LazyVM.UI.Wpf.Tests;
 public sealed class VMViewModelTests : IDisposable
 {
     private const long _GB = 1024L * 1024 * 1024;
+    private static readonly Guid _DEV_BOX_ID = Guid.Parse("4f2c9a1e-7b3d-4c8e-9a10-2d5e6f7a8b9c");
 
     private readonly CultureScope _Culture = new("en-GB");
-    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeRunners _Runners = new();
     private readonly FakeBuildLauncher _Launcher = new();
     private readonly FakeToolWindows _Tools;
 
     public VMViewModelTests()
     {
-        _Tools = new FakeToolWindows(_Runner, _Launcher);
+        _Tools = new FakeToolWindows(_Runners, _Launcher);
     }
 
     public void Dispose()
@@ -29,24 +30,38 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void Checks_OpensTheVMsChecks()
     {
-        _Runner.ReturnsChecks(Sample.Check());
+        _Runners.Checks.ReturnsChecks(Sample.Check());
         var vm = Open(Sample.VM("DevEnv"));
 
         vm.ChecksCommand.Execute(null);
 
         Assert.Equal("DevEnv", Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown)).VMName);
-        Assert.Equal([("DevEnv", false)], _Runner.CheckCalls);
+        Assert.Equal([("DevEnv", false)], _Runners.Checks.CheckCalls);
     }
 
     [Fact]
     public void Log_OpensTheVMsLog()
     {
-        _Runner.ReturnsLog();
+        _Runners.Log.ReturnsLog();
         var vm = Open(Sample.VM("DevEnv"));
 
         vm.LogCommand.Execute(null);
 
         Assert.Equal("DevEnv", Assert.IsType<LogViewModel>(Assert.Single(_Tools.Shown)).VMName);
+    }
+
+    [Fact]
+    public void ChecksAndLog_RunInTheVMsOwnSession()
+    {
+        _Runners.Checks.ReturnsChecks(Sample.Check());
+        _Runners.Log.ReturnsLog();
+        var vm = Open(Sample.VM() with { Id = _DEV_BOX_ID });
+
+        vm.ChecksCommand.Execute(null);
+        vm.LogCommand.Execute(null);
+
+        Assert.Equal([_DEV_BOX_ID], _Runners.Checks.CheckIds);
+        Assert.Equal([_DEV_BOX_ID], _Runners.Log.LogIds);
     }
 
     private static string? Detail(VMViewModel vm, string label)
@@ -197,62 +212,62 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void RecoveryKeys_OpensTheVMsRecoveryKeysWindow_AndReadsTheKeys()
     {
-        _Runner.ReturnsRecoveryKeys();
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys();
         var vm = Open(Sample.VM());
 
         vm.RecoveryKeysCommand.Execute(null);
 
         Assert.Equal("DevBox", Assert.IsType<RecoveryKeysViewModel>(Assert.Single(_Tools.Shown)).Name);
-        Assert.Equal(["DevBox"], _Runner.RecoveryKeyCalls);
+        Assert.Equal(["DevBox"], _Runners.RecoveryKeys.RecoveryKeyCalls);
     }
 
     [Fact]
     public void SecurityFindings_OpensTheVMsSecurityFindingsWindow_AndReadsThem()
     {
-        _Runner.ReturnsSecurityFindings();
-        _Runner.ReturnsSecurityApprovals();
+        _Runners.SecurityFindings.ReturnsSecurityFindings();
+        _Runners.SecurityFindings.ReturnsSecurityApprovals();
         var vm = Open(Sample.VM());
 
         vm.SecurityFindingsCommand.Execute(null);
 
         Assert.Equal("DevBox", Assert.IsType<SecurityFindingsViewModel>(Assert.Single(_Tools.Shown)).Name);
-        Assert.Equal(["DevBox"], _Runner.SecurityFindingCalls);
-        Assert.Equal(["DevBox"], _Runner.SecurityApprovalCalls);
+        Assert.Equal(["DevBox"], _Runners.SecurityFindings.SecurityFindingCalls);
+        Assert.Equal(["DevBox"], _Runners.SecurityFindings.SecurityApprovalCalls);
     }
 
     [Fact]
     public void SecurityFindings_Twice_BringsTheOpenWindowToTheFront()
     {
-        _Runner.ReturnsSecurityFindings();
-        _Runner.ReturnsSecurityApprovals();
+        _Runners.SecurityFindings.ReturnsSecurityFindings();
+        _Runners.SecurityFindings.ReturnsSecurityApprovals();
         var vm = Open(Sample.VM());
 
         vm.SecurityFindingsCommand.Execute(null);
         vm.SecurityFindingsCommand.Execute(null);
 
         Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
-        Assert.Single(_Runner.SecurityFindingCalls);
+        Assert.Single(_Runners.SecurityFindings.SecurityFindingCalls);
     }
 
     [Fact]
     public void Update_WithANewerScan_ReadsTheOpenSecurityFindingsWindowAgain()
     {
-        _Runner.ReturnsSecurityFindings();
-        _Runner.ReturnsSecurityApprovals();
+        _Runners.SecurityFindings.ReturnsSecurityFindings();
+        _Runners.SecurityFindings.ReturnsSecurityApprovals();
         var vm = Open(Sample.VM() with
         {
             LastSecurityScan = null
         });
         vm.SecurityFindingsCommand.Execute(null);
-        _Runner.ReturnsSecurityFindings();
-        _Runner.ReturnsSecurityApprovals();
+        _Runners.SecurityFindings.ReturnsSecurityFindings();
+        _Runners.SecurityFindings.ReturnsSecurityApprovals();
 
         vm.Update(Sample.VM() with
         {
             LastSecurityScan = new DateTime(2026, 11, 18, 2, 30, 0)
         });
 
-        Assert.Equal(2, _Runner.SecurityFindingCalls.Count);
+        Assert.Equal(2, _Runners.SecurityFindings.SecurityFindingCalls.Count);
     }
 
     [Fact]
@@ -263,8 +278,8 @@ public sealed class VMViewModelTests : IDisposable
         vm.PasswordCommand.Execute(null);
 
         Assert.Equal("DevBox", Assert.IsType<PasswordViewModel>(Assert.Single(_Tools.Shown)).Name);
-        Assert.Equal(["DevBox"], _Runner.UserNameCalls);
-        Assert.Empty(_Runner.PasswordCalls);
+        Assert.Equal(["DevBox"], _Runners.Credentials.UserNameCalls);
+        Assert.Empty(_Runners.Credentials.PasswordCalls);
     }
 
     [Fact]
@@ -281,14 +296,14 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void RecoveryKeys_Twice_BringsTheOpenWindowToTheFront()
     {
-        _Runner.ReturnsRecoveryKeys();
+        _Runners.RecoveryKeys.ReturnsRecoveryKeys();
         var vm = Open(Sample.VM());
 
         vm.RecoveryKeysCommand.Execute(null);
         vm.RecoveryKeysCommand.Execute(null);
 
         Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
-        Assert.Single(_Runner.RecoveryKeyCalls);
+        Assert.Single(_Runners.RecoveryKeys.RecoveryKeyCalls);
     }
 
     [Fact]
@@ -478,7 +493,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public void BuildProgress_OpensTheProgressOfTheRunningBuild()
     {
-        _Runner.ReturnsRun(new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 }, "DevEnv");
+        _Runners.Dashboard.ReturnsRun(new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 }, "DevEnv");
         var vm = Open(Sample.VM("DevEnv") with
         {
             Run = new VMRun { Command = VMRun.BUILD, Status = VMRun.RUNNING, ProcessId = 9, Phase = 7 }
@@ -591,7 +606,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task BuildFromPhaseHelp_WithNoPhaseChosen_SaysOnlyHowTheBuildRuns()
     {
-        _Runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
+        _Runners.Build.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
 
         var vm = await Loaded(Sample.VM());
 
@@ -601,7 +616,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task PhaseHelp_WhenThePhasesCannotBeRead_IsEmpty()
     {
-        _Runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
+        _Runners.Build.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
 
         var vm = await Loaded(Sample.VM());
 
@@ -665,7 +680,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task Load_WhenThePhasesCannotBeRead_SaysWhy_AndOffersNoBuild()
     {
-        _Runner.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
+        _Runners.Build.PhasesFail = new InvalidOperationException("The LazyVM module could not be loaded.");
 
         var vm = await Loaded(Sample.VM());
 
@@ -678,7 +693,7 @@ public sealed class VMViewModelTests : IDisposable
     {
         var vm = await Loaded(Sample.VM("DevEnv"));
         vm.SelectedPhase = vm.Phases.Single(phase => phase.Number == 7);
-        _Runner.ReturnsRun(null, "DevEnv");
+        _Runners.Dashboard.ReturnsRun(null, "DevEnv");
 
         await vm.BuildFromPhaseAsync();
 
@@ -716,7 +731,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task Delete_IsWorkingWhileWhatGoesIsReadAndTheVMIsDeleted()
     {
-        _Runner.ReturnsRemovalPlan(PlanOf());
+        _Runners.Removal.ReturnsRemovalPlan(PlanOf());
         _Tools.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
         var watcher = new WorkWatcher(vm);
@@ -733,14 +748,14 @@ public sealed class VMViewModelTests : IDisposable
 
         await vm.RunMaintenanceAsync();
 
-        Assert.Equal(["DevEnv"], _Runner.MaintenanceCalls);
+        Assert.Equal(["DevEnv"], _Runners.Build.MaintenanceCalls);
         Assert.StartsWith("The maintenance of DevEnv has started, as its nightly run does.", vm.Status);
     }
 
     [Fact]
     public async Task RunMaintenance_WhenTheModuleStartsNothing_SaysWhy()
     {
-        _Runner.MaintenanceFails = new InvalidOperationException("The maintenance of DevBox is running already, so it was not started again.");
+        _Runners.Build.MaintenanceFails = new InvalidOperationException("The maintenance of DevBox is running already, so it was not started again.");
         var vm = await Loaded(Sample.VM());
 
         await vm.RunMaintenanceAsync();
@@ -767,7 +782,7 @@ public sealed class VMViewModelTests : IDisposable
 
         await vm.RunMaintenanceAsync();
         await vm.BuildFromPhaseAsync();
-        Assert.Empty(_Runner.MaintenanceCalls);
+        Assert.Empty(_Runners.Build.MaintenanceCalls);
         Assert.Empty(_Launcher.Started);
     }
 
@@ -873,7 +888,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task Delete_ShowsWhatGoes_AndOnYes_RemovesTheVM()
     {
-        _Runner.ReturnsRemovalPlan(PlanOf());
+        _Runners.Removal.ReturnsRemovalPlan(PlanOf());
         _Tools.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
         var removed = 0;
@@ -886,8 +901,8 @@ public sealed class VMViewModelTests : IDisposable
         var asked = Assert.Single(_Tools.RemovalsAsked);
         Assert.Equal("DevBox", asked.Name);
         Assert.Contains(@"Folder C:\LazyVM\DevBox, 50 GB", asked.Lines.Select(line => line.Text));
-        Assert.Equal(["DevBox"], _Runner.RemovalPlanCalls);
-        Assert.Equal(["DevBox"], _Runner.RemoveCalls);
+        Assert.Equal(["DevBox"], _Runners.Removal.RemovalPlanCalls);
+        Assert.Equal(["DevBox"], _Runners.Removal.RemoveCalls);
         Assert.Equal(1, removed);
         Assert.Equal(1, listChanged);
         Assert.Equal("DevBox has been deleted.", vm.Status);
@@ -897,7 +912,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task Delete_OnNo_DeletesNothing()
     {
-        _Runner.ReturnsRemovalPlan(PlanOf());
+        _Runners.Removal.ReturnsRemovalPlan(PlanOf());
         _Tools.ConfirmsRemoval = false;
         var vm = await Loaded(Sample.VM());
         var removed = 0;
@@ -906,7 +921,7 @@ public sealed class VMViewModelTests : IDisposable
         await vm.DeleteAsync();
 
         Assert.Single(_Tools.RemovalsAsked);
-        Assert.Empty(_Runner.RemoveCalls);
+        Assert.Empty(_Runners.Removal.RemoveCalls);
         Assert.Equal(0, removed);
         Assert.Equal("DevBox was not deleted.", vm.Status);
         Assert.True(vm.DeleteCommand.CanExecute(null));
@@ -915,22 +930,22 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task Delete_WhenWhatGoesCannotBeRead_AsksNothing_AndSaysWhy()
     {
-        _Runner.RemovalPlanThrows(new InvalidOperationException("Cannot tell what VM 'Other' uses, so nothing has been removed."));
+        _Runners.Removal.RemovalPlanThrows(new InvalidOperationException("Cannot tell what VM 'Other' uses, so nothing has been removed."));
         var vm = await Loaded(Sample.VM());
 
         await vm.DeleteAsync();
 
         Assert.Empty(_Tools.RemovalsAsked);
-        Assert.Empty(_Runner.RemoveCalls);
+        Assert.Empty(_Runners.Removal.RemoveCalls);
         Assert.Equal("DevBox cannot be deleted now: Cannot tell what VM 'Other' uses, so nothing has been removed.", vm.Status);
     }
 
     [Fact]
     public async Task Delete_ThatOnlyPartlyRemoved_SaysWhatIsLeft_AndKeepsTheWindow()
     {
-        _Runner.ReturnsRemovalPlan(PlanOf());
-        _Runner.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", Items = [new(RemovalItem.FILE, @"E:\Disks\DevBox\SQL.vhdx", _GB)] });
-        _Runner.RemoveFails = new InvalidOperationException(@"'DevBox' was only partly removed. The log lists what is left: C:\LazyVM\DevBox\Logs\DevBox.log");
+        _Runners.Removal.ReturnsRemovalPlan(PlanOf());
+        _Runners.Removal.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", Items = [new(RemovalItem.FILE, @"E:\Disks\DevBox\SQL.vhdx", _GB)] });
+        _Runners.Removal.RemoveFails = new InvalidOperationException(@"'DevBox' was only partly removed. The log lists what is left: C:\LazyVM\DevBox\Logs\DevBox.log");
         _Tools.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
         var removed = 0;
@@ -949,11 +964,28 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Delete_RunsInTheVMsSession_AndReadsWhatIsLeftInTheHosts()
+    {
+        // The delete closes the VM's session, and its Hyper-V Id may be gone:
+        // what is left is read without it, so no new session starts for it.
+        _Runners.Removal.ReturnsRemovalPlan(PlanOf());
+        _Runners.Removal.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", Items = [new(RemovalItem.FILE, @"E:\Disks\DevBox\SQL.vhdx", _GB)] });
+        _Runners.Removal.RemoveFails = new InvalidOperationException("'DevBox' was only partly removed.");
+        _Tools.ConfirmsRemoval = true;
+        var vm = await Loaded(Sample.VM() with { Id = _DEV_BOX_ID });
+
+        await vm.DeleteAsync();
+
+        Assert.Equal([_DEV_BOX_ID], _Runners.Removal.RemoveIds);
+        Assert.Equal([_DEV_BOX_ID, null], _Runners.Removal.RemovalPlanIds);
+    }
+
+    [Fact]
     public async Task Delete_ThatFailed_WhenWhatIsLeftCannotBeRead_GivesTheModulesReason()
     {
-        _Runner.ReturnsRemovalPlan(PlanOf());
-        _Runner.RemovalPlanThrows(new InvalidOperationException("There is no VM named DevBox."));
-        _Runner.RemoveFails = new InvalidOperationException("'DevBox' was only partly removed.");
+        _Runners.Removal.ReturnsRemovalPlan(PlanOf());
+        _Runners.Removal.RemovalPlanThrows(new InvalidOperationException("There is no VM named DevBox."));
+        _Runners.Removal.RemoveFails = new InvalidOperationException("'DevBox' was only partly removed.");
         _Tools.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
 
@@ -965,8 +997,8 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task WhileDeleting_NothingElseCanStart()
     {
-        _Runner.ReturnsRemovalPlan(PlanOf());
-        _Runner.RemoveGate = new TaskCompletionSource();
+        _Runners.Removal.ReturnsRemovalPlan(PlanOf());
+        _Runners.Removal.RemoveGate = new TaskCompletionSource();
         _Tools.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
 
@@ -980,11 +1012,11 @@ public sealed class VMViewModelTests : IDisposable
         await vm.BuildFromPhaseAsync();
         await vm.RunMaintenanceAsync();
         Assert.Empty(_Launcher.Started);
-        Assert.Empty(_Runner.MaintenanceCalls);
+        Assert.Empty(_Runners.Build.MaintenanceCalls);
 
-        _Runner.RemoveGate.SetResult();
+        _Runners.Removal.RemoveGate.SetResult();
         await deleting;
-        Assert.Equal(["DevBox"], _Runner.RemoveCalls);
+        Assert.Equal(["DevBox"], _Runners.Removal.RemoveCalls);
     }
 
     [Theory]
@@ -1003,7 +1035,7 @@ public sealed class VMViewModelTests : IDisposable
         Assert.True(vm.HasDeleteNote);
 
         await vm.DeleteAsync();
-        Assert.Empty(_Runner.RemovalPlanCalls);
+        Assert.Empty(_Runners.Removal.RemovalPlanCalls);
     }
 
     [Fact]
@@ -1034,19 +1066,19 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task RestorePoints_OpensTheVMsRestoreWindow_AndReadsThePoints()
     {
-        _Runner.ReturnsRestorePoints();
+        _Runners.Restore.ReturnsRestorePoints();
         var vm = await Loaded(Sample.VM());
 
         vm.RestorePointsCommand.Execute(null);
 
         Assert.Equal("DevBox", Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Shown)).Name);
-        Assert.Equal(["DevBox"], _Runner.RestorePointCalls);
+        Assert.Equal(["DevBox"], _Runners.Restore.RestorePointCalls);
     }
 
     [Fact]
     public async Task RestorePoints_Twice_BringsTheOpenWindowToTheFront()
     {
-        _Runner.ReturnsRestorePoints();
+        _Runners.Restore.ReturnsRestorePoints();
         var vm = await Loaded(Sample.VM());
 
         vm.RestorePointsCommand.Execute(null);
@@ -1058,7 +1090,7 @@ public sealed class VMViewModelTests : IDisposable
     [Fact]
     public async Task ARefresh_ReachesTheOpenRestoreWindow()
     {
-        _Runner.ReturnsRestorePoints(new VMRestorePoint("20261008-193000", new DateTime(2026, 10, 8), true));
+        _Runners.Restore.ReturnsRestorePoints(new VMRestorePoint("20261008-193000", new DateTime(2026, 10, 8), true));
         var vm = await Loaded(Sample.VM());
         vm.RestorePointsCommand.Execute(null);
         var restore = Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Shown));

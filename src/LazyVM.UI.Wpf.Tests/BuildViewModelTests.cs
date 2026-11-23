@@ -4,14 +4,14 @@ namespace LazyVM.UI.Wpf.Tests;
 
 public sealed class BuildViewModelTests
 {
-    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeRunners _Runners = new();
     private readonly FakeBuildLauncher _Launcher = new();
     private readonly List<(string Name, StartedBuild Build)> _Started = [];
     private readonly BuildViewModel _Build;
 
     public BuildViewModelTests()
     {
-        _Build = new BuildViewModel(_Runner, _Launcher, ["DevBox"], (name, process) => _Started.Add((name, process)));
+        _Build = new BuildViewModel(_Runners.Build, _Launcher, ["DevBox"], (name, process) => _Started.Add((name, process)));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class BuildViewModelTests
     [Fact]
     public async Task Load_WhenTheTemplatesCannotBeRead_SaysWhy()
     {
-        _Runner.TemplatesFail = new InvalidOperationException("Access is denied.");
+        _Runners.Build.TemplatesFail = new InvalidOperationException("Access is denied.");
 
         await _Build.LoadAsync();
 

@@ -107,7 +107,7 @@ public sealed class PasswordViewModel : ViewModelBase
     {
         try
         {
-            UserName = await WorkAsync("Reading the user name", () => _Tools.GetUserNameAsync(Name));
+            UserName = await WorkAsync("Reading the user name", () => _Tools.GetUserNameAsync(_Entry.Id, Name));
         }
         catch (Exception exception)
         {
@@ -132,7 +132,7 @@ public sealed class PasswordViewModel : ViewModelBase
         {
             try
             {
-                SetPassword(await WorkAsync("Reading the password", () => _Tools.GetPasswordAsync(Name)));
+                SetPassword(await WorkAsync("Reading the password", () => _Tools.GetPasswordAsync(_Entry.Id, Name)));
                 Status = "The password is shown. Hide password hides it again; closing this window does too.";
             }
             catch (Exception exception)
@@ -153,7 +153,7 @@ public sealed class PasswordViewModel : ViewModelBase
         {
             try
             {
-                var until = _Tools.Clipboard.Put(await WorkAsync("Reading the password", () => _Tools.GetPasswordAsync(Name)));
+                var until = _Tools.Clipboard.Put(await WorkAsync("Reading the password", () => _Tools.GetPasswordAsync(_Entry.Id, Name)));
                 Status = $"The password is on the clipboard until {until.ToString("t", CultureInfo.CurrentCulture)}. "
                     + "It is left out of clipboard history, and cleared then if it is still there.";
             }

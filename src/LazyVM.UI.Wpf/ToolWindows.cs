@@ -17,9 +17,11 @@ namespace LazyVM.UI.Wpf;
 /// window per VM shows the account LazyVM signs in with, its password hidden
 /// until asked for, and copies it to the clipboard for three minutes. One
 /// Security findings window per VM lists what its last scan found, and the
-/// findings approved, and approves or revokes one after asking.
+/// findings approved, and approves or revokes one after asking. A command
+/// about a VM takes its Hyper-V Id, empty for a VM not built yet, so it runs
+/// in the VM's own PowerShell session.
 /// </summary>
-public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
+public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
 {
     private const string _BUILD_KEY = "build";
     private readonly Dictionary<string, ViewModelBase> _Open = new(StringComparer.OrdinalIgnoreCase);
@@ -33,7 +35,7 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     /// <summary>Every phase of a build, for choosing the one a build starts at.</summary>
     public virtual Task<IReadOnlyList<BuildPhase>> GetBuildPhasesAsync(CancellationToken cancellationToken)
     {
-        return runner.GetLazyVMBuildPhasesAsync(cancellationToken);
+        return runners.Build.GetLazyVMBuildPhasesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -41,42 +43,46 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     /// was in, in a pwsh process of its own, and shows its progress. Throws
     /// when it could not start.
     /// </summary>
-    public virtual async Task StartBuildAsync(BuildRequest request)
+    public virtual async Task StartBuildAsync(Guid? vmId, BuildRequest request)
     {
-        var moduleFolder = await runner.GetModuleFolderAsync(CancellationToken.None);
+        var moduleFolder = await runners.Build.GetModuleFolderAsync(CancellationToken.None);
         var build = launcher.Start(request, moduleFolder);
-        OpenProgress(request.Name, build);
+        OpenProgress(vmId, request.Name, build);
         RunStarted?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Starts the VM's maintenance task, as the nightly run does. Throws with the reason when it did not start.</summary>
-    public virtual async Task StartMaintenanceAsync(string vmName)
+    public virtual async Task StartMaintenanceAsync(Guid? vmId, string vmName)
     {
-        await runner.StartLazyVMMaintenanceAsync(vmName, CancellationToken.None);
+        await runners.Build.StartLazyVMMaintenanceAsync(vmId, vmName, CancellationToken.None);
         RunStarted?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Opens the documentation page in the browser. Throws with the reason when the browser did not open.</summary>
     public virtual Task OpenHelpAsync(HelpTopic topic)
     {
-        return runner.ShowLazyVMHelpAsync(topic, CancellationToken.None);
+        return runners.Help.ShowLazyVMHelpAsync(topic, CancellationToken.None);
     }
 
     /// <summary>Raised when a delete has ended, even one that removed only part of the VM, so the list can be read again.</summary>
     public event EventHandler? VMRemoved;
 
     /// <summary>What deleting the VM would delete and keep. Throws with the reason when it cannot be deleted.</summary>
-    public virtual Task<RemovalPlan> GetRemovalPlanAsync(string vmName)
+    public virtual Task<RemovalPlan> GetRemovalPlanAsync(Guid? vmId, string vmName)
     {
-        return runner.GetLazyVMRemovalPlanAsync(vmName, CancellationToken.None);
+        return runners.Removal.GetLazyVMRemovalPlanAsync(vmId, vmName, CancellationToken.None);
     }
 
-    /// <summary>Deletes the VM, without asking: <see cref="ConfirmRemoval"/> has. Throws with what went wrong, such as what is left.</summary>
-    public virtual async Task RemoveVMAsync(string vmName)
+    /// <summary>
+    /// Deletes the VM, without asking: <see cref="ConfirmRemoval"/> has, and
+    /// closes its PowerShell session. Throws with what went wrong, such as
+    /// what is left.
+    /// </summary>
+    public virtual async Task RemoveVMAsync(Guid? vmId, string vmName)
     {
         try
         {
-            await runner.RemoveLazyVMAsync(vmName);
+            await runners.Removal.RemoveLazyVMAsync(vmId, vmName);
         }
         finally
         {
@@ -100,17 +106,17 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     public event EventHandler? ToolingRestored;
 
     /// <summary>The VM's restore points, oldest first.</summary>
-    public virtual Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(string vmName)
+    public virtual Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(Guid? vmId, string vmName)
     {
-        return runner.GetLazyVMRestorePointsAsync(vmName, CancellationToken.None);
+        return runners.Restore.GetLazyVMRestorePointsAsync(vmId, vmName, CancellationToken.None);
     }
 
     /// <summary>Returns the VM to a restore point, without asking: <see cref="ConfirmRestore"/> has. Throws with the module's reason when it did not.</summary>
-    public virtual async Task RestoreToolingAsync(string vmName, string stamp)
+    public virtual async Task RestoreToolingAsync(Guid? vmId, string vmName, string stamp)
     {
         try
         {
-            await runner.RestoreLazyVMToolingAsync(vmName, stamp);
+            await runners.Restore.RestoreLazyVMToolingAsync(vmId, vmName, stamp);
         }
         finally
         {
@@ -151,23 +157,23 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     public event EventHandler? RecoveryKeysExported;
 
     /// <summary>The VM's recovery keys, without their passwords.</summary>
-    public virtual Task<IReadOnlyList<VMRecoveryKey>> GetRecoveryKeysAsync(string vmName)
+    public virtual Task<IReadOnlyList<VMRecoveryKey>> GetRecoveryKeysAsync(Guid? vmId, string vmName)
     {
-        return runner.GetLazyVMRecoveryKeysAsync(vmName, CancellationToken.None);
+        return runners.RecoveryKeys.GetLazyVMRecoveryKeysAsync(vmId, vmName, CancellationToken.None);
     }
 
     /// <summary>The recovery password of one of the VM's disks, read now, to be shown.</summary>
-    public virtual Task<string> GetRecoveryPasswordAsync(string vmName, string diskGuid)
+    public virtual Task<string> GetRecoveryPasswordAsync(Guid? vmId, string vmName, string diskGuid)
     {
-        return runner.GetLazyVMRecoveryPasswordAsync(vmName, diskGuid, CancellationToken.None);
+        return runners.RecoveryKeys.GetLazyVMRecoveryPasswordAsync(vmId, vmName, diskGuid, CancellationToken.None);
     }
 
     /// <summary>Writes the VM's recovery keys to <paramref name="path"/>, replacing it when <paramref name="force"/>. Throws with the module's reason when it did not.</summary>
-    public virtual async Task<RecoveryKeyExport> ExportRecoveryKeysAsync(string vmName, string path, bool force)
+    public virtual async Task<RecoveryKeyExport> ExportRecoveryKeysAsync(Guid? vmId, string vmName, string path, bool force)
     {
         try
         {
-            return await runner.ExportLazyVMRecoveryKeysAsync(vmName, path, force);
+            return await runners.RecoveryKeys.ExportLazyVMRecoveryKeysAsync(vmId, vmName, path, force);
         }
         finally
         {
@@ -233,15 +239,15 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     public SecretClipboard Clipboard { get; } = clipboard ?? new SecretClipboard(clock);
 
     /// <summary>The user name LazyVM signs in to the VM with. Throws with the module's reason, such as when none is stored.</summary>
-    public virtual Task<string> GetUserNameAsync(string vmName)
+    public virtual Task<string> GetUserNameAsync(Guid? vmId, string vmName)
     {
-        return runner.GetLazyVMUserNameAsync(vmName, CancellationToken.None);
+        return runners.Credentials.GetLazyVMUserNameAsync(vmId, vmName, CancellationToken.None);
     }
 
     /// <summary>The VM's password, read now, to be shown or copied.</summary>
-    public virtual Task<string> GetPasswordAsync(string vmName)
+    public virtual Task<string> GetPasswordAsync(Guid? vmId, string vmName)
     {
-        return runner.GetLazyVMPasswordAsync(vmName, CancellationToken.None);
+        return runners.Credentials.GetLazyVMPasswordAsync(vmId, vmName, CancellationToken.None);
     }
 
     /// <summary>Shows the account LazyVM signs in to the VM with, or brings its open window to the front. Closing the window forgets the password.</summary>
@@ -260,26 +266,26 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     }
 
     /// <summary>The findings of the VM's last security scan, less the approved ones.</summary>
-    public virtual Task<IReadOnlyList<VMSecurityFinding>> GetSecurityFindingsAsync(string vmName)
+    public virtual Task<IReadOnlyList<VMSecurityFinding>> GetSecurityFindingsAsync(Guid? vmId, string vmName)
     {
-        return runner.GetLazyVMSecurityFindingsAsync(vmName, CancellationToken.None);
+        return runners.SecurityFindings.GetLazyVMSecurityFindingsAsync(vmId, vmName, CancellationToken.None);
     }
 
     /// <summary>The VM's approved findings, with when and why each was approved.</summary>
-    public virtual Task<IReadOnlyList<VMSecurityApproval>> GetSecurityApprovalsAsync(string vmName)
+    public virtual Task<IReadOnlyList<VMSecurityApproval>> GetSecurityApprovalsAsync(Guid? vmId, string vmName)
     {
-        return runner.GetLazyVMSecurityApprovalsAsync(vmName, CancellationToken.None);
+        return runners.SecurityFindings.GetLazyVMSecurityApprovalsAsync(vmId, vmName, CancellationToken.None);
     }
 
     /// <summary>Raised when an approval or a revoke has ended, even one refused, so the list can be read again.</summary>
     public event EventHandler? SecurityFindingsChanged;
 
     /// <summary>Approves the finding, without asking: <see cref="ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
-    public virtual async Task ApproveSecurityFindingAsync(string vmName, string id, string reason)
+    public virtual async Task ApproveSecurityFindingAsync(Guid? vmId, string vmName, string id, string reason)
     {
         try
         {
-            await runner.ApproveLazyVMSecurityFindingAsync(vmName, id, reason);
+            await runners.SecurityFindings.ApproveLazyVMSecurityFindingAsync(vmId, vmName, id, reason);
         }
         finally
         {
@@ -288,11 +294,11 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     }
 
     /// <summary>Revokes the approval, without asking: <see cref="ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
-    public virtual async Task RevokeSecurityFindingAsync(string vmName, string id)
+    public virtual async Task RevokeSecurityFindingAsync(Guid? vmId, string vmName, string id)
     {
         try
         {
-            await runner.RevokeLazyVMSecurityFindingAsync(vmName, id);
+            await runners.SecurityFindings.RevokeLazyVMSecurityFindingAsync(vmId, vmName, id);
         }
         finally
         {
@@ -339,13 +345,13 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     }
 
     /// <summary>Shows the checks of the VM <paramref name="vmName"/>, or of the host, and runs them.</summary>
-    public void OpenChecks(string? vmName, bool hostOnly)
+    public void OpenChecks(Guid? vmId, string? vmName, bool hostOnly)
     {
         if (BringToFrontIfOpen(ChecksKey(vmName)))
         {
             return;
         }
-        var checks = new ChecksViewModel(runner, vmName, hostOnly);
+        var checks = new ChecksViewModel(runners.Checks, vmId, vmName, hostOnly);
         Track(ChecksKey(vmName), checks);
         _ = checks.RunAsync();
     }
@@ -360,14 +366,14 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     }
 
     /// <summary>Shows the VM's log and reads it.</summary>
-    public void OpenLog(string vmName)
+    public void OpenLog(Guid? vmId, string vmName)
     {
         var key = "log:" + vmName;
         if (BringToFrontIfOpen(key))
         {
             return;
         }
-        var log = new LogViewModel(runner, vmName);
+        var log = new LogViewModel(runners.Log, vmId, vmName);
         Track(key, log);
         _ = log.LoadAsync();
     }
@@ -379,7 +385,8 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
         {
             return;
         }
-        var build = new BuildViewModel(runner, launcher, existingNames, (name, started) => OpenProgress(name, started));
+        // A new VM has no Hyper-V Id until its build creates it.
+        var build = new BuildViewModel(runners.Build, launcher, existingNames, (name, started) => OpenProgress(null, name, started));
         Track(_BUILD_KEY, build);
         _ = build.LoadAsync();
     }
@@ -389,7 +396,7 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
     /// the build the app has just started, or with none, of the build
     /// running now. Closing the window stops only the following.
     /// </summary>
-    public void OpenProgress(string vmName, StartedBuild? started)
+    public void OpenProgress(Guid? vmId, string vmName, StartedBuild? started)
     {
         var key = "progress:" + vmName;
         if (_Open.TryGetValue(key, out var existing))
@@ -403,8 +410,8 @@ public class ToolWindows(PowerShellCommandRunner runner, BuildLauncher launcher,
             _Open.Remove(key);
             CloseWindow(existing);
         }
-        var progress = new BuildProgressViewModel(runner, vmName, started, clock,
-            phase => StartBuildAsync(new BuildRequest(vmName, null, null, phase)));
+        var progress = new BuildProgressViewModel(runners.Dashboard, runners.Build, vmId, vmName, started, clock,
+            phase => StartBuildAsync(vmId, new BuildRequest(vmName, null, null, phase)));
         progress.Ended += (_, _) => BuildEnded?.Invoke(this, EventArgs.Empty);
         Track(key, progress, progress.StopFollowing);
         _ = progress.FollowAsync();

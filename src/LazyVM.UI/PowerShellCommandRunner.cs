@@ -1,125 +1,80 @@
-using System.IO;
 using System.Management.Automation;
-using System.Management.Automation.Runspaces;
+
 namespace LazyVM.UI;
 
 /// <summary>
-/// Runs the LazyVM module's commands in PowerShell hosted in the app, and
-/// hands back plain values. View models take this class through their
-/// constructor; tests replace its virtual members.
+/// What every LazyVM runner shares: the session a command runs in, and
+/// the rules for when what a command wrote is its failure. Each runner,
+/// such as <see cref="LazyVMLogRunner"/>, runs the module's commands of
+/// one area and reads what they return into plain values. View models take
+/// runners through their constructor; tests replace their virtual members.
 /// </summary>
-/// <remarks>
-/// One runspace, opened on the first call, with the installed module
-/// imported by full path from %ProgramFiles%\LazyVM\Modules, never found
-/// through PSModulePath, no profile scripts, and a module search path of
-/// folders only administrators control. Commands are fixed commands
-/// with fixed parameters, never script text. A runspace runs one pipeline at
-/// a time, so a second call waits for the first.
-/// </remarks>
-public class PowerShellCommandRunner : IDisposable
+public abstract class PowerShellCommandRunner
 {
-    #region PowerShellCommandRunner specific
-    private readonly SemaphoreSlim _OneAtATime = new(1, 1);
-    private Runspace? _Runspace;
-    private bool _Disposed;
+    /// <summary>Runs commands in the sessions <paramref name="sessions"/> gives, which the app makes once and disposes when it exits.</summary>
+    protected PowerShellCommandRunner(PowerShellSessionFactory sessions)
+    {
+        ArgumentNullException.ThrowIfNull(sessions);
+        Sessions = sessions;
+    }
 
-    /// <summary>The installed module: %ProgramFiles%\LazyVM\Modules\LazyVM, 
-    /// which only administrators can change.
-    /// </summary>
-    internal static string ModulePath
+    /// <summary>The sessions commands run in: the host's, and one per VM.</summary>
+    protected PowerShellSessionFactory Sessions
     {
         get;
-    } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LazyVM", "Modules", "LazyVM");
-
-    /// <summary>
-    /// Where the hosted PowerShell finds the modules it loads: only folders
-    /// administrators control. The app runs elevated, so a module the user
-    /// could change, such as one in Documents\PowerShell\Modules, must never
-    /// load into it. LazyVM's folder comes first, then the Windows modules
-    /// (Hyper-V, ScheduledTasks), then the modules shipped with the app.
-    /// </summary>
-    internal static string ModuleSearchPath
-    {
-        get;
-    } = string.Join(
-        Path.PathSeparator,
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LazyVM", "Modules"),
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "Modules"),
-        Path.Combine(Path.GetDirectoryName(typeof(PSObject).Assembly.Location)!, "Modules"));
-
-    /// <summary>True once PowerShell has started and the module
-    /// is imported.
-    /// </summary>
-    internal bool IsStarted => _Runspace is not null;
-
-    /// <summary>The folder the module was imported from, 
-    /// which holds the script each build runs with.
-    /// </summary>
-    public virtual async Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-Module", [("Name", "LazyVM")], cancellationToken).ConfigureAwait(false);
-        return output.Select(module => PropertyText(module, "ModuleBase")).FirstOrDefault(folder => folder.Length > 0)
-            ?? throw new InvalidOperationException("The LazyVM module is not loaded.");
     }
 
     /// <summary>
-    /// Runs <paramref name="command"/> with each parameter added by name,
-    /// never as script text. <paramref name="failsOnlyByThrowing"/>: a
-    /// command that can rightly return nothing while it silences errors of
-    /// its own, so only an error it throws is its failure.
-    /// <paramref name="failsByItsOwnErrors"/>: a command that returns nothing
-    /// and reports a refused item as a non-terminating error of its own, so
-    /// that error is its failure too (<see cref="ThrowIfCommandWroteError"/>).
+    /// The session for a command about the VM with the Hyper-V Id
+    /// <paramref name="vmId"/>. A VM with no Id, one not built yet or a new
+    /// one until its build creates it, uses the host's.
     /// </summary>
-    private async Task<IReadOnlyList<PSObject>> InvokeAsync(
-        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool failsOnlyByThrowing = false,
-        bool failsByItsOwnErrors = false)
+    protected PowerShellSession SessionFor(Guid? vmId)
     {
-        var (output, _) = await InvokeWithWarningsAsync(command, parameters, cancellationToken, failsOnlyByThrowing, failsByItsOwnErrors).ConfigureAwait(false);
+        return vmId is { } id ? Sessions.ForVM(id) : Sessions.ForHost();
+    }
+
+    /// <summary>
+    /// Runs <paramref name="command"/> in <paramref name="session"/> with each
+    /// parameter added by name, never as script text.
+    /// <paramref name="failsOnlyByThrowing"/>: a command that can rightly
+    /// return nothing while it silences errors of its own, so only an error
+    /// it throws is its failure. <paramref name="failsByItsOwnErrors"/>: a
+    /// command that returns nothing and reports a refused item as a
+    /// non-terminating error of its own, so that error is its failure too
+    /// (<see cref="ThrowIfCommandWroteError"/>).
+    /// </summary>
+    protected async Task<IReadOnlyList<PSObject>> InvokeAsync(
+        PowerShellSession session, string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken,
+        bool failsOnlyByThrowing = false, bool failsByItsOwnErrors = false)
+    {
+        var (output, _) = await InvokeWithWarningsAsync(session, command, parameters, cancellationToken, failsOnlyByThrowing, failsByItsOwnErrors)
+            .ConfigureAwait(false);
         return output;
     }
 
-    /// <summary>As <see cref="InvokeAsync"/>, and also gives
-    /// the warnings the command wrote, each as its text.
-    /// </summary>
-    private async Task<(IReadOnlyList<PSObject> Output, IReadOnlyList<string> Warnings)> InvokeWithWarningsAsync(
-        string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken, bool failsOnlyByThrowing = false,
-        bool failsByItsOwnErrors = false)
+    /// <summary>As <see cref="InvokeAsync"/>, and also gives the warnings the command wrote, each as its text.</summary>
+    protected async Task<(IReadOnlyList<PSObject> Output, IReadOnlyList<string> Warnings)> InvokeWithWarningsAsync(
+        PowerShellSession session, string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken,
+        bool failsOnlyByThrowing = false, bool failsByItsOwnErrors = false)
     {
-        ObjectDisposedException.ThrowIf(_Disposed, this);
-        await _OneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        ArgumentNullException.ThrowIfNull(session);
+        var result = await session.InvokeAsync(command, parameters, cancellationToken).ConfigureAwait(false);
+        ThrowIfFailed(result.Output, result.Errors, failsOnlyByThrowing);
+        if (failsByItsOwnErrors)
         {
-            // Importing the module takes a while; keep it off the caller's thread.
-            _Runspace ??= await Task.Run(OpenRunspace, cancellationToken).ConfigureAwait(false);
+            ThrowIfCommandWroteError(command, result.Errors);
+        }
+        return (result.Output, result.Warnings);
+    }
 
-            using var shell = PowerShell.Create(_Runspace);
-            shell.AddCommand(command).AddParameters(parameters.ToDictionary(parameter => parameter.Name, parameter => parameter.Value));
-            PSDataCollection<PSObject> output;
-            using (cancellationToken.Register(() => _ = shell.StopAsync(null, null)))
-            {
-                try
-                {
-                    output = await shell.InvokeAsync().ConfigureAwait(false);
-                }
-                catch (PipelineStoppedException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw new OperationCanceledException(cancellationToken);
-                }
-            }
-            cancellationToken.ThrowIfCancellationRequested();
-            ThrowIfFailed(output, shell.Streams.Error, failsOnlyByThrowing);
-            if (failsByItsOwnErrors)
-            {
-                ThrowIfCommandWroteError(command, shell.Streams.Error);
-            }
-            return ([.. output], shell.Streams.Warning.Select(warning => warning.Message).ToList());
-        }
-        finally
-        {
-            _OneAtATime.Release();
-        }
+    /// <summary>
+    /// The parameters that have a value, such as a switch only when it is
+    /// on: <c>("Force", force ? true : null)</c>.
+    /// </summary>
+    protected static IReadOnlyList<(string Name, object Value)> Present(params (string Name, object? Value)[] parameters)
+    {
+        return parameters.Where(parameter => parameter.Value is not null).Select(parameter => (parameter.Name, parameter.Value!)).ToList();
     }
 
     /// <summary>
@@ -129,402 +84,12 @@ public class PowerShellCommandRunner : IDisposable
     /// reports each VM's own failures in its Problems. A command that
     /// <paramref name="failsOnlyByThrowing"/> never fails here.
     /// </summary>
-    internal static void ThrowIfFailed(IList<PSObject> output, IList<ErrorRecord> errors, bool failsOnlyByThrowing = false)
+    internal static void ThrowIfFailed(IReadOnlyCollection<PSObject> output, IReadOnlyList<ErrorRecord> errors, bool failsOnlyByThrowing = false)
     {
         if (!failsOnlyByThrowing && output.Count == 0 && errors.Count > 0)
         {
             throw new InvalidOperationException(errors[0].ToString());
         }
-    }
-
-    private static Runspace OpenRunspace()
-    {
-        var state = InitialSessionState.CreateDefault2();
-        // The policy pwsh has on Windows by default. A hosted runspace with no
-        // powershell.config.json would otherwise be Restricted and refuse to
-        // load the module. Group Policy still wins over this.
-        state.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.RemoteSigned;
-
-        var opened = RunspaceFactory.CreateRunspace(state);
-        try
-        {
-            opened.Open();
-            // Opening puts the user's own module folders back in front, so the
-            // search path is set after it, and the module imported only then.
-            Environment.SetEnvironmentVariable("PSModulePath", ModuleSearchPath);
-            using var import = PowerShell.Create(opened);
-            import.AddCommand("Import-Module").AddParameter("Name", ModulePath).AddParameter("ErrorAction", "Stop");
-            try
-            {
-                import.Invoke();
-            }
-            catch (ActionPreferenceStopException stopped)
-            {
-                // Say why the import failed, not that -ErrorAction Stop stopped it.
-                throw new InvalidOperationException(stopped.ErrorRecord.Exception.Message, stopped);
-            }
-            return opened;
-        }
-        catch
-        {
-            opened.Dispose();
-            throw;
-        }
-    }
-
-    private static T? Read<T>(PSObject source, string name, string label, List<string> problems)
-    {
-        var value = Unwrap(source.Properties[name]?.Value);
-        if (value is null)
-        {
-            return default;
-        }
-        try
-        {
-            return LanguagePrimitives.ConvertTo<T>(value);
-        }
-        catch (PSInvalidCastException)
-        {
-            problems.Add($"{label}: could not be read");
-            return default;
-        }
-    }
-
-    /// <summary>A date, in local time. The module gives some as DateTimeOffset, such as the security scan time.</summary>
-    private static DateTime? ReadDate(PSObject source, string name, string label, List<string> problems)
-    {
-        return Unwrap(source.Properties[name]?.Value) is DateTimeOffset offset
-            ? offset.LocalDateTime
-            : Read<DateTime?>(source, name, label, problems);
-    }
-
-    private static IEnumerable<PSObject> ReadList(PSObject source, string name)
-    {
-        var value = Unwrap(source.Properties[name]?.Value);
-        if (value is null)
-        {
-            return [];
-        }
-        var items = LanguagePrimitives.GetEnumerable(value);
-        return items is null ? [PSObject.AsPSObject(value)] : items.Cast<object>().Select(PSObject.AsPSObject);
-    }
-
-    /// <summary>A property as text; empty when it is missing or empty.</summary>
-    private static string PropertyText(PSObject source, string name)
-    {
-        return Unwrap(source.Properties[name]?.Value)?.ToString() ?? string.Empty;
-    }
-
-    private static object? Unwrap(object? value)
-    {
-        return value is PSObject wrapped ? wrapped.BaseObject : value;
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (_Disposed)
-        {
-            return;
-        }
-        if (disposing)
-        {
-            _Runspace?.Dispose();
-            _OneAtATime.Dispose();
-        }
-        _Disposed = true;
-    }
-
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    #endregion
-
-    #region Dashboard
-    /// <summary>Runs <c>Get-LazyVMDashboard</c>: one entry per VM.</summary>
-    public virtual async Task<IReadOnlyList<LazyVMDashboard>> GetLazyVMDashboardAsync(CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMDashboard", [], cancellationToken).ConfigureAwait(false);
-        return output.Select(LazyVMDashboard).ToList();
-    }
-
-    /// <summary>Runs <c>Get-LazyVMDashboard -Name</c>: the one VM, or nothing when there is no such VM.</summary>
-    public virtual async Task<LazyVMDashboard?> GetLazyVMAsync(string name, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMDashboard", [("Name", name)], cancellationToken).ConfigureAwait(false);
-        return output.Select(LazyVMDashboard).FirstOrDefault(entry => string.Equals(entry.Name, name, StringComparison.OrdinalIgnoreCase));
-    }
-
-    #endregion
-
-    #region Build Phases and Config Templates
-    /// <summary>Runs <c>Get-LazyVMBuildPhase</c>: every phase of a build, in order.</summary>
-    public virtual async Task<IReadOnlyList<BuildPhase>> GetLazyVMBuildPhasesAsync(CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMBuildPhase", [], cancellationToken).ConfigureAwait(false);
-        return output.Select(phase => new BuildPhase(
-            Read<int?>(phase, "Number", "Number", []) ?? 0, PropertyText(phase, "Name"), PropertyText(phase, "Goal"))).ToList();
-    }
-
-    /// <summary>Runs <c>Get-LazyVMConfigTemplate</c>: the config templates a new VM can be built from.</summary>
-    public virtual async Task<IReadOnlyList<ConfigTemplate>> GetLazyVMConfigTemplatesAsync(CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMConfigTemplate", [], cancellationToken).ConfigureAwait(false);
-        return output.Select(template => new ConfigTemplate(
-            PropertyText(template, "Name"),
-            Read<bool?>(template, "BuiltIn", "BuiltIn", []) ?? false,
-            Read<bool?>(template, "Automatic", "Automatic", []) ?? false)).ToList();
-    }
-
-    /// <summary>
-    /// Runs <c>Stop-LazyVMBuild -Name</c>: asks the VM's running build to stop
-    /// at its next safe point, and returns the run with StopRequested set.
-    /// Throws with the module's reason when nothing was stopped, such as a
-    /// run that has not recorded itself yet.
-    /// </summary>
-    public virtual async Task<VMRun?> StopLazyVMBuildAsync(string name, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Stop-LazyVMBuild", [("Name", name)], cancellationToken).ConfigureAwait(false);
-        return output.Count == 0 ? null : LazyVMRun(output[0], []);
-    }
-
-    #endregion
-
-    /// <summary>
-    /// Runs <c>Start-LazyVMMaintenance -Name</c>: starts the VM's maintenance
-    /// task, so it runs as the nightly run does. Throws with the module's
-    /// reason when nothing was started, such as while another run of the VM
-    /// is going or when maintenance is not scheduled.
-    /// </summary>
-
-    #region Maintenance
-    public virtual async Task StartLazyVMMaintenanceAsync(string name, CancellationToken cancellationToken)
-    {
-        await InvokeAsync("Start-LazyVMMaintenance", [("Name", name)], cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Runs <c>Show-LazyVMHelp -Topic</c>: opens the page in the browser, for
-    /// the installed version. It only opens an address. Throws with the
-    /// module's reason when the browser did not open.
-    /// </summary>
-    public virtual async Task ShowLazyVMHelpAsync(HelpTopic topic, CancellationToken cancellationToken)
-    {
-        await InvokeAsync("Show-LazyVMHelp", [("Topic", topic.ToString())], cancellationToken, failsOnlyByThrowing: true, failsByItsOwnErrors: true)
-            .ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Runs <c>Get-LazyVMRemovalPlan -Name</c>: what deleting the VM would
-    /// delete and keep. Throws with the module's reason when nothing could be
-    /// removed, such as when another VM's settings cannot be read.
-    /// </summary>
-    public virtual async Task<RemovalPlan> GetLazyVMRemovalPlanAsync(string name, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMRemovalPlan", [("Name", name)], cancellationToken).ConfigureAwait(false);
-        return output.Select(LazyVMRemovalPlan).FirstOrDefault()
-            ?? throw new InvalidOperationException($"Get-LazyVMRemovalPlan said nothing about {name}.");
-    }
-
-    /// <summary>
-    /// Runs <c>Remove-LazyVM -Name -Force</c>: deletes the VM, without the
-    /// question the app has already asked. Never cancelled: a removal stopped
-    /// half way leaves more behind. Throws with the module's reason when it
-    /// removed nothing or only part, such as while another run of the VM is
-    /// going.
-    /// </summary>
-    public virtual async Task RemoveLazyVMAsync(string name)
-    {
-        await InvokeAsync("Remove-LazyVM", [("Name", name), ("Force", true)], CancellationToken.None, failsOnlyByThrowing: true).ConfigureAwait(false);
-    }
-
-    /// <summary>Runs <c>Get-LazyVMRestorePoint -Name</c>: the VM's restore points, oldest first. None before the first.</summary>
-    public virtual async Task<IReadOnlyList<VMRestorePoint>> GetLazyVMRestorePointsAsync(string name, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMRestorePoint", [("Name", name)], cancellationToken, failsOnlyByThrowing: true).ConfigureAwait(false);
-        return output.Select(LazyVMToRestorePoint).ToList();
-    }
-
-    /// <summary>
-    /// Runs <c>Restore-LazyVMTooling -Name -RestorePoint -Force</c>: returns
-    /// the VM to the restore point <paramref name="stamp"/>, without the
-    /// question the app has already asked. Never cancelled: a revert stopped
-    /// half way leaves the VM between the two. Throws with the module's
-    /// reason when it did not, such as while another run of the VM is going.
-    /// </summary>
-    public virtual async Task RestoreLazyVMToolingAsync(string name, string stamp)
-    {
-        await InvokeAsync(
-            "Restore-LazyVMTooling", [("Name", name), ("RestorePoint", stamp), ("Force", true)], CancellationToken.None, failsOnlyByThrowing: true)
-            .ConfigureAwait(false);
-    }
-
-    /// <summary>Reads one <c>LazyVM.RestorePoint</c> object. A time that
-    /// cannot be read is left empty.
-    /// </summary>
-    internal static VMRestorePoint LazyVMToRestorePoint(PSObject point)
-    {
-        return new(
-            PropertyText(point, "RestorePoint"),
-            ReadDate(point, "Taken", "Taken", []),
-            Read<bool?>(point, "HasToolingList", "HasToolingList", []) ?? false);
-    }
-
-    #endregion
-
-    #region Recovery Keys and Credentials
-
-    /// <summary>Runs <c>Get-LazyVMRecoveryKey -Name</c>: the VM's recovery keys,
-    /// without their passwords. None while none is stored.
-    /// </summary>
-    public virtual async Task<IReadOnlyList<VMRecoveryKey>> GetLazyVMRecoveryKeysAsync(string name, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMRecoveryKey", [("Name", name)], cancellationToken, failsOnlyByThrowing: true).ConfigureAwait(false);
-        return output.Select(LazyVMRecoveryKey).ToList();
-    }
-
-    /// <summary>
-    /// Runs <c>Get-LazyVMCredential -Name -RecoveryPassword</c> and gives
-    /// only the password of the disk <paramref name="diskGuid"/>, for the
-    /// moment it is shown. The others are not kept.
-    /// </summary>
-    public virtual async Task<string> GetLazyVMRecoveryPasswordAsync(string name, string diskGuid, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMCredential", [("Name", name), ("RecoveryPassword", true)], cancellationToken, failsOnlyByThrowing: true)
-            .ConfigureAwait(false);
-        return LazyVMDisRecoveryPasswordOf(output, diskGuid);
-    }
-
-    /// <summary>
-    /// Runs <c>Export-LazyVMRecoveryKey -Name -Path</c>, with <c>-Force</c>
-    /// when <paramref name="force"/>, which the app passes only after asking.
-    /// Never cancelled. Gives the file written and the module's warnings.
-    /// Throws with the module's reason when nothing was written.
-    /// </summary>
-    public virtual async Task<RecoveryKeyExport> ExportLazyVMRecoveryKeysAsync(string name, string path, bool force)
-    {
-        var parameters = new (string Name, object? Value)[] { ("Name", name), ("Path", path), ("Force", force ? true : null) }
-            .Where(parameter => parameter.Value is not null)
-            .Select(parameter => (parameter.Name, parameter.Value!))
-            .ToList();
-        var (output, warnings) = await InvokeWithWarningsAsync("Export-LazyVMRecoveryKey", parameters, CancellationToken.None, failsOnlyByThrowing: true)
-            .ConfigureAwait(false);
-        var written = output.Select(file => PropertyText(file, "FullName")).FirstOrDefault(full => full.Length > 0) ?? path;
-        return new RecoveryKeyExport(written, warnings);
-    }
-
-    #endregion
-
-    #region Credentials
-
-    /// <summary>
-    /// Runs <c>Get-LazyVMCredential -Name</c> and gives only the user name
-    /// LazyVM signs in with. The password stays encrypted and is disposed of
-    /// at once. Throws with the module's reason, such as when no credential
-    /// is stored, which names Set-LazyVMCredential.
-    /// </summary>
-    public virtual async Task<string> GetLazyVMUserNameAsync(string name, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMCredential", [("Name", name)], cancellationToken, failsOnlyByThrowing: true).ConfigureAwait(false);
-        return LazyVMUserNameOf(output);
-    }
-
-    /// <summary>Runs <c>Get-LazyVMCredential -Name -AsPlainText</c> and gives only the password, for the moment it is shown or copied.</summary>
-    public virtual async Task<string> GetLazyVMPasswordAsync(string name, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMCredential", [("Name", name), ("AsPlainText", true)], cancellationToken, failsOnlyByThrowing: true)
-            .ConfigureAwait(false);
-        return LazyVMPasswordOf(output);
-    }
-
-    /// <summary>The user name of the credential in <paramref name="output"/>; its password is disposed of. Throws when there is none.</summary>
-    internal static string LazyVMUserNameOf(IEnumerable<PSObject> output)
-    {
-        var credential = output.Select(item => item.BaseObject).OfType<PSCredential>().FirstOrDefault()
-            ?? throw new InvalidOperationException("Get-LazyVMCredential gave no account.");
-        credential.Password.Dispose();
-        return credential.UserName;
-    }
-
-    /// <summary>The password of the <c>LazyVM.PlainCredential</c> in <paramref name="output"/>. Throws, without it, when there is none.</summary>
-    internal static string LazyVMPasswordOf(IEnumerable<PSObject> output)
-    {
-        return output.Select(item => PropertyText(item, "Password")).FirstOrDefault(password => password.Length > 0)
-            ?? throw new InvalidOperationException("Get-LazyVMCredential gave no password.");
-    }
-
-    /// <summary>Reads one <c>LazyVM.RecoveryKey</c> object. A date that cannot be read is left empty.</summary>
-    internal static VMRecoveryKey LazyVMRecoveryKey(PSObject key)
-    {
-        return new(
-            PropertyText(key, "Disk"),
-            PropertyText(key, "DiskGuid"),
-            PropertyText(key, "KeyId"),
-            ReadDate(key, "Recorded", "Recorded", []),
-            Read<bool?>(key, "Exported", "Exported", []) ?? false);
-    }
-
-    /// <summary>The recovery password of the disk <paramref name="diskGuid"/> among <paramref name="keys"/>. Throws when it has none.</summary>
-    internal static string LazyVMDisRecoveryPasswordOf(IEnumerable<PSObject> keys, string diskGuid)
-    {
-        return keys
-            .Where(key => string.Equals(PropertyText(key, "DiskGuid"), diskGuid, StringComparison.OrdinalIgnoreCase))
-            .Select(key => PropertyText(key, "RecoveryPassword"))
-            .FirstOrDefault(password => password.Length > 0)
-            ?? throw new InvalidOperationException(
-                "No recovery password is stored for that disk now. Close this window and open it again to see the keys stored now.");
-    }
-
-    #endregion
-
-    #region Security Findings 
-
-    /// <summary>
-    /// Runs <c>Get-LazyVMSecurityFinding -Name</c>: the last scan's findings,
-    /// less the approved ones. None before the first scan, and none when it
-    /// found nothing: the module tells those apart only in a warning, so the
-    /// window tells them apart by the dashboard's <c>LastSecurityScan</c>.
-    /// </summary>
-    public virtual async Task<IReadOnlyList<VMSecurityFinding>> GetLazyVMSecurityFindingsAsync(string name, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMSecurityFinding", [("Name", name)], cancellationToken, failsOnlyByThrowing: true).ConfigureAwait(false);
-        return output.Select(LazyVMSecurityFinding).ToList();
-    }
-
-    /// <summary>Runs <c>Get-LazyVMSecurityFinding -Name -Approved</c>: the approved findings, with when and why. None while none is approved.</summary>
-    public virtual async Task<IReadOnlyList<VMSecurityApproval>> GetLazyVMSecurityApprovalsAsync(string name, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMSecurityFinding", [("Name", name), ("Approved", true)], cancellationToken, failsOnlyByThrowing: true)
-            .ConfigureAwait(false);
-        return output.Select(LazyVMSecurityApproval).ToList();
-    }
-
-    /// <summary>
-    /// Runs <c>Approve-LazyVMSecurityFinding -Name -Id -Reason -Confirm:$false</c>,
-    /// without the question the app has already asked. Throws with the
-    /// module's reason when it refused the Id, such as a finding no longer open.
-    /// </summary>
-    public virtual async Task ApproveLazyVMSecurityFindingAsync(string name, string id, string reason)
-    {
-        await InvokeAsync(
-            "Approve-LazyVMSecurityFinding", [("Name", name), ("Id", id), ("Reason", reason), ("Confirm", false)], CancellationToken.None,
-            failsOnlyByThrowing: true, failsByItsOwnErrors: true)
-            .ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Runs <c>Revoke-LazyVMSecurityFinding -Name -Id -Confirm:$false</c>,
-    /// without the question the app has already asked. Throws with the
-    /// module's reason when it refused the Id, such as one not approved.
-    /// </summary>
-    public virtual async Task RevokeLazyVMSecurityFindingAsync(string name, string id)
-    {
-        await InvokeAsync(
-            "Revoke-LazyVMSecurityFinding", [("Name", name), ("Id", id), ("Confirm", false)], CancellationToken.None,
-            failsOnlyByThrowing: true, failsByItsOwnErrors: true)
-            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -540,182 +105,4 @@ public class PowerShellCommandRunner : IDisposable
             throw new InvalidOperationException(own.ToString());
         }
     }
-
-    /// <summary>Reads one <c>LazyVM.SecurityFinding</c> object. A time that cannot be read is left empty.</summary>
-    internal static VMSecurityFinding LazyVMSecurityFinding(PSObject finding)
-    {
-        return new(
-            PropertyText(finding, "Id"),
-            PropertyText(finding, "Severity"),
-            PropertyText(finding, "Title"),
-            PropertyText(finding, "WhatWeFound"),
-            ReadList(finding, "Where").Select(file => file.BaseObject.ToString() ?? string.Empty).Where(file => file.Length > 0).ToList(),
-            PropertyText(finding, "WhyItMatters"),
-            PropertyText(finding, "HowToFix"),
-            ReadDate(finding, "FirstSeen", "FirstSeen", []),
-            PropertyText(finding, "Status"));
-    }
-
-    /// <summary>Reads one <c>LazyVM.SecurityApproval</c> object. A time that cannot be read is left empty.</summary>
-    internal static VMSecurityApproval LazyVMSecurityApproval(PSObject approval)
-    {
-        return new(
-            PropertyText(approval, "Id"),
-            PropertyText(approval, "Severity"),
-            PropertyText(approval, "Title"),
-            ReadDate(approval, "ApprovedOn", "ApprovedOn", []),
-            PropertyText(approval, "Reason"));
-    }
-
-    #endregion
-
-    /// <summary>
-    /// Runs <c>Test-LazyVM</c>: the checks of the VM <paramref name="name"/>,
-    /// or with no name, of the host and the only VM, if there is one.
-    /// <paramref name="hostOnly"/> checks the host alone.
-    /// </summary>
-    public virtual async Task<IReadOnlyList<VMCheck>> GetLazyVMChecksAsync(string? name, bool hostOnly, CancellationToken cancellationToken)
-    {
-        var parameters = new (string Name, object? Value)[] { ("Name", name), ("HostOnly", hostOnly ? true : null) }
-            .Where(parameter => parameter.Value is not null)
-            .Select(parameter => (parameter.Name, parameter.Value!))
-            .ToList();
-        var output = await InvokeAsync("Test-LazyVM", parameters, cancellationToken).ConfigureAwait(false);
-        return output.Select(LazyVMCheck).ToList();
-    }
-
-    /// <summary>Runs <c>G
-    /// entries of the VM's log, oldest first. None before there is a log.
-    /// </summary>
-    public virtual async Task<IReadOnlyList<VMLogEntry>> GetLazyVMLogAsync(string name, int tail, CancellationToken cancellationToken)
-    {
-        var output = await InvokeAsync("Get-LazyVMLog", [("Name", name), ("Tail", tail)], cancellationToken).ConfigureAwait(false);
-        return output.Select(LazyVMLogEntry).ToList();
-    }
-
-    /// <summary>
-    /// Reads one <c>LazyVM.Dashboard</c> object. A value that cannot be read
-    /// is left empty and named in the VM's Problems, so one odd value never
-    /// fails the whole refresh.
-    /// </summary>
-    internal static LazyVMDashboard LazyVMDashboard(PSObject entry)
-    {
-        var problems = ReadList(entry, "Problems").Select(problem => problem.BaseObject.ToString() ?? string.Empty).ToList();
-        T? Value<T>(PSObject source, string name, string label)
-        {
-            return Read<T>(source, name, label, problems);
-        }
-
-        DateTime? Date(string name, string label)
-        {
-            return ReadDate(entry, name, label, problems);
-        }
-
-        return new()
-        {
-            Name = Value<string>(entry, "Name", "Name") ?? string.Empty,
-            Id = Value<Guid?>(entry, "Id", "Hyper-V Id"),
-            State = Value<string>(entry, "State", "State") ?? "Unknown",
-            Created = Date("Created", "Created"),
-            MemoryAssigned = Value<long?>(entry, "MemoryAssigned", "Memory in use"),
-            MemoryMaximum = Value<long?>(entry, "MemoryMaximum", "Memory maximum"),
-            Disks = ReadList(entry, "Disks").Select(disk => new VMDisk(
-                Value<string>(disk, "Name", "Disk name") ?? string.Empty,
-                Value<string>(disk, "Path", "Disk path") ?? string.Empty,
-                Value<long?>(disk, "Used", "Disk space used") ?? 0,
-                Value<long?>(disk, "Maximum", "Disk size") ?? 0)).ToList(),
-            DiskSpaceUsed = Value<long?>(entry, "DiskSpaceUsed", "Disk space used"),
-            MaintenanceTime = Value<string>(entry, "MaintenanceTime", "Maintenance time"),
-            MaintenanceTask = Value<string>(entry, "MaintenanceTask", "Maintenance task"),
-            LastMaintenance = Date("LastMaintenance", "Last maintenance"),
-            LastMaintenanceResult = Value<string>(entry, "LastMaintenanceResult", "Last maintenance result"),
-            LastSecurityScan = Date("LastSecurityScan", "Last security scan"),
-            OpenFindings = Value<int?>(entry, "OpenFindings", "Open findings"),
-            OriginalConfig = Value<string>(entry, "OriginalConfig", "Original configuration"),
-            CreatedFromTemplate = Value<string>(entry, "CreatedFromTemplate", "Config template"),
-            GreenTemplate = Value<string>(entry, "GreenTemplate", "Green template"),
-            GreenTemplateUpdated = Date("GreenTemplateUpdated", "Green template updated"),
-            RecoveryKeys = Value<int?>(entry, "RecoveryKeys", "Recovery keys"),
-            UnexportedRecoveryKeys = Value<int?>(entry, "UnexportedRecoveryKeys", "Recovery keys not exported"),
-            RecoveryKeysExported = Date("RecoveryKeysExported", "Recovery keys exported"),
-            Settings = Value<string>(entry, "Settings", "Settings") ?? "Not known",
-            Run = ReadLazyVMRun(entry, "Run", problems),
-            LastBuild = ReadLazyVMRun(entry, "LastBuild", problems),
-            Problems = problems,
-        };
-    }
-
-    /// <summary>Reads one <c>LazyVM.VMRun</c> object. A value that cannot be read is left empty and named in <paramref name="problems"/>.</summary>
-    internal static VMRun LazyVMRun(PSObject run, List<string> problems)
-    {
-        return new()
-        {
-            Command = Read<string>(run, "Command", "Run command", problems),
-            Status = Read<string>(run, "Status", "Run status", problems),
-            ProcessId = Read<int?>(run, "ProcessId", "Run process", problems),
-            Started = ReadDate(run, "Started", "Run started", problems),
-            Ended = ReadDate(run, "Ended", "Run ended", problems),
-            Phase = Read<int?>(run, "Phase", "Run phase", problems),
-            PhaseName = Read<string>(run, "PhaseName", "Run phase name", problems),
-            UnfinishedPhase = Read<int?>(run, "UnfinishedPhase", "Unfinished phase", problems),
-            StopRequested = Read<bool?>(run, "StopRequested", "Stop requested", problems) ?? false,
-        };
-    }
-
-    /// <summary>The run as it came: a [pscustomobject] keeps its properties only on its PSObject, never on what it wraps.</summary>
-    private static VMRun? ReadLazyVMRun(PSObject entry, string name, List<string> problems)
-    {
-        return entry.Properties[name]?.Value switch
-        {
-            null => null,
-            PSObject { BaseObject: null } => null,
-            PSObject run => LazyVMRun(run, problems),
-            var other => LazyVMRun(PSObject.AsPSObject(other), problems),
-        };
-    }
-
-    /// <summary>Reads one <c>LazyVM.RemovalPlan</c> object. A size that cannot be read counts as 0.</summary>
-    internal static RemovalPlan LazyVMRemovalPlan(PSObject plan)
-    {
-        long Size(PSObject source, string name)
-        {
-            return (long)(Read<double?>(source, name, name, []) ?? 0);
-        }
-
-        return new()
-        {
-            Name = PropertyText(plan, "Name"),
-            HyperVState = PropertyText(plan, "HyperVState") is { Length: > 0 } state ? state : null,
-            CheckpointCount = Read<int?>(plan, "CheckpointCount", "CheckpointCount", []) ?? 0,
-            ScheduledTasks = ReadList(plan, "Tasks").Select(task => task.BaseObject.ToString() ?? string.Empty).ToList(),
-            Items = ReadList(plan, "Items").Select(item => new RemovalItem(PropertyText(item, "Kind"), PropertyText(item, "Path"), Size(item, "Size"))).ToList(),
-            TotalSize = Size(plan, "Total"),
-            Kept = ReadList(plan, "Kept").Select(kept => new KeptItem(PropertyText(kept, "Path"), PropertyText(kept, "Reason"))).ToList(),
-            WorkDisks = ReadList(plan, "WorkDisks")
-                .Select(disk => new WorkDisk(PropertyText(disk, "Name"), PropertyText(disk, "Path"), Size(disk, "Size"), PropertyText(disk, "Advice")))
-                .ToList(),
-        };
-    }
-
-    /// <summary>Reads one <c>LazyVM.Check</c> object.</summary>
-    internal static VMCheck LazyVMCheck(PSObject check)
-    {
-        return new(
-        PropertyText(check, "Area"),
-        PropertyText(check, "Check"),
-        PropertyText(check, "Status"),
-        PropertyText(check, "Detail"),
-        PropertyText(check, "Fix"));
-    }
-
-    /// <summary>Reads one <c>LazyVM.LogEntry</c> object. A time that cannot be read is left empty.</summary>
-    internal static VMLogEntry LazyVMLogEntry(PSObject entry)
-    {
-        return new(
-        ReadDate(entry, "Time", "Time", []),
-        PropertyText(entry, "Level"),
-        PropertyText(entry, "Message"));
-    }
-
-
 }

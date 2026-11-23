@@ -80,12 +80,12 @@ public sealed class ZoomLayoutTests
         return title.ActualHeight < title.FontSize * 1.8;
     }
 
-    private static MainWindow MainWindowFor(FakeCommandRunner runner)
+    private static MainWindow MainWindowFor(FakeRunners runners)
     {
         return Ui.Invoke(() =>
         {
-            var tools = new FakeToolWindows(runner);
-            var model = new MainViewModel(runner, new FakeVMWindowManager(tools), tools, TimeProvider.System);
+            var tools = new FakeToolWindows(runners);
+            var model = new MainViewModel(runners.Dashboard, runners.Checks, new FakeVMWindowManager(tools), tools, TimeProvider.System);
             return new MainWindow { DataContext = model };
         });
     }
@@ -95,7 +95,7 @@ public sealed class ZoomLayoutTests
     [InlineData(320, 225)]
     public void MainWindow_KeepsTitleOnOneLine(double width, double height)
     {
-        var window = MainWindowFor(new FakeCommandRunner());
+        var window = MainWindowFor(new FakeRunners());
 
         var oneLine = Layout(window, new Size(width, height), root => OnOneLine(root, "LazyVM"));
 
@@ -107,7 +107,7 @@ public sealed class ZoomLayoutTests
     [InlineData(320, 225)]
     public void MainWindow_LeavesRoomForTheListOfVMs(double width, double height)
     {
-        var window = MainWindowFor(new FakeCommandRunner());
+        var window = MainWindowFor(new FakeRunners());
 
         var listHeight = Layout(window, new Size(width, height),
             root => Visuals<DataGrid>(root).Single().ActualHeight);
@@ -120,7 +120,7 @@ public sealed class ZoomLayoutTests
     [InlineData(320, 225)]
     public void VMWindow_KeepsTheNameOnOneLine(double width, double height)
     {
-        var runner = new FakeCommandRunner();
+        var runner = new FakeRunners();
         var window = Ui.Invoke(() => new VMWindow { DataContext = new VMViewModel(Sample.VM("Alpha"), new FakeToolWindows(runner)) });
 
         var oneLine = Layout(window, new Size(width, height), root => OnOneLine(root, "Alpha"));
@@ -133,7 +133,7 @@ public sealed class ZoomLayoutTests
     [InlineData(320, 225)]
     public void VMWindow_ScrollsWhatDoesNotFit(double width, double height)
     {
-        var runner = new FakeCommandRunner();
+        var runner = new FakeRunners();
         var window = Ui.Invoke(() => new VMWindow { DataContext = new VMViewModel(Sample.VM("Alpha"), new FakeToolWindows(runner)) });
 
         var scrolls = Layout(window, new Size(width, height),

@@ -29,12 +29,12 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         "Rdp:On", "Medium", "Remote Desktop is on", new DateTime(2026, 11, 10, 9, 15, 0), "I connect to it with Remote Desktop.");
 
     private readonly CultureScope _Culture = new("en-GB");
-    private readonly FakeCommandRunner _Runner = new();
+    private readonly FakeRunners _Runners = new();
     private readonly FakeToolWindows _Tools;
 
     public SecurityFindingsViewModelTests()
     {
-        _Tools = new FakeToolWindows(_Runner);
+        _Tools = new FakeToolWindows(_Runners);
     }
 
     public void Dispose()
@@ -66,8 +66,8 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     [Fact]
     public async Task Load_IsWorkingWhileTheFindingsAndTheApprovalsAreRead()
     {
-        _Runner.ReturnsSecurityFindings([_Firewall]);
-        _Runner.ReturnsSecurityApprovals([]);
+        _Runners.SecurityFindings.ReturnsSecurityFindings([_Firewall]);
+        _Runners.SecurityFindings.ReturnsSecurityApprovals([]);
         var window = new SecurityFindingsViewModel(Sample.VM(), _Tools);
         var watcher = new WorkWatcher(window);
 
@@ -78,8 +78,8 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
 
     private async Task<SecurityFindingsViewModel> Loaded(LazyVMDashboard entry, VMSecurityFinding[] findings, params VMSecurityApproval[] approvals)
     {
-        _Runner.ReturnsSecurityFindings(findings);
-        _Runner.ReturnsSecurityApprovals(approvals);
+        _Runners.SecurityFindings.ReturnsSecurityFindings(findings);
+        _Runners.SecurityFindings.ReturnsSecurityApprovals(approvals);
         var window = new SecurityFindingsViewModel(entry, _Tools);
         await window.LoadAsync();
         return window;
@@ -90,8 +90,8 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     {
         var window = await Loaded(Scanned(), [_Firewall], _Approval);
 
-        Assert.Equal(["DevBox"], _Runner.SecurityFindingCalls);
-        Assert.Equal(["DevBox"], _Runner.SecurityApprovalCalls);
+        Assert.Equal(["DevBox"], _Runners.SecurityFindings.SecurityFindingCalls);
+        Assert.Equal(["DevBox"], _Runners.SecurityFindings.SecurityApprovalCalls);
         Assert.Equal("Security findings of DevBox - LazyVM", window.Title);
     }
 
@@ -251,8 +251,8 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     [Fact]
     public async Task FindingsThatCannotBeRead_SayWhy_AndStillReadTheApprovals()
     {
-        _Runner.SecurityFindingsThrow(new InvalidOperationException("Access is denied."));
-        _Runner.ReturnsSecurityApprovals(_Approval);
+        _Runners.SecurityFindings.SecurityFindingsThrow(new InvalidOperationException("Access is denied."));
+        _Runners.SecurityFindings.ReturnsSecurityApprovals(_Approval);
         var window = new SecurityFindingsViewModel(Scanned(), _Tools);
 
         await window.LoadAsync();
@@ -265,8 +265,8 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     [Fact]
     public async Task ApprovalsThatCannotBeRead_SayWhy_AndKeepTheFindings()
     {
-        _Runner.ReturnsSecurityFindings(_Firewall);
-        _Runner.SecurityApprovalsThrow(new InvalidOperationException("The file is damaged."));
+        _Runners.SecurityFindings.ReturnsSecurityFindings(_Firewall);
+        _Runners.SecurityFindings.SecurityApprovalsThrow(new InvalidOperationException("The file is damaged."));
         var window = new SecurityFindingsViewModel(Scanned(), _Tools);
 
         await window.LoadAsync();
@@ -280,13 +280,13 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     public async Task ReadAgain_ReadsBothAgain()
     {
         var window = await Loaded(Scanned(), [_Firewall]);
-        _Runner.ReturnsSecurityFindings(_Firewall, _Detection);
-        _Runner.ReturnsSecurityApprovals();
+        _Runners.SecurityFindings.ReturnsSecurityFindings(_Firewall, _Detection);
+        _Runners.SecurityFindings.ReturnsSecurityApprovals();
 
         await window.ReloadAsync();
 
         Assert.Equal(2, window.Findings.Count);
-        Assert.Equal(["DevBox", "DevBox"], _Runner.SecurityFindingCalls);
+        Assert.Equal(["DevBox", "DevBox"], _Runners.SecurityFindings.SecurityFindingCalls);
     }
 
     [Fact]
@@ -296,14 +296,14 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         {
             LastSecurityScan = null
         }, []);
-        _Runner.ReturnsSecurityFindings(_Firewall);
-        _Runner.ReturnsSecurityApprovals();
+        _Runners.SecurityFindings.ReturnsSecurityFindings(_Firewall);
+        _Runners.SecurityFindings.ReturnsSecurityApprovals();
 
         await window.Update(Scanned());
 
         Assert.Equal("Last scanned 18 November 2026 02:30.", window.ScanText);
         Assert.Single(window.Findings);
-        Assert.Equal(2, _Runner.SecurityFindingCalls.Count);
+        Assert.Equal(2, _Runners.SecurityFindings.SecurityFindingCalls.Count);
     }
 
     [Fact]
@@ -313,7 +313,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
 
         await window.Update(Scanned());
 
-        Assert.Single(_Runner.SecurityFindingCalls);
+        Assert.Single(_Runners.SecurityFindings.SecurityFindingCalls);
     }
 
     [Fact]
@@ -335,8 +335,8 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     /// <summary>What reading both lists again, after an approval or revoke, returns.</summary>
     private void ReadAgainGives(VMSecurityFinding[] findings, params VMSecurityApproval[] approvals)
     {
-        _Runner.ReturnsSecurityFindings(findings);
-        _Runner.ReturnsSecurityApprovals(approvals);
+        _Runners.SecurityFindings.ReturnsSecurityFindings(findings);
+        _Runners.SecurityFindings.ReturnsSecurityApprovals(approvals);
     }
 
     [Fact]
@@ -382,7 +382,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
 
         Assert.Equal(_Firewall.Id, Assert.Single(_Tools.ReasonsAsked).Finding.Id);
         Assert.Single(_Tools.SecurityQuestions);
-        Assert.Equal([("DevBox", "Firewall:Public:Off", "I turned it off for a test")], _Runner.ApproveCalls);
+        Assert.Equal([("DevBox", "Firewall:Public:Off", "I turned it off for a test")], _Runners.SecurityFindings.ApproveCalls);
     }
 
     [Fact]
@@ -412,7 +412,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
 
         await window.ApproveAsync();
 
-        Assert.Equal(string.Empty, Assert.Single(_Runner.ApproveCalls).Reason);
+        Assert.Equal(string.Empty, Assert.Single(_Runners.SecurityFindings.ApproveCalls).Reason);
     }
 
     [Fact]
@@ -424,7 +424,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         await window.ApproveAsync();
 
         Assert.Empty(_Tools.SecurityQuestions);
-        Assert.Empty(_Runner.ApproveCalls);
+        Assert.Empty(_Runners.SecurityFindings.ApproveCalls);
         Assert.Equal("Firewall:Public:Off was not approved.", window.Status);
     }
 
@@ -438,7 +438,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
 
         await window.ApproveAsync();
 
-        Assert.Empty(_Runner.ApproveCalls);
+        Assert.Empty(_Runners.SecurityFindings.ApproveCalls);
         Assert.Equal(0, changed);
         Assert.Equal("Firewall:Public:Off was not approved.", window.Status);
     }
@@ -455,8 +455,8 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
 
         await window.ApproveAsync();
 
-        Assert.Equal(2, _Runner.SecurityFindingCalls.Count);
-        Assert.Equal(2, _Runner.SecurityApprovalCalls.Count);
+        Assert.Equal(2, _Runners.SecurityFindings.SecurityFindingCalls.Count);
+        Assert.Equal(2, _Runners.SecurityFindings.SecurityApprovalCalls.Count);
         Assert.Equal(1, changed);
         Assert.Empty(window.Findings);
         Assert.Equal(2, window.Approvals.Count);
@@ -468,7 +468,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     {
         var window = await Chosen(_Firewall);
         _Tools.ConfirmsSecurityChange = true;
-        _Runner.ApproveFails = new InvalidOperationException("Firewall:Public:Off is not an open finding of the last scan of DevBox.");
+        _Runners.SecurityFindings.ApproveFails = new InvalidOperationException("Firewall:Public:Off is not an open finding of the last scan of DevBox.");
         var changed = 0;
         _Tools.SecurityFindingsChanged += (_, _) => changed++;
         ReadAgainGives([_Firewall]);
@@ -476,7 +476,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         await window.ApproveAsync();
 
         Assert.Equal(1, changed);
-        Assert.Equal(2, _Runner.SecurityFindingCalls.Count);
+        Assert.Equal(2, _Runners.SecurityFindings.SecurityFindingCalls.Count);
         Assert.Equal("Firewall:Public:Off was not approved: Firewall:Public:Off is not an open finding of the last scan of DevBox.", window.Status);
     }
 
@@ -485,8 +485,8 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
     {
         var window = await Chosen(_Firewall);
         _Tools.ConfirmsSecurityChange = true;
-        _Runner.SecurityFindingsThrow(new InvalidOperationException("The file is locked."));
-        _Runner.ReturnsSecurityApprovals(_Approval);
+        _Runners.SecurityFindings.SecurityFindingsThrow(new InvalidOperationException("The file is locked."));
+        _Runners.SecurityFindings.ReturnsSecurityApprovals(_Approval);
 
         await window.ApproveAsync();
 
@@ -501,7 +501,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         var window = await Chosen(_Firewall);
         window.SelectedApproval = window.Approvals.Single();
         _Tools.ConfirmsSecurityChange = true;
-        _Runner.ApproveGate = new();
+        _Runners.SecurityFindings.ApproveGate = new();
         ReadAgainGives([]);
 
         var approving = window.ApproveAsync();
@@ -511,7 +511,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         Assert.False(window.RevokeCommand.CanExecute(null));
         Assert.Equal("Approving Firewall:Public:Off", window.Status);
 
-        _Runner.ApproveGate.SetResult();
+        _Runners.SecurityFindings.ApproveGate.SetResult();
         await approving;
 
         Assert.False(window.IsChanging);
@@ -542,7 +542,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         Assert.Contains("Medium severity", question);
         Assert.Contains("Remote Desktop is on", question);
         Assert.Contains("reports it again", question);
-        Assert.Empty(_Runner.RevokeCalls);
+        Assert.Empty(_Runners.SecurityFindings.RevokeCalls);
         Assert.Equal("The approval of Rdp:On was not revoked.", window.Status);
     }
 
@@ -558,7 +558,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
 
         await window.RevokeAsync();
 
-        Assert.Equal([("DevBox", "Rdp:On")], _Runner.RevokeCalls);
+        Assert.Equal([("DevBox", "Rdp:On")], _Runners.SecurityFindings.RevokeCalls);
         Assert.Equal(1, changed);
         Assert.Empty(window.Approvals);
         Assert.Null(window.SelectedApproval);
@@ -571,7 +571,7 @@ public sealed class SecurityFindingsViewModelTests : IDisposable
         var window = await Loaded(Scanned(), [], _Approval);
         window.SelectedApproval = window.Approvals.Single();
         _Tools.ConfirmsSecurityChange = true;
-        _Runner.RevokeFails = new InvalidOperationException("Rdp:On is not approved for DevBox.");
+        _Runners.SecurityFindings.RevokeFails = new InvalidOperationException("Rdp:On is not approved for DevBox.");
         ReadAgainGives([], _Approval);
 
         await window.RevokeAsync();

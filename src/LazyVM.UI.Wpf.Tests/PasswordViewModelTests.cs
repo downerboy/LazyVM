@@ -7,7 +7,7 @@ public sealed class PasswordViewModelTests : IDisposable
     private const string _SECRET = "Correct-Horse-9";
 
     private readonly CultureScope _Culture = new("en-GB");
-    private readonly FakeCommandRunner _Runner = new() { Password = _SECRET };
+    private readonly FakeRunners _Runners = new() { Credentials = { Password = _SECRET } };
     private readonly ManualClock _Clock = new(new DateTimeOffset(2026, 11, 18, 14, 52, 0, TimeSpan.Zero));
     private readonly FakeSecretClipboard _Clipboard;
     private readonly FakeToolWindows _Tools;
@@ -15,7 +15,7 @@ public sealed class PasswordViewModelTests : IDisposable
     public PasswordViewModelTests()
     {
         _Clipboard = new FakeSecretClipboard(_Clock);
-        _Tools = new FakeToolWindows(_Runner, clipboard: _Clipboard);
+        _Tools = new FakeToolWindows(_Runners, clipboard: _Clipboard);
     }
 
     public void Dispose()
@@ -28,6 +28,19 @@ public sealed class PasswordViewModelTests : IDisposable
         var window = new PasswordViewModel(Sample.VM(), _Tools);
         await window.LoadAsync();
         return window;
+    }
+
+    [Fact]
+    public async Task Show_ReadsThePasswordInTheVMsSession()
+    {
+        var id = Guid.Parse("4f2c9a1e-7b3d-4c8e-9a10-2d5e6f7a8b9c");
+        var window = new PasswordViewModel(Sample.VM() with { Id = id }, _Tools);
+        await window.LoadAsync();
+
+        await window.ToggleAsync();
+
+        Assert.Equal([id], _Runners.Credentials.PasswordIds);
+        window.Forget();
     }
 
     [Fact]
@@ -58,8 +71,8 @@ public sealed class PasswordViewModelTests : IDisposable
         Assert.Equal("Password hidden", window.PasswordText);
         Assert.False(window.IsShown);
         Assert.Equal("Show password", window.ToggleText);
-        Assert.Equal(["DevBox"], _Runner.UserNameCalls);
-        Assert.Empty(_Runner.PasswordCalls);
+        Assert.Equal(["DevBox"], _Runners.Credentials.UserNameCalls);
+        Assert.Empty(_Runners.Credentials.PasswordCalls);
         Assert.True(window.ToggleCommand.CanExecute(null));
         Assert.True(window.CopyCommand.CanExecute(null));
     }
@@ -71,7 +84,7 @@ public sealed class PasswordViewModelTests : IDisposable
 
         await window.ToggleAsync();
 
-        Assert.Equal(["DevBox"], _Runner.PasswordCalls);
+        Assert.Equal(["DevBox"], _Runners.Credentials.PasswordCalls);
         Assert.True(window.IsShown);
         Assert.Equal(_SECRET, window.PasswordText);
         Assert.Equal("Hide password", window.ToggleText);
@@ -88,7 +101,7 @@ public sealed class PasswordViewModelTests : IDisposable
 
         Assert.False(window.IsShown);
         Assert.Equal("Password hidden", window.PasswordText);
-        Assert.Single(_Runner.PasswordCalls);
+        Assert.Single(_Runners.Credentials.PasswordCalls);
     }
 
     [Fact]
@@ -151,17 +164,17 @@ public sealed class PasswordViewModelTests : IDisposable
         await window.CopyAsync();
 
         Assert.DoesNotContain(_SECRET, Recorded(window));
-        Assert.Equal(["DevBox", "DevBox"], _Runner.PasswordCalls);
+        Assert.Equal(["DevBox", "DevBox"], _Runners.Credentials.PasswordCalls);
         // Only reads: nothing was asked of the module that could write a log.
-        Assert.Empty(_Runner.LogCalls);
-        Assert.Empty(_Runner.MaintenanceCalls);
+        Assert.Empty(_Runners.Log.LogCalls);
+        Assert.Empty(_Runners.Build.MaintenanceCalls);
     }
 
     [Fact]
     public async Task APasswordThatCannotBeRead_StaysHidden_AndTheStatusSaysWhy()
     {
         var window = await Loaded();
-        _Runner.PasswordFails = new InvalidOperationException("Key not valid for use in specified state.");
+        _Runners.Credentials.PasswordFails = new InvalidOperationException("Key not valid for use in specified state.");
 
         await window.ToggleAsync();
         await window.CopyAsync();
@@ -174,7 +187,7 @@ public sealed class PasswordViewModelTests : IDisposable
     [Fact]
     public async Task WithNoCredentialStored_TheWindowSaysSo_NamingSetLazyVMCredential()
     {
-        _Runner.UserName = null;
+        _Runners.Credentials.UserName = null;
 
         var window = await Loaded();
 

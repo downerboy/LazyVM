@@ -12,7 +12,7 @@ public sealed partial class BuildViewModel : ViewModelBase
     /// <summary>The template chosen when the window opens, when there is one: the full developer VM.</summary>
     internal const string DEFAULT_TEMPLATE = "Developer";
 
-    private readonly PowerShellCommandRunner _Runner;
+    private readonly LazyVMBuildRunner _Runner;
     private readonly BuildLauncher _Launcher;
     private readonly IReadOnlySet<string> _ExistingNames;
     private readonly Action<string, StartedBuild> _BuildStarted;
@@ -26,7 +26,7 @@ public sealed partial class BuildViewModel : ViewModelBase
 
     /// <param name="existingNames">The VMs there are already: a new VM needs a name of its own.</param>
     /// <param name="buildStarted">Called with the VM's name and its build once the build has started.</param>
-    public BuildViewModel(PowerShellCommandRunner runner, BuildLauncher launcher, IEnumerable<string> existingNames, Action<string, StartedBuild> buildStarted)
+    public BuildViewModel(LazyVMBuildRunner runner, BuildLauncher launcher, IEnumerable<string> existingNames, Action<string, StartedBuild> buildStarted)
     {
         _Runner = runner;
         _Launcher = launcher;

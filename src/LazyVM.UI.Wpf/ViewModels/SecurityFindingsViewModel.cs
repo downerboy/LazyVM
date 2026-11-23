@@ -217,7 +217,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         var problems = new List<string>();
         try
         {
-            var found = await WorkAsync("Reading the security findings", () => _Tools.GetSecurityFindingsAsync(Name));
+            var found = await WorkAsync("Reading the security findings", () => _Tools.GetSecurityFindingsAsync(_Entry.Id, Name));
             _FindingsRead = true;
             Findings = found
                 .Select(finding => new SecurityFindingRow(finding))
@@ -233,7 +233,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         }
         try
         {
-            var approved = await WorkAsync("Reading the approved findings", () => _Tools.GetSecurityApprovalsAsync(Name));
+            var approved = await WorkAsync("Reading the approved findings", () => _Tools.GetSecurityApprovalsAsync(_Entry.Id, Name));
             _ApprovalsRead = true;
             Approvals = approved.Select(approval => new SecurityApprovalRow(approval)).ToList();
         }
@@ -266,7 +266,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         await ChangeAsync(
             () => _Tools.AskApprovalReason(this, chosen) is { } reason
                 && _Tools.ConfirmSecurityChange(this, $"Approve a security finding of {Name} - LazyVM", ApproveQuestion(chosen))
-                ? () => _Tools.ApproveSecurityFindingAsync(Name, id, reason.Trim())
+                ? () => _Tools.ApproveSecurityFindingAsync(_Entry.Id, Name,id, reason.Trim())
                 : null,
             $"Approving {id}",
             $"{id} is approved. The nightly scan stops reporting it until it changes.",
@@ -287,7 +287,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         var id = chosen.Approval.Id;
         await ChangeAsync(
             () => _Tools.ConfirmSecurityChange(this, $"Revoke an approval of {Name} - LazyVM", RevokeQuestion(chosen.Approval))
-                ? () => _Tools.RevokeSecurityFindingAsync(Name, id)
+                ? () => _Tools.RevokeSecurityFindingAsync(_Entry.Id, Name,id)
                 : null,
             $"Revoking the approval of {id}",
             $"The approval of {id} is revoked. The next nightly scan reports it again, as new, if it still finds it.",

@@ -28,9 +28,9 @@ public sealed class VMViewModel : ViewModelBase
         _Tools = tools;
         Details = ReadDetails(entry);
         _SuggestedPhase = CarryOnPhase(entry.LastBuild);
-        ChecksCommand = new RelayCommand(() => tools.OpenChecks(Name, hostOnly: false));
-        LogCommand = new RelayCommand(() => tools.OpenLog(Name));
-        BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(Name, started: null), () => IsBuilding);
+        ChecksCommand = new RelayCommand(() => tools.OpenChecks(_Entry.Id, Name, hostOnly: false));
+        LogCommand = new RelayCommand(() => tools.OpenLog(_Entry.Id, Name));
+        BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(_Entry.Id, Name, started: null), () => IsBuilding);
         BuildFromPhaseCommand = new RelayCommand(() => _ = BuildFromPhaseAsync(), () => CanStart && SelectedPhase is not null);
         MaintenanceCommand = new RelayCommand(() => _ = RunMaintenanceAsync(), () => CanStart && IsMaintenanceScheduled);
         DeleteCommand = new RelayCommand(() => _ = DeleteAsync(), () => CanStart);
@@ -294,7 +294,7 @@ public sealed class VMViewModel : ViewModelBase
         Status = $"Starting the build of {Name} from phase {phase.Number}";
         try
         {
-            await WorkAsync($"Starting the build from phase {phase.Number}", () => _Tools.StartBuildAsync(new BuildRequest(Name, null, null, phase.Number)));
+            await WorkAsync($"Starting the build from phase {phase.Number}", () => _Tools.StartBuildAsync(_Entry.Id, new BuildRequest(Name, null, null, phase.Number)));
             Status = $"The build of {Name} has started from phase {phase.Number}. Its progress is in its own window.";
         }
         catch (Exception exception)
@@ -318,7 +318,7 @@ public sealed class VMViewModel : ViewModelBase
         Status = $"Starting the maintenance of {Name}";
         try
         {
-            await WorkAsync("Starting the maintenance", () => _Tools.StartMaintenanceAsync(Name));
+            await WorkAsync("Starting the maintenance", () => _Tools.StartMaintenanceAsync(_Entry.Id, Name));
             Status = $"The maintenance of {Name} has started, as its nightly run does. Running now shows it once it has begun, and the Log says how it goes.";
         }
         catch (Exception exception)
@@ -349,7 +349,7 @@ public sealed class VMViewModel : ViewModelBase
             RemovalPlan plan;
             try
             {
-                plan = await WorkAsync("Reading what deleting the VM removes", () => _Tools.GetRemovalPlanAsync(Name));
+                plan = await WorkAsync("Reading what deleting the VM removes", () => _Tools.GetRemovalPlanAsync(_Entry.Id, Name));
             }
             catch (Exception exception)
             {
@@ -364,7 +364,7 @@ public sealed class VMViewModel : ViewModelBase
             Status = $"Deleting {Name}";
             try
             {
-                await WorkAsync($"Deleting {Name}", () => _Tools.RemoveVMAsync(Name));
+                await WorkAsync($"Deleting {Name}", () => _Tools.RemoveVMAsync(_Entry.Id, Name));
             }
             catch (Exception exception)
             {
@@ -386,7 +386,8 @@ public sealed class VMViewModel : ViewModelBase
     {
         try
         {
-            return RemovalViewModel.Left(await WorkAsync("Checking what is left of the VM", () => _Tools.GetRemovalPlanAsync(Name)));
+            // In the host's session: the delete closed the VM's, and its Hyper-V Id may be gone.
+            return RemovalViewModel.Left(await WorkAsync("Checking what is left of the VM", () => _Tools.GetRemovalPlanAsync(null, Name)));
         }
         catch (Exception)
         {

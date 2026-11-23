@@ -3,8 +3,8 @@ using LazyVM.UI.Wpf.ViewModels;
 namespace LazyVM.UI.Wpf.Tests;
 
 /// <summary>Records the windows shown, brought to the front and closed, without making windows.</summary>
-internal sealed class FakeToolWindows(PowerShellCommandRunner runner, BuildLauncher? launcher = null, FakeSecretClipboard? clipboard = null)
-    : ToolWindows(runner, launcher ?? new FakeBuildLauncher(), new FixedClock(DateTimeOffset.UnixEpoch),
+internal sealed class FakeToolWindows(FakeRunners runners, BuildLauncher? launcher = null, FakeSecretClipboard? clipboard = null)
+    : ToolWindows(runners.Runners, launcher ?? new FakeBuildLauncher(), new FixedClock(DateTimeOffset.UnixEpoch),
         clipboard ?? new FakeSecretClipboard(new ManualClock(DateTimeOffset.UnixEpoch)))
 {
     private readonly Dictionary<ViewModelBase, Action> _Closers = [];

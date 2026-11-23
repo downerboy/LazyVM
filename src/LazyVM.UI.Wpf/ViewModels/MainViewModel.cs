@@ -6,7 +6,8 @@ namespace LazyVM.UI.Wpf.ViewModels;
 /// <summary>The main window: the list of VMs, refreshing it, and opening a VM's window.</summary>
 public sealed class MainViewModel : ViewModelBase
 {
-    private readonly PowerShellCommandRunner _Runner;
+    private readonly LazyVMDashboardRunner _Dashboard;
+    private readonly LazyVMChecksRunner _Checks;
     private readonly VMWindowManager _Windows;
     private readonly ToolWindows _Tools;
     private readonly TimeProvider _Clock;
@@ -19,13 +20,14 @@ public sealed class MainViewModel : ViewModelBase
     private string _Status = string.Empty;
     private bool _ListIsKnown;
 
-    public MainViewModel(PowerShellCommandRunner runner, VMWindowManager windows, ToolWindows tools, TimeProvider clock)
+    public MainViewModel(LazyVMDashboardRunner dashboard, LazyVMChecksRunner checks, VMWindowManager windows, ToolWindows tools, TimeProvider clock)
     {
-        _Runner = runner;
+        _Dashboard = dashboard;
+        _Checks = checks;
         _Windows = windows;
         _Tools = tools;
         _Clock = clock;
-        HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, HostOnly()));
+        HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, null, HostOnly()));
         BuildCommand = new RelayCommand(() => tools.OpenBuild(VMs.Select(row => row.Name).ToList()));
         GuideCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.Guide));
         UseCasesCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.UseCases));
@@ -40,7 +42,7 @@ public sealed class MainViewModel : ViewModelBase
         _RefreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
         _CancelRefreshCommand = new RelayCommand(() => _Refreshing?.Cancel(), () => IsRefreshing);
         _OpenVMCommand = new RelayCommand(OpenSelectedVM, () => SelectedVM is not null);
-        _BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(SelectedVM!.Name, started: null), () => SelectedVMIsBuilding);
+        _BuildProgressCommand = new RelayCommand(() => tools.OpenProgress(SelectedVM!.Id, SelectedVM.Name, started: null), () => SelectedVMIsBuilding);
     }
 
     public ObservableCollection<VMRowViewModel> VMs { get; } = [];
@@ -142,7 +144,7 @@ public sealed class MainViewModel : ViewModelBase
     public async Task StartAsync()
     {
         await RefreshAsync();
-        var checks = new ChecksViewModel(_Runner, null, HostOnly());
+        var checks = new ChecksViewModel(_Checks, null, null, HostOnly());
         await checks.RunAsync();
         if (NoVMs() || checks.HasFailures || checks.CouldNotRun)
         {
@@ -181,7 +183,7 @@ public sealed class MainViewModel : ViewModelBase
         _ListIsKnown = false;
         try
         {
-            var entries = await WorkAsync("Reading your VMs", () => _Runner.GetLazyVMDashboardAsync(cancel.Token));
+            var entries = await WorkAsync("Reading your VMs", () => _Dashboard.GetLazyVMDashboardAsync(cancel.Token));
             ShowInList(entries);
             // The selected VM may have started or stopped building.
             SelectedVMChanged();
