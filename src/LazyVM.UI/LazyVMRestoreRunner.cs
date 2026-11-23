@@ -2,8 +2,12 @@ using System.Management.Automation;
 
 namespace LazyVM.UI;
 
-/// <summary>Runs the module's commands about a VM's restore points: listing them, and returning the VM to one.</summary>
-public class LazyVMRestoreRunner(PowerShellSessionFactory sessions) : PowerShellCommandRunner(sessions)
+/// <summary>
+/// Runs the module's commands about a VM's restore points: listing them, and
+/// returning the VM to one, which runs in a pwsh process of its own
+/// (<see cref="RestoreLauncher"/>) so closing the app cannot stop it part way.
+/// </summary>
+public class LazyVMRestoreRunner(PowerShellSessionFactory sessions, RestoreLauncher launcher) : PowerShellCommandRunner(sessions)
 {
     /// <summary>Runs <c>Get-LazyVMRestorePoint -Name</c> in the VM's session: its restore points, oldest first. None before the first.</summary>
     public virtual async Task<IReadOnlyList<VMRestorePoint>> GetLazyVMRestorePointsAsync(Guid? vmId, string name, CancellationToken cancellationToken)
@@ -14,8 +18,8 @@ public class LazyVMRestoreRunner(PowerShellSessionFactory sessions) : PowerShell
     }
 
     /// <summary>
-    /// Runs <c>Restore-LazyVMTooling -Name -RestorePoint -Force</c> in the
-    /// VM's session: returns the VM to the restore point
+    /// Runs <c>Restore-LazyVMTooling -Name -RestorePoint -Force</c> in a pwsh
+    /// process of its own: returns the VM to the restore point
     /// <paramref name="stamp"/>, without the question the app has already
     /// asked. Never cancelled: a revert stopped half way leaves the VM
     /// between the two. Throws with the module's reason when it did not,
@@ -23,10 +27,7 @@ public class LazyVMRestoreRunner(PowerShellSessionFactory sessions) : PowerShell
     /// </summary>
     public virtual async Task RestoreLazyVMToolingAsync(Guid? vmId, string name, string stamp)
     {
-        await InvokeAsync(
-            SessionFor(vmId), "Restore-LazyVMTooling", [("Name", name), ("RestorePoint", stamp), ("Force", true)], CancellationToken.None,
-            failsOnlyByThrowing: true)
-            .ConfigureAwait(false);
+        await RunInOwnProcessAsync(moduleFolder => launcher.Start(new RestoreRequest(name, stamp), moduleFolder)).ConfigureAwait(false);
     }
 
     /// <summary>Reads one <c>LazyVM.RestorePoint</c> object. A time that cannot be read is left empty.</summary>

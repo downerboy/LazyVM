@@ -12,7 +12,7 @@ public class BuildStarter(LazyVMBuildRunner builds, BuildLauncher launcher)
     /// it could not start, such as when the module is not loaded or PowerShell
     /// 7.6 is not installed.
     /// </summary>
-    public async Task<StartedBuild> StartAsync(BuildRequest request, CancellationToken cancellationToken)
+    public async Task<StartedRun> StartAsync(BuildRequest request, CancellationToken cancellationToken)
     {
         var moduleFolder = await builds.GetModuleFolderAsync(cancellationToken).ConfigureAwait(false);
         return launcher.Start(request, moduleFolder);

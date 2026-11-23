@@ -9,11 +9,9 @@ namespace LazyVM.UI;
 public class LazyVMBuildRunner(PowerShellSessionFactory sessions) : PowerShellCommandRunner(sessions)
 {
     /// <summary>The folder the module was imported from, which holds the script each build runs with.</summary>
-    public virtual async Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
+    public virtual Task<string> GetModuleFolderAsync(CancellationToken cancellationToken)
     {
-        var output = await InvokeAsync(Sessions.ForHost(), "Get-Module", [("Name", "LazyVM")], cancellationToken).ConfigureAwait(false);
-        return output.Select(module => module.PropertyText("ModuleBase")).FirstOrDefault(folder => folder.Length > 0)
-            ?? throw new InvalidOperationException("The LazyVM module is not loaded.");
+        return ModuleFolderAsync(cancellationToken);
     }
 
     /// <summary>Runs <c>Get-LazyVMBuildPhase</c>: every phase of a build, in order.</summary>

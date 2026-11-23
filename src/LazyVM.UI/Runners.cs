@@ -18,14 +18,18 @@ public sealed record Runners(
     LazyVMLogRunner Log,
     LazyVMHelpRunner Help)
 {
-    /// <summary>Every runner, on <paramref name="sessions"/>.</summary>
-    public static Runners On(PowerShellSessionFactory sessions)
+    /// <summary>
+    /// Every runner, on <paramref name="sessions"/>. A delete and a restore
+    /// start in the processes <paramref name="removals"/> and
+    /// <paramref name="restores"/> start.
+    /// </summary>
+    public static Runners On(PowerShellSessionFactory sessions, RemovalLauncher removals, RestoreLauncher restores)
     {
         return new(
             new LazyVMDashboardRunner(sessions),
             new LazyVMBuildRunner(sessions),
-            new LazyVMRemovalRunner(sessions),
-            new LazyVMRestoreRunner(sessions),
+            new LazyVMRemovalRunner(sessions, removals),
+            new LazyVMRestoreRunner(sessions, restores),
             new LazyVMRecoveryKeysRunner(sessions),
             new LazyVMCredentialsRunner(sessions),
             new LazyVMSecurityFindingsRunner(sessions),

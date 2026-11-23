@@ -16,7 +16,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     private readonly LazyVMDashboardRunner _Dashboard;
     private readonly LazyVMBuildRunner _Builds;
     private readonly Guid? _VMId;
-    private readonly StartedBuild? _Started;
+    private readonly StartedRun? _Started;
     private readonly TimeProvider _Clock;
     private readonly RelayCommand _CancelCommand;
     private readonly Func<int, Task>? _StartFromPhase;
@@ -39,7 +39,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     /// <param name="started">The build process the app started; empty to follow the VM's build that is running now.</param>
     /// <param name="startFromPhase">Starts a new build of the VM from the phase it is given, and shows it; empty offers no Carry on.</param>
     public BuildProgressViewModel(
-        LazyVMDashboardRunner dashboard, LazyVMBuildRunner builds, Guid? vmId, string vmName, StartedBuild? started, TimeProvider clock,
+        LazyVMDashboardRunner dashboard, LazyVMBuildRunner builds, Guid? vmId, string vmName, StartedRun? started, TimeProvider clock,
         Func<int, Task>? startFromPhase = null)
     {
         _Dashboard = dashboard;
@@ -277,7 +277,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         } else if (processEnded)
         {
             // It ended before it recorded a run, such as when the Windows ISO is missing or another run is going.
-            Finish(result!.Outcome == BuildResult.COMPLETED
+            Finish(result!.Outcome == RunResult.COMPLETED
                 ? $"The build of {VMName} ended."
                 : $"The build of {VMName} did not start: {result.Message}", null);
         } else
@@ -311,7 +311,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
         Show(latest, null);
     }
 
-    private void Show(VMRun latest, BuildResult? result)
+    private void Show(VMRun latest, RunResult? result)
     {
         _Run = latest;
         IsStopping = latest.StopRequested;
@@ -330,7 +330,7 @@ public sealed class BuildProgressViewModel : ViewModelBase
     }
 
     /// <summary>How the build ended, and for a build that stopped or failed, how to carry on.</summary>
-    private void Ending(VMRun ended, BuildResult? result)
+    private void Ending(VMRun ended, RunResult? result)
     {
         var phase = ended.UnfinishedPhase ?? ended.Phase;
         var carryOn = phase switch

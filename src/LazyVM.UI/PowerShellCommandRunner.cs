@@ -34,6 +34,30 @@ public abstract class PowerShellCommandRunner
         return vmId is { } id ? Sessions.ForVM(id) : Sessions.ForHost();
     }
 
+    /// <summary>The folder the module was imported from, which holds the scripts a run in a process of its own starts with. Throws when the module is not loaded.</summary>
+    protected async Task<string> ModuleFolderAsync(CancellationToken cancellationToken)
+    {
+        var output = await InvokeAsync(Sessions.ForHost(), "Get-Module", [("Name", "LazyVM")], cancellationToken).ConfigureAwait(false);
+        return output.Select(module => module.PropertyText("ModuleBase")).FirstOrDefault(folder => folder.Length > 0)
+            ?? throw new InvalidOperationException("The LazyVM module is not loaded.");
+    }
+
+    /// <summary>
+    /// Starts a run in a pwsh process of its own, with the module's folder,
+    /// and waits for it to end. Never cancelled: a delete or restore stopped
+    /// half way leaves more behind. Throws with the script's reason when the
+    /// process could not start or did not complete.
+    /// </summary>
+    protected async Task RunInOwnProcessAsync(Func<string, StartedRun> start)
+    {
+        var started = start(await ModuleFolderAsync(CancellationToken.None).ConfigureAwait(false));
+        var result = await started.Ended.ConfigureAwait(false);
+        if (result.Outcome != RunResult.COMPLETED)
+        {
+            throw new InvalidOperationException(result.Message is { Length: > 0 } message ? message : $"The run ended with the outcome {result.Outcome}.");
+        }
+    }
+
     /// <summary>
     /// Runs <paramref name="command"/> in <paramref name="session"/> with each
     /// parameter added by name, never as script text.

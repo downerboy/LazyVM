@@ -2,8 +2,12 @@ using System.Management.Automation;
 
 namespace LazyVM.UI;
 
-/// <summary>Runs the module's commands that delete a VM: what deleting it would delete and keep, and the delete.</summary>
-public class LazyVMRemovalRunner(PowerShellSessionFactory sessions) : PowerShellCommandRunner(sessions)
+/// <summary>
+/// Runs the module's commands that delete a VM: what deleting it would delete
+/// and keep, and the delete, which runs in a pwsh process of its own
+/// (<see cref="RemovalLauncher"/>) so closing the app cannot stop it part way.
+/// </summary>
+public class LazyVMRemovalRunner(PowerShellSessionFactory sessions, RemovalLauncher launcher) : PowerShellCommandRunner(sessions)
 {
     /// <summary>
     /// Runs <c>Get-LazyVMRemovalPlan -Name</c> in the VM's session: what
@@ -19,19 +23,18 @@ public class LazyVMRemovalRunner(PowerShellSessionFactory sessions) : PowerShell
     }
 
     /// <summary>
-    /// Runs <c>Remove-LazyVM -Name -Force</c> in the VM's session: deletes
-    /// the VM, without the question the app has already asked, then closes
-    /// its session, even when only part was removed: its Hyper-V Id may be
-    /// gone. Never cancelled: a removal stopped half way leaves more behind.
-    /// Throws with the module's reason when it removed nothing or only part,
-    /// such as while another run of the VM is going.
+    /// Runs <c>Remove-LazyVM -Name -Force</c> in a pwsh process of its own:
+    /// deletes the VM, without the question the app has already asked, then
+    /// closes the VM's session, even when only part was removed: its Hyper-V
+    /// Id may be gone. Never cancelled: a removal stopped half way leaves
+    /// more behind. Throws with the module's reason when it removed nothing
+    /// or only part, such as while another run of the VM is going.
     /// </summary>
     public virtual async Task RemoveLazyVMAsync(Guid? vmId, string name)
     {
         try
         {
-            await InvokeAsync(SessionFor(vmId), "Remove-LazyVM", [("Name", name), ("Force", true)], CancellationToken.None, failsOnlyByThrowing: true)
-                .ConfigureAwait(false);
+            await RunInOwnProcessAsync(moduleFolder => launcher.Start(new RemovalRequest(name), moduleFolder)).ConfigureAwait(false);
         }
         finally
         {

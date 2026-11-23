@@ -9,28 +9,53 @@ public sealed class LazyVMRemovalRunnerTests
 {
     private static readonly Guid _DEV_BOX = Guid.Parse("4f2c9a1e-7b3d-4c8e-9a10-2d5e6f7a8b9c");
 
-    [Fact]
-    public async Task RemoveLazyVMAsync_RunsInTheVMsSession_ThenClosesIt()
+    private const string _MODULE_FOLDER = @"C:\Program Files\LazyVM\Modules\LazyVM\6.43.0";
+
+    private readonly FakeRemovalLauncher _Launcher = new();
+
+    private static ScriptedSessions SessionsOfTheModule()
     {
-        using var sessions = new ScriptedSessions();
+        return new ScriptedSessions { Answer = ScriptedSessions.Output(Entry(("ModuleBase", _MODULE_FOLDER))) };
+    }
+
+    [Fact]
+    public async Task RemoveLazyVMAsync_RunsInAProcessOfItsOwn_ThenClosesTheVMsSession()
+    {
+        using var sessions = SessionsOfTheModule();
         var before = sessions.ForVM(_DEV_BOX);
 
-        await new LazyVMRemovalRunner(sessions).RemoveLazyVMAsync(_DEV_BOX, "DevBox");
+        await new LazyVMRemovalRunner(sessions, _Launcher).RemoveLazyVMAsync(_DEV_BOX, "DevBox");
 
-        Assert.Same(before, sessions.Call.Session);
-        Assert.Equal("Remove-LazyVM", sessions.Call.Command);
+        Assert.Equal((new RemovalRequest("DevBox"), _MODULE_FOLDER), Assert.Single(_Launcher.Started));
+        // Only the module's folder was read, in the host's session: the delete is not run in the app's.
+        Assert.Equal("Get-Module", sessions.Call.Command);
         Assert.NotSame(before, sessions.ForVM(_DEV_BOX));
     }
 
     [Fact]
-    public async Task RemoveLazyVMAsync_ThatRemovedOnlyPart_StillClosesTheVMsSession()
+    public async Task RemoveLazyVMAsync_ThatRemovedOnlyPart_ThrowsTheScriptsReason_AndStillClosesTheVMsSession()
     {
         // Only part removed may still be the Hyper-V VM gone, with its Id.
-        using var sessions = new ScriptedSessions { Fails = new InvalidOperationException("The folder is in use.") };
+        using var sessions = SessionsOfTheModule();
+        _Launcher.Result = new RunResult(RunResult.FAILED, "LazyVM.RemovedInPart", "'DevBox' was only partly removed.");
         var before = sessions.ForVM(_DEV_BOX);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new LazyVMRemovalRunner(sessions).RemoveLazyVMAsync(_DEV_BOX, "DevBox"));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => new LazyVMRemovalRunner(sessions, _Launcher).RemoveLazyVMAsync(_DEV_BOX, "DevBox"));
 
+        Assert.Equal("'DevBox' was only partly removed.", failure.Message);
+        Assert.NotSame(before, sessions.ForVM(_DEV_BOX));
+    }
+
+    [Fact]
+    public async Task RemoveLazyVMAsync_WhenTheProcessCannotStart_Throws_AndStillClosesTheVMsSession()
+    {
+        using var sessions = SessionsOfTheModule();
+        _Launcher.Fails = new InvalidOperationException("PowerShell 7.6 or later was not found.");
+        var before = sessions.ForVM(_DEV_BOX);
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => new LazyVMRemovalRunner(sessions, _Launcher).RemoveLazyVMAsync(_DEV_BOX, "DevBox"));
+
+        Assert.Equal("PowerShell 7.6 or later was not found.", failure.Message);
         Assert.NotSame(before, sessions.ForVM(_DEV_BOX));
     }
 

@@ -6,7 +6,7 @@ public sealed class BuildViewModelTests
 {
     private readonly FakeRunners _Runners = new();
     private readonly FakeBuildLauncher _Launcher = new();
-    private readonly List<(string Name, StartedBuild Build)> _Started = [];
+    private readonly List<(string Name, StartedRun Build)> _Started = [];
     private readonly BuildViewModel _Build;
 
     public BuildViewModelTests()
