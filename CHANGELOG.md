@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.43.0](https://github.com/downerboy/LazyVM/compare/v6.42.1...v6.43.0) (2026-11-23)
+
+
+### Features
+
+* a window closes with the window that opened it ([#535](https://github.com/downerboy/LazyVM/issues/535)) ([ce18b0d](https://github.com/downerboy/LazyVM/commit/ce18b0dc6f8cc39b9279560df6408d5c3b284d0b))
+
 ## [6.42.1](https://github.com/downerboy/LazyVM/compare/v6.42.0...v6.42.1) (2026-11-23)
 
 
