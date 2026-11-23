@@ -2,18 +2,26 @@ using LazyVM.UI.Wpf.ViewModels;
 
 namespace LazyVM.UI.Wpf.Tests;
 
-/// <summary>Records the windows shown, brought to the front and closed, without making windows.</summary>
-internal sealed class FakeToolWindows(FakeRunners runners, BuildLauncher? launcher = null, FakeSecretClipboard? clipboard = null)
-    : ToolWindows(runners.Runners, launcher ?? new FakeBuildLauncher(), new FixedClock(DateTimeOffset.UnixEpoch),
-        clipboard ?? new FakeSecretClipboard(new ManualClock(DateTimeOffset.UnixEpoch)))
+/// <summary>Opens windows through a <see cref="FakeWindowTracker"/>, which records them, and gives the dialog answers a test sets.</summary>
+internal sealed class FakeToolWindows : ToolWindows
 {
-    private readonly Dictionary<ViewModelBase, Action> _Closers = [];
+    public FakeToolWindows(FakeRunners runners, BuildLauncher? launcher = null, FakeSecretClipboard? clipboard = null)
+        : this(runners, new FakeWindowTracker(), launcher, clipboard)
+    {
+    }
 
-    public List<ViewModelBase> Shown { get; } = [];
+    private FakeToolWindows(FakeRunners runners, FakeWindowTracker windows, BuildLauncher? launcher, FakeSecretClipboard? clipboard)
+        : base(runners.Runners, windows, launcher ?? new FakeBuildLauncher(), new FixedClock(DateTimeOffset.UnixEpoch),
+            clipboard ?? new FakeSecretClipboard(new ManualClock(DateTimeOffset.UnixEpoch)))
+    {
+        Windows = windows;
+    }
 
-    public List<ViewModelBase> BroughtToFront { get; } = [];
-
-    public List<ViewModelBase> Closed { get; } = [];
+    /// <summary>The windows opened, brought to the front and closed.</summary>
+    public FakeWindowTracker Windows
+    {
+        get;
+    }
 
     /// <summary>The answer to "Do you really want to delete this VM?": Yes when true.</summary>
     public bool ConfirmsRemoval
@@ -110,25 +118,4 @@ internal sealed class FakeToolWindows(FakeRunners runners, BuildLauncher? launch
         return ConfirmsSecurityChange;
     }
 
-    public void Close(ViewModelBase window)
-    {
-        _Closers[window]();
-    }
-
-    protected override void CloseWindow(ViewModelBase viewModel)
-    {
-        Closed.Add(viewModel);
-        _Closers[viewModel]();
-    }
-
-    protected override void Show(ViewModelBase viewModel, Action closed)
-    {
-        Shown.Add(viewModel);
-        _Closers[viewModel] = closed;
-    }
-
-    protected override void BringToFront(ViewModelBase viewModel)
-    {
-        BroughtToFront.Add(viewModel);
-    }
 }

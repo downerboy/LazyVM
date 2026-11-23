@@ -25,8 +25,8 @@ public partial class App : Application
 
         _Sessions = new PowerShellSessionFactory();
         var runners = Runners.On(_Sessions);
-        var tools = _Tools = new ToolWindows(runners, new BuildLauncher(), TimeProvider.System);
-        var main = new MainViewModel(runners.Dashboard, runners.Checks, new VMWindowManager(tools), tools, TimeProvider.System);
+        var tools = _Tools = new ToolWindows(runners, new WindowTracker(), new BuildLauncher(), TimeProvider.System);
+        var main = new MainViewModel(runners.Dashboard, runners.Checks, tools, TimeProvider.System);
         MainWindow = new MainWindow { DataContext = main };
         MainWindow.Show();
         _ = main.StartAsync();

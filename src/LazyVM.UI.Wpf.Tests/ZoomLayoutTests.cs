@@ -47,7 +47,7 @@ public sealed class ZoomLayoutTests
         return Ui.Invoke(() =>
         {
             var tools = new FakeToolWindows(runners);
-            var model = new MainViewModel(runners.Dashboard, runners.Checks, new FakeVMWindowManager(tools), tools, TimeProvider.System);
+            var model = new MainViewModel(runners.Dashboard, runners.Checks, tools, TimeProvider.System);
             return new MainWindow { DataContext = model };
         });
     }

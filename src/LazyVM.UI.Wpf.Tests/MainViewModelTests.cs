@@ -7,14 +7,15 @@ public sealed class MainViewModelTests : IDisposable
     private readonly CultureScope _Culture = new("en-GB");
     private readonly FakeRunners _Runners = new();
     private readonly FakeToolWindows _Tools;
-    private readonly FakeVMWindowManager _Windows;
+
+    /// <summary>The VM windows opened, as view models.</summary>
+    private IReadOnlyList<VMViewModel> ShownVMs => [.. _Tools.Windows.Shown.OfType<VMViewModel>()];
     private readonly MainViewModel _Main;
 
     public MainViewModelTests()
     {
         _Tools = new FakeToolWindows(_Runners);
-        _Windows = new FakeVMWindowManager(_Tools);
-        _Main = new MainViewModel(_Runners.Dashboard, _Runners.Checks, _Windows, _Tools, new FixedClock(new DateTimeOffset(2026, 11, 14, 14, 52, 0, TimeSpan.Zero)));
+        _Main = new MainViewModel(_Runners.Dashboard, _Runners.Checks, _Tools, new FixedClock(new DateTimeOffset(2026, 11, 14, 14, 52, 0, TimeSpan.Zero)));
     }
 
     public void Dispose()
@@ -100,7 +101,7 @@ public sealed class MainViewModelTests : IDisposable
 
         _Main.BuildProgressCommand.Execute(null);
 
-        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Shown));
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Windows.Shown));
         Assert.Equal("DevEnv", progress.VMName);
         progress.StopFollowing();
     }
@@ -248,7 +249,7 @@ public sealed class MainViewModelTests : IDisposable
 
         _Main.OpenVMCommand.Execute(null);
 
-        Assert.Equal("DevBox", Assert.Single(_Windows.Shown).Name);
+        Assert.Equal("DevBox", Assert.Single(ShownVMs).Name);
     }
 
     [Fact]
@@ -267,8 +268,8 @@ public sealed class MainViewModelTests : IDisposable
         _Main.OpenVMCommand.Execute(null);
         _Main.OpenVMCommand.Execute(null);
 
-        var window = Assert.Single(_Windows.Shown);
-        Assert.Same(window, Assert.Single(_Windows.BroughtToFront));
+        var window = Assert.Single(ShownVMs);
+        Assert.Same(window, Assert.Single(_Tools.Windows.BroughtToFront));
     }
 
     [Fact]
@@ -278,12 +279,12 @@ public sealed class MainViewModelTests : IDisposable
         await _Main.RefreshAsync();
         _Main.SelectedVM = _Main.VMs[0];
         _Main.OpenVMCommand.Execute(null);
-        _Windows.Close(_Windows.Shown[0]);
+        _Tools.Windows.UserCloses(ShownVMs[0]);
 
         _Main.OpenVMCommand.Execute(null);
 
-        Assert.Equal(2, _Windows.Shown.Count);
-        Assert.Empty(_Windows.BroughtToFront);
+        Assert.Equal(2, ShownVMs.Count);
+        Assert.Empty(_Tools.Windows.BroughtToFront);
     }
 
     [Fact]
@@ -296,7 +297,7 @@ public sealed class MainViewModelTests : IDisposable
 
         // Without -HostOnly, Test-LazyVM adds the note that there are no VMs yet.
         Assert.Equal([(null, false)], _Runners.Checks.CheckCalls);
-        Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown));
+        Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Windows.Shown));
     }
 
     [Fact]
@@ -308,7 +309,7 @@ public sealed class MainViewModelTests : IDisposable
         await _Main.StartAsync();
 
         Assert.Equal([(null, true)], _Runners.Checks.CheckCalls);
-        Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown));
+        Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Windows.Shown));
     }
 
     [Fact]
@@ -319,7 +320,7 @@ public sealed class MainViewModelTests : IDisposable
 
         await _Main.StartAsync();
 
-        Assert.Empty(_Tools.Shown);
+        Assert.Empty(_Tools.Windows.Shown);
         Assert.Equal("Refreshed 1 VM at 14:52", _Main.Status);
     }
 
@@ -333,7 +334,7 @@ public sealed class MainViewModelTests : IDisposable
         await _Main.StartAsync();
 
         Assert.Equal([(null, true)], _Runners.Checks.CheckCalls);
-        Assert.Empty(_Tools.Shown);
+        Assert.Empty(_Tools.Windows.Shown);
     }
 
     [Fact]
@@ -344,7 +345,7 @@ public sealed class MainViewModelTests : IDisposable
 
         await _Main.StartAsync();
 
-        var checks = Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown));
+        var checks = Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Windows.Shown));
         Assert.Equal("Checks could not run: Run LazyVM as administrator.", checks.Status);
     }
 
@@ -358,7 +359,7 @@ public sealed class MainViewModelTests : IDisposable
         _Main.HostChecksCommand.Execute(null);
 
         Assert.Equal([(null, true)], _Runners.Checks.CheckCalls);
-        Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown));
+        Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Windows.Shown));
     }
 
     [Fact]
@@ -399,7 +400,7 @@ public sealed class MainViewModelTests : IDisposable
 
         await _Main.RefreshAsync();
 
-        Assert.Equal("Off", _Windows.Shown[0].State);
+        Assert.Equal("Off", ShownVMs[0].State);
     }
 
     [Fact]
@@ -409,7 +410,7 @@ public sealed class MainViewModelTests : IDisposable
         await _Main.RefreshAsync();
 
         _Main.BuildCommand.Execute(null);
-        var build = Assert.IsType<BuildViewModel>(Assert.Single(_Tools.Shown));
+        var build = Assert.IsType<BuildViewModel>(Assert.Single(_Tools.Windows.Shown));
         await build.LoadAsync();
         build.Name = "devbox";
         await build.BuildAsync();
@@ -489,19 +490,19 @@ public sealed class MainViewModelTests : IDisposable
         await _Main.RefreshAsync();
         _Main.SelectedVM = _Main.VMs[0];
         _Main.OpenVMCommand.Execute(null);
-        var window = Assert.Single(_Windows.Shown);
+        var window = Assert.Single(ShownVMs);
         _Runners.Removal.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", HyperVState = "Off" });
         _Runners.Dashboard.Returns();
         _Tools.ConfirmsRemoval = true;
 
         await window.DeleteAsync();
 
-        Assert.Same(window, Assert.Single(_Windows.Closed));
+        Assert.Same(window, Assert.Single(_Tools.Windows.Closed));
         // Its window is gone, so opening the VM again makes a new one.
         _Runners.Dashboard.Returns(Sample.VM("DevBox"));
         await _Main.RefreshAsync();
         _Main.SelectedVM = _Main.VMs[0];
         _Main.OpenVMCommand.Execute(null);
-        Assert.Equal(2, _Windows.Shown.Count);
+        Assert.Equal(2, ShownVMs.Count);
     }
 }

@@ -8,7 +8,6 @@ public sealed class MainViewModel : ViewModelBase
 {
     private readonly LazyVMDashboardRunner _Dashboard;
     private readonly LazyVMChecksRunner _Checks;
-    private readonly VMWindowManager _Windows;
     private readonly ToolWindows _Tools;
     private readonly TimeProvider _Clock;
     private readonly RelayCommand _RefreshCommand;
@@ -20,11 +19,10 @@ public sealed class MainViewModel : ViewModelBase
     private string _Status = string.Empty;
     private bool _ListIsKnown;
 
-    public MainViewModel(LazyVMDashboardRunner dashboard, LazyVMChecksRunner checks, VMWindowManager windows, ToolWindows tools, TimeProvider clock)
+    public MainViewModel(LazyVMDashboardRunner dashboard, LazyVMChecksRunner checks, ToolWindows tools, TimeProvider clock)
     {
         _Dashboard = dashboard;
         _Checks = checks;
-        _Windows = windows;
         _Tools = tools;
         _Clock = clock;
         HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, null, HostOnly()));
@@ -183,7 +181,7 @@ public sealed class MainViewModel : ViewModelBase
             // The selected VM may have started or stopped building.
             SelectedVMChanged();
             _ListIsKnown = true;
-            _Windows.Update(entries);
+            _Tools.UpdateVMs(entries);
             var count = entries.Count == 1 ? "1 VM" : $"{entries.Count} VMs";
             Status = $"Refreshed {count} at {_Clock.GetLocalNow().ToString("t", CultureInfo.CurrentCulture)}";
         }
@@ -247,7 +245,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (SelectedVM is { } row)
         {
-            _Windows.Open(row.Entry);
+            _Tools.OpenVM(row.Entry);
         }
     }
 }

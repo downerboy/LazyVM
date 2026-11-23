@@ -111,7 +111,7 @@ public sealed class PasswordViewModelTests : IDisposable
         await window.ToggleAsync();
         Assert.True(window.IsShown);
 
-        _Tools.Close(window);
+        _Tools.Windows.UserCloses(window);
 
         Assert.False(window.IsShown);
         Assert.Equal("Password hidden", window.PasswordText);

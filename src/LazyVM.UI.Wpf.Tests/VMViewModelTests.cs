@@ -35,7 +35,7 @@ public sealed class VMViewModelTests : IDisposable
 
         vm.ChecksCommand.Execute(null);
 
-        Assert.Equal("DevEnv", Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Shown)).VMName);
+        Assert.Equal("DevEnv", Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Windows.Shown)).VMName);
         Assert.Equal([("DevEnv", false)], _Runners.Checks.CheckCalls);
     }
 
@@ -47,7 +47,7 @@ public sealed class VMViewModelTests : IDisposable
 
         vm.LogCommand.Execute(null);
 
-        Assert.Equal("DevEnv", Assert.IsType<LogViewModel>(Assert.Single(_Tools.Shown)).VMName);
+        Assert.Equal("DevEnv", Assert.IsType<LogViewModel>(Assert.Single(_Tools.Windows.Shown)).VMName);
     }
 
     [Fact]
@@ -217,7 +217,7 @@ public sealed class VMViewModelTests : IDisposable
 
         vm.RecoveryKeysCommand.Execute(null);
 
-        Assert.Equal("DevBox", Assert.IsType<RecoveryKeysViewModel>(Assert.Single(_Tools.Shown)).Name);
+        Assert.Equal("DevBox", Assert.IsType<RecoveryKeysViewModel>(Assert.Single(_Tools.Windows.Shown)).Name);
         Assert.Equal(["DevBox"], _Runners.RecoveryKeys.RecoveryKeyCalls);
     }
 
@@ -230,7 +230,7 @@ public sealed class VMViewModelTests : IDisposable
 
         vm.SecurityFindingsCommand.Execute(null);
 
-        Assert.Equal("DevBox", Assert.IsType<SecurityFindingsViewModel>(Assert.Single(_Tools.Shown)).Name);
+        Assert.Equal("DevBox", Assert.IsType<SecurityFindingsViewModel>(Assert.Single(_Tools.Windows.Shown)).Name);
         Assert.Equal(["DevBox"], _Runners.SecurityFindings.SecurityFindingCalls);
         Assert.Equal(["DevBox"], _Runners.SecurityFindings.SecurityApprovalCalls);
     }
@@ -245,7 +245,7 @@ public sealed class VMViewModelTests : IDisposable
         vm.SecurityFindingsCommand.Execute(null);
         vm.SecurityFindingsCommand.Execute(null);
 
-        Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
+        Assert.Same(Assert.Single(_Tools.Windows.Shown), Assert.Single(_Tools.Windows.BroughtToFront));
         Assert.Single(_Runners.SecurityFindings.SecurityFindingCalls);
     }
 
@@ -277,7 +277,7 @@ public sealed class VMViewModelTests : IDisposable
 
         vm.PasswordCommand.Execute(null);
 
-        Assert.Equal("DevBox", Assert.IsType<PasswordViewModel>(Assert.Single(_Tools.Shown)).Name);
+        Assert.Equal("DevBox", Assert.IsType<PasswordViewModel>(Assert.Single(_Tools.Windows.Shown)).Name);
         Assert.Equal(["DevBox"], _Runners.Credentials.UserNameCalls);
         Assert.Empty(_Runners.Credentials.PasswordCalls);
     }
@@ -290,7 +290,7 @@ public sealed class VMViewModelTests : IDisposable
         vm.PasswordCommand.Execute(null);
         vm.PasswordCommand.Execute(null);
 
-        Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
+        Assert.Same(Assert.Single(_Tools.Windows.Shown), Assert.Single(_Tools.Windows.BroughtToFront));
     }
 
     [Fact]
@@ -302,7 +302,7 @@ public sealed class VMViewModelTests : IDisposable
         vm.RecoveryKeysCommand.Execute(null);
         vm.RecoveryKeysCommand.Execute(null);
 
-        Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
+        Assert.Same(Assert.Single(_Tools.Windows.Shown), Assert.Single(_Tools.Windows.BroughtToFront));
         Assert.Single(_Runners.RecoveryKeys.RecoveryKeyCalls);
     }
 
@@ -501,7 +501,7 @@ public sealed class VMViewModelTests : IDisposable
 
         vm.BuildProgressCommand.Execute(null);
 
-        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Shown));
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Windows.Shown));
         Assert.Equal("DevEnv", progress.VMName);
         progress.StopFollowing();
     }
@@ -698,7 +698,7 @@ public sealed class VMViewModelTests : IDisposable
         await vm.BuildFromPhaseAsync();
 
         Assert.Equal(new BuildRequest("DevEnv", null, null, 7), Assert.Single(_Launcher.Started).Request);
-        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Shown));
+        var progress = Assert.IsType<BuildProgressViewModel>(Assert.Single(_Tools.Windows.Shown));
         Assert.Equal("DevEnv", progress.VMName);
         Assert.Equal("The build of DevEnv has started from phase 7. Its progress is in its own window.", vm.Status);
         progress.StopFollowing();
@@ -1071,7 +1071,7 @@ public sealed class VMViewModelTests : IDisposable
 
         vm.RestorePointsCommand.Execute(null);
 
-        Assert.Equal("DevBox", Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Shown)).Name);
+        Assert.Equal("DevBox", Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Windows.Shown)).Name);
         Assert.Equal(["DevBox"], _Runners.Restore.RestorePointCalls);
     }
 
@@ -1084,7 +1084,7 @@ public sealed class VMViewModelTests : IDisposable
         vm.RestorePointsCommand.Execute(null);
         vm.RestorePointsCommand.Execute(null);
 
-        Assert.Same(Assert.Single(_Tools.Shown), Assert.Single(_Tools.BroughtToFront));
+        Assert.Same(Assert.Single(_Tools.Windows.Shown), Assert.Single(_Tools.Windows.BroughtToFront));
     }
 
     [Fact]
@@ -1093,7 +1093,7 @@ public sealed class VMViewModelTests : IDisposable
         _Runners.Restore.ReturnsRestorePoints(new VMRestorePoint("20261008-193000", new DateTime(2026, 10, 8), true));
         var vm = await Loaded(Sample.VM());
         vm.RestorePointsCommand.Execute(null);
-        var restore = Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Shown));
+        var restore = Assert.IsType<RestoreViewModel>(Assert.Single(_Tools.Windows.Shown));
         await Task.Yield();
 
         vm.Update(Sample.VM() with

@@ -142,7 +142,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
         await window.Keys[0].ToggleAsync();
         Assert.True(window.Keys[0].IsShown);
 
-        _Tools.Close(window);
+        _Tools.Windows.UserCloses(window);
 
         Assert.All(window.Keys, key => Assert.False(key.IsShown));
         Assert.DoesNotContain(_OS_PASSWORD, AllText(window));

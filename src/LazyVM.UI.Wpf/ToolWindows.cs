@@ -21,10 +21,9 @@ namespace LazyVM.UI.Wpf;
 /// about a VM takes its Hyper-V Id, empty for a VM not built yet, so it runs
 /// in the VM's own PowerShell session.
 /// </summary>
-public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
+public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
 {
     private const string _BUILD_KEY = "build";
-    private readonly Dictionary<string, ViewModelBase> _Open = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Raised when a build ended, a build or maintenance started, a delete,
@@ -126,13 +125,12 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
     public RestoreViewModel OpenRestore(LazyVMDashboard entry)
     {
         var key = "restore:" + entry.Name;
-        if (_Open.TryGetValue(key, out var existing) && existing is RestoreViewModel open)
+        if (windows.Activate<RestoreViewModel>(key) is { } open)
         {
-            BringToFront(open);
             return open;
         }
         var restore = new RestoreViewModel(entry, this);
-        Track(key, restore);
+        windows.Track(key, restore);
         _ = restore.LoadAsync();
         return restore;
     }
@@ -180,13 +178,12 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
     public RecoveryKeysViewModel OpenRecoveryKeys(LazyVMDashboard entry)
     {
         var key = "recovery-keys:" + entry.Name;
-        if (_Open.TryGetValue(key, out var existing) && existing is RecoveryKeysViewModel open)
+        if (windows.Activate<RecoveryKeysViewModel>(key) is { } open)
         {
-            BringToFront(open);
             return open;
         }
         var keys = new RecoveryKeysViewModel(entry, this);
-        Track(key, keys, keys.Forget);
+        windows.Track(key, keys, keys.Forget);
         _ = keys.LoadAsync();
         return keys;
     }
@@ -246,13 +243,12 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
     public PasswordViewModel OpenPassword(LazyVMDashboard entry)
     {
         var key = "password:" + entry.Name;
-        if (_Open.TryGetValue(key, out var existing) && existing is PasswordViewModel open)
+        if (windows.Activate<PasswordViewModel>(key) is { } open)
         {
-            BringToFront(open);
             return open;
         }
         var password = new PasswordViewModel(entry, this);
-        Track(key, password, password.Forget);
+        windows.Track(key, password, password.Forget);
         _ = password.LoadAsync();
         return password;
     }
@@ -322,13 +318,12 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
     public SecurityFindingsViewModel OpenSecurityFindings(LazyVMDashboard entry)
     {
         var key = "security-findings:" + entry.Name;
-        if (_Open.TryGetValue(key, out var existing) && existing is SecurityFindingsViewModel open)
+        if (windows.Activate<SecurityFindingsViewModel>(key) is { } open)
         {
-            BringToFront(open);
             return open;
         }
         var findings = new SecurityFindingsViewModel(entry, this);
-        Track(key, findings);
+        windows.Track(key, findings);
         _ = findings.LoadAsync();
         return findings;
     }
@@ -336,21 +331,21 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
     /// <summary>Shows the checks of the VM <paramref name="vmName"/>, or of the host, and runs them.</summary>
     public void OpenChecks(Guid? vmId, string? vmName, bool hostOnly)
     {
-        if (BringToFrontIfOpen(ChecksKey(vmName)))
+        if (windows.Activate<ChecksViewModel>(ChecksKey(vmName)) is not null)
         {
             return;
         }
         var checks = new ChecksViewModel(runners.Checks, vmId, vmName, hostOnly);
-        Track(ChecksKey(vmName), checks);
+        windows.Track(ChecksKey(vmName), checks);
         _ = checks.RunAsync();
     }
 
     /// <summary>Shows checks that have already run, such as the ones made when the app starts.</summary>
     public void ShowChecks(ChecksViewModel checks)
     {
-        if (!BringToFrontIfOpen(ChecksKey(checks.VMName)))
+        if (windows.Activate<ChecksViewModel>(ChecksKey(checks.VMName)) is null)
         {
-            Track(ChecksKey(checks.VMName), checks);
+            windows.Track(ChecksKey(checks.VMName), checks);
         }
     }
 
@@ -358,26 +353,50 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
     public void OpenLog(Guid? vmId, string vmName)
     {
         var key = "log:" + vmName;
-        if (BringToFrontIfOpen(key))
+        if (windows.Activate<LogViewModel>(key) is not null)
         {
             return;
         }
         var log = new LogViewModel(runners.Log, vmId, vmName);
-        Track(key, log);
+        windows.Track(key, log);
         _ = log.LoadAsync();
     }
 
     /// <summary>Shows the Build new VM window. <paramref name="existingNames"/> are the VMs there are already.</summary>
     public void OpenBuild(IEnumerable<string> existingNames)
     {
-        if (BringToFrontIfOpen(_BUILD_KEY))
+        if (windows.Activate<BuildViewModel>(_BUILD_KEY) is not null)
         {
             return;
         }
         // A new VM has no Hyper-V Id until its build creates it.
         var build = new BuildViewModel(runners.Build, launcher, existingNames, (name, started) => OpenProgress(null, name, started));
-        Track(_BUILD_KEY, build);
+        windows.Track(_BUILD_KEY, build);
         _ = build.LoadAsync();
+    }
+
+    /// <summary>Shows the VM's window, or brings its open window to the front. A VM that is deleted closes its window.</summary>
+    public void OpenVM(LazyVMDashboard entry)
+    {
+        var key = VMKey(entry.Name);
+        if (windows.Activate<VMViewModel>(key) is not null)
+        {
+            return;
+        }
+        var viewModel = new VMViewModel(entry, this);
+        // A deleted VM has nothing left to show.
+        viewModel.Removed += (_, _) => windows.Close(viewModel);
+        windows.Track(key, viewModel);
+        _ = viewModel.LoadAsync();
+    }
+
+    /// <summary>Shows what a refresh read in the VM windows that are open.</summary>
+    public void UpdateVMs(IEnumerable<LazyVMDashboard> entries)
+    {
+        foreach (var entry in entries)
+        {
+            windows.Find<VMViewModel>(VMKey(entry.Name))?.Update(entry);
+        }
     }
 
     /// <summary>
@@ -388,63 +407,28 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
     public void OpenProgress(Guid? vmId, string vmName, StartedBuild? started)
     {
         var key = "progress:" + vmName;
-        if (_Open.TryGetValue(key, out var existing))
+        if (windows.Find<BuildProgressViewModel>(key) is { } existing)
         {
-            if (started is null || existing is BuildProgressViewModel { IsFinished: false })
+            if (started is null || !existing.IsFinished)
             {
-                BringToFront(existing);
+                windows.Activate<BuildProgressViewModel>(key);
                 return;
             }
             // A new build of the same VM: the window of the last one makes way for it.
-            _Open.Remove(key);
-            CloseWindow(existing);
+            windows.Close(key);
         }
         var progress = new BuildProgressViewModel(runners.Dashboard, runners.Build, vmId, vmName, started, clock,
             phase => StartBuildAsync(vmId, new BuildRequest(vmName, null, null, phase)));
         progress.Ended += (_, _) => Changes.Raise();
-        Track(key, progress, progress.StopFollowing);
+        windows.Track(key, progress, progress.StopFollowing);
         _ = progress.FollowAsync();
     }
 
-    /// <summary>Shows a new window for <paramref name="viewModel"/> and calls <paramref name="closed"/> when it closes.</summary>
-    protected virtual void Show(ViewModelBase viewModel, Action closed)
-    {
-        Window window = viewModel switch
-        {
-            ChecksViewModel => new ChecksWindow(),
-            LogViewModel => new LogWindow(),
-            BuildViewModel => new BuildWindow(),
-            BuildProgressViewModel => new BuildProgressWindow(),
-            RestoreViewModel => new RestoreWindow(),
-            RecoveryKeysViewModel => new RecoveryKeysWindow(),
-            PasswordViewModel => new PasswordWindow(),
-            SecurityFindingsViewModel => new SecurityFindingsWindow(),
-            _ => throw new ArgumentException($"There is no window for {viewModel.GetType().Name}.", nameof(viewModel)),
-        };
-        window.DataContext = viewModel;
-        window.Closed += (_, _) => closed();
-        window.Show();
-    }
-
-    protected virtual void BringToFront(ViewModelBase viewModel)
-    {
-        var window = WindowOf(viewModel);
-        if (window.WindowState == WindowState.Minimized)
-        {
-            window.WindowState = WindowState.Normal;
-        }
-        window.Activate();
-    }
-
-    /// <summary>Closes the window of <paramref name="viewModel"/>.</summary>
-    protected virtual void CloseWindow(ViewModelBase viewModel)
-    {
-        WindowOf(viewModel).Close();
-    }
-
+    /// <summary>The window that shows <paramref name="viewModel"/>, to own a dialog over it.</summary>
     private static Window WindowOf(ViewModelBase viewModel)
     {
-        return Application.Current.Windows.OfType<Window>().First(window => window.DataContext == viewModel);
+        return Application.Current.Windows.OfType<Window>().WindowOf(viewModel)
+            ?? throw new InvalidOperationException($"No window shows {viewModel.GetType().Name}.");
     }
 
     private static string ChecksKey(string? vmName)
@@ -452,27 +436,8 @@ public class ToolWindows(Runners runners, BuildLauncher launcher, TimeProvider c
         return "checks:" + (vmName ?? string.Empty);
     }
 
-    private bool BringToFrontIfOpen(string key)
+    private static string VMKey(string vmName)
     {
-        if (!_Open.TryGetValue(key, out var existing))
-        {
-            return false;
-        }
-        BringToFront(existing);
-        return true;
-    }
-
-    private void Track(string key, ViewModelBase viewModel, Action? closed = null)
-    {
-        _Open.Add(key, viewModel);
-        Show(viewModel, () =>
-        {
-            // Only this window's own entry: a newer window may have taken its key.
-            if (_Open.TryGetValue(key, out var current) && current == viewModel)
-            {
-                _Open.Remove(key);
-            }
-            closed?.Invoke();
-        });
+        return "vm:" + vmName;
     }
 }
