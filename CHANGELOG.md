@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.42.1](https://github.com/downerboy/LazyVM/compare/v6.42.0...v6.42.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* closing the app no longer stops a delete or restore part way ([#533](https://github.com/downerboy/LazyVM/issues/533)) ([21f19c6](https://github.com/downerboy/LazyVM/commit/21f19c6263a48a051b1d45c8da44ec2a9f4973de))
+
 ## [6.42.0](https://github.com/downerboy/LazyVM/compare/v6.41.0...v6.42.0) (2026-11-22)
 
 
