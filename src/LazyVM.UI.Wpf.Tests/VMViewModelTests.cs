@@ -24,7 +24,7 @@ public sealed class VMViewModelTests : IDisposable
 
     private VMViewModel Open(LazyVMDashboard entry)
     {
-        return new(entry, _Tools);
+        return new(entry, _Tools, _Tools.Dialogs);
     }
 
     [Fact]
@@ -732,7 +732,7 @@ public sealed class VMViewModelTests : IDisposable
     public async Task Delete_IsWorkingWhileWhatGoesIsReadAndTheVMIsDeleted()
     {
         _Runners.Removal.ReturnsRemovalPlan(PlanOf());
-        _Tools.ConfirmsRemoval = true;
+        _Tools.Dialogs.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
         var watcher = new WorkWatcher(vm);
 
@@ -889,7 +889,7 @@ public sealed class VMViewModelTests : IDisposable
     public async Task Delete_ShowsWhatGoes_AndOnYes_RemovesTheVM()
     {
         _Runners.Removal.ReturnsRemovalPlan(PlanOf());
-        _Tools.ConfirmsRemoval = true;
+        _Tools.Dialogs.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
         var removed = 0;
         vm.Removed += (_, _) => removed++;
@@ -898,7 +898,7 @@ public sealed class VMViewModelTests : IDisposable
 
         await vm.DeleteAsync();
 
-        var asked = Assert.Single(_Tools.RemovalsAsked);
+        var asked = Assert.Single(_Tools.Dialogs.RemovalsAsked);
         Assert.Equal("DevBox", asked.Name);
         Assert.Contains(@"Folder C:\LazyVM\DevBox, 50 GB", asked.Lines.Select(line => line.Text));
         Assert.Equal(["DevBox"], _Runners.Removal.RemovalPlanCalls);
@@ -913,14 +913,14 @@ public sealed class VMViewModelTests : IDisposable
     public async Task Delete_OnNo_DeletesNothing()
     {
         _Runners.Removal.ReturnsRemovalPlan(PlanOf());
-        _Tools.ConfirmsRemoval = false;
+        _Tools.Dialogs.ConfirmsRemoval = false;
         var vm = await Loaded(Sample.VM());
         var removed = 0;
         vm.Removed += (_, _) => removed++;
 
         await vm.DeleteAsync();
 
-        Assert.Single(_Tools.RemovalsAsked);
+        Assert.Single(_Tools.Dialogs.RemovalsAsked);
         Assert.Empty(_Runners.Removal.RemoveCalls);
         Assert.Equal(0, removed);
         Assert.Equal("DevBox was not deleted.", vm.Status);
@@ -935,7 +935,7 @@ public sealed class VMViewModelTests : IDisposable
 
         await vm.DeleteAsync();
 
-        Assert.Empty(_Tools.RemovalsAsked);
+        Assert.Empty(_Tools.Dialogs.RemovalsAsked);
         Assert.Empty(_Runners.Removal.RemoveCalls);
         Assert.Equal("DevBox cannot be deleted now: Cannot tell what VM 'Other' uses, so nothing has been removed.", vm.Status);
     }
@@ -946,7 +946,7 @@ public sealed class VMViewModelTests : IDisposable
         _Runners.Removal.ReturnsRemovalPlan(PlanOf());
         _Runners.Removal.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", Items = [new(RemovalItem.FILE, @"E:\Disks\DevBox\SQL.vhdx", _GB)] });
         _Runners.Removal.RemoveFails = new InvalidOperationException(@"'DevBox' was only partly removed. The log lists what is left: C:\LazyVM\DevBox\Logs\DevBox.log");
-        _Tools.ConfirmsRemoval = true;
+        _Tools.Dialogs.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
         var removed = 0;
         vm.Removed += (_, _) => removed++;
@@ -971,7 +971,7 @@ public sealed class VMViewModelTests : IDisposable
         _Runners.Removal.ReturnsRemovalPlan(PlanOf());
         _Runners.Removal.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", Items = [new(RemovalItem.FILE, @"E:\Disks\DevBox\SQL.vhdx", _GB)] });
         _Runners.Removal.RemoveFails = new InvalidOperationException("'DevBox' was only partly removed.");
-        _Tools.ConfirmsRemoval = true;
+        _Tools.Dialogs.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM() with { Id = _DEV_BOX_ID });
 
         await vm.DeleteAsync();
@@ -986,7 +986,7 @@ public sealed class VMViewModelTests : IDisposable
         _Runners.Removal.ReturnsRemovalPlan(PlanOf());
         _Runners.Removal.RemovalPlanThrows(new InvalidOperationException("There is no VM named DevBox."));
         _Runners.Removal.RemoveFails = new InvalidOperationException("'DevBox' was only partly removed.");
-        _Tools.ConfirmsRemoval = true;
+        _Tools.Dialogs.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
 
         await vm.DeleteAsync();
@@ -999,7 +999,7 @@ public sealed class VMViewModelTests : IDisposable
     {
         _Runners.Removal.ReturnsRemovalPlan(PlanOf());
         _Runners.Removal.RemoveGate = new TaskCompletionSource();
-        _Tools.ConfirmsRemoval = true;
+        _Tools.Dialogs.ConfirmsRemoval = true;
         var vm = await Loaded(Sample.VM());
 
         var deleting = vm.DeleteAsync();

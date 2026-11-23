@@ -12,6 +12,7 @@ namespace LazyVM.UI.Wpf.ViewModels;
 public sealed class RecoveryKeysViewModel : ViewModelBase
 {
     private readonly ToolWindows _Tools;
+    private readonly Dialogs _Dialogs;
     private readonly LazyVMDashboard _Entry;
     private IReadOnlyList<RecoveryKeyRow> _Keys = [];
     private IReadOnlyList<string> _Warnings = [];
@@ -19,10 +20,11 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
     private bool _IsLoaded;
     private bool _IsExporting;
 
-    public RecoveryKeysViewModel(LazyVMDashboard entry, ToolWindows tools)
+    public RecoveryKeysViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs)
     {
         _Entry = entry;
         _Tools = tools;
+        _Dialogs = dialogs;
         ExportCommand = new RelayCommand(() => _ = ExportAsync(), () => CanExport);
     }
 
@@ -162,14 +164,14 @@ public sealed class RecoveryKeysViewModel : ViewModelBase
         IsExporting = true;
         try
         {
-            var path = _Tools.ChooseExportFile(this, $"{Name}-recovery-keys.txt");
+            var path = _Dialogs.ChooseExportFile(this, $"{Name}-recovery-keys.txt");
             if (path is null)
             {
                 Status = "Nothing was exported.";
                 return;
             }
-            var replace = _Tools.FileExists(path);
-            if (replace && !_Tools.ConfirmReplace(this, ReplaceQuestion(path)))
+            var replace = _Dialogs.FileExists(path);
+            if (replace && !_Dialogs.ConfirmReplace(this, ReplaceQuestion(path)))
             {
                 Status = "Nothing was exported.";
                 return;

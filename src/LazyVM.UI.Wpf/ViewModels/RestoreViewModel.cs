@@ -13,16 +13,18 @@ public sealed class RestoreViewModel : ViewModelBase
         + "so code not yet pushed, database changes and files in your personal folders changed since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.";
 
     private readonly ToolWindows _Tools;
+    private readonly Dialogs _Dialogs;
     private LazyVMDashboard _Entry;
     private IReadOnlyList<RestorePointOption> _Points = [];
     private RestorePointOption? _SelectedPoint;
     private string _Status = string.Empty;
     private bool _IsRestoring;
 
-    public RestoreViewModel(LazyVMDashboard entry, ToolWindows tools)
+    public RestoreViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs)
     {
         _Entry = entry;
         _Tools = tools;
+        _Dialogs = dialogs;
         RestoreCommand = new RelayCommand(() => _ = RestoreAsync(), () => CanRestore);
     }
 
@@ -134,7 +136,7 @@ public sealed class RestoreViewModel : ViewModelBase
         try
         {
             var when = chosen.When;
-            if (!_Tools.ConfirmRestore(this, Question(when)))
+            if (!_Dialogs.ConfirmRestore(this, Question(when)))
             {
                 Status = $"{Name} was not restored.";
                 return;

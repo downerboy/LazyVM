@@ -18,6 +18,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
     private const string _REVOKE_HELP = "Revoking undoes an approval. The next nightly scan reports the finding again, as new, if it still finds it.";
 
     private readonly ToolWindows _Tools;
+    private readonly Dialogs _Dialogs;
     private LazyVMDashboard _Entry;
     private IReadOnlyList<SecurityFindingRow> _Findings = [];
     private IReadOnlyList<SecurityApprovalRow> _Approvals = [];
@@ -28,10 +29,11 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
     private bool _IsChanging;
     private string _Status = string.Empty;
 
-    public SecurityFindingsViewModel(LazyVMDashboard entry, ToolWindows tools)
+    public SecurityFindingsViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs)
     {
         _Entry = entry;
         _Tools = tools;
+        _Dialogs = dialogs;
         ReloadCommand = new RelayCommand(() => _ = ReloadAsync());
         ApproveCommand = new RelayCommand(() => _ = ApproveAsync(), () => CanApprove);
         RevokeCommand = new RelayCommand(() => _ = RevokeAsync(), () => CanRevoke);
@@ -264,8 +266,8 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         }
         var id = chosen.Finding.Id;
         await ChangeAsync(
-            () => _Tools.AskApprovalReason(this, chosen) is { } reason
-                && _Tools.ConfirmSecurityChange(this, $"Approve a security finding of {Name} - LazyVM", ApproveQuestion(chosen))
+            () => _Dialogs.AskApprovalReason(this, chosen) is { } reason
+                && _Dialogs.ConfirmSecurityChange(this, $"Approve a security finding of {Name} - LazyVM", ApproveQuestion(chosen))
                 ? () => _Tools.ApproveSecurityFindingAsync(_Entry.Id, Name,id, reason.Trim())
                 : null,
             $"Approving {id}",
@@ -286,7 +288,7 @@ public sealed class SecurityFindingsViewModel : ViewModelBase
         }
         var id = chosen.Approval.Id;
         await ChangeAsync(
-            () => _Tools.ConfirmSecurityChange(this, $"Revoke an approval of {Name} - LazyVM", RevokeQuestion(chosen.Approval))
+            () => _Dialogs.ConfirmSecurityChange(this, $"Revoke an approval of {Name} - LazyVM", RevokeQuestion(chosen.Approval))
                 ? () => _Tools.RevokeSecurityFindingAsync(_Entry.Id, Name,id)
                 : null,
             $"Revoking the approval of {id}",

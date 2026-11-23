@@ -42,6 +42,12 @@ public sealed class ZoomLayoutTests
         return title.ActualHeight < title.FontSize * 1.8;
     }
 
+    private static VMViewModel VMViewModelOf(FakeRunners runners)
+    {
+        var tools = new FakeToolWindows(runners);
+        return new VMViewModel(Sample.VM("Alpha"), tools, tools.Dialogs);
+    }
+
     private static MainWindow MainWindowFor(FakeRunners runners)
     {
         return Ui.Invoke(() =>
@@ -83,7 +89,7 @@ public sealed class ZoomLayoutTests
     public void VMWindow_KeepsTheNameOnOneLine(double width, double height)
     {
         var runner = new FakeRunners();
-        var window = Ui.Invoke(() => new VMWindow { DataContext = new VMViewModel(Sample.VM("Alpha"), new FakeToolWindows(runner)) });
+        var window = Ui.Invoke(() => new VMWindow { DataContext = VMViewModelOf(runner) });
 
         var oneLine = Layout(window, new Size(width, height), root => OnOneLine(root, "Alpha"));
 
@@ -96,7 +102,7 @@ public sealed class ZoomLayoutTests
     public void VMWindow_ScrollsWhatDoesNotFit(double width, double height)
     {
         var runner = new FakeRunners();
-        var window = Ui.Invoke(() => new VMWindow { DataContext = new VMViewModel(Sample.VM("Alpha"), new FakeToolWindows(runner)) });
+        var window = Ui.Invoke(() => new VMWindow { DataContext = VMViewModelOf(runner) });
 
         var scrolls = Layout(window, new Size(width, height),
             root => root is ScrollViewer { ScrollableHeight: > 0 });

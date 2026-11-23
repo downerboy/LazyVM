@@ -21,7 +21,7 @@ namespace LazyVM.UI.Wpf;
 /// about a VM takes its Hyper-V Id, empty for a VM not built yet, so it runs
 /// in the VM's own PowerShell session.
 /// </summary>
-public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
+public class ToolWindows(Runners runners, WindowTracker windows, Dialogs dialogs, BuildLauncher launcher, TimeProvider clock, SecretClipboard? clipboard = null)
 {
     private const string _BUILD_KEY = "build";
 
@@ -71,7 +71,7 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
     }
 
     /// <summary>
-    /// Deletes the VM, without asking: <see cref="ConfirmRemoval"/> has, and
+    /// Deletes the VM, without asking: <see cref="Dialogs.ConfirmRemoval"/> has, and
     /// closes its PowerShell session. Throws with what went wrong, such as
     /// what is left.
     /// </summary>
@@ -87,25 +87,13 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
         }
     }
 
-    /// <summary>
-    /// Shows what deleting the VM deletes, and asks "Do you really want to
-    /// delete this VM?", in a dialog over the VM's window. True for Yes.
-    /// </summary>
-    public virtual bool ConfirmRemoval(RemovalViewModel removal)
-    {
-        var owner = Application.Current.Windows.OfType<VMWindow>()
-            .FirstOrDefault(window => window.DataContext is VMViewModel vm && string.Equals(vm.Name, removal.Name, StringComparison.OrdinalIgnoreCase));
-        var dialog = new RemovalWindow { DataContext = removal, Owner = owner ?? Application.Current.MainWindow };
-        return dialog.ShowDialog() == true;
-    }
-
     /// <summary>The VM's restore points, oldest first.</summary>
     public virtual Task<IReadOnlyList<VMRestorePoint>> GetRestorePointsAsync(Guid? vmId, string vmName)
     {
         return runners.Restore.GetLazyVMRestorePointsAsync(vmId, vmName, CancellationToken.None);
     }
 
-    /// <summary>Returns the VM to a restore point, without asking: <see cref="ConfirmRestore"/> has. Throws with the module's reason when it did not.</summary>
+    /// <summary>Returns the VM to a restore point, without asking: <see cref="Dialogs.ConfirmRestore"/> has. Throws with the module's reason when it did not.</summary>
     public virtual async Task RestoreToolingAsync(Guid? vmId, string vmName, string stamp)
     {
         try
@@ -129,21 +117,10 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
         {
             return open;
         }
-        var restore = new RestoreViewModel(entry, this);
+        var restore = new RestoreViewModel(entry, this, dialogs);
         windows.Track(key, restore);
         _ = restore.LoadAsync();
         return restore;
-    }
-
-    /// <summary>Asks <paramref name="question"/> with Yes and No, No the default, over the restore window. True for Yes.</summary>
-    public virtual bool ConfirmRestore(RestoreViewModel restore, string question)
-    {
-        var dialog = new QuestionWindow
-        {
-            DataContext = new QuestionViewModel($"Restore {restore.Name} - LazyVM", question),
-            Owner = WindowOf(restore),
-        };
-        return dialog.ShowDialog() == true;
     }
 
     /// <summary>The VM's recovery keys, without their passwords.</summary>
@@ -182,46 +159,10 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
         {
             return open;
         }
-        var keys = new RecoveryKeysViewModel(entry, this);
+        var keys = new RecoveryKeysViewModel(entry, this, dialogs);
         windows.Track(key, keys, keys.Forget);
         _ = keys.LoadAsync();
         return keys;
-    }
-
-    /// <summary>
-    /// Asks for the file to export to with a Save dialog over the recovery
-    /// keys window; empty for Cancel. It does not ask about a file that
-    /// exists: <see cref="ConfirmReplace"/> does, with No the default.
-    /// </summary>
-    public virtual string? ChooseExportFile(RecoveryKeysViewModel keys, string suggestedName)
-    {
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Title = $"Export the recovery keys of {keys.Name}",
-            FileName = suggestedName,
-            DefaultExt = ".txt",
-            Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
-            OverwritePrompt = false,
-            AddExtension = true,
-        };
-        return dialog.ShowDialog(WindowOf(keys)) == true ? dialog.FileName : null;
-    }
-
-    /// <summary>True when there is a file at <paramref name="path"/>.</summary>
-    public virtual bool FileExists(string path)
-    {
-        return System.IO.File.Exists(path);
-    }
-
-    /// <summary>Asks <paramref name="question"/> with Yes and No, No the default, over the recovery keys window. True for Yes.</summary>
-    public virtual bool ConfirmReplace(RecoveryKeysViewModel keys, string question)
-    {
-        var dialog = new QuestionWindow
-        {
-            DataContext = new QuestionViewModel($"Export the recovery keys of {keys.Name} - LazyVM", question),
-            Owner = WindowOf(keys),
-        };
-        return dialog.ShowDialog() == true;
     }
 
     /// <summary>The clipboard a copied password goes on, for the whole app: the app clears it when it closes.</summary>
@@ -265,7 +206,7 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
         return runners.SecurityFindings.GetLazyVMSecurityApprovalsAsync(vmId, vmName, CancellationToken.None);
     }
 
-    /// <summary>Approves the finding, without asking: <see cref="ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
+    /// <summary>Approves the finding, without asking: <see cref="Dialogs.ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
     public virtual async Task ApproveSecurityFindingAsync(Guid? vmId, string vmName, string id, string reason)
     {
         try
@@ -278,7 +219,7 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
         }
     }
 
-    /// <summary>Revokes the approval, without asking: <see cref="ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
+    /// <summary>Revokes the approval, without asking: <see cref="Dialogs.ConfirmSecurityChange"/> has. Throws with the module's reason when it refused.</summary>
     public virtual async Task RevokeSecurityFindingAsync(Guid? vmId, string vmName, string id)
     {
         try
@@ -289,25 +230,6 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
         {
             Changes.Raise();
         }
-    }
-
-    /// <summary>Asks for the optional reason an approval keeps, over the Security findings window. Null for Cancel.</summary>
-    public virtual string? AskApprovalReason(SecurityFindingsViewModel findings, SecurityFindingRow finding)
-    {
-        var reason = new ReasonViewModel($"Approve a security finding of {findings.Name} - LazyVM", finding.Finding.Id);
-        var dialog = new ReasonWindow { DataContext = reason, Owner = WindowOf(findings) };
-        return dialog.ShowDialog() == true ? reason.Reason : null;
-    }
-
-    /// <summary>Asks <paramref name="question"/> with Yes and No, No the default, over the Security findings window. True for Yes.</summary>
-    public virtual bool ConfirmSecurityChange(SecurityFindingsViewModel findings, string title, string question)
-    {
-        var dialog = new QuestionWindow
-        {
-            DataContext = new QuestionViewModel(title, question),
-            Owner = WindowOf(findings),
-        };
-        return dialog.ShowDialog() == true;
     }
 
     /// <summary>
@@ -322,7 +244,7 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
         {
             return open;
         }
-        var findings = new SecurityFindingsViewModel(entry, this);
+        var findings = new SecurityFindingsViewModel(entry, this, dialogs);
         windows.Track(key, findings);
         _ = findings.LoadAsync();
         return findings;
@@ -383,7 +305,7 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
         {
             return;
         }
-        var viewModel = new VMViewModel(entry, this);
+        var viewModel = new VMViewModel(entry, this, dialogs);
         // A deleted VM has nothing left to show.
         viewModel.Removed += (_, _) => windows.Close(viewModel);
         windows.Track(key, viewModel);
@@ -422,13 +344,6 @@ public class ToolWindows(Runners runners, WindowTracker windows, BuildLauncher l
         progress.Ended += (_, _) => Changes.Raise();
         windows.Track(key, progress, progress.StopFollowing);
         _ = progress.FollowAsync();
-    }
-
-    /// <summary>The window that shows <paramref name="viewModel"/>, to own a dialog over it.</summary>
-    private static Window WindowOf(ViewModelBase viewModel)
-    {
-        return Application.Current.Windows.OfType<Window>().WindowOf(viewModel)
-            ?? throw new InvalidOperationException($"No window shows {viewModel.GetType().Name}.");
     }
 
     private static string ChecksKey(string? vmName)

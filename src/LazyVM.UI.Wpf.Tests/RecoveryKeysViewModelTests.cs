@@ -32,7 +32,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     private async Task<RecoveryKeysViewModel> Loaded(params VMRecoveryKey[] keys)
     {
         _Runners.RecoveryKeys.ReturnsRecoveryKeys(keys);
-        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools);
+        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
         await window.LoadAsync();
         return window;
     }
@@ -165,7 +165,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task WhenTheKeysCannotBeRead_TheWindowSaysWhy()
     {
         _Runners.RecoveryKeys.RecoveryKeysThrow(new InvalidOperationException("Key not valid for use in specified state."));
-        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools);
+        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
 
         await window.LoadAsync();
 
@@ -177,10 +177,10 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task LoadAndExport_AreWorkingWhileTheKeysAreReadAndWritten()
     {
         _Runners.RecoveryKeys.ReturnsRecoveryKeys(_OsKey);
-        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools);
+        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
         var watcher = new WorkWatcher(window);
         await window.LoadAsync();
-        _Tools.ChosenExportFile = _FILE;
+        _Tools.Dialogs.ChosenExportFile = _FILE;
         _Runners.RecoveryKeys.ReturnsRecoveryKeys(_OsKey);
 
         await window.ExportAsync();
@@ -194,7 +194,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task Export_ToANewFile_WritesTheVMsKeysThere_SaysWhere_AndReadsTheKeysAgain()
     {
         var window = await Loaded(_OsKey, _UserKey);
-        _Tools.ChosenExportFile = _FILE;
+        _Tools.Dialogs.ChosenExportFile = _FILE;
         _Runners.RecoveryKeys.ReturnsRecoveryKeys(_OsKey, _UserKey with
         {
             Exported = true
@@ -204,8 +204,8 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
 
         await window.ExportAsync();
 
-        Assert.Equal(["DevBox-recovery-keys.txt"], _Tools.ExportFileSuggestions);
-        Assert.Empty(_Tools.ReplaceQuestions);
+        Assert.Equal(["DevBox-recovery-keys.txt"], _Tools.Dialogs.ExportFileSuggestions);
+        Assert.Empty(_Tools.Dialogs.ReplaceQuestions);
         Assert.Equal([("DevBox", _FILE, false)], _Runners.RecoveryKeys.ExportCalls);
         Assert.Equal(
             @"The recovery passwords of DevBox were written to E:\DevBox-recovery-keys.txt. Keep that file offline, such as on a USB drive, somewhere safe.",
@@ -219,9 +219,9 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task Export_ToAFileThatExists_AsksFirst_SayingItIsReplaced_AndOnYes_Replaces()
     {
         var window = await Loaded(_UserKey);
-        _Tools.ChosenExportFile = _FILE;
-        _Tools.ExistingFiles.Add(_FILE);
-        _Tools.ConfirmsReplace = true;
+        _Tools.Dialogs.ChosenExportFile = _FILE;
+        _Tools.Dialogs.ExistingFiles.Add(_FILE);
+        _Tools.Dialogs.ConfirmsReplace = true;
         _Runners.RecoveryKeys.ReturnsRecoveryKeys(_UserKey with
         {
             Exported = true
@@ -231,7 +231,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
 
         Assert.Equal(
             @"E:\DevBox-recovery-keys.txt already exists. Do you want to replace it? Nothing in it now is kept: it will hold only the recovery passwords of DevBox, so those of any other VM in it are removed.",
-            Assert.Single(_Tools.ReplaceQuestions));
+            Assert.Single(_Tools.Dialogs.ReplaceQuestions));
         Assert.Equal([("DevBox", _FILE, true)], _Runners.RecoveryKeys.ExportCalls);
     }
 
@@ -239,9 +239,9 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task Export_ToAFileThatExists_OnNo_WritesNothing()
     {
         var window = await Loaded(_UserKey);
-        _Tools.ChosenExportFile = _FILE;
-        _Tools.ExistingFiles.Add(_FILE);
-        _Tools.ConfirmsReplace = false;
+        _Tools.Dialogs.ChosenExportFile = _FILE;
+        _Tools.Dialogs.ExistingFiles.Add(_FILE);
+        _Tools.Dialogs.ConfirmsReplace = false;
 
         await window.ExportAsync();
 
@@ -253,12 +253,12 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task Export_CancelledInTheSaveDialog_WritesNothing()
     {
         var window = await Loaded(_UserKey);
-        _Tools.ChosenExportFile = null;
+        _Tools.Dialogs.ChosenExportFile = null;
 
         await window.ExportAsync();
 
         Assert.Empty(_Runners.RecoveryKeys.ExportCalls);
-        Assert.Empty(_Tools.ReplaceQuestions);
+        Assert.Empty(_Tools.Dialogs.ReplaceQuestions);
         Assert.Equal("Nothing was exported.", window.Status);
     }
 
@@ -266,7 +266,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task Export_ShowsTheModulesWarnings_EachAsTextOfItsOwn()
     {
         var window = await Loaded(_UserKey);
-        _Tools.ChosenExportFile = @"C:\Users\me\OneDrive\keys.txt";
+        _Tools.Dialogs.ChosenExportFile = @"C:\Users\me\OneDrive\keys.txt";
         _Runners.RecoveryKeys.ExportWarnings =
         [
             @"C:\Users\me\OneDrive\keys.txt is in OneDrive (or another folder kept in step with the cloud), which copies it off this computer. Keep the file offline, such as on a USB drive.",
@@ -287,7 +287,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task Export_WithSeveralWarnings_SaysHowManyInTheStatus()
     {
         var window = await Loaded(_UserKey);
-        _Tools.ChosenExportFile = _FILE;
+        _Tools.Dialogs.ChosenExportFile = _FILE;
         _Runners.RecoveryKeys.ExportWarnings = ["One.", "Two."];
         _Runners.RecoveryKeys.ReturnsRecoveryKeys(_UserKey with
         {
@@ -303,7 +303,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task Export_ThatFailed_GivesTheModulesReason()
     {
         var window = await Loaded(_UserKey);
-        _Tools.ChosenExportFile = @"F:\keys.txt";
+        _Tools.Dialogs.ChosenExportFile = @"F:\keys.txt";
         _Runners.RecoveryKeys.ExportFails = new InvalidOperationException(@"The folder F:\ is not there. Plug in the drive, or choose a folder that exists.");
 
         await window.ExportAsync();
@@ -316,7 +316,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     public async Task ANewExport_ClearsTheLastOnesWarnings()
     {
         var window = await Loaded(_UserKey);
-        _Tools.ChosenExportFile = _FILE;
+        _Tools.Dialogs.ChosenExportFile = _FILE;
         _Runners.RecoveryKeys.ExportWarnings = ["A warning."];
         _Runners.RecoveryKeys.ReturnsRecoveryKeys(_UserKey);
         await window.ExportAsync();
@@ -332,7 +332,7 @@ public sealed class RecoveryKeysViewModelTests : IDisposable
     [Fact]
     public void Title_NamesTheVM()
     {
-        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools);
+        var window = new RecoveryKeysViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
 
         Assert.Equal("Recovery keys of DevBox - LazyVM", window.Title);
         Assert.Equal("DevBox", window.Name);

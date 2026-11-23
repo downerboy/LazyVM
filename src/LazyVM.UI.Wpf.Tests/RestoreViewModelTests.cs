@@ -25,7 +25,7 @@ public sealed class RestoreViewModelTests : IDisposable
     private async Task<RestoreViewModel> Loaded(LazyVMDashboard? entry = null, params VMRestorePoint[] points)
     {
         _Runners.Restore.ReturnsRestorePoints(points);
-        var restore = new RestoreViewModel(entry ?? Sample.VM(), _Tools);
+        var restore = new RestoreViewModel(entry ?? Sample.VM(), _Tools, _Tools.Dialogs);
         await restore.LoadAsync();
         return restore;
     }
@@ -85,7 +85,7 @@ public sealed class RestoreViewModelTests : IDisposable
     public async Task WhenThePointsCannotBeRead_TheWindowSaysWhy()
     {
         _Runners.Restore.RestorePointsThrow(new InvalidOperationException("Hyper-V is not running."));
-        var restore = new RestoreViewModel(Sample.VM(), _Tools);
+        var restore = new RestoreViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
 
         await restore.LoadAsync();
 
@@ -96,11 +96,11 @@ public sealed class RestoreViewModelTests : IDisposable
     public async Task LoadAndRestore_AreWorkingWhileThePointsAreReadAndTheVMIsRestored()
     {
         _Runners.Restore.ReturnsRestorePoints(_October);
-        var restore = new RestoreViewModel(Sample.VM(), _Tools);
+        var restore = new RestoreViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
         var watcher = new WorkWatcher(restore);
         await restore.LoadAsync();
         restore.SelectedPoint = restore.Points[0];
-        _Tools.ConfirmsRestore = true;
+        _Tools.Dialogs.ConfirmsRestore = true;
         _Runners.Restore.ReturnsRestorePoints(_October);
 
         await restore.RestoreAsync();
@@ -115,7 +115,7 @@ public sealed class RestoreViewModelTests : IDisposable
     {
         var restore = await Loaded(null, _October, _November);
         restore.SelectedPoint = restore.Points[1];
-        _Tools.ConfirmsRestore = true;
+        _Tools.Dialogs.ConfirmsRestore = true;
         _Runners.Restore.ReturnsRestorePoints(_October, _November, new("20261118-090000", new DateTime(2026, 11, 18, 9, 0, 0), true));
         var listChanged = 0;
         _Tools.Changes.Changed += (_, _) => listChanged++;
@@ -124,7 +124,7 @@ public sealed class RestoreViewModelTests : IDisposable
 
         Assert.Equal(
             "Do you really want to restore DevBox to 8 October 2026 19:30? All of its disks go back to then, including the Dev Drive, the SQL data disk and the User disk, so code not yet pushed, database changes and files in your personal folders changed since then are lost. A checkpoint of how it is now is taken first, so this restore can be undone.",
-            Assert.Single(_Tools.RestoreQuestions));
+            Assert.Single(_Tools.Dialogs.RestoreQuestions));
         Assert.Equal([("DevBox", "20261008-193000")], _Runners.Restore.RestoreCalls);
         Assert.Equal(1, listChanged);
         Assert.Equal("DevBox is back at 8 October 2026 19:30. A restore point of how it was just before was taken, so this can be undone.", restore.Status);
@@ -136,11 +136,11 @@ public sealed class RestoreViewModelTests : IDisposable
     public async Task Restore_OnNo_RestoresNothing()
     {
         var restore = await Loaded(null, _October);
-        _Tools.ConfirmsRestore = false;
+        _Tools.Dialogs.ConfirmsRestore = false;
 
         await restore.RestoreAsync();
 
-        Assert.Single(_Tools.RestoreQuestions);
+        Assert.Single(_Tools.Dialogs.RestoreQuestions);
         Assert.Empty(_Runners.Restore.RestoreCalls);
         Assert.Equal("DevBox was not restored.", restore.Status);
     }
@@ -149,7 +149,7 @@ public sealed class RestoreViewModelTests : IDisposable
     public async Task Restore_ThatFailed_GivesTheModulesReason_AndReadsThePointsAgain()
     {
         var restore = await Loaded(null, _October);
-        _Tools.ConfirmsRestore = true;
+        _Tools.Dialogs.ConfirmsRestore = true;
         _Runners.Restore.RestoreFails = new InvalidOperationException("A build of DevBox is running now.");
         _Runners.Restore.ReturnsRestorePoints(_October);
         var listChanged = 0;
@@ -171,7 +171,7 @@ public sealed class RestoreViewModelTests : IDisposable
         Assert.Equal("This restore point cannot be restored: its tooling list is missing.", restore.RestoreNote);
 
         await restore.RestoreAsync();
-        Assert.Empty(_Tools.RestoreQuestions);
+        Assert.Empty(_Tools.Dialogs.RestoreQuestions);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public sealed class RestoreViewModelTests : IDisposable
         Assert.True(restore.HasRestoreNote);
 
         await restore.RestoreAsync();
-        Assert.Empty(_Tools.RestoreQuestions);
+        Assert.Empty(_Tools.Dialogs.RestoreQuestions);
     }
 
     [Fact]
@@ -210,7 +210,7 @@ public sealed class RestoreViewModelTests : IDisposable
     public async Task WhileRestoring_ItCannotStartAgain()
     {
         var restore = await Loaded(null, _October);
-        _Tools.ConfirmsRestore = true;
+        _Tools.Dialogs.ConfirmsRestore = true;
         _Runners.Restore.RestoreGate = new TaskCompletionSource();
         _Runners.Restore.ReturnsRestorePoints(_October);
 
@@ -227,7 +227,7 @@ public sealed class RestoreViewModelTests : IDisposable
     [Fact]
     public void Title_NamesTheVM()
     {
-        var restore = new RestoreViewModel(Sample.VM(), _Tools);
+        var restore = new RestoreViewModel(Sample.VM(), _Tools, _Tools.Dialogs);
 
         Assert.Equal("Restore points of DevBox - LazyVM", restore.Title);
         Assert.Equal("DevBox", restore.Name);

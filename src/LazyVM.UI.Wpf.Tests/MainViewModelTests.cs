@@ -493,7 +493,7 @@ public sealed class MainViewModelTests : IDisposable
         var window = Assert.Single(ShownVMs);
         _Runners.Removal.ReturnsRemovalPlan(new RemovalPlan { Name = "DevBox", HyperVState = "Off" });
         _Runners.Dashboard.Returns();
-        _Tools.ConfirmsRemoval = true;
+        _Tools.Dialogs.ConfirmsRemoval = true;
 
         await window.DeleteAsync();
 

@@ -12,6 +12,7 @@ public sealed class VMViewModel : ViewModelBase
     private const string _MAINTENANCE_HELP = "Runs the VM's nightly maintenance now: it records what changed in the VM, backs up its databases, installs updates and scans it for security problems. Near the end of the evaluation it also rearms Windows and restarts the VM, or, with no rearms left, rebuilds it.";
 
     private readonly ToolWindows _Tools;
+    private readonly Dialogs _Dialogs;
     private LazyVMDashboard _Entry;
     private IReadOnlyList<PhaseOption> _Phases = [];
     private PhaseOption? _SelectedPhase;
@@ -22,10 +23,11 @@ public sealed class VMViewModel : ViewModelBase
     private RestoreViewModel? _Restore;
     private SecurityFindingsViewModel? _Findings;
 
-    public VMViewModel(LazyVMDashboard entry, ToolWindows tools)
+    public VMViewModel(LazyVMDashboard entry, ToolWindows tools, Dialogs dialogs)
     {
         _Entry = entry;
         _Tools = tools;
+        _Dialogs = dialogs;
         Details = ReadDetails(entry);
         _SuggestedPhase = CarryOnPhase(entry.LastBuild);
         ChecksCommand = new RelayCommand(() => tools.OpenChecks(_Entry.Id, Name, hostOnly: false));
@@ -356,7 +358,7 @@ public sealed class VMViewModel : ViewModelBase
                 Status = $"{Name} cannot be deleted now: {exception.Message}";
                 return;
             }
-            if (!_Tools.ConfirmRemoval(new RemovalViewModel(plan)))
+            if (!_Dialogs.ConfirmRemoval(new RemovalViewModel(plan)))
             {
                 Status = $"{Name} was not deleted.";
                 return;
