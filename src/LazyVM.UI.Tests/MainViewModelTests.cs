@@ -454,7 +454,7 @@ public sealed class MainViewModelTests : IDisposable
         _Runners.Dashboard.Returns();
         _Tools.Dialogs.ConfirmsRemoval = true;
 
-        await window.DeleteAsync();
+        await window.Deletion.DeleteAsync();
 
         Assert.Same(window, Assert.Single(_Tools.Windows.Closed));
         // Its window is gone, so opening the VM again makes a new one.

@@ -20,9 +20,51 @@ public sealed class WorkingTests
         {
             return WorkAsync(text, work);
         }
+
+        public void Holds(ViewModelBase part)
+        {
+            Include(part);
+        }
     }
 
     private readonly Working _Working = new();
+
+    [Fact]
+    public async Task WhileAPartItHoldsRunsACommand_SaysWhatThePartIsDoing()
+    {
+        var part = new Working();
+        _Working.Holds(part);
+        var watcher = new WorkWatcher(_Working);
+        var answer = new TaskCompletionSource<int>();
+
+        var running = part.Run("Deleting DevBox", () => answer.Task);
+
+        Assert.True(_Working.IsWorking);
+        Assert.Equal("Deleting DevBox", _Working.WorkingText);
+        answer.SetResult(7);
+        await running;
+        Assert.False(_Working.IsWorking);
+        Assert.Equal(["Deleting DevBox", null], watcher.Seen);
+    }
+
+    [Fact]
+    public async Task ItsOwnCommand_IsSaidBeforeThatOfAPart()
+    {
+        var part = new Working();
+        _Working.Holds(part);
+        var own = new TaskCompletionSource<int>();
+        var parts = new TaskCompletionSource<int>();
+
+        var reading = part.Run("Reading the build phases", () => parts.Task);
+        var opening = _Working.Run("Opening the guide", () => own.Task);
+
+        Assert.Equal("Opening the guide", _Working.WorkingText);
+        own.SetResult(1);
+        await opening;
+        Assert.Equal("Reading the build phases", _Working.WorkingText);
+        parts.SetResult(2);
+        await reading;
+    }
 
     [Fact]
     public async Task WhileTheCommandRuns_SaysWhatItIsDoing()

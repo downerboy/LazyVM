@@ -52,13 +52,13 @@
                 <TextBlock Text="Build and maintain" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
                 <Label Content="_Phase to build from" Target="{Binding ElementName=PhaseList}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
                 <!-- What building from the chosen phase skips, runs again and keeps. The list's help text is the same, so Narrator reads it too. -->
-                <TextBlock Text="{Binding PhaseHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap"
-                           Visibility="{Binding HasPhaseHelp, Converter={StaticResource VisibleWhenTrue}}" />
+                <TextBlock Text="{Binding BuildFromPhase.PhaseHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap"
+                           Visibility="{Binding BuildFromPhase.HasPhaseHelp, Converter={StaticResource VisibleWhenTrue}}" />
                 <!-- A list rather than a drop-down, as in the Build window, so the arrow keys move through the phases and Narrator reads each one. -->
-                <ListBox x:Name="PhaseList" ItemsSource="{Binding Phases}" SelectedItem="{Binding SelectedPhase}"
+                <ListBox x:Name="PhaseList" ItemsSource="{Binding BuildFromPhase.Phases}" SelectedItem="{Binding BuildFromPhase.SelectedPhase}"
                          DisplayMemberPath="Text" Margin="0,4,0,8" MaxHeight="190"
                          AutomationProperties.Name="Phase to build from"
-                         AutomationProperties.HelpText="{Binding PhaseHelp}"
+                         AutomationProperties.HelpText="{Binding BuildFromPhase.PhaseHelp}"
                          BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
                          Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -69,15 +69,15 @@
                     </ListBox.ItemContainerStyle>
                 </ListBox>
                 <WrapPanel>
-                    <Button Content="_Build from this phase" Command="{Binding BuildFromPhaseCommand}" Margin="0,0,8,8"
+                    <Button Content="_Build from this phase" Command="{Binding BuildFromPhase.BuildCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Build {0} from the chosen phase'}"
-                            AutomationProperties.HelpText="{Binding BuildFromPhaseHelp}" />
-                    <Button Content="Run _maintenance now" Command="{Binding MaintenanceCommand}" Margin="0,0,8,8"
+                            AutomationProperties.HelpText="{Binding BuildFromPhase.BuildHelp}" />
+                    <Button Content="Run _maintenance now" Command="{Binding Maintenance.RunCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Run the maintenance of {0} now'}"
-                            AutomationProperties.HelpText="{Binding MaintenanceHelp}" />
+                            AutomationProperties.HelpText="{Binding Maintenance.Help}" />
                 </WrapPanel>
                 <!-- What Run maintenance now does. The button's help text is the same, so Narrator reads it too. -->
-                <TextBlock Text="{Binding MaintenanceHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <TextBlock Text="{Binding Maintenance.Help}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
                 <TextBlock Text="{Binding RunNote}" TextWrapping="Wrap"
                            Visibility="{Binding HasRunNote, Converter={StaticResource VisibleWhenTrue}}"
                            AutomationProperties.Name="{Binding RunNote}" local:LiveRegion.Announce="True" />
@@ -89,15 +89,15 @@
             <StackPanel>
                 <TextBlock Text="Delete" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
                 <!-- What deleting the VM takes with it. The button's help text is the same, so Narrator reads it too. -->
-                <TextBlock Text="{Binding DeleteHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Deletion.Help}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
                 <WrapPanel Margin="0,8,0,0">
-                    <Button Content="_Delete this VM..." Command="{Binding DeleteCommand}" Margin="0,0,8,8"
+                    <Button Content="_Delete this VM..." Command="{Binding Deletion.DeleteCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Delete {0}'}"
-                            AutomationProperties.HelpText="{Binding DeleteHelp}" />
+                            AutomationProperties.HelpText="{Binding Deletion.Help}" />
                 </WrapPanel>
-                <TextBlock Text="{Binding DeleteNote}" TextWrapping="Wrap"
-                           Visibility="{Binding HasDeleteNote, Converter={StaticResource VisibleWhenTrue}}"
-                           AutomationProperties.Name="{Binding DeleteNote}" />
+                <TextBlock Text="{Binding Deletion.Note}" TextWrapping="Wrap"
+                           Visibility="{Binding Deletion.HasNote, Converter={StaticResource VisibleWhenTrue}}"
+                           AutomationProperties.Name="{Binding Deletion.Note}" />
             </StackPanel>
         </Border>
 
