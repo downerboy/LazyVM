@@ -153,7 +153,7 @@ public class ToolWindows(
         }
         var viewModel = new VMViewModel(entry, this, dialogs, runners.Build, runners.Removal, changes);
         // A deleted VM has nothing left to show.
-        viewModel.Removed += (_, _) => windows.Close(viewModel);
+        viewModel.Deletion.Removed += (_, _) => windows.Close(viewModel);
         windows.Track(key, viewModel);
         _ = viewModel.LoadAsync();
     }
