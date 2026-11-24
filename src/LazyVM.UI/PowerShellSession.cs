@@ -21,12 +21,12 @@ namespace LazyVM.UI;
 public class PowerShellSession : IDisposable
 {
     /// <summary>
-    /// One runspace opens at a time, in the whole app: PSModulePath belongs
-    /// to the process, and opening a runspace changes it, so a second
-    /// session opening while the first imports the module could let the
-    /// user's own module folders in.
+    /// Keeps commands and opens apart in the whole app (#528): PSModulePath
+    /// belongs to the process, and opening a runspace puts the user's own
+    /// module folders back in it until the session sets it back, so no
+    /// command may run, and autoload a module, while any session opens.
     /// </summary>
-    private static readonly Lock _OneOpenAtATime = new();
+    private static readonly ModulePathGate _ModulePath = new();
 
     private readonly SemaphoreSlim _OneAtATime = new(1, 1);
     private readonly Lock _State = new();
@@ -84,9 +84,9 @@ public class PowerShellSession : IDisposable
         await _OneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // Importing the module takes a while; keep it off the caller's thread.
-            var runspace = CurrentRunspace() ?? Keep(await Task.Run(OpenRunspace, cancellationToken).ConfigureAwait(false));
+            var runspace = CurrentRunspace() ?? Keep(await OpenAsync(cancellationToken).ConfigureAwait(false));
 
+            using var running = await _ModulePath.RunAsync(cancellationToken).ConfigureAwait(false);
             using var shell = PowerShell.Create(runspace);
             shell.AddCommand(command).AddParameters(parameters.ToDictionary(parameter => parameter.Name, parameter => parameter.Value));
             PSDataCollection<PSObject> output;
@@ -174,6 +174,13 @@ public class PowerShellSession : IDisposable
         throw new ObjectDisposedException(nameof(PowerShellSession));
     }
 
+    /// <summary>Opens the runspace while no command runs in any session, off the caller's thread: importing the module takes a while.</summary>
+    private static async Task<Runspace> OpenAsync(CancellationToken cancellationToken)
+    {
+        using var opening = await _ModulePath.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await Task.Run(OpenRunspace, cancellationToken).ConfigureAwait(false);
+    }
+
     private static Runspace OpenRunspace()
     {
         var state = InitialSessionState.CreateDefault2();
@@ -182,33 +189,37 @@ public class PowerShellSession : IDisposable
         // load the module. Group Policy still wins over this.
         state.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.RemoteSigned;
 
-        lock (_OneOpenAtATime)
+        var opened = RunspaceFactory.CreateRunspace(state);
+        try
         {
-            var opened = RunspaceFactory.CreateRunspace(state);
             try
             {
                 opened.Open();
-                // Opening puts the user's own module folders back in front, so the
-                // search path is set after it, and the module imported only then.
-                Environment.SetEnvironmentVariable("PSModulePath", ModuleSearchPath);
-                using var import = PowerShell.Create(opened);
-                import.AddCommand("Import-Module").AddParameter("Name", ModulePath).AddParameter("ErrorAction", "Stop");
-                try
-                {
-                    import.Invoke();
-                }
-                catch (ActionPreferenceStopException stopped)
-                {
-                    // Say why the import failed, not that -ErrorAction Stop stopped it.
-                    throw new InvalidOperationException(stopped.ErrorRecord.Exception.Message, stopped);
-                }
-                return opened;
             }
-            catch
+            finally
             {
-                opened.Dispose();
-                throw;
+                // Opening puts the user's own module folders back in front, even
+                // when it then fails, so the search path is set back before any
+                // command may run again, and the module imported only after.
+                Environment.SetEnvironmentVariable("PSModulePath", ModuleSearchPath);
             }
+            using var import = PowerShell.Create(opened);
+            import.AddCommand("Import-Module").AddParameter("Name", ModulePath).AddParameter("ErrorAction", "Stop");
+            try
+            {
+                import.Invoke();
+            }
+            catch (ActionPreferenceStopException stopped)
+            {
+                // Say why the import failed, not that -ErrorAction Stop stopped it.
+                throw new InvalidOperationException(stopped.ErrorRecord.Exception.Message, stopped);
+            }
+            return opened;
+        }
+        catch
+        {
+            opened.Dispose();
+            throw;
         }
     }
 }

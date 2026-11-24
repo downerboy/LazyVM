@@ -117,7 +117,7 @@ src/LazyVM.UI.Wpf.Tests/     xUnit: view-model behavior against a fake command r
 The app runs elevated, because the commands it runs need administrator rights. It adds no privilege the user does not already use in an administrator PowerShell, and it must not give a non-administrator a way to run code as an administrator:
 
 1. The app and every DLL it loads sit in `%ProgramFiles%\LazyVM\App`, with the module's access rule: administrators and SYSTEM can change them, and only the user who installed LazyVM can read and run them. `Assert-TrustedCode` checks that folder too.
-2. The module is imported by full path from `%ProgramFiles%\LazyVM\Modules`, never found through `PSModulePath`. No PowerShell profile scripts run.
+2. The module is imported by full path from `%ProgramFiles%\LazyVM\Modules`, never found through `PSModulePath`. No PowerShell profile scripts run. `PSModulePath` holds only folders administrators control. Opening a session puts the user's own module folders back in it for a moment, since it belongs to the whole app, so no command runs in any session while one opens, and the path is set back even when the open fails (#528).
 3. The data folder in `%USERPROFILE%\LazyVM` is untrusted: any process running as the user can change it. Settings are read through the module's checks (`Read-TrustedVMSetting`) and never become script text. Commands are fixed commands with fixed parameters.
 4. No listener, no named pipe, no remote calls.
 5. No secrets on disk or in logs. The password is hidden until asked for, and the clipboard is cleared after a copy. A recovery key export warns when the chosen folder is inside OneDrive.
