@@ -3,6 +3,7 @@ using System.Management.Automation;
 namespace LazyVM.UI.Tests;
 
 /// <summary>What every runner shares: the session a command runs in, and when what it wrote is a failure.</summary>
+[Collection(ProcessModulePath.NAME)]
 public sealed class PowerShellCommandRunnerTests
 {
     private static readonly Guid _DEV_BOX = Guid.Parse("4f2c9a1e-7b3d-4c8e-9a10-2d5e6f7a8b9c");

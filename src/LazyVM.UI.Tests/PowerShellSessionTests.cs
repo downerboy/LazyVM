@@ -3,6 +3,7 @@ using System.Management.Automation;
 namespace LazyVM.UI.Tests;
 
 /// <summary>Where a session finds the modules it loads.</summary>
+[Collection(ProcessModulePath.NAME)]
 public sealed class PowerShellSessionTests
 {
     [Fact]
@@ -24,5 +25,23 @@ public sealed class PowerShellSessionTests
         Assert.DoesNotContain(folders, folder =>
             folder.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), StringComparison.OrdinalIgnoreCase) ||
             folder.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task OnceASessionHasOpened_TheProcessFindsModulesOnlyInFoldersAdministratorsControl()
+    {
+        // Opening a runspace puts the user's own module folders back in front (#528).
+        // Where LazyVM is not installed, as in CI, the import fails: the path is narrowed all the same.
+        using var session = new PowerShellSession();
+        try
+        {
+            await session.InvokeAsync("Get-Date", [], CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            // The module is not installed here.
+        }
+
+        Assert.Equal(PowerShellSession.ModuleSearchPath, Environment.GetEnvironmentVariable("PSModulePath"));
     }
 }
