@@ -31,6 +31,7 @@ public class PowerShellSession : IDisposable
     private readonly SemaphoreSlim _OneAtATime = new(1, 1);
     private readonly Lock _State = new();
     private Runspace? _Runspace;
+    private int _Calls;
     private bool _Disposed;
 
     /// <summary>The installed module: %ProgramFiles%\LazyVM\Modules\LazyVM, which only administrators can change.</summary>
@@ -71,6 +72,9 @@ public class PowerShellSession : IDisposable
         }
     }
 
+    /// <summary>True while a command runs in the session, or waits for one that does, so the session must not be closed.</summary>
+    internal virtual bool IsBusy => Volatile.Read(ref _Calls) > 0;
+
     /// <summary>
     /// Runs <paramref name="command"/> with each parameter added by name,
     /// never as script text, and gives what it wrote. Throws
@@ -81,7 +85,16 @@ public class PowerShellSession : IDisposable
         string command, IReadOnlyList<(string Name, object Value)> parameters, CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
-        await _OneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
+        Interlocked.Increment(ref _Calls);
+        try
+        {
+            await _OneAtATime.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            Interlocked.Decrement(ref _Calls);
+            throw;
+        }
         try
         {
             var runspace = CurrentRunspace() ?? Keep(await OpenAsync(cancellationToken).ConfigureAwait(false));
@@ -107,6 +120,7 @@ public class PowerShellSession : IDisposable
         finally
         {
             _OneAtATime.Release();
+            Interlocked.Decrement(ref _Calls);
         }
     }
 
