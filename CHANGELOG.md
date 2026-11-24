@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.44.0](https://github.com/downerboy/LazyVM/compare/v6.43.1...v6.44.0) (2026-11-24)
+
+
+### Features
+
+* **gui:** keep a limit on open VM sessions, for hosts with many VMs ([#543](https://github.com/downerboy/LazyVM/issues/543)) ([b55ac44](https://github.com/downerboy/LazyVM/commit/b55ac446518f663647f4420c5d82a6624353ec67))
+
 ## [6.43.1](https://github.com/downerboy/LazyVM/compare/v6.43.0...v6.43.1) (2026-11-24)
 
 
