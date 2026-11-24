@@ -170,7 +170,7 @@ Each flow diagram in `docs/Diagrams.md` is drawn from one source, `docs/diagrams
 
 ## License
 
-LazyVM is free for personal and other noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Using it for a commercial purpose needs a separate commercial license; contact the author through GitHub.
+LazyVM is licensed under the [Apache License 2.0](LICENSE.md). It is free to use, change and distribute, including commercially. Keep the license text and the copyright notice with copies you distribute, and state your changes.
 
 ### Name and logo
 
