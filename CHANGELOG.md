@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.43.1](https://github.com/downerboy/LazyVM/compare/v6.43.0...v6.43.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **gui:** no command runs while a session opens and widens PSModulePath ([#539](https://github.com/downerboy/LazyVM/issues/539)) ([3fde0b7](https://github.com/downerboy/LazyVM/commit/3fde0b75984c38077147030f4df99348f7a89798))
+
 ## [6.43.0](https://github.com/downerboy/LazyVM/compare/v6.42.1...v6.43.0) (2026-11-23)
 
 
