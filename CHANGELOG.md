@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.45.0](https://github.com/downerboy/LazyVM/compare/v6.44.0...v6.45.0) (2026-11-25)
+
+
+### Features
+
+* **gui:** say why a VM needs attention, and open the window that fixes it ([#550](https://github.com/downerboy/LazyVM/issues/550)) ([73033e7](https://github.com/downerboy/LazyVM/commit/73033e754f0c9f5bd92f3c8df0aec5606b4342d4))
+
 ## [6.44.0](https://github.com/downerboy/LazyVM/compare/v6.43.1...v6.44.0) (2026-11-24)
 
 
