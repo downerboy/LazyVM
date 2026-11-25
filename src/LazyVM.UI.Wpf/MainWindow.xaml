@@ -101,7 +101,7 @@
                                                 Visibility="{Binding NeedsAttention, Converter={StaticResource VisibleWhenTrue}}">
                                             <TextBlock Foreground="{DynamicResource LvOnSev}" TextWrapping="Wrap"
                                                        AutomationProperties.Name="{Binding AttentionText}">
-                                                <Run Text="&#x25C6;" /> <Run Text="Needs attention" />
+                                                <Run Text="&#x25C6;" /> <Run Text="{Binding AttentionText, Mode=OneWay}" />
                                             </TextBlock>
                                         </Border>
                                     </StackPanel>

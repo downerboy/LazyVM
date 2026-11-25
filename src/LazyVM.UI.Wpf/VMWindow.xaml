@@ -101,6 +101,30 @@
             </StackPanel>
         </Border>
 
+        <!-- What needs attention besides recovery keys: each reason in words, with the button that opens the window to put it right. -->
+        <Border DockPanel.Dock="Top" Style="{StaticResource LvPanel}" Margin="24,24,24,0"
+                Visibility="{Binding HasAttention, Converter={StaticResource VisibleWhenTrue}}">
+            <StackPanel>
+                <TextBlock Text="Needs attention" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
+                <ItemsControl ItemsSource="{Binding Attention}" AutomationProperties.Name="Needs attention">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:VMAttentionReason">
+                            <StackPanel Margin="0,0,0,8">
+                                <Border Style="{StaticResource LvAttentionBadge}" Margin="0,0,0,8">
+                                    <TextBlock Foreground="{DynamicResource LvOnSev}" TextWrapping="Wrap" Focusable="True"
+                                               AutomationProperties.Name="{Binding Text}">
+                                        <Run Text="&#x25C6;" /> <Run Text="{Binding Text, Mode=OneWay}" />
+                                    </TextBlock>
+                                </Border>
+                                <Button Content="{Binding ButtonText}" Command="{Binding Command}" HorizontalAlignment="Left"
+                                        AutomationProperties.Name="{Binding AutomationName}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
         <!-- The BitLocker recovery keys: a notice when some are not exported yet, with the button that opens them beside it. -->
         <Border DockPanel.Dock="Top" Style="{StaticResource LvPanel}" Margin="24,24,24,0">
             <StackPanel>
