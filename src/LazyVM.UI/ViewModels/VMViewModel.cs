@@ -82,6 +82,23 @@ public sealed class VMViewModel : ViewModelBase
 
     public bool HasRecoveryKeyNotice => RecoveryKeyNotice.Length > 0;
 
+    /// <summary>
+    /// What is wrong with the VM besides keys not exported, each with the
+    /// button that opens the window to put it right: a failed maintenance
+    /// opens the log, a settings problem opens the checks.
+    /// </summary>
+    public IReadOnlyList<VMAttentionReason> Attention => new[]
+    {
+        DashboardText.MaintenanceFailed(Entry)
+            ? new VMAttentionReason($"The last maintenance of {Name} failed. The log says why.", "Open the log", LogCommand)
+            : null,
+        DashboardText.SettingsProblem(Entry)
+            ? new VMAttentionReason($"The settings of {Name} have a problem. The checks say what to fix.", "Open the checks", ChecksCommand)
+            : null,
+    }.OfType<VMAttentionReason>().ToList();
+
+    public bool HasAttention => Attention.Count > 0;
+
     /// <summary>Opens the VM's restore points, to return it to one. Always available: the Restore window itself says when a restore cannot start.</summary>
     public RelayCommand RestorePointsCommand
     {

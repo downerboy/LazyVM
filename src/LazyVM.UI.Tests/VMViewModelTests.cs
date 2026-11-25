@@ -109,6 +109,52 @@ public sealed class VMViewModelTests : IDisposable
     }
 
     [Fact]
+    public void NothingWrong_HasNoAttentionReasons()
+    {
+        var vm = Open(Sample.VM());
+
+        Assert.Empty(vm.Attention);
+    }
+
+    [Fact]
+    public void FailedMaintenance_GivesAReason_WhoseButtonOpensTheLog()
+    {
+        _Runners.Log.ReturnsLog();
+        var vm = Open(Sample.VM("DevEnv") with { LastMaintenanceResult = "Failed (0x1)" });
+
+        var reason = Assert.Single(vm.Attention);
+        reason.Command.Execute(null);
+
+        Assert.Contains("last maintenance of DevEnv failed", reason.Text);
+        Assert.Equal("Open the log", reason.ButtonText);
+        Assert.Equal("DevEnv", Assert.IsType<LogViewModel>(Assert.Single(_Tools.Windows.Shown)).VMName);
+    }
+
+    [Fact]
+    public void SettingsProblem_GivesAReason_WhoseButtonOpensTheChecks()
+    {
+        _Runners.Checks.ReturnsChecks(Sample.Check());
+        var vm = Open(Sample.VM("DevEnv") with { Settings = "VM.json is not valid JSON." });
+
+        var reason = Assert.Single(vm.Attention);
+        reason.Command.Execute(null);
+
+        Assert.Contains("settings of DevEnv have a problem", reason.Text);
+        Assert.Equal("Open the checks", reason.ButtonText);
+        Assert.Equal("DevEnv", Assert.IsType<ChecksViewModel>(Assert.Single(_Tools.Windows.Shown)).VMName);
+    }
+
+    [Fact]
+    public void ARefresh_ThatFixesTheProblem_TakesTheReasonAway()
+    {
+        var vm = Open(Sample.VM("DevEnv") with { LastMaintenanceResult = "Failed (0x1)" });
+
+        vm.Update(Sample.VM("DevEnv") with { LastMaintenanceResult = "Succeeded" });
+
+        Assert.Empty(vm.Attention);
+    }
+
+    [Fact]
     public void ARefresh_AfterAnExport_TakesTheNoticeAway()
     {
         var vm = Open(Sample.VM() with
