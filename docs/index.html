@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LazyVM: build and look after Hyper-V virtual machines</title>
-<meta name="description" content="LazyVM is a PowerShell module that builds, looks after and disposes of Hyper-V virtual machines on a Windows host, unattended.">
+<meta name="description" content="LazyVM is a PowerShell module that makes Hyper-V virtual machines easy to create, clone, look after and rebuild, with nightly security baseline checks, on a Windows host, unattended.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
 <header class="site">
   <div class="wrap">
     <h1>LazyVM™</h1>
-    <p>A PowerShell module that builds, looks after and disposes of Hyper-V virtual machines on a Windows host, unattended.</p>
+    <p>A PowerShell module that makes Hyper-V virtual machines easy to create, clone, look after and rebuild, with nightly security checks, on a Windows host, unattended.</p>
     <nav aria-label="Site">
       <ul>
         <li><a href="#what-it-does">What it does</a></li>
@@ -29,15 +29,18 @@
 <main id="main" class="wrap">
   <p class="notice"><strong>Alpha.</strong> LazyVM works, and its author uses it daily, but much of its behavior is still being worked on.</p>
 
+  <p>LazyVM makes it easy to create, clone and maintain Hyper-V VMs. Its nightly security checks give a baseline to anyone with security expectations or obligations. And when a VM has to be replaced, such as after a ransomware infection, it can be rebuilt from its recorded configuration instead of from memory.</p>
   <p>Today LazyVM makes development VMs: Windows 11 Enterprise Evaluation with Visual Studio, SQL Server Standard Developer and whatever other tools you install, with the 90-day evaluation handled for you. It uses every rearm Windows allows, then rebuilds the VM and puts your work back.</p>
   <p><a class="button" href="https://github.com/downerboy/LazyVM/releases/latest">Download the latest release</a></p>
 
   <h2 id="what-it-does">What it does</h2>
   <div class="cards">
     <section class="card"><h3>Builds a VM with no input</h3><p>Creates the VM, installs Windows from an answer file, then installs Visual Studio, SQL Server and your other tools.</p></section>
+    <section class="card"><h3>Clones a VM</h3><p>Creates a new VM from another VM's recorded configuration, with disks of its own.</p></section>
+    <section class="card"><h3>Rebuilds a VM when it must be replaced</h3><p>One command builds the VM again from its recorded configuration: a new Windows disk, your tools, then your recorded state put back. Use it when an evaluation ends, or when a VM is damaged or compromised, such as by ransomware; <code>-SkipCapture</code> puts back the last capture, not the damaged VM's state. Source and personal files live on separate disks, so keep source in source control.</p></section>
     <section class="card"><h3>Handles the 90-day evaluation</h3><p>Rearms Windows while it can. When it can't, it captures your state, rebuilds the VM and puts everything back.</p></section>
     <section class="card"><h3>Keeps the VM up to date</h3><p>Every night: Windows updates, winget upgrades, Store apps and Sysmon, restarting only when nobody is using the VM.</p></section>
-    <section class="card"><h3>Checks security nightly</h3><p>Defender scan, security baseline checks and persistence checks. It only reports, in plain words, with how to fix each finding.</p></section>
+    <section class="card"><h3>Checks security nightly</h3><p>A baseline for those with security expectations and obligations: Defender scan, Microsoft security baseline checks and persistence checks. It only reports, in plain words, with how to fix each finding.</p></section>
     <section class="card"><h3>Records what you change</h3><p>Tools, settings, firewall rules, scheduled tasks and SQL logins are kept, so a rebuilt VM comes back as you left it.</p></section>
     <section class="card"><h3>Runs many VMs</h3><p>Each VM has its own tools, disks, schedule and restore points. Source and files live on disks a rebuild never touches.</p></section>
   </div>
