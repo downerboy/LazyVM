@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.47.0](https://github.com/downerboy/LazyVM/compare/v6.46.1...v6.47.0) (2026-11-26)
+
+
+### Features
+
+* **gui:** windows open maximized, pop-ups centered at one size ([#564](https://github.com/downerboy/LazyVM/issues/564)) ([7fc5ddb](https://github.com/downerboy/LazyVM/commit/7fc5ddb8657a8997f25047499f78653179bf2c05))
+
 ## [6.46.1](https://github.com/downerboy/LazyVM/compare/v6.46.0...v6.46.1) (2026-11-26)
 
 
