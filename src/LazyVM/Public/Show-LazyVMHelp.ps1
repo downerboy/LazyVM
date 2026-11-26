@@ -1,7 +1,7 @@
 function Show-LazyVMHelp {
     <#
     .SYNOPSIS
-    Opens LazyVM's guide, use cases or diagrams, for the installed version, in your browser.
+    Opens LazyVM's guide, troubleshooting, use cases or diagrams, for the installed version, in your browser.
 
     .DESCRIPTION
     Opens the page on GitHub for the release you have installed, such as
@@ -15,9 +15,10 @@ function Show-LazyVMHelp {
     one command without leaving PowerShell.
 
     .PARAMETER Topic
-    Guide, the guide to installing and using LazyVM (the default). UseCases,
-    what LazyVM is for, case by case. Diagrams, the flow of each command
-    drawn as a picture and as a numbered list.
+    Guide, the guide to installing and using LazyVM (the default).
+    Troubleshooting, the guide's section on what to do when something goes
+    wrong. UseCases, what LazyVM is for, case by case. Diagrams, the flow of
+    each command drawn as a picture and as a numbered list.
 
     .EXAMPLE
     Show-LazyVMHelp
@@ -36,7 +37,7 @@ function Show-LazyVMHelp {
     [OutputType([void])]
     param(
         [Parameter(Position = 0)]
-        [ValidateSet('Guide', 'UseCases', 'Diagrams')]
+        [ValidateSet('Guide', 'UseCases', 'Diagrams', 'Troubleshooting')]
         [string]$Topic = 'Guide'
     )
 
