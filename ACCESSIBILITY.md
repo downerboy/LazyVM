@@ -91,6 +91,11 @@ Nothing cut off or overlapping, and no horizontal scrolling in a list.
       captured before their lists loaded, so their lists are not yet checked.
     * This is a check with a test harness, not by hand at a real 200% or 400%
       setting; confirm in the app.
+  * 2026-11-26 (#558): every window opens inside its screen's work area, and
+    every window now scrolls when it is smaller than its content, so lists are
+    not squeezed out of sight (`ScreenFitTests` and `ZoomLayoutTests`). Checked
+    in the app at 300% on a 3840 by 2160 screen; the question, reason, delete
+    and build progress windows were not opened.
 
 ### High Contrast
 
