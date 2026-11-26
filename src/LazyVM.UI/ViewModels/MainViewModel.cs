@@ -29,9 +29,7 @@ public sealed class MainViewModel : ViewModelBase
         _Clock = clock;
         HostChecksCommand = new RelayCommand(() => tools.OpenChecks(null, null, HostOnly()));
         BuildCommand = new RelayCommand(() => tools.OpenBuild(VMs.Select(row => row.Name).ToList()));
-        GuideCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.Guide));
-        UseCasesCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.UseCases));
-        DiagramsCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.Diagrams));
+        HelpCommand = new RelayCommand(() => _ = OpenHelpAsync(HelpTopic.Troubleshooting));
         // A build that ended, a build or maintenance that started, a delete, a restore, an export of recovery keys or a security finding changed the list: read it again.
         changes.Changed += (_, _) => _ = RefreshAsync();
         _RefreshCommand = new RelayCommand(() => _ = RefreshAsync(), () => !IsRefreshing);
@@ -90,20 +88,8 @@ public sealed class MainViewModel : ViewModelBase
         get;
     }
 
-    /// <summary>Opens the guide in the browser (F1).</summary>
-    public RelayCommand GuideCommand
-    {
-        get;
-    }
-
-    /// <summary>Opens the use cases in the browser.</summary>
-    public RelayCommand UseCasesCommand
-    {
-        get;
-    }
-
-    /// <summary>Opens the diagrams in the browser.</summary>
-    public RelayCommand DiagramsCommand
+    /// <summary>Opens the troubleshooting section of the guide in the browser (F1).</summary>
+    public RelayCommand HelpCommand
     {
         get;
     }
@@ -116,8 +102,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         var page = topic switch
         {
-            HelpTopic.UseCases => "the use cases",
-            HelpTopic.Diagrams => "the diagrams",
+            HelpTopic.Troubleshooting => "the troubleshooting section of the guide",
             _ => "the guide",
         };
         try

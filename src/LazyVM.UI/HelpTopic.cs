@@ -9,9 +9,6 @@ public enum HelpTopic
     /// <summary>The guide to installing and using LazyVM.</summary>
     Guide,
 
-    /// <summary>What LazyVM is for, case by case.</summary>
-    UseCases,
-
-    /// <summary>The flow of each command, as pictures and numbered lists.</summary>
-    Diagrams,
+    /// <summary>The guide's section on what to do when something goes wrong.</summary>
+    Troubleshooting,
 }

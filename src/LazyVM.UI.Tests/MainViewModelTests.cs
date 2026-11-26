@@ -30,8 +30,7 @@ public sealed class MainViewModelTests : IDisposable
 
     [Theory]
     [InlineData(HelpTopic.Guide, "the guide")]
-    [InlineData(HelpTopic.UseCases, "the use cases")]
-    [InlineData(HelpTopic.Diagrams, "the diagrams")]
+    [InlineData(HelpTopic.Troubleshooting, "the troubleshooting section of the guide")]
     public async Task OpenHelp_AsksForThePage_AndSaysWhichOpened(HelpTopic topic, string said)
     {
         await _Main.OpenHelpAsync(topic);
@@ -45,20 +44,18 @@ public sealed class MainViewModelTests : IDisposable
     {
         _Runners.Help.HelpFails = new InvalidOperationException("Could not open your browser: none is set.");
 
-        await _Main.OpenHelpAsync(HelpTopic.UseCases);
+        await _Main.OpenHelpAsync(HelpTopic.Troubleshooting);
 
-        Assert.Equal("Could not open the use cases: Could not open your browser: none is set.", _Main.Status);
+        Assert.Equal("Could not open the troubleshooting section of the guide: Could not open your browser: none is set.", _Main.Status);
         Assert.False(_Main.IsWorking);
     }
 
     [Fact]
-    public void HelpCommands_EachOpenTheirOwnPage()
+    public void HelpCommand_OpensTheTroubleshootingSection()
     {
-        _Main.GuideCommand.Execute(null);
-        _Main.UseCasesCommand.Execute(null);
-        _Main.DiagramsCommand.Execute(null);
+        _Main.HelpCommand.Execute(null);
 
-        Assert.Equal([HelpTopic.Guide, HelpTopic.UseCases, HelpTopic.Diagrams], _Runners.Help.HelpCalls);
+        Assert.Equal([HelpTopic.Troubleshooting], _Runners.Help.HelpCalls);
     }
 
     [Fact]

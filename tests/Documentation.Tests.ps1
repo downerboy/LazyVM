@@ -22,6 +22,7 @@ Describe 'Get-DocumentationUrl' {
         @{ Topic = 'Guide'; Page = 'docs/Guide.md' }
         @{ Topic = 'UseCases'; Page = 'docs/UseCases.md' }
         @{ Topic = 'Diagrams'; Page = 'docs/Diagrams.md' }
+        @{ Topic = 'Troubleshooting'; Page = 'docs/Guide.md#12-troubleshooting' }
     ) {
         $url = InModuleScope $module -Parameters @{ Topic = $Topic } { Get-DocumentationUrl -Topic $Topic -Version ([version]'6.39.0') -Prerelease '' }
 
@@ -51,6 +52,7 @@ Describe 'Show-LazyVMHelp' {
     It 'opens the page for the topic asked for' -ForEach @(
         @{ Topic = 'UseCases'; Page = 'UseCases.md' }
         @{ Topic = 'Diagrams'; Page = 'Diagrams.md' }
+        @{ Topic = 'Troubleshooting'; Page = 'Guide.md#12-troubleshooting' }
     ) {
         Show-LazyVMHelp -Topic $Topic
 
@@ -65,7 +67,7 @@ Describe 'Show-LazyVMHelp' {
         Should -Invoke -ModuleName $module Start-Process -Times 1 -Exactly -ParameterFilter { $FilePath -like "*/blob/v$version/*" -or $FilePath -like '*/blob/main/*' }
     }
 
-    It 'refuses a topic that is not one of the three pages' {
+    It 'refuses a topic that is not one of the fixed pages' {
         { Show-LazyVMHelp -Topic 'https://example.com' } | Should -Throw
 
         Should -Invoke -ModuleName $module Start-Process -Times 0 -Exactly
