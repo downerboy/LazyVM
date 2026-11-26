@@ -110,4 +110,54 @@ public sealed class ZoomLayoutTests
         Assert.True(scrolls, "Part of the window is cut off and nothing scrolls to it.");
     }
 
+    public static TheoryData<Type, double, double> ListWindows => SizesOf(
+        typeof(BuildProgressWindow), typeof(BuildWindow), typeof(ChecksWindow), typeof(LogWindow),
+        typeof(RecoveryKeysWindow), typeof(RemovalWindow), typeof(RestoreWindow), typeof(SecurityFindingsWindow));
+
+    public static TheoryData<Type, double, double> Dialogs => SizesOf(
+        typeof(PasswordWindow), typeof(QuestionWindow), typeof(ReasonWindow));
+
+    private static TheoryData<Type, double, double> SizesOf(params Type[] windows)
+    {
+        var data = new TheoryData<Type, double, double>();
+        foreach (var window in windows)
+        {
+            data.Add(window, 640, 450);
+            data.Add(window, 320, 225);
+        }
+        return data;
+    }
+
+    private static Window Create(Type window)
+    {
+        return Ui.Invoke(() => (Window)Activator.CreateInstance(window)!);
+    }
+
+    /// <summary>A window made smaller to fit its screen keeps its list usable: the whole window scrolls (#558).</summary>
+    [Theory]
+    [MemberData(nameof(ListWindows))]
+    public void AWindowWithAList_ScrollsInsteadOfSqueezingTheList(Type type, double width, double height)
+    {
+        var window = Create(type);
+
+        var (scrolls, listHeight) = Layout(window, new Size(width, height), root =>
+            (root is ScrollViewer { ScrollableHeight: > 0 }, Visuals<ListBox>(root).First(list => list.Name is "List" or "TemplateList").ActualHeight));
+
+        Assert.True(scrolls, "Part of the window is cut off and nothing scrolls to it.");
+        Assert.True(listHeight >= 150, $"The list is {listHeight:0} units high; the window should scroll instead.");
+    }
+
+    [Theory]
+    [MemberData(nameof(Dialogs))]
+    public void ADialog_ScrollsWhatDoesNotFit(Type type, double width, double height)
+    {
+        var window = Create(type);
+
+        var scrolls = Layout(window, new Size(width, height),
+            root => root is ScrollViewer { ComputedVerticalScrollBarVisibility: var bar } page
+                && (page.ExtentHeight <= page.ViewportHeight || bar == Visibility.Visible));
+
+        Assert.True(scrolls, "Part of the window can be cut off with nothing to scroll to it.");
+    }
+
 }

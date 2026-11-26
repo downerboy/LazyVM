@@ -55,6 +55,16 @@ public sealed class AccessibilityXamlTests
             .Any(label => ((string?)label.Attribute("Target") ?? "").Contains("ElementName=" + name, StringComparison.Ordinal));
     }
 
+    /// <summary>The window style carries what every window needs, such as opening inside the screen (#558).</summary>
+    [Theory]
+    [MemberData(nameof(Windows))]
+    public void EveryWindow_UsesTheWindowStyle(string window)
+    {
+        var style = (string?)Load(window).Root?.Attribute("Style");
+
+        Assert.Equal("{StaticResource LvWindow}", style);
+    }
+
     [Theory]
     [MemberData(nameof(Windows))]
     public void EveryInputControl_HasAName(string window)
