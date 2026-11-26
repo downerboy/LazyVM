@@ -96,6 +96,13 @@ Nothing cut off or overlapping, and no horizontal scrolling in a list.
     not squeezed out of sight (`ScreenFitTests` and `ZoomLayoutTests`). Checked
     in the app at 300% on a 3840 by 2160 screen; the question, reason, delete
     and build progress windows were not opened.
+  * 2026-11-26 (#563): every window opens maximized. The question, reason,
+    password and delete pop-ups open at one size in the middle of the screen
+    (`WindowOpeningTests`). Checked in the app at 300% on a 3840 by 2160
+    screen: the main, host checks, VM, log, restore points, recovery keys,
+    security findings and build windows opened maximized, and the password and
+    delete pop-ups opened centered at the same size. The question, reason and
+    build progress windows were not opened.
 
 ### High Contrast
 

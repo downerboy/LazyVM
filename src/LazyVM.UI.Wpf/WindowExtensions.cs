@@ -16,12 +16,12 @@ internal static class WindowExtensions
 
     extension(Window window)
     {
-        /// <summary>Restores the window when it is minimized, and makes it the active one.</summary>
+        /// <summary>Restores the window when it is minimized, maximized again if it was, and makes it the active one.</summary>
         public void BringToFront()
         {
             if (window.WindowState == WindowState.Minimized)
             {
-                window.WindowState = WindowState.Normal;
+                SystemCommands.RestoreWindow(window);
             }
             window.Activate();
         }

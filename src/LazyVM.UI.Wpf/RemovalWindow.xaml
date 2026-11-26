@@ -6,10 +6,10 @@
         xmlns:vm="clr-namespace:LazyVM.UI.ViewModels;assembly=LazyVM.UI"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:RemovalViewModel}"
-        Title="{Binding Title}" Width="720" Height="620" MinWidth="320"
+        Title="{Binding Title}" MinWidth="320"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         AutomationProperties.HelpText="{Binding Question}"
-        Style="{StaticResource LvWindow}">
+        Style="{StaticResource LvPopUp}">
     <!-- No is both the default and the cancel button: Enter and Esc both answer No. Only Yes, by click, Alt+Y or Space on it, deletes. -->
     <!-- In a window smaller than its content the page scrolls instead of squeezing the list out of sight (#558). -->
     <ScrollViewer x:Name="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">

@@ -44,6 +44,22 @@ public sealed class ScreenFitTests
         Assert.Equal(_AREA, fitted);
     }
 
+    [Fact]
+    public void CenteredIn_OfARectangle_PutsItInTheMiddle()
+    {
+        var centered = new Int32Rect(0, 0, 1360, 1160).CenteredIn(_AREA);
+
+        Assert.Equal(new Int32Rect(1480, 500, 1360, 1160), centered);
+    }
+
+    [Fact]
+    public void CenteredIn_OfARectangleLargerThanTheArea_ShrinksItToTheArea()
+    {
+        var centered = new Int32Rect(0, 0, 4000, 3000).CenteredIn(_AREA);
+
+        Assert.Equal(_AREA, centered);
+    }
+
     [Theory]
     [InlineData(SizeToContent.Manual)]
     [InlineData(SizeToContent.Height)]
@@ -58,6 +74,7 @@ public sealed class ScreenFitTests
                 Width = 20000,
                 Height = sizeToContent == SizeToContent.Manual ? 20000 : double.NaN,
                 SizeToContent = sizeToContent,
+                WindowState = WindowState.Normal,
                 Left = 200,
                 Top = 200,
                 ShowActivated = false,

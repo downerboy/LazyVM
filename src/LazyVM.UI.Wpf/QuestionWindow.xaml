@@ -6,9 +6,9 @@
         xmlns:vm="clr-namespace:LazyVM.UI.ViewModels;assembly=LazyVM.UI"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:QuestionViewModel}"
-        Title="{Binding Title}" Width="560" SizeToContent="Height" MinWidth="320"
+        Title="{Binding Title}" MinWidth="320"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="NoResize"
-        Style="{StaticResource LvWindow}">
+        Style="{StaticResource LvPopUp}">
     <!-- No is both the default and the cancel button, and has focus: Enter and Esc both answer No. Only Yes, by click, Alt+Y or Space on it, goes ahead. -->
     <!-- In a window smaller than its content the page scrolls (#558). -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
