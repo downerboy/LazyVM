@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.46.0](https://github.com/downerboy/LazyVM/compare/v6.45.0...v6.46.0) (2026-11-26)
+
+
+### Features
+
+* **gui:** drop the Use cases and Diagrams buttons, and Help opens troubleshooting ([#556](https://github.com/downerboy/LazyVM/issues/556)) ([fe123d2](https://github.com/downerboy/LazyVM/commit/fe123d227865bf96ae963d4732fe3c6957b1974d))
+
 ## [6.45.0](https://github.com/downerboy/LazyVM/compare/v6.44.0...v6.45.0) (2026-11-25)
 
 
