@@ -12,10 +12,19 @@
     <Style x:Key="LvWindow" TargetType="Window">
         <!-- Every window opens inside its screen's work area, whatever its default size (#558). -->
         <Setter Property="local:ScreenFit.OnOpen" Value="True" />
+        <Setter Property="WindowState" Value="Maximized" />
         <Setter Property="Background" Value="{DynamicResource LvPage}" />
         <Setter Property="Foreground" Value="{DynamicResource LvInk}" />
         <Setter Property="FontFamily" Value="{StaticResource LvFont}" />
         <Setter Property="FontSize" Value="16" />
+    </Style>
+
+    <!-- A pop-up opens smaller than the screen, in its middle, and every pop-up at this one size (#563). -->
+    <Style x:Key="LvPopUp" TargetType="Window" BasedOn="{StaticResource LvWindow}">
+        <Setter Property="local:ScreenFit.Centered" Value="True" />
+        <Setter Property="WindowState" Value="Normal" />
+        <Setter Property="Width" Value="720" />
+        <Setter Property="Height" Value="620" />
     </Style>
 
     <!-- 3px focus outline, 2px outside the control: navy, yellow in the dark theme. Never removed. -->

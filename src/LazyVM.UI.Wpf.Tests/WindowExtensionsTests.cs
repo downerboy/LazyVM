@@ -1,6 +1,7 @@
 using LazyVM.UI.ViewModels;
 
 using System.Windows;
+using System.Windows.Threading;
 
 namespace LazyVM.UI.Wpf.Tests;
 
@@ -31,17 +32,29 @@ public sealed class WindowExtensionsTests
         Assert.Null(found);
     }
 
-    [Fact]
-    public void BringToFront_OfAMinimizedWindow_RestoresIt()
+    [Theory]
+    [InlineData(WindowState.Normal)]
+    [InlineData(WindowState.Maximized)]
+    public void BringToFront_OfAMinimizedWindow_RestoresItAsItWas(WindowState before)
     {
-        var state = WpfThread.Dispatcher.Invoke(() =>
+        var window = WpfThread.Dispatcher.Invoke(() =>
         {
-            var window = new Window { WindowState = WindowState.Minimized };
-            window.BringToFront();
-            return window.WindowState;
+            // WPF shows a maximized window only when it may activate it.
+            var shown = new Window { WindowState = before, ShowInTaskbar = false };
+            shown.Show();
+            shown.WindowState = WindowState.Minimized;
+            return shown;
         });
 
-        Assert.Equal(WindowState.Normal, state);
+        WpfThread.Dispatcher.Invoke(window.BringToFront, DispatcherPriority.ContextIdle);
+        var state = WpfThread.Dispatcher.Invoke(() =>
+        {
+            var found = window.WindowState;
+            window.Close();
+            return found;
+        }, DispatcherPriority.ContextIdle);
+
+        Assert.Equal(before, state);
     }
 
     [Fact]

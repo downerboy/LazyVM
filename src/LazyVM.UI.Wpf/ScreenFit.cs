@@ -16,6 +16,20 @@ public static class ScreenFit
     public static readonly DependencyProperty OnOpenProperty = DependencyProperty.RegisterAttached(
         "OnOpen", typeof(bool), typeof(ScreenFit), new PropertyMetadata(false, OnOpenChanged));
 
+    /// <summary>Set to true on a window, by its style, to have it open in the middle of the work area (#563).</summary>
+    public static readonly DependencyProperty CenteredProperty = DependencyProperty.RegisterAttached(
+        "Centered", typeof(bool), typeof(ScreenFit), new PropertyMetadata(false));
+
+    public static bool GetCentered(Window window)
+    {
+        return (bool)window.GetValue(CenteredProperty);
+    }
+
+    public static void SetCentered(Window window, bool value)
+    {
+        window.SetValue(CenteredProperty, value);
+    }
+
     public static bool GetOnOpen(Window window)
     {
         return (bool)window.GetValue(OnOpenProperty);
@@ -42,9 +56,33 @@ public static class ScreenFit
     private static void Fit(object sender, RoutedEventArgs e)
     {
         var window = (Window)sender;
+        if (window.WindowState == WindowState.Normal)
+        {
+            Place(window);
+        }
+        else
+        {
+            // A maximized window already fills the work area. Its other size is fitted when it is first restored.
+            window.StateChanged += FitWhenRestored;
+        }
+    }
+
+    private static void FitWhenRestored(object? sender, EventArgs e)
+    {
+        var window = (Window)sender!;
+        if (window.WindowState == WindowState.Normal)
+        {
+            window.StateChanged -= FitWhenRestored;
+            Place(window);
+        }
+    }
+
+    private static void Place(Window window)
+    {
         var handle = new WindowInteropHelper(window).Handle;
         var bounds = BoundsOf(handle);
-        var fitted = bounds.FittedInto(WorkAreaOf(handle));
+        var area = WorkAreaOf(handle);
+        var fitted = GetCentered(window) ? bounds.CenteredIn(area) : bounds.FittedInto(area);
         if (fitted == bounds)
         {
             return;
@@ -62,6 +100,14 @@ public static class ScreenFit
 
     extension(Int32Rect window)
     {
+        /// <summary>This rectangle in the middle of <paramref name="area"/>, shrunk when it is larger.</summary>
+        internal Int32Rect CenteredIn(Int32Rect area)
+        {
+            var width = Math.Min(window.Width, area.Width);
+            var height = Math.Min(window.Height, area.Height);
+            return new Int32Rect(area.X + ((area.Width - width) / 2), area.Y + ((area.Height - height) / 2), width, height);
+        }
+
         /// <summary>This rectangle, shrunk when it is larger than <paramref name="area"/>, then moved the least that puts it inside.</summary>
         internal Int32Rect FittedInto(Int32Rect area)
         {

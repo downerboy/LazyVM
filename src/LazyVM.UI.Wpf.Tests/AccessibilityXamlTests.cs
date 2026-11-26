@@ -62,7 +62,7 @@ public sealed class AccessibilityXamlTests
     {
         var style = (string?)Load(window).Root?.Attribute("Style");
 
-        Assert.Equal("{StaticResource LvWindow}", style);
+        Assert.Contains(style, new[] { "{StaticResource LvWindow}", "{StaticResource LvPopUp}" });
     }
 
     [Theory]
