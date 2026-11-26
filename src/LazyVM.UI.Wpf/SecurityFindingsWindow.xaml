@@ -7,7 +7,7 @@
         xmlns:vm="clr-namespace:LazyVM.UI.ViewModels;assembly=LazyVM.UI"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:SecurityFindingsViewModel}"
-        Title="{Binding Title}" Width="900" Height="820" MinWidth="320"
+        Title="{Binding Title}" Width="900" Height="850" MinWidth="320"
         Style="{StaticResource LvWindow}">
     <Window.CommandBindings>
         <CommandBinding Command="Close" Executed="CloseWindow" />
@@ -17,7 +17,9 @@
         <KeyBinding Key="F5" Command="{Binding ReloadCommand}" />
     </Window.InputBindings>
 
-    <DockPanel>
+    <!-- In a window smaller than its content the page scrolls instead of squeezing the lists out of sight (#558). -->
+    <ScrollViewer x:Name="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+    <DockPanel Height="{Binding ViewportHeight, ElementName=Page}" MinHeight="800">
         <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
             <DockPanel>
                 <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
@@ -129,4 +131,5 @@
             </DockPanel>
         </Border>
     </DockPanel>
+    </ScrollViewer>
 </Window>

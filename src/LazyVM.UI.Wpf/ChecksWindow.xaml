@@ -17,7 +17,9 @@
         <KeyBinding Key="F5" Command="{Binding RunCommand}" />
     </Window.InputBindings>
 
-    <DockPanel>
+    <!-- In a window smaller than its content the page scrolls instead of squeezing the list out of sight (#558). -->
+    <ScrollViewer x:Name="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+    <DockPanel Height="{Binding ViewportHeight, ElementName=Page}" MinHeight="660">
         <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
             <DockPanel>
                 <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
@@ -97,4 +99,5 @@
             </DockPanel>
         </Border>
     </DockPanel>
+    </ScrollViewer>
 </Window>

@@ -16,7 +16,10 @@
         <KeyBinding Key="Escape" Command="Close" />
     </Window.InputBindings>
 
-    <DockPanel>
+    <!-- In a window smaller than its content the page scrolls instead of squeezing the list out of sight (#558).
+         There are only a few templates, so the list keeps a height of its own and the page grows around it. -->
+    <ScrollViewer x:Name="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+    <DockPanel MinHeight="{Binding ViewportHeight, ElementName=Page}">
         <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
             <TextBlock Text="Build new VM" Style="{StaticResource LvTitle}" VerticalAlignment="Center" />
         </Border>
@@ -58,7 +61,7 @@
                 <!-- A list rather than a drop-down, so the arrow keys move through the templates and Narrator reads each one. -->
                 <ListBox x:Name="TemplateList" ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate}"
                          DisplayMemberPath="Text" AutomationProperties.Name="Config template"
-                         BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
+                         MinHeight="150" BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
                          Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle>
@@ -70,4 +73,5 @@
             </DockPanel>
         </Border>
     </DockPanel>
+    </ScrollViewer>
 </Window>

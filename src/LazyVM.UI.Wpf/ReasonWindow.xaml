@@ -10,6 +10,8 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="NoResize"
         Style="{StaticResource LvWindow}">
     <!-- Focus starts in the reason box, which Narrator reads with its label and the warning. Enter goes on to the question; Esc cancels the approval. -->
+    <!-- In a window smaller than its content the page scrolls (#558). -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
     <StackPanel Margin="24">
         <Label Target="{Binding ElementName=ReasonBox}" Padding="0" Margin="0,0,0,4">
             <TextBlock Text="{Binding Prompt}" TextWrapping="Wrap" />
@@ -25,4 +27,5 @@
                     AutomationProperties.HelpText="Does not approve the finding." />
         </WrapPanel>
     </StackPanel>
+    </ScrollViewer>
 </Window>

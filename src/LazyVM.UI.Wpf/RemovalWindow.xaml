@@ -11,6 +11,9 @@
         AutomationProperties.HelpText="{Binding Question}"
         Style="{StaticResource LvWindow}">
     <!-- No is both the default and the cancel button: Enter and Esc both answer No. Only Yes, by click, Alt+Y or Space on it, deletes. -->
+    <!-- In a window smaller than its content the page scrolls instead of squeezing the list out of sight (#558). -->
+    <ScrollViewer x:Name="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+    <Grid Height="{Binding ViewportHeight, ElementName=Page}" MinHeight="560">
     <DockPanel Margin="24">
         <TextBlock DockPanel.Dock="Top" Text="{Binding Heading}" Style="{StaticResource LvHeading}" TextWrapping="Wrap" Margin="0,0,0,12" />
 
@@ -49,4 +52,6 @@
             </ListBox.ItemTemplate>
         </ListBox>
     </DockPanel>
+    </Grid>
+    </ScrollViewer>
 </Window>
