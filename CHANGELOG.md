@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.46.1](https://github.com/downerboy/LazyVM/compare/v6.46.0...v6.46.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* **gui:** windows open inside the screen, and scroll what does not fit ([#561](https://github.com/downerboy/LazyVM/issues/561)) ([f2e0849](https://github.com/downerboy/LazyVM/commit/f2e08498eea8f2932b684ef5d6cdcb449b30ddcf))
+
 ## [6.46.0](https://github.com/downerboy/LazyVM/compare/v6.45.0...v6.46.0) (2026-11-26)
 
 
