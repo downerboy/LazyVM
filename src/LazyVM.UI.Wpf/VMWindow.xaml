@@ -56,7 +56,7 @@
                            Visibility="{Binding BuildFromPhase.HasPhaseHelp, Converter={StaticResource VisibleWhenTrue}}" />
                 <!-- A list rather than a drop-down, as in the Build window, so the arrow keys move through the phases and Narrator reads each one. -->
                 <ListBox x:Name="PhaseList" ItemsSource="{Binding BuildFromPhase.Phases}" SelectedItem="{Binding BuildFromPhase.SelectedPhase}"
-                         DisplayMemberPath="Text" Margin="0,4,0,8" MaxHeight="190"
+                         TextSearch.TextPath="Text" Margin="0,4,0,8" MaxHeight="190"
                          AutomationProperties.Name="Phase to build from"
                          AutomationProperties.HelpText="{Binding BuildFromPhase.PhaseHelp}"
                          BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
@@ -67,6 +67,11 @@
                             <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
                         </Style>
                     </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:PhaseOption">
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
                 </ListBox>
                 <WrapPanel>
                     <Button Content="_Build from this phase" Command="{Binding BuildFromPhase.BuildCommand}" Margin="0,0,8,8"

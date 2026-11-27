@@ -103,6 +103,12 @@ Nothing cut off or overlapping, and no horizontal scrolling in a list.
     security findings and build windows opened maximized, and the password and
     delete pop-ups opened centered at the same size. The question, reason and
     build progress windows were not opened.
+  * 2026-11-26 (#554): long text in a text box wraps instead of being cut off,
+    and past four lines the box scrolls. The rows of the config template and
+    phase lists wrap too (`TextCutOffTests`). In the app the VM, build,
+    password, log and host checks windows showed no text cut off at the side.
+    Long text was tried in the tests only, and the reason window was not
+    opened.
 
 ### High Contrast
 

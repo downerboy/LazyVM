@@ -260,8 +260,12 @@
         </Style.Triggers>
     </Style>
 
-    <!-- A text box on the card color, with the theme's ink and a visible border, in every theme. -->
+    <!-- A text box on the card color, with the theme's ink and a visible border, in every theme.
+         Long text wraps instead of being cut off, and past four lines the box scrolls (#554). -->
     <Style TargetType="TextBox">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="MaxLines" Value="4" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
         <Setter Property="Background" Value="{DynamicResource LvCard}" />
         <Setter Property="Foreground" Value="{DynamicResource LvInk}" />
         <Setter Property="CaretBrush" Value="{DynamicResource LvInk}" />

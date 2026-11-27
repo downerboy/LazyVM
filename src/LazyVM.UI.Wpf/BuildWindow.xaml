@@ -60,7 +60,7 @@
                 </StackPanel>
                 <!-- A list rather than a drop-down, so the arrow keys move through the templates and Narrator reads each one. -->
                 <ListBox x:Name="TemplateList" ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate}"
-                         DisplayMemberPath="Text" AutomationProperties.Name="Config template"
+                         TextSearch.TextPath="Text" AutomationProperties.Name="Config template"
                          MinHeight="150" BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
                          Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -69,6 +69,11 @@
                             <Setter Property="AutomationProperties.Name" Value="{Binding Text}" />
                         </Style>
                     </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:TemplateOption">
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
                 </ListBox>
             </DockPanel>
         </Border>
