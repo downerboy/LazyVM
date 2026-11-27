@@ -44,14 +44,7 @@ public partial class ChecksWindow : Window
     {
         if (List.SelectedItem is CheckRowViewModel row)
         {
-            try
-            {
-                Clipboard.SetText(row.HasFix ? row.Fix : row.AutomationName);
-            }
-            catch (System.Runtime.InteropServices.ExternalException)
-            {
-                // Another app has the clipboard open; Ctrl+C again will do.
-            }
+            RowCopy.Put(row.HasFix ? row.Fix : row.AutomationName);
         }
     }
 }

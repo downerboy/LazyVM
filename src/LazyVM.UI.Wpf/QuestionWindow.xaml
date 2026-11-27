@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:LazyVM.UI.Wpf"
         xmlns:vm="clr-namespace:LazyVM.UI.ViewModels;assembly=LazyVM.UI"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:QuestionViewModel}"
@@ -13,7 +14,7 @@
     <!-- In a window smaller than its content the page scrolls (#558). -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
     <StackPanel Margin="24">
-        <TextBlock Text="{Binding Question}" TextWrapping="Wrap" Margin="0,0,0,16" />
+        <local:SelectableText Text="{Binding Question, Mode=OneWay}" Margin="0,0,0,16" />
         <WrapPanel HorizontalAlignment="Right">
             <Button Content="_Yes" Click="AnswerYes" MinWidth="88" Margin="0,0,8,0"
                     AutomationProperties.HelpText="{Binding Question}" />

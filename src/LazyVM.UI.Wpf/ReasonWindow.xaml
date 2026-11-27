@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:LazyVM.UI.Wpf"
         xmlns:vm="clr-namespace:LazyVM.UI.ViewModels;assembly=LazyVM.UI"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:ReasonViewModel}"
@@ -16,7 +17,7 @@
         <Label Target="{Binding ElementName=ReasonBox}" Padding="0" Margin="0,0,0,4">
             <TextBlock Text="{Binding Prompt}" TextWrapping="Wrap" />
         </Label>
-        <TextBlock Text="{Binding Warning}" TextWrapping="Wrap" Style="{StaticResource LvMuted}" Margin="0,0,0,8" />
+        <local:SelectableText Text="{Binding Warning, Mode=OneWay}" Style="{StaticResource LvMutedText}" Margin="0,0,0,8" />
         <TextBox x:Name="ReasonBox" Text="{Binding Reason, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16"
                  AutomationProperties.Name="{Binding Prompt}"
                  AutomationProperties.HelpText="{Binding Warning}" />

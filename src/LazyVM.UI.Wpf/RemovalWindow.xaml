@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:LazyVM.UI.Wpf"
         xmlns:vm="clr-namespace:LazyVM.UI.ViewModels;assembly=LazyVM.UI"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:RemovalViewModel}"
@@ -18,7 +19,7 @@
         <TextBlock DockPanel.Dock="Top" Text="{Binding Heading}" Style="{StaticResource LvHeading}" TextWrapping="Wrap" Margin="0,0,0,12" />
 
         <StackPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
-            <TextBlock Text="{Binding Question}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,12" />
+            <local:SelectableText Text="{Binding Question, Mode=OneWay}" FontWeight="SemiBold" Margin="0,0,0,12" />
             <WrapPanel HorizontalAlignment="Right">
                 <Button Content="_Yes" Click="AnswerYes" MinWidth="88" Margin="0,0,8,0"
                         AutomationProperties.Name="{Binding Name, StringFormat='Yes, delete {0}'}"
@@ -30,7 +31,7 @@
         </StackPanel>
 
         <!-- A list, so the arrow keys move from one line to the next and Narrator reads each one. -->
-        <ListBox x:Name="List" ItemsSource="{Binding Lines}"
+        <ListBox local:RowCopy.IsEnabled="True" x:Name="List" ItemsSource="{Binding Lines}"
                  AutomationProperties.Name="What goes, and what is kept"
                  BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
                  Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"

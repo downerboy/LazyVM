@@ -52,10 +52,10 @@
                 <TextBlock Text="Build and maintain" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
                 <Label Content="_Phase to build from" Target="{Binding ElementName=PhaseList}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
                 <!-- What building from the chosen phase skips, runs again and keeps. The list's help text is the same, so Narrator reads it too. -->
-                <TextBlock Text="{Binding BuildFromPhase.PhaseHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap"
+                <local:SelectableText Text="{Binding BuildFromPhase.PhaseHelp, Mode=OneWay}" Style="{StaticResource LvMutedText}"
                            Visibility="{Binding BuildFromPhase.HasPhaseHelp, Converter={StaticResource VisibleWhenTrue}}" />
                 <!-- A list rather than a drop-down, as in the Build window, so the arrow keys move through the phases and Narrator reads each one. -->
-                <ListBox x:Name="PhaseList" ItemsSource="{Binding BuildFromPhase.Phases}" SelectedItem="{Binding BuildFromPhase.SelectedPhase}"
+                <ListBox local:RowCopy.IsEnabled="True" x:Name="PhaseList" ItemsSource="{Binding BuildFromPhase.Phases}" SelectedItem="{Binding BuildFromPhase.SelectedPhase}"
                          TextSearch.TextPath="Text" Margin="0,4,0,8" MaxHeight="190"
                          AutomationProperties.Name="Phase to build from"
                          AutomationProperties.HelpText="{Binding BuildFromPhase.PhaseHelp}"
@@ -82,7 +82,7 @@
                             AutomationProperties.HelpText="{Binding Maintenance.Help}" />
                 </WrapPanel>
                 <!-- What Run maintenance now does. The button's help text is the same, so Narrator reads it too. -->
-                <TextBlock Text="{Binding Maintenance.Help}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <local:SelectableText Text="{Binding Maintenance.Help, Mode=OneWay}" Style="{StaticResource LvMutedText}" Margin="0,0,0,8" />
                 <TextBlock Text="{Binding RunNote}" TextWrapping="Wrap"
                            Visibility="{Binding HasRunNote, Converter={StaticResource VisibleWhenTrue}}"
                            AutomationProperties.Name="{Binding RunNote}" local:LiveRegion.Announce="True" />
@@ -94,13 +94,13 @@
             <StackPanel>
                 <TextBlock Text="Delete" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
                 <!-- What deleting the VM takes with it. The button's help text is the same, so Narrator reads it too. -->
-                <TextBlock Text="{Binding Deletion.Help}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                <local:SelectableText Text="{Binding Deletion.Help, Mode=OneWay}" Style="{StaticResource LvMutedText}" />
                 <WrapPanel Margin="0,8,0,0">
                     <Button Content="_Delete this VM..." Command="{Binding Deletion.DeleteCommand}" Margin="0,0,8,8"
                             AutomationProperties.Name="{Binding Name, StringFormat='Delete {0}'}"
                             AutomationProperties.HelpText="{Binding Deletion.Help}" />
                 </WrapPanel>
-                <TextBlock Text="{Binding Deletion.Note}" TextWrapping="Wrap"
+                <local:SelectableText Text="{Binding Deletion.Note, Mode=OneWay}"
                            Visibility="{Binding Deletion.HasNote, Converter={StaticResource VisibleWhenTrue}}"
                            AutomationProperties.Name="{Binding Deletion.Note}" />
             </StackPanel>
@@ -141,8 +141,8 @@
                         <Run Text="&#x25C6;" /> <Run Text="{Binding RecoveryKeyNotice, Mode=OneWay}" />
                     </TextBlock>
                 </Border>
-                <TextBlock Text="The BitLocker recovery password of each disk LazyVM encrypted. Shows one when you ask, and exports them to a file you keep offline."
-                           Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                <local:SelectableText Text="The BitLocker recovery password of each disk LazyVM encrypted. Shows one when you ask, and exports them to a file you keep offline."
+                           Style="{StaticResource LvMutedText}" />
                 <WrapPanel Margin="0,8,0,0">
                     <Button Content="Recovery _keys..." Command="{Binding RecoveryKeysCommand}" Margin="0,0,8,0"
                             AutomationProperties.Name="{Binding Name, StringFormat='Recovery keys of {0}'}"
@@ -161,7 +161,7 @@
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="Details" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
                 <!-- A list, so the arrow keys move from one detail to the next and Narrator reads each one. -->
-                <ListBox ItemsSource="{Binding Details}" AutomationProperties.Name="Details"
+                <ListBox local:RowCopy.IsEnabled="True" ItemsSource="{Binding Details}" AutomationProperties.Name="Details"
                          Grid.IsSharedSizeScope="True" BorderThickness="0"
                          Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">

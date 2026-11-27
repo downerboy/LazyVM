@@ -19,7 +19,7 @@
 
     <!-- In a window smaller than its content the page scrolls instead of squeezing the lists out of sight (#558). -->
     <ScrollViewer x:Name="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-    <DockPanel Height="{Binding ViewportHeight, ElementName=Page}" MinHeight="800">
+    <DockPanel Height="{Binding ViewportHeight, ElementName=Page}" MinHeight="900">
         <Border DockPanel.Dock="Top" Style="{StaticResource LvHeaderBar}">
             <DockPanel>
                 <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
@@ -39,7 +39,7 @@
         <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="Approved findings" Style="{StaticResource LvHeading}" Margin="0,0,0,8" />
-                <TextBlock DockPanel.Dock="Top" Text="{Binding ApprovalsSummary}" TextWrapping="Wrap" Margin="0,0,0,8"
+                <local:SelectableText DockPanel.Dock="Top" Text="{Binding ApprovalsSummary, Mode=OneWay}" Margin="0,0,0,8"
                            AutomationProperties.Name="{Binding ApprovalsSummary}" />
                 <WrapPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                     <Button x:Name="RevokeButton" Content="Re_voke..." Command="{Binding RevokeCommand}"
@@ -47,8 +47,8 @@
                             AutomationProperties.HelpText="{Binding RevokeHelp}" />
                 </WrapPanel>
                 <!-- What Revoke does. The button's help text is the same, so Narrator reads it too. -->
-                <TextBlock DockPanel.Dock="Bottom" Text="{Binding RevokeHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,8,0,0" />
-                <ListBox x:Name="ApprovalList" ItemsSource="{Binding Approvals}" SelectedItem="{Binding SelectedApproval}"
+                <local:SelectableText DockPanel.Dock="Bottom" Text="{Binding RevokeHelp, Mode=OneWay}" Style="{StaticResource LvMutedText}" Margin="0,8,0,0" />
+                <ListBox local:RowCopy.IsEnabled="True" x:Name="ApprovalList" ItemsSource="{Binding Approvals}" SelectedItem="{Binding SelectedApproval}"
                          MaxHeight="180" AutomationProperties.Name="Approved findings"
                          BorderThickness="0" Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -70,29 +70,35 @@
         <Border Style="{StaticResource LvPanel}" Margin="24">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="Findings" Style="{StaticResource LvHeading}" Margin="0,0,0,8" />
-                <TextBlock DockPanel.Dock="Top" Text="{Binding ScanText}" TextWrapping="Wrap" Margin="0,0,0,4"
+                <local:SelectableText DockPanel.Dock="Top" Text="{Binding ScanText, Mode=OneWay}" Margin="0,0,0,4"
                            AutomationProperties.Name="{Binding ScanText}" />
-                <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,0,0,8"
+                <local:SelectableText DockPanel.Dock="Top" Text="{Binding Summary, Mode=OneWay}" Margin="0,0,0,8"
                            AutomationProperties.Name="{Binding Summary}" />
+                <local:SelectableText DockPanel.Dock="Top" Style="{StaticResource LvMutedText}" Margin="0,0,0,8"
+                                      Text="Ctrl+C copies the chosen finding; Ctrl+Shift+C copies only the path it is about." />
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                     <!-- What Approve does. The button's help text is the same, so Narrator reads it too. -->
-                    <TextBlock Text="{Binding ApproveHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <local:SelectableText Text="{Binding ApproveHelp, Mode=OneWay}" Style="{StaticResource LvMutedText}" Margin="0,0,0,8" />
                     <WrapPanel>
                         <Button x:Name="ApproveButton" Content="_Approve..." Command="{Binding ApproveCommand}"
                                 AutomationProperties.Name="Approve the chosen finding"
                                 AutomationProperties.HelpText="{Binding ApproveHelp}" />
                     </WrapPanel>
                     <!-- Why Approve is disabled, as text of its own: a disabled button cannot take focus. -->
-                    <TextBlock Text="{Binding ApproveNote}" TextWrapping="Wrap" Margin="0,4,0,0"
+                    <local:SelectableText Text="{Binding ApproveNote, Mode=OneWay}" Margin="0,4,0,0"
                                Visibility="{Binding HasApproveNote, Converter={StaticResource VisibleWhenTrue}}"
                                AutomationProperties.Name="{Binding ApproveNote}" />
                 </StackPanel>
                 <!-- A list, so the arrow keys move through the findings and Narrator reads each: severity, title and status first, then the rest. -->
-                <ListBox x:Name="List" ItemsSource="{Binding Findings}" SelectedItem="{Binding SelectedFinding}" AutomationProperties.Name="Security findings"
+                <ListBox local:RowCopy.IsEnabled="True" x:Name="List" ItemsSource="{Binding Findings}" SelectedItem="{Binding SelectedFinding}" AutomationProperties.Name="Security findings"
                          BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
                          Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
+                         AutomationProperties.HelpText="Ctrl+C copies the finding; Ctrl+Shift+C copies only the path it is about."
                          VirtualizingPanel.ScrollUnit="Pixel"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.CommandBindings>
+                        <CommandBinding Command="local:SecurityFindingsWindow.CopyPathCommand" Executed="CopyPath" CanExecute="CanCopyPath" />
+                    </ListBox.CommandBindings>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem" BasedOn="{StaticResource LvListItem}">
                             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />

@@ -48,10 +48,10 @@
         <Border Style="{StaticResource LvPanel}" Margin="24">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="Entries" Style="{StaticResource LvHeading}" />
-                <TextBlock DockPanel.Dock="Top" Style="{StaticResource LvMuted}" Margin="0,0,0,12"
-                           Text="Oldest first; the newest is selected. F8 goes to the next warning or error, Shift+F8 to the one before." />
+                <local:SelectableText DockPanel.Dock="Top" Style="{StaticResource LvMutedText}" Margin="0,0,0,12"
+                           Text="Oldest first; the newest is selected. F8 goes to the next warning or error, Shift+F8 to the one before. Ctrl+C copies the entry." />
                 <!-- A list, so the arrow keys move from one entry to the next and Narrator reads each: level, time, message. -->
-                <ListBox x:Name="List" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
+                <ListBox local:RowCopy.IsEnabled="True" x:Name="List" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
                          AutomationProperties.Name="Log entries" Grid.IsSharedSizeScope="True"
                          BorderThickness="0" Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Item"

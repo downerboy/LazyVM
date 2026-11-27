@@ -26,13 +26,13 @@
         <!-- Exporting. With no key stored, Export is disabled and the note says why. Each warning the module gives is text of its own, so Narrator reads it. -->
         <StackPanel DockPanel.Dock="Bottom" Margin="24,0,24,24">
             <!-- What Export does and where to keep the file. The button's help text is the same, so Narrator reads it too. -->
-            <TextBlock Text="{Binding ExportHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
+            <local:SelectableText Text="{Binding ExportHelp, Mode=OneWay}" Style="{StaticResource LvMutedText}" Margin="0,0,0,8" />
             <WrapPanel>
                 <Button Content="_Export..." Command="{Binding ExportCommand}" Margin="0,0,8,8"
                         AutomationProperties.Name="{Binding Name, StringFormat='Export the recovery keys of {0}'}"
                         AutomationProperties.HelpText="{Binding ExportHelp}" />
             </WrapPanel>
-            <TextBlock Text="{Binding ExportNote}" TextWrapping="Wrap"
+            <local:SelectableText Text="{Binding ExportNote, Mode=OneWay}"
                        Visibility="{Binding HasExportNote, Converter={StaticResource VisibleWhenTrue}}"
                        AutomationProperties.Name="{Binding ExportNote}" />
             <ItemsControl ItemsSource="{Binding Warnings}" Focusable="False"
@@ -54,9 +54,9 @@
 
         <Border Style="{StaticResource LvPanel}" Margin="24">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Style="{StaticResource LvMuted}" Margin="0,0,0,8"
+                <local:SelectableText DockPanel.Dock="Top" Style="{StaticResource LvMutedText}" Margin="0,0,0,8"
                            Text="When BitLocker asks for a recovery key, it shows the start of a key ID. Each password is hidden until you choose Show; closing this window hides them all." />
-                <TextBlock DockPanel.Dock="Top" Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,0,0,8"
+                <local:SelectableText DockPanel.Dock="Top" Text="{Binding Summary, Mode=OneWay}" Margin="0,0,0,8"
                            AutomationProperties.Name="{Binding Summary}" />
                 <!-- A list, so the arrow keys move through the disks and Narrator reads each one; Tab reaches each disk's Show button. -->
                 <ListBox x:Name="List" ItemsSource="{Binding Keys}"

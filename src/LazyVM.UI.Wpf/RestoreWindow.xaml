@@ -26,14 +26,14 @@
         <!-- While a run of the VM is going, or for a point without its tooling list, Restore is disabled and the note says why. -->
         <StackPanel DockPanel.Dock="Bottom" Margin="24,0,24,24">
             <!-- What restoring the chosen point does. Restore's help text is the same, so Narrator reads it too. -->
-            <TextBlock Text="{Binding RestoreHelp}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8"
+            <local:SelectableText Text="{Binding RestoreHelp, Mode=OneWay}" Style="{StaticResource LvMutedText}" Margin="0,0,0,8"
                        Visibility="{Binding HasRestoreHelp, Converter={StaticResource VisibleWhenTrue}}" />
             <WrapPanel>
                 <Button Content="_Restore to this point..." Command="{Binding RestoreCommand}" Margin="0,0,8,8"
                         AutomationProperties.Name="{Binding Name, StringFormat='Restore {0} to the chosen point'}"
                         AutomationProperties.HelpText="{Binding RestoreHelp}" />
             </WrapPanel>
-            <TextBlock Text="{Binding RestoreNote}" TextWrapping="Wrap"
+            <local:SelectableText Text="{Binding RestoreNote, Mode=OneWay}"
                        Visibility="{Binding HasRestoreNote, Converter={StaticResource VisibleWhenTrue}}"
                        AutomationProperties.Name="{Binding RestoreNote}" />
             <TextBlock Text="{Binding Status}" Style="{StaticResource LvStatus}" Margin="0,8,0,0"
@@ -44,10 +44,10 @@
 
         <Border Style="{StaticResource LvPanel}" Margin="24">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Top" Text="A restore point is taken each time a change to the VM's tooling is recorded. Newest first."
-                           Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <local:SelectableText DockPanel.Dock="Top" Text="A restore point is taken each time a change to the VM's tooling is recorded. Newest first."
+                           Style="{StaticResource LvMutedText}" Margin="0,0,0,8" />
                 <!-- A list, so the arrow keys move through the points and Narrator reads each one. -->
-                <ListBox x:Name="List" ItemsSource="{Binding Points}" SelectedItem="{Binding SelectedPoint}"
+                <ListBox local:RowCopy.IsEnabled="True" x:Name="List" ItemsSource="{Binding Points}" SelectedItem="{Binding SelectedPoint}"
                          AutomationProperties.Name="Restore points"
                          BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
                          Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
