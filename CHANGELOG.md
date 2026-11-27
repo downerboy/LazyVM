@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.47.1](https://github.com/downerboy/LazyVM/compare/v6.47.0...v6.47.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **gui:** long text wraps instead of being cut off ([#566](https://github.com/downerboy/LazyVM/issues/566)) ([2d7e702](https://github.com/downerboy/LazyVM/commit/2d7e70285d04a5657139f5bae2bee43d880fa9ed))
+
 ## [6.47.0](https://github.com/downerboy/LazyVM/compare/v6.46.1...v6.47.0) (2026-11-26)
 
 
