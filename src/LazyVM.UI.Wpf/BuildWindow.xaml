@@ -27,7 +27,7 @@
         <Border DockPanel.Dock="Bottom" Style="{StaticResource LvPanel}" Margin="24,0,24,24" Padding="24,16">
             <DockPanel>
                 <!-- Before a build starts: it runs on its own, so its window can be closed and opened again (#498). -->
-                <TextBlock DockPanel.Dock="Top" Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,12"
+                <local:SelectableText DockPanel.Dock="Top" Style="{StaticResource LvMutedText}" Margin="0,0,0,12"
                            Text="The build runs on its own, in its own process. Its progress opens in a window you can close at any time without stopping it: to see it again, select the VM in the list and choose Build progress." />
                 <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
                     <Button Content="_Build" Command="{Binding BuildCommand}" IsDefault="True"
@@ -44,22 +44,22 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top">
                     <Label Content="_Name of the new VM" Target="{Binding ElementName=NameBox}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
-                    <TextBlock Text="1 to 15 letters, digits or hyphens, starting with a letter or digit." Style="{StaticResource LvMuted}" />
+                    <local:SelectableText Text="1 to 15 letters, digits or hyphens, starting with a letter or digit." Style="{StaticResource LvMutedText}" />
                     <TextBox x:Name="NameBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MaxLength="15" Margin="0,4,0,16"
                              AutomationProperties.Name="Name of the new VM"
                              AutomationProperties.HelpText="1 to 15 letters, digits or hyphens, starting with a letter or digit." />
 
                     <Label Content="Administrator _account inside the VM (optional)" Target="{Binding ElementName=UserNameBox}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
-                    <TextBlock Text="Leave empty for the usual account. Its password is made for you." Style="{StaticResource LvMuted}" TextWrapping="Wrap" />
+                    <local:SelectableText Text="Leave empty for the usual account. Its password is made for you." Style="{StaticResource LvMutedText}" />
                     <TextBox x:Name="UserNameBox" Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" MaxLength="20" Margin="0,4,0,16"
                              AutomationProperties.Name="Administrator account inside the VM, optional"
                              AutomationProperties.HelpText="Leave empty for the usual account. Its password is made for you." />
 
                     <Label Content="_Config template" Target="{Binding ElementName=TemplateList}" Padding="0" Foreground="{DynamicResource LvInk}" FontWeight="SemiBold" />
-                    <TextBlock Text="What the VM is built with. Developer has the developer tools; PlainWindows has Windows alone." Style="{StaticResource LvMuted}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                    <local:SelectableText Text="What the VM is built with. Developer has the developer tools; PlainWindows has Windows alone." Style="{StaticResource LvMutedText}" Margin="0,0,0,4" />
                 </StackPanel>
                 <!-- A list rather than a drop-down, so the arrow keys move through the templates and Narrator reads each one. -->
-                <ListBox x:Name="TemplateList" ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate}"
+                <ListBox local:RowCopy.IsEnabled="True" x:Name="TemplateList" ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate}"
                          TextSearch.TextPath="Text" AutomationProperties.Name="Config template"
                          MinHeight="150" BorderThickness="1" BorderBrush="{DynamicResource LvCardBorder}"
                          Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"

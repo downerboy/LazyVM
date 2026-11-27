@@ -109,6 +109,12 @@ Nothing cut off or overlapping, and no horizontal scrolling in a list.
     password, log and host checks windows showed no text cut off at the side.
     Long text was tried in the tests only, and the reason window was not
     opened.
+  * 2026-11-26 (#553): information text can be selected and copied, and
+    Ctrl+C copies a list's chosen row (`CopyTextTests`). Narrator reads that
+    text as text, as before, and Tab passes over it. Checked in the app with
+    UI Automation: the main and VM windows' text reads as text with its
+    words, Tab skips it, Ctrl+A and Ctrl+C copied a help text, and Ctrl+C
+    copied a row of the VM's details. Not yet checked with Narrator itself.
 
 ### High Contrast
 

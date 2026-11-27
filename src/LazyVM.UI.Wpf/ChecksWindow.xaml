@@ -44,7 +44,7 @@
         <Border Style="{StaticResource LvPanel}" Margin="24">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="Checks" Style="{StaticResource LvHeading}" />
-                <TextBlock DockPanel.Dock="Top" Style="{StaticResource LvMuted}" Margin="0,0,0,12"
+                <local:SelectableText DockPanel.Dock="Top" Style="{StaticResource LvMutedText}" Margin="0,0,0,12"
                            Text="Nothing is changed. Each problem says how to fix it; Ctrl+C copies the fix." />
                 <!-- A list, so the arrow keys move from one check to the next and Narrator reads each one with its fix. -->
                 <ListBox x:Name="List" ItemsSource="{Binding Checks}" AutomationProperties.Name="Checks"

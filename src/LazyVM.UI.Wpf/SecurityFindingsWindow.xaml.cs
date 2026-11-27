@@ -72,6 +72,30 @@ public partial class SecurityFindingsWindow : Window
         Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => LiveRegion.AnnounceAgain(StatusText));
     }
 
+    /// <summary>Ctrl+Shift+C on the findings copies only the files the chosen finding is about (#553).</summary>
+    public static readonly RoutedUICommand CopyPathCommand = new(
+        "Copy the path", nameof(CopyPathCommand), typeof(SecurityFindingsWindow),
+        [new KeyGesture(Key.C, ModifierKeys.Control | ModifierKeys.Shift)]);
+
+    /// <summary>The files a finding is about, separated by semicolons, or null when it names none.</summary>
+    internal static string? PathOf(SecurityFindingRow? row)
+    {
+        return row is { HasWhere: true } ? row.WhereText : null;
+    }
+
+    private void CanCopyPath(object sender, CanExecuteRoutedEventArgs e)
+    {
+        e.CanExecute = PathOf(List.SelectedItem as SecurityFindingRow) is not null;
+    }
+
+    private void CopyPath(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (PathOf(List.SelectedItem as SecurityFindingRow) is { } path)
+        {
+            RowCopy.Put(path);
+        }
+    }
+
     /// <summary>Esc closes the window.</summary>
     private void CloseWindow(object sender, ExecutedRoutedEventArgs e)
     {

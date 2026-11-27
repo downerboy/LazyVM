@@ -53,7 +53,7 @@
                     <Button DockPanel.Dock="Right" Content="Close" Command="Close" VerticalAlignment="Bottom" Margin="16,0,0,0"
                             AutomationProperties.Name="Close this window"
                             AutomationProperties.HelpText="Closes this window only. The build carries on." />
-                    <TextBlock Text="{Binding ReturnText}" Style="{StaticResource LvMuted}" TextWrapping="Wrap" VerticalAlignment="Center"
+                    <local:SelectableText Text="{Binding ReturnText, Mode=OneWay}" Style="{StaticResource LvMutedText}" VerticalAlignment="Center"
                                Visibility="{Binding HasReturnText, Converter={StaticResource VisibleWhenTrue}}" />
                 </DockPanel>
             </StackPanel>
@@ -63,7 +63,7 @@
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="Phases" Style="{StaticResource LvHeading}" Margin="0,0,0,12" />
                 <!-- A list, so the arrow keys move from one phase to the next and Narrator reads each one with how far it has got. -->
-                <ListBox x:Name="List" ItemsSource="{Binding Phases}" AutomationProperties.Name="Phases"
+                <ListBox local:RowCopy.IsEnabled="True" x:Name="List" ItemsSource="{Binding Phases}" AutomationProperties.Name="Phases"
                          BorderThickness="0" Background="{DynamicResource LvCard}" Foreground="{DynamicResource LvInk}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle>
