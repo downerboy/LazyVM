@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.48.0](https://github.com/downerboy/LazyVM/compare/v6.47.1...v6.48.0) (2026-11-27)
+
+
+### Features
+
+* **gui:** information text can be selected and copied ([#568](https://github.com/downerboy/LazyVM/issues/568)) ([e451bb5](https://github.com/downerboy/LazyVM/commit/e451bb5310a8bcda9672b58c5be8689097a15624))
+
 ## [6.47.1](https://github.com/downerboy/LazyVM/compare/v6.47.0...v6.47.1) (2026-11-27)
 
 
